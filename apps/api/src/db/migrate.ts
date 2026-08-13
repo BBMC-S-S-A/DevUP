@@ -24,17 +24,23 @@ loadEnv({ path: join(repoRoot, ".env") });
 const MIGRATIONS_DIR = join(repoRoot, "db", "migrations");
 const GRANTS_FILE = join(repoRoot, "db", "grants.sql");
 
-const adminUrl = process.env.DATABASE_ADMIN_URL;
-const appPassword = process.env.APP_DB_PASSWORD;
+function required(name: string, hint: string): string {
+  const value = process.env[name];
+  if (!value) {
+    console.error(`Falta ${name}: ${hint}`);
+    process.exit(1);
+  }
+  return value;
+}
 
-if (!adminUrl) {
-  console.error("Falta DATABASE_ADMIN_URL. Copia .env.example a .env.");
-  process.exit(1);
-}
-if (!appPassword) {
-  console.error("Falta APP_DB_PASSWORD: es la contraseña del rol devup_app.");
-  process.exit(1);
-}
+const adminUrl = required(
+  "DATABASE_ADMIN_URL",
+  "es la conexión del propietario del esquema. Copia .env.example a .env.",
+);
+const appPassword = required(
+  "APP_DB_PASSWORD",
+  "es la contraseña del rol devup_app, con el que se conecta la API.",
+);
 
 const reset = process.argv.includes("--reset");
 
