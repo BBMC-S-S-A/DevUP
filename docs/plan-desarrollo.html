@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>DevUP — Plan de Desarrollo</title>
+<style>
+  /* ============ Página ============ */
+  @page {
+    size: A4;
+    margin: 17mm 16mm 16mm 16mm;
+    @bottom-left {
+      content: "DevUP · Plan de Desarrollo · v1.0";
+      font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+      font-size: 7.2pt;
+      color: #8b94a3;
+      padding-bottom: 3mm;
+    }
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+      font-size: 7.2pt;
+      color: #8b94a3;
+      padding-bottom: 3mm;
+    }
+  }
+  @page cover { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+
+  /* ============ Base ============ */
+  * { box-sizing: border-box; }
+  html { -weasy-hyphens: none; }
+  body {
+    font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+    font-size: 9.3pt;
+    line-height: 1.52;
+    color: #171c26;
+    margin: 0;
+  }
+  p { margin: 0 0 7pt 0; }
+  strong { font-weight: 700; color: #0d1119; }
+  em { color: #3a4354; }
+  code, .mono {
+    font-family: "DejaVu Sans Mono", monospace;
+    font-size: 0.86em;
+    letter-spacing: -0.02em;
+  }
+  ul, ol { margin: 0 0 8pt 0; padding-left: 14pt; }
+  li { margin-bottom: 2.2pt; }
+  a { color: #2f5bd0; text-decoration: none; }
+
+  /* ============ Portada ============ */
+  .cover {
+    page: cover;
+    height: 297mm;
+    background: #0f1626;
+    color: #ffffff;
+    padding: 52mm 22mm 20mm 22mm;
+    position: relative;
+  }
+  .cover-rule { width: 34mm; height: 3pt; background: #4d80ff; margin-bottom: 12mm; }
+  .cover-eyebrow {
+    font-size: 8.4pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #7f94c4; margin-bottom: 6mm;
+  }
+  .cover h1 {
+    font-size: 40pt; line-height: 1.04; margin: 0 0 7mm 0;
+    font-weight: 700; letter-spacing: -0.025em; color: #ffffff;
+  }
+  .cover h1 span { color: #4d80ff; }
+  .cover-sub {
+    font-size: 13pt; line-height: 1.42; color: #b9c4da; font-weight: 400;
+    max-width: 130mm; margin: 0 0 14mm 0;
+  }
+  .cover-claim {
+    border-left: 2.5pt solid #4d80ff; padding: 3mm 0 3mm 6mm;
+    font-size: 10.5pt; color: #d6deed; max-width: 132mm; line-height: 1.55;
+  }
+  .cover-meta {
+    position: absolute; bottom: 22mm; left: 22mm; right: 22mm;
+    display: flex; gap: 0; border-top: 0.6pt solid #2c3b58; padding-top: 6mm;
+  }
+  .cover-meta div { flex: 1; }
+  .cover-meta .k {
+    font-size: 7pt; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #6d80a8; margin-bottom: 1.6mm;
+  }
+  .cover-meta .v { font-size: 9.6pt; color: #e8edf6; font-weight: 600; }
+
+  /* ============ Secciones ============ */
+  h2 {
+    font-size: 17pt; font-weight: 700; letter-spacing: -0.02em;
+    color: #0f1626; margin: 0 0 2mm 0; line-height: 1.18;
+    break-after: avoid;
+  }
+  .sec { break-before: page; }
+  .sec-head { margin-bottom: 5mm; }
+  .sec-num {
+    display: inline-block; font-size: 7.4pt; font-weight: 700;
+    letter-spacing: 0.16em; color: #4d80ff; text-transform: uppercase;
+    margin-bottom: 2.5mm;
+  }
+  .sec-lead { font-size: 10pt; color: #4a5567; max-width: 155mm; line-height: 1.5; }
+  h3 {
+    font-size: 11.4pt; font-weight: 700; color: #0f1626;
+    margin: 6.5mm 0 2.6mm 0; letter-spacing: -0.01em; break-after: avoid;
+  }
+  h4 {
+    font-size: 9.6pt; font-weight: 700; color: #1c2536;
+    margin: 5mm 0 2mm 0; break-after: avoid;
+  }
+
+  /* ============ Tablas ============ */
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 6mm 0; font-size: 8.6pt; }
+  thead { display: table-header-group; }
+  tfoot { display: table-row-group; } /* el total solo al final, no repetido por página */
+  th {
+    text-align: left; font-size: 7.2pt; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #6b7686; font-weight: 700; padding: 2.2mm 2.4mm; border-bottom: 1pt solid #17203a;
+    vertical-align: bottom;
+  }
+  td { padding: 2.15mm 2.4mm; border-bottom: 0.5pt solid #e4e8ef; vertical-align: top; line-height: 1.42; }
+  tr { break-inside: avoid; }
+  .t-id { font-family: "DejaVu Sans Mono", monospace; font-size: 7.6pt; color: #2f5bd0; font-weight: 700; white-space: nowrap; }
+  .t-pts { text-align: center; font-weight: 700; color: #1c2536; white-space: nowrap; }
+  .t-task { font-weight: 600; color: #0f1626; }
+  .t-crit { color: #4a5567; }
+  tbody tr:last-child td { border-bottom: none; }
+  .tfoot td {
+    border-top: 1pt solid #17203a; border-bottom: none; font-weight: 700;
+    font-size: 8.4pt; color: #0f1626; padding-top: 2.4mm;
+  }
+
+  /* ============ Cabecera de semana ============ */
+  .week { break-inside: avoid-page; margin-bottom: 1mm; }
+  .week-head {
+    background: #0f1626; color: #fff; padding: 3.2mm 5mm 3.6mm 5mm;
+    break-after: avoid; line-height: 1.25;
+  }
+  .week-kicker { overflow: hidden; margin-bottom: 1.2mm; }
+  .week-tag {
+    font-size: 7.4pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: #7f9ee0; font-weight: 700;
+  }
+  .week-title { font-size: 13pt; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+  .week-pts {
+    float: right; font-size: 7.6pt; color: #94a6c6; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .week-meta {
+    background: #f4f6fa; border-left: 2.5pt solid #4d80ff;
+    padding: 3.4mm 5mm; margin-bottom: 1mm; font-size: 8.8pt; color: #3a4354;
+    break-before: avoid;
+  }
+  .week-meta b { color: #0f1626; }
+  .demo {
+    background: #eef3ff; border: 0.6pt solid #c9d9ff; padding: 3.2mm 4mm;
+    font-size: 8.6pt; color: #1c3d8f; margin: 0 0 7mm 0;
+    break-inside: avoid; break-before: avoid;
+  }
+  .demo b { color: #12306f; letter-spacing: 0.04em; text-transform: uppercase; font-size: 7.4pt; }
+
+  /* ============ Callouts ============ */
+  .note {
+    border: 0.6pt solid #e0e5ee; border-left: 2.5pt solid #6b7686;
+    padding: 3.2mm 4.2mm; margin: 3.4mm 0 5mm 0; font-size: 8.7pt;
+    background: #fafbfd; break-inside: avoid;
+  }
+  .note.warn { border-left-color: #d97706; background: #fffbf4; border-color: #f0dfc4; }
+  .note.risk { border-left-color: #d64545; background: #fff7f7; border-color: #f3d6d6; }
+  .note-t {
+    font-size: 7.4pt; letter-spacing: 0.14em; text-transform: uppercase;
+    font-weight: 700; color: #6b7686; margin-bottom: 2mm;
+  }
+  .note.warn .note-t { color: #b45309; }
+  .note.risk .note-t { color: #b02a2a; }
+  .note p:last-child, .note ul:last-child { margin-bottom: 0; }
+
+  /* ============ Alcance SÍ/NO ============ */
+  .scope { display: flex; gap: 5mm; margin: 4mm 0 6mm 0; break-inside: avoid; }
+  .scope-col { flex: 1; border: 0.6pt solid #e0e5ee; padding: 4mm 4.4mm; }
+  .scope-col.yes { border-top: 2.5pt solid #0e9f6e; }
+  .scope-col.no { border-top: 2.5pt solid #d64545; }
+  .scope-h {
+    font-size: 8pt; letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 700; margin-bottom: 3mm;
+  }
+  .scope-col.yes .scope-h { color: #0b7f58; }
+  .scope-col.no .scope-h { color: #b02a2a; }
+  .scope ul { list-style: none; padding: 0; margin: 0; font-size: 8.5pt; }
+  .scope li { padding-left: 5mm; position: relative; margin-bottom: 2.6mm; line-height: 1.42; color: #2b3444; }
+  .scope-col.yes li::before { content: "+"; position: absolute; left: 0; color: #0e9f6e; font-weight: 700; }
+  .scope-col.no li::before { content: "–"; position: absolute; left: 0; color: #d64545; font-weight: 700; }
+
+  /* ============ Diagrama ============ */
+  .diag { margin: 4mm 0 5mm 0; break-inside: avoid; }
+  .layer { border: 0.6pt solid #dde3ec; margin-bottom: 2.4mm; }
+  .layer-h {
+    font-size: 7.4pt; letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+    padding: 1.8mm 3.4mm; background: #f4f6fa; color: #4a5567; border-bottom: 0.6pt solid #dde3ec;
+  }
+  .layer.core { border-color: #17203a; }
+  .layer.core .layer-h { background: #0f1626; color: #9fb4dd; border-bottom-color: #0f1626; }
+  .layer.ext { border-style: dashed; border-color: #c3cbd8; }
+  .boxes { display: flex; flex-wrap: wrap; gap: 2mm; padding: 2.6mm; }
+  .box {
+    flex: 1 1 30mm; border: 0.6pt solid #dde3ec; background: #fff;
+    padding: 2.2mm 3mm; font-size: 8pt; text-align: center; color: #1c2536; font-weight: 600;
+  }
+  .layer.core .box { border-color: #2a3550; background: #1a2438; color: #dbe4f5; }
+  .box small { display: block; font-weight: 400; color: #7d8798; font-size: 7pt; margin-top: 1mm; }
+  .layer.core .box small { color: #8296bb; }
+  .flow {
+    text-align: center; font-size: 7.6pt; color: #6b7686; padding: 1mm 0;
+    letter-spacing: 0.04em;
+  }
+  .flow b { color: #2f5bd0; }
+
+  /* ============ Roadmap compacto ============ */
+  .road td { padding: 2.2mm 2.4mm; }
+  .road .w { font-weight: 700; color: #0f1626; white-space: nowrap; font-size: 8.2pt; }
+  .road .phase {
+    font-size: 6.9pt; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700;
+    white-space: nowrap; padding: 0.8mm 2mm; display: inline-block; color: #fff;
+  }
+  .p1 { background: #4d80ff; } .p2 { background: #0e9f6e; }
+  .p3 { background: #8b5cf6; } .p4 { background: #d97706; }
+
+  .kv { font-size: 8.7pt; }
+  .kv td { padding: 1.95mm 2.4mm; }
+  .kv td:first-child { font-weight: 700; color: #0f1626; width: 42mm; }
+  .nobreak { break-inside: avoid; }
+  .fixed { table-layout: fixed; }
+  .fixed .mono { overflow-wrap: break-word; }
+</style>
+</head>
+<body>
+
+<!-- ============================ PORTADA ============================ -->
+<div class="cover">
+  <div class="cover-rule"></div>
+  <div class="cover-eyebrow">Documento de desarrollo · Versión 1.0</div>
+  <h1>DevUP<br><span>Plan de Desarrollo</span></h1>
+  <div class="cover-sub">
+    Centro de mando unificado para la operación comercial y la infraestructura
+    técnica de un equipo de desarrollo.
+  </div>
+  <div class="cover-claim">
+    Proveedor de infraestructura, no de alojamiento. El equipo diseña, versiona y
+    opera su arquitectura desde un solo lugar; la ejecución y el cómputo siguen
+    viviendo en las cuentas del propio cliente.
+  </div>
+  <div class="cover-meta">
+    <div><div class="k">Fecha</div><div class="v">13 de agosto de 2026</div></div>
+    <div><div class="k">Horizonte</div><div class="v">12 semanas</div></div>
+    <div><div class="k">Esfuerzo</div><div class="v">257 puntos</div></div>
+    <div><div class="k">Repositorio</div><div class="v">sekkon0906/DevUP</div></div>
+  </div>
+</div>
+
+<!-- ============================ 1. RESUMEN ============================ -->
+<div class="sec" style="break-before: auto;">
+  <div class="sec-head">
+    <div class="sec-num">01 — Resumen ejecutivo</div>
+    <h2>Qué estamos construyendo</h2>
+  </div>
+
+  <p>
+    Hoy, sacar adelante un producto pequeño obliga a repartir el trabajo entre cinco
+    o seis herramientas que no se hablan entre sí: el código en GitHub, el frontend
+    en Vercel, el backend en Render, la base de datos en un cuarto proveedor, las
+    tareas en un quinto y la conversación del equipo en un sexto. Cada salto rompe
+    el contexto y multiplica el trabajo administrativo. <strong>DevUP es el plano de
+    control que falta en el medio.</strong>
+  </p>
+
+  <p>El producto se sostiene sobre tres promesas, en este orden:</p>
+
+  <table class="kv">
+    <tr>
+      <td>Espacio de trabajo</td>
+      <td>Workspaces con canales, mensajería en tiempo real, llamadas de voz cifradas
+      con grabación, y gestión documental con etiquetas y búsqueda. Es la capa donde
+      el equipo vive a diario.</td>
+    </tr>
+    <tr>
+      <td>Control de ventas</td>
+      <td>Catálogo de servicios etiquetados, clientes, oportunidades, cotizaciones,
+      objetivos y seguimiento de la ejecución. Una venta ganada se convierte en un
+      proyecto con tareas, y el avance de los objetivos se calcula solo.</td>
+    </tr>
+    <tr>
+      <td>Infraestructura sin alojamiento</td>
+      <td>Modelado de esquema, migraciones versionadas, explorador de datos y vista
+      unificada de repositorios y despliegues — todo ejecutándose sobre las cuentas
+      y credenciales del cliente. Sobre esa base, agentes (Codex, Claude Code, propios)
+      etiquetados y asignables a tareas concretas.</td>
+    </tr>
+  </table>
+
+  <p>
+    La diferencia con Supabase, Render o Vercel es de rol: ellos venden capacidad de
+    cómputo y almacenamiento; nosotros vendemos <strong>coordinación</strong>. No
+    competimos con el proveedor del cliente, nos montamos encima de él. Eso elimina
+    de un plumazo el coste variable de infraestructura, la responsabilidad sobre la
+    disponibilidad de sistemas productivos ajenos y buena parte de la exposición legal
+    por custodia de datos de terceros.
+  </p>
+
+  <h3>Modelo BYOI — <em>Bring Your Own Infrastructure</em></h3>
+  <p>
+    El cliente conecta sus propias cuentas mediante credenciales que quedan cifradas
+    en nuestra bóveda. DevUP orquesta, propone, versiona y audita; nunca aloja la
+    base de datos productiva ni ejecuta el servicio del cliente. Nuestro almacenamiento
+    se limita a lo que el producto genera: mensajes, archivos subidos al workspace,
+    grabaciones, metadatos comerciales y bitácoras.
+  </p>
+
+  <div class="note">
+    <div class="note-t">Cómo leer este documento</div>
+    <p>
+      Las secciones 2 a 5 fijan el alcance, la arquitectura y las reglas de trabajo.
+      La sección 6 resume las 12 semanas en una tabla. La sección 7 es el detalle real:
+      cada semana con su objetivo, sus tareas numeradas, el criterio de aceptación de
+      cada una y su estimación. Las secciones 8 a 11 cubren hitos, riesgos, decisiones
+      pendientes y el trabajo que queda deliberadamente fuera de estas 12 semanas.
+    </p>
+  </div>
+</div>
+
+<!-- ============================ 2. ALCANCE ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">02 — Alcance</div>
+    <h2>Qué es y qué no es DevUP</h2>
+    <div class="sec-lead">
+      La frontera entre plano de control y plano de datos es la decisión de producto
+      más importante del proyecto. Definirla mal nos convierte en un proveedor de
+      alojamiento por accidente, con todos sus costes y ninguna de sus ventajas.
+    </div>
+  </div>
+
+  <div class="scope">
+    <div class="scope-col yes">
+      <div class="scope-h">Sí hacemos</div>
+      <ul>
+        <li>Workspaces, canales y mensajería en tiempo real</li>
+        <li>Llamadas de voz con cifrado y grabación</li>
+        <li>Almacenamiento, versionado, etiquetado y búsqueda de archivos del workspace</li>
+        <li>Control de ventas: servicios, clientes, oportunidades, cotizaciones</li>
+        <li>Objetivos con progreso calculado y seguimiento de ejecución</li>
+        <li>Modelado visual de esquema y generación de migraciones</li>
+        <li>Explorador de datos sobre la base del cliente, con guardas</li>
+        <li>Vista unificada de repositorios, entornos y despliegues</li>
+        <li>Orquestación de agentes con aprobación humana</li>
+        <li>Identidad propia (DevUP ID), auditoría y control de acceso</li>
+      </ul>
+    </div>
+    <div class="scope-col no">
+      <div class="scope-h">No hacemos</div>
+      <ul>
+        <li>No alojamos bases de datos ni las operamos</li>
+        <li>No ejecutamos el cómputo del cliente (ni web, ni API, ni <em>workers</em>)</li>
+        <li>No revendemos ni intermediamos servicios de terceros de pago</li>
+        <li>No somos CDN, ni registrador de dominios, ni pasarela de pagos</li>
+        <li>No almacenamos copias de los datos productivos del cliente</li>
+        <li>No garantizamos disponibilidad de sistemas que no controlamos</li>
+        <li>No sustituimos el control de versiones: GitHub sigue siendo la fuente de verdad del código</li>
+        <li>No ofrecemos soporte de infraestructura de terceros</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Consecuencias de esta frontera</h3>
+  <p>
+    <strong>A favor:</strong> coste marginal por cliente casi plano, ausencia de
+    guardias de disponibilidad sobre sistemas ajenos, y una superficie regulatoria
+    mucho menor. Podemos crecer en clientes sin crecer en servidores.
+  </p>
+  <p>
+    <strong>En contra:</strong> dependemos de las APIs de terceros y de que sus
+    credenciales sigan siendo válidas; el producto sirve de poco sin conectores
+    funcionando. Y asumimos el riesgo más delicado del modelo: <strong>custodiamos
+    llaves de sistemas productivos ajenos</strong>. Esa bóveda es el activo más
+    sensible de la plataforma y se trata en consecuencia (§7, S7-01).
+  </p>
+
+  <div class="note warn">
+    <div class="note-t">Regla permanente de producto</div>
+    <p>
+      Si una funcionalidad exige que DevUP mantenga un proceso corriendo, un puerto
+      abierto o un disco montado <em>en nombre del cliente</em>, está fuera de alcance
+      por definición y hay que rediseñarla como orquestación sobre la cuenta del cliente.
+      Esta regla no admite excepciones tácticas: cada una de ellas nos acerca a ser
+      un proveedor de alojamiento.
+    </p>
+  </div>
+</div>
+
+<!-- ============================ 3. ARQUITECTURA ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">03 — Arquitectura</div>
+    <h2>Arquitectura de referencia</h2>
+    <div class="sec-lead">
+      Tres capas con una separación estricta: lo que corre en el navegador, lo que
+      corre en nuestro plano de control, y lo que vive en las cuentas del cliente y
+      nunca sale de ellas.
+    </div>
+  </div>
+
+  <div class="diag">
+    <div class="layer">
+      <div class="layer-h">Capa cliente — navegador</div>
+      <div class="boxes">
+        <div class="box">Aplicación web<small>Next.js · TypeScript</small></div>
+        <div class="box">Cliente de medios<small>WebRTC · E2EE</small></div>
+        <div class="box">Cliente de tiempo real<small>WebSocket</small></div>
+      </div>
+    </div>
+
+    <div class="flow">sesión autenticada · <b>tokens de ámbito acotado</b></div>
+
+    <div class="layer core">
+      <div class="layer-h">Plano de control — DevUP (nuestro)</div>
+      <div class="boxes">
+        <div class="box">API y autorización<small>REST · RLS</small></div>
+        <div class="box">Tiempo real<small>presencia · eventos</small></div>
+        <div class="box">Servidor de medios<small>SFU · grabación</small></div>
+        <div class="box">Bóveda de credenciales<small>cifrado envolvente</small></div>
+      </div>
+      <div class="boxes" style="padding-top: 0;">
+        <div class="box">Motor de migraciones<small>diff · plan · apply</small></div>
+        <div class="box">Orquestador de agentes<small>colas · runs</small></div>
+        <div class="box">Notificaciones<small>in-app · correo</small></div>
+        <div class="box">Auditoría<small>bitácora inmutable</small></div>
+      </div>
+    </div>
+
+    <div class="flow">credenciales del cliente · <b>solo salida, nunca copia de datos productivos</b></div>
+
+    <div class="layer ext">
+      <div class="layer-h">Plano de datos — cuentas del cliente (fuera de DevUP)</div>
+      <div class="boxes">
+        <div class="box">GitHub<small>código · PRs</small></div>
+        <div class="box">Vercel<small>frontend</small></div>
+        <div class="box">Render<small>backend</small></div>
+        <div class="box">Postgres<small>Neon · Supabase · propio</small></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Pila tecnológica propuesta</h3>
+  <table class="kv">
+    <tr><td>Frontend</td><td>Next.js (App Router) · TypeScript · Tailwind · biblioteca de componentes propia sobre primitivas accesibles</td></tr>
+    <tr><td>Datos y API</td><td>Postgres con <em>Row Level Security</em> como mecanismo primario de aislamiento entre organizaciones; capa de API tipada sobre ella</td></tr>
+    <tr><td>Tiempo real</td><td>Canal WebSocket sobre Postgres (replicación lógica) para mensajes, presencia y eventos de agentes</td></tr>
+    <tr><td>Voz</td><td>SFU de código abierto (LiveKit o mediasoup) con servicio de grabación separado; sin dependencia de SDK propietario</td></tr>
+    <tr><td>Almacenamiento</td><td>Almacenamiento de objetos compatible con S3, cifrado en reposo con clave por organización</td></tr>
+    <tr><td>Trabajos en segundo plano</td><td>Cola persistente sobre Postgres para migraciones, grabaciones y ejecuciones de agentes</td></tr>
+    <tr><td>Secretos</td><td>Cifrado envolvente AES-256-GCM con clave maestra en KMS; la clave en claro nunca se persiste</td></tr>
+    <tr><td>Repositorio</td><td>Monorepo con <em>workspaces</em>: <code>apps/web</code>, <code>apps/api</code>, <code>apps/worker</code>, <code>packages/ui</code>, <code>packages/db</code>, <code>packages/connectors</code></td></tr>
+  </table>
+
+</div>
+
+<!-- ============================ 4. MODELO DE DATOS ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">04 — Modelo de datos</div>
+    <h2>Entidades del núcleo</h2>
+    <div class="sec-lead">
+      Inventario por dominio de lo que hay que modelar durante las 12 semanas. Toda
+      tabla cuelga de <code>organization_id</code> salvo las globales del proveedor de identidad.
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="note-t">Por qué RLS en lugar de filtrar en la aplicación</div>
+    <p>
+      Con multi-tenencia, un solo <code>WHERE org_id = ?</code> olvidado filtra datos entre
+      clientes. Poniendo el aislamiento en la base de datos, un error de la aplicación
+      devuelve cero filas en vez de las filas de otro. El coste es disciplina: cada tabla
+      nueva necesita su política y su prueba de aislamiento en integración continua
+      (§5, criterios de finalización).
+    </p>
+  </div>
+
+  <table class="fixed">
+    <thead>
+      <tr><th style="width:26mm">Dominio</th><th style="width:66mm">Entidades</th><th>Notas de diseño</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="t-task">Identidad</td>
+        <td class="mono">organizations, users, memberships, roles, invitations, sessions, api_keys</td>
+        <td class="t-crit">Un usuario puede pertenecer a varias organizaciones con rol distinto en cada una. El rol se resuelve en la política RLS, no en la aplicación.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Colaboración</td>
+        <td class="mono">workspaces, channels, messages, threads, reactions, presence</td>
+        <td class="t-crit">Los mensajes se paginan por cursor, nunca por desplazamiento; el historial crece sin límite y el desplazamiento se degrada.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Voz</td>
+        <td class="mono">call_sessions, call_participants, recordings, recording_consents, room_keys</td>
+        <td class="t-crit">La sesión guarda el modo de cifrado elegido. El consentimiento se registra por participante y por sesión, con marca temporal.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Documentos</td>
+        <td class="mono">files, file_versions, folders, collections, tags, taggings</td>
+        <td class="t-crit">El etiquetado es polimórfico (<code>taggings</code>) y sirve a archivos, servicios, tareas y agentes con una sola tabla.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Comercial</td>
+        <td class="mono">accounts, contacts, services, deals, deal_stages, quotes, quote_items, activities</td>
+        <td class="t-crit">La cotización se versiona: editar una enviada crea una versión nueva, no muta la anterior. El histórico es requisito legal y comercial.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Objetivos</td>
+        <td class="mono">objectives, key_results, objective_links, periods</td>
+        <td class="t-crit">El progreso se deriva de hechos (ventas cerradas, tareas hechas), no se teclea a mano. Las metas manuales se corrompen en dos semanas.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Entrega</td>
+        <td class="mono">projects, tasks, milestones, task_dependencies, assignments, time_entries</td>
+        <td class="t-crit">Una tarea admite como responsable a una persona o a un agente: misma tabla, mismo tablero, distinto ejecutor.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Infraestructura</td>
+        <td class="mono">connections, credentials, environments, deployments, db_schemas, migrations, migration_runs</td>
+        <td class="t-crit"><code>credentials</code> guarda solo el material cifrado y la referencia a la clave; jamás el secreto en claro, ni siquiera transitoriamente en registro.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Agentes</td>
+        <td class="mono">agents, agent_capabilities, agent_tasks, runs, run_events, approvals, quotas</td>
+        <td class="t-crit"><code>run_events</code> es de solo anexión y alimenta el registro en vivo por streaming.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Transversal</td>
+        <td class="mono">notifications, notification_prefs, audit_log, webhooks, feature_flags</td>
+        <td class="t-crit">La bitácora de auditoría es inmutable: sin <code>UPDATE</code> ni <code>DELETE</code>, revocado a nivel de permisos de base de datos.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ 5. METODOLOGÍA ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">05 — Metodología</div>
+    <h2>Reglas de trabajo y estimación</h2>
+  </div>
+
+  <h3>Unidad de estimación y capacidad</h3>
+  <table class="kv">
+    <tr><td>1 punto</td><td>≈ 3 horas efectivas de trabajo (diseño, implementación, pruebas y revisión incluidos)</td></tr>
+    <tr><td>Capacidad</td><td>11 puntos por persona y semana — 33 h efectivas sobre una jornada de 40 h; el resto se va en coordinación, revisión y contexto</td></tr>
+    <tr><td>Equipo supuesto</td><td>2 personas full-stack → <strong>22 puntos por semana</strong>, 264 puntos en 12 semanas</td></tr>
+    <tr><td>Plan actual</td><td>257 puntos → 97 % de ocupación, con un colchón del 3 %. Es un plan ajustado: cualquier semana que se desborde consume el colchón entero</td></tr>
+  </table>
+
+  <div class="note warn">
+    <div class="note-t">Sobre la ocupación al 97 %</div>
+    <p>
+      Un plan sin holgura falla ante el primer imprevisto. Se asume conscientemente
+      porque cada semana incluye al menos una tarea marcada como diferible, y porque
+      el criterio de corte está definido de antemano: <strong>si una semana se desborda,
+      se recorta alcance dentro de esa semana antes que arrastrar deuda a la siguiente.</strong>
+      Las semanas 2, 8 y 9 son las de mayor incertidumbre y las candidatas naturales a
+      absorber una semana extra si hace falta.
+    </p>
+  </div>
+
+  <h3>Criterios de finalización <em>(Definition of Done)</em></h3>
+  <p>Una tarea no está hecha hasta que cumple, sin excepciones:</p>
+  <ul>
+    <li>Solicitud de incorporación revisada y aprobada por otra persona del equipo.</li>
+    <li>Pruebas automáticas: unitarias de la lógica y al menos una de integración del camino feliz.</li>
+    <li>Si toca tablas nuevas: <strong>prueba de aislamiento entre organizaciones</strong> que verifique que la organización A no ve nada de la B.</li>
+    <li>Sin errores de tipado ni de análisis estático; formato aplicado automáticamente.</li>
+    <li>Desplegada en el entorno de pruebas y verificada a mano contra su criterio de aceptación.</li>
+    <li>Si registra un hecho auditable, el evento correspondiente escrito en <code>audit_log</code>.</li>
+    <li>Anotada en el registro de cambios interno con una línea entendible por alguien de fuera.</li>
+  </ul>
+
+  <h3>Convenciones de repositorio</h3>
+  <table class="kv">
+    <tr><td>Ramas</td><td><code>feat/&lt;id-tarea&gt;-descripcion</code>, <code>fix/…</code>, <code>chore/…</code> — el identificador de tarea de este plan va en el nombre</td></tr>
+    <tr><td>Commits</td><td>Convencionales (<code>feat:</code>, <code>fix:</code>, <code>refactor:</code>…), en imperativo y en español</td></tr>
+    <tr><td>Integración continua</td><td>Tipado, análisis estático, pruebas, migraciones aplicadas en limpio y pruebas de aislamiento RLS — en cada solicitud</td></tr>
+    <tr><td>Migraciones</td><td>Siempre hacia adelante y reversibles; nunca se edita una migración ya fusionada</td></tr>
+    <tr><td>Entornos</td><td><code>dev</code> local · <code>staging</code> con datos sintéticos · <code>prod</code> a partir de la semana 12</td></tr>
+  </table>
+
+  <h3>Ritmo semanal</h3>
+  <p>
+    Lunes: planificación y reparto de tareas. Miércoles: revisión a mitad de semana,
+    momento de corte de alcance si algo va tarde. Viernes: <strong>demostración obligatoria
+    del entregable de la semana</strong> sobre el entorno de pruebas. Una semana sin
+    demostración se considera no cerrada, y su deuda se hace explícita en la planificación
+    del lunes siguiente.
+  </p>
+
+  <h3>Estrategia de pruebas</h3>
+  <table>
+    <thead><tr><th style="width:34mm">Nivel</th><th>Qué cubre y cómo</th></tr></thead>
+    <tbody>
+      <tr><td class="t-task">Unitarias</td><td class="t-crit">Lógica de dominio pura y sin base de datos: cálculo de progreso de objetivos, diferencias de esquema, resolución de permisos, motor de reglas de alerta.</td></tr>
+      <tr><td class="t-task">Integración</td><td class="t-crit">Contra un Postgres efímero que la propia suite levanta y migra desde cero. Cubre migraciones, políticas y consultas reales, no simulaciones.</td></tr>
+      <tr><td class="t-task">Aislamiento</td><td class="t-crit">Por cada tabla con <code>organization_id</code>, una prueba que verifica que un usuario de la organización A no lee ni escribe filas de la B. Se genera a partir del catálogo de tablas, de forma que <strong>una tabla nueva sin política falla sola</strong> sin que nadie recuerde escribir la prueba.</td></tr>
+      <tr><td class="t-task">Extremo a extremo</td><td class="t-crit">Solo los caminos que no se pueden romper: invitar y entrar, enviar un mensaje, entrar en una llamada, cerrar una venta y aplicar una migración en pruebas.</td></tr>
+      <tr><td class="t-task">Medios</td><td class="t-crit">Llamadas con navegadores automatizados y pistas de audio sintéticas. Se comprueba que hay audio recibido, no solo que la conexión se estableció.</td></tr>
+      <tr><td class="t-task">Conectores</td><td class="t-crit">Contra respuestas reales grabadas de cada proveedor, más una ejecución semanal contra la API viva que avisa si el contrato cambió por su lado.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ 6. ROADMAP ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">06 — Hoja de ruta</div>
+    <h2>Las 12 semanas de un vistazo</h2>
+    <div class="sec-lead">
+      El orden no es arbitrario: primero lo que el propio equipo va a usar a diario
+      (para poder trabajar dentro del producto cuanto antes), después el control de
+      ventas que sostiene el negocio, y solo entonces la capa de infraestructura, que
+      es la más compleja y la que más se beneficia de una base ya asentada.
+    </div>
+  </div>
+
+  <table class="road">
+    <thead>
+      <tr>
+        <th style="width:15mm">Semana</th>
+        <th style="width:21mm">Fase</th>
+        <th style="width:44mm">Foco</th>
+        <th>Entregable demostrable</th>
+        <th style="width:12mm">Pts</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="w">S1</td><td><span class="phase p1">Workspace</span></td><td class="t-task">Cimientos, identidad y canales</td><td class="t-crit">Dos usuarios chatean en un canal privado de su organización</td><td class="t-pts">21</td></tr>
+      <tr><td class="w">S2</td><td><span class="phase p1">Workspace</span></td><td class="t-task">Voz: llamada, cifrado y grabación</td><td class="t-crit">Llamada cifrada, grabada y archivada con consentimiento registrado</td><td class="t-pts">22</td></tr>
+      <tr><td class="w">S3</td><td><span class="phase p1">Workspace</span></td><td class="t-task">Archivos, taxonomía y búsqueda</td><td class="t-crit">Archivo subido, cifrado, etiquetado y encontrado por búsqueda</td><td class="t-pts">22</td></tr>
+      <tr><td class="w">S4</td><td><span class="phase p2">Ventas</span></td><td class="t-task">Servicios, clientes y pipeline</td><td class="t-crit">Cotización armada con servicios etiquetados avanzando por el embudo</td><td class="t-pts">22</td></tr>
+      <tr><td class="w">S5</td><td><span class="phase p2">Ventas</span></td><td class="t-task">Objetivos, entrega y seguimiento</td><td class="t-crit">Objetivo trimestral que avanza solo al cerrarse una venta</td><td class="t-pts">21</td></tr>
+      <tr><td class="w">S6</td><td><span class="phase p2">Ventas</span></td><td class="t-task">Notificaciones y búsqueda global</td><td class="t-crit">El equipo migra su operación diaria a DevUP</td><td class="t-pts">20</td></tr>
+      <tr><td class="w">S7</td><td><span class="phase p3">Infra</span></td><td class="t-task">Bóveda y conectores externos</td><td class="t-crit">Repo, despliegues y base de datos de un proyecto real, en una pantalla</td><td class="t-pts">22</td></tr>
+      <tr><td class="w">S8</td><td><span class="phase p3">Infra</span></td><td class="t-task">Base de datos como código</td><td class="t-crit">Tabla modelada en la interfaz y datos explorados con guardas activas</td><td class="t-pts">22</td></tr>
+      <tr><td class="w">S9</td><td><span class="phase p3">Infra</span></td><td class="t-task">Migraciones y sincronía con el repo</td><td class="t-crit">Cambio de esquema → migración → PR en GitHub → aplicado con plan previo</td><td class="t-pts">20</td></tr>
+      <tr><td class="w">S10</td><td><span class="phase p3">Infra</span></td><td class="t-task">Orquestación de agentes</td><td class="t-crit">Tarea asignada a un agente, ejecutada, aprobada y fusionada</td><td class="t-pts">22</td></tr>
+      <tr><td class="w">S11</td><td><span class="phase p4">Plataforma</span></td><td class="t-task">DevUP ID e identidad propia</td><td class="t-crit">Inicio de sesión con identidad propia, MFA y auditoría consultable</td><td class="t-pts">21</td></tr>
+      <tr><td class="w">S12</td><td><span class="phase p4">Plataforma</span></td><td class="t-task">Métricas, endurecimiento y beta</td><td class="t-crit">Beta cerrada con equipos externos usando el producto</td><td class="t-pts">22</td></tr>
+    </tbody>
+    <tfoot class="tfoot">
+      <tr><td colspan="4">Total planificado · 12 semanas</td><td class="t-pts">257</td></tr>
+    </tfoot>
+  </table>
+
+  <div class="note">
+    <div class="note-t">Semana 0 — preparación (2 a 3 días, antes de S1)</div>
+    <p>
+      Antes de escribir código hay que cerrar: composición del equipo, cuentas y
+      dominios, elección entre SFU autoalojado o gestionado, proveedor del Postgres
+      del plano de control, y las decisiones abiertas de la sección 10. Son decisiones
+      baratas ahora y carísimas en la semana 8.
+    </p>
+  </div>
+</div>
+
+<!-- ============================ 7. DETALLE ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">07 — Detalle por semana</div>
+    <h2>Tareas, criterios y estimación</h2>
+    <div class="sec-lead">
+      Cada tarea lleva identificador estable —el mismo que va en el nombre de la rama—,
+      un criterio de aceptación verificable y su estimación en puntos. Una tarea sin
+      criterio comprobable no entra en la planificación.
+    </div>
+  </div>
+
+  <!-- ---------- SEMANA 1 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">21 puntos</span><span class="week-tag">Semana 1</span></div>
+      <div class="week-title">Cimientos, identidad y workspace</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> dejar montado el esqueleto sobre el que se apoyan las once semanas
+    siguientes —repositorio, integración continua, multi-tenencia y autenticación— y
+    entregar ya la primera pieza visible: canales con mensajería en vivo.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S1-01</td><td class="t-task">Arranque del monorepo</td><td class="t-crit">Estructura de <em>workspaces</em> creada, tipado compartido entre aplicaciones, un solo comando levanta todo el entorno local desde cero en menos de 5 minutos.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S1-02</td><td class="t-task">Integración y despliegue continuos</td><td class="t-crit">Cada solicitud ejecuta tipado, análisis estático, pruebas y migraciones en limpio; la rama principal despliega sola al entorno de pruebas.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S1-03</td><td class="t-task">Esquema base multi-tenant con RLS</td><td class="t-crit">Tablas de organización, usuario, membresía y rol con políticas activas. Existe una prueba automática que falla si la organización A alcanza una fila de la B.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S1-04</td><td class="t-task">Autenticación</td><td class="t-crit">Registro e inicio de sesión por correo con enlace mágico y por GitHub. Sesión persistente, cierre de sesión efectivo y renovación de credencial transparente.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S1-05</td><td class="t-task">Invitaciones y gestión de miembros</td><td class="t-crit">Un administrador invita por correo, el invitado acepta y entra con el rol asignado. Roles de propietario, administrador y miembro con permisos distintos y verificables.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S1-06</td><td class="t-task">Sistema de diseño base</td><td class="t-crit">Paleta, tipografía y espaciado como variables; componentes de botón, campo, diálogo, menú y tabla; disposición de la aplicación con barra lateral y navegación funcionando en claro y oscuro.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S1-07</td><td class="t-task">Workspaces y canales</td><td class="t-crit">Alta, edición y archivado de workspaces y canales. Canales públicos y privados con lista de miembros propia; quien no pertenece no ve el canal ni por interfaz ni por API.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S1-08</td><td class="t-task">Mensajería en tiempo real</td><td class="t-crit">Mensaje enviado en una pestaña aparece en otra en menos de 500 ms sin recargar. Historial paginado por cursor, edición y borrado propios, indicador de escritura.</td><td class="t-pts">3</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 1</td><td class="t-pts">21</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Dos cuentas de la misma organización inician sesión, crean un canal privado y
+    conversan en tiempo real. Una tercera cuenta de otra organización no puede ver
+    absolutamente nada de la primera, y se enseña la prueba automática que lo garantiza.
+  </div>
+
+  <!-- ---------- SEMANA 2 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 2</span></div>
+      <div class="week-title">Voz: llamada, cifrado y grabación</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> llamadas de voz dentro del canal, con el modelo de cifrado
+    resuelto de forma explícita y grabación archivada. <b>Es la semana de mayor riesgo
+    técnico del plan</b>: concentra WebRTC, criptografía y una decisión de producto que
+    no se puede aplazar.
+  </div>
+
+  <div class="note risk">
+    <div class="note-t">Conflicto que hay que resolver antes de S2-04</div>
+    <p>
+      <strong>El cifrado extremo a extremo y la grabación en servidor son mutuamente
+      excluyentes.</strong> Si el audio va cifrado de punta a punta, nuestro servidor
+      solo ve paquetes opacos y no puede grabar nada; si el servidor puede grabar, es
+      porque tiene la clave, y entonces no es cifrado extremo a extremo por mucho que
+      lo llamemos así. Las tres salidas posibles:
+    </p>
+    <ul>
+      <li><strong>Grabar en el cliente:</strong> un participante designado graba localmente y sube el archivo re-cifrado. Preserva el cifrado, pero depende de su conexión y de que no cierre la pestaña.</li>
+      <li><strong>Sala sin cifrado extremo a extremo:</strong> cifrado en tránsito (DTLS-SRTP) y en reposo, con el servidor capaz de grabar. Es lo que hacen Zoom y Meet por defecto, y es perfectamente defendible mientras se diga.</li>
+      <li><strong>Participante grabador con clave:</strong> se entrega la clave de sala a un grabador del lado servidor. Conserva la arquitectura, pero rompe la promesa estricta.</li>
+    </ul>
+    <p style="margin-top:6pt">
+      <strong>Recomendación:</strong> modo declarado por sala, elegido al crearla y
+      visible para todos antes de entrar — «Sala privada: cifrada extremo a extremo,
+      no grabable» frente a «Sala grabable: cifrada en tránsito y en reposo». Prometer
+      ambas cosas a la vez es una promesa de seguridad falsa, y en este terreno una
+      promesa falsa cuesta más que una funcionalidad ausente.
+    </p>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S2-01</td><td class="t-task">Infraestructura de medios</td><td class="t-crit">SFU corriendo en desarrollo y pruebas. El servidor emite credenciales de sala de vida corta y ámbito acotado a un canal; una credencial no sirve para otra sala.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S2-02</td><td class="t-task">Sala de voz</td><td class="t-crit">Entrar y salir de la llamada desde el canal, silenciar micrófono, elegir dispositivo de entrada y salida, lista de participantes e indicador de quién habla. Tres participantes simultáneos sin cortes.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S2-03</td><td class="t-task">Presencia y estado</td><td class="t-crit">Estado en línea, ausente y en llamada visible en la lista del workspace, con propagación en menos de 2 s y limpieza correcta al cerrar la pestaña o perder la conexión.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S2-04</td><td class="t-task">Cifrado de la llamada</td><td class="t-crit">Modo elegido al crear la sala y mostrado a todos antes de entrar. En modo extremo a extremo, clave por sala rotada al entrar o salir cualquiera, y se demuestra con captura de tráfico que el servidor no puede descifrar el audio.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S2-05</td><td class="t-task">Grabación en servidor</td><td class="t-crit">Inicio y parada manual restringidos por rol, solo disponible en salas declaradas grabables. Indicador permanente de grabación en curso para todos. La grabación sobrevive a que el iniciador se desconecte.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S2-06</td><td class="t-task">Consentimiento y registro legal</td><td class="t-crit">Aviso previo al entrar en sala grabable y al iniciar la grabación; consentimiento registrado por participante con marca temporal. Quien no consiente no entra o es expulsado de la grabación.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S2-07</td><td class="t-task">Post-proceso de grabación</td><td class="t-crit">Al terminar, tarea en segundo plano que normaliza el audio, calcula duración y genera forma de onda. Estados de procesando, lista y fallida visibles, con reintento manual.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S2-08</td><td class="t-task">Biblioteca y reproductor</td><td class="t-crit">Grabaciones listadas por canal y fecha con reproductor propio. Acceso mediante enlaces firmados que caducan; un enlace caducado devuelve 403 y queda registrado el intento.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 2</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Llamada a tres en un canal. Primero en sala privada, enseñando con un analizador de
+    tráfico que el servidor no puede descifrar el audio. Después en sala grabable: se
+    graba, se registra el consentimiento de los tres, y al colgar la grabación aparece
+    procesada y reproducible en la biblioteca del canal.
+  </div>
+
+  <!-- ---------- SEMANA 3 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 3</span></div>
+      <div class="week-title">Archivos, taxonomía y búsqueda</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> convertir el workspace en el sitio donde de verdad viven los
+    documentos del equipo. El sistema de etiquetas que se construye aquí es transversal:
+    lo reutilizarán servicios, tareas y agentes en las semanas siguientes.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S3-01</td><td class="t-task">Subida reanudable</td><td class="t-crit">Subida por partes con barra de progreso; cortar la red y reanudar continúa donde iba. Límite por archivo y cuota por organización aplicados en servidor, no solo en la interfaz.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S3-02</td><td class="t-task">Cifrado en reposo</td><td class="t-crit">Cifrado envolvente con clave por organización; el objeto almacenado es ilegible sin pasar por la aplicación. Rotación de clave documentada y probada sobre datos existentes.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S3-03</td><td class="t-task">Sistema de etiquetas transversal</td><td class="t-crit">Etiquetas con color y descripción, aplicables a archivos, servicios, tareas y agentes desde una sola tabla polimórfica. Renombrar una etiqueta se propaga a todo lo etiquetado.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S3-04</td><td class="t-task">Categorías y colecciones</td><td class="t-crit">Carpetas virtuales y colecciones por criterio guardado. Un archivo puede estar en varias colecciones sin duplicarse en almacenamiento.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S3-05</td><td class="t-task">Previsualización</td><td class="t-crit">Vista previa en la propia aplicación para imagen, PDF, audio, vídeo y texto plano, sin descargar. Los tipos no soportados muestran ficha con metadatos y descarga directa.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S3-06</td><td class="t-task">Búsqueda y filtros</td><td class="t-crit">Búsqueda de texto completo sobre nombre, descripción y contenido extraído, combinable con filtros de etiqueta, tipo, autor y fecha. Respuesta por debajo de 300 ms en el percentil 95 con 10 000 archivos.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S3-07</td><td class="t-task">Versionado</td><td class="t-crit">Subir un archivo con el mismo nombre crea versión, no sobrescribe. Historial navegable, descarga de versiones anteriores y restauración con registro de quién y cuándo.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S3-08</td><td class="t-task">Retención y borrado</td><td class="t-crit">Papelera con plazo configurable, restauración desde ella y borrado definitivo que elimina también el objeto cifrado. Política de retención por workspace aplicada por tarea programada.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 3</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Se sube un contrato en PDF desde un canal, se etiqueta como «cliente» y «legal», se
+    previsualiza sin descargar, se sube una segunda versión, se recupera la primera del
+    historial, y se encuentra todo por búsqueda combinando texto y etiqueta.
+  </div>
+
+  <!-- ---------- SEMANA 4 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 4</span></div>
+      <div class="week-title">Control de ventas: servicios, clientes y pipeline</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> el corazón del negocio. Catálogo de servicios etiquetados, cartera
+    de clientes y embudo de oportunidades hasta la cotización. A partir de aquí el
+    producto deja de ser una herramienta de comunicación y empieza a ser una herramienta
+    de gestión.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S4-01</td><td class="t-task">Catálogo de servicios</td><td class="t-crit">Alta de servicio con nombre, descripción, precio base, unidad de venta, etiquetas y estado activo o retirado. Retirar un servicio no rompe las cotizaciones que ya lo incluían.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S4-02</td><td class="t-task">Cuentas y contactos</td><td class="t-crit">Ficha de cliente con varios contactos, datos fiscales, etiquetas y responsable asignado. Detección de duplicados por nombre y por identificador fiscal al crear.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S4-03</td><td class="t-task">Oportunidades</td><td class="t-crit">Etapas del embudo configurables por organización, con valor estimado, probabilidad, fecha prevista de cierre y responsable. Cambiar de etapa queda registrado con marca temporal.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S4-04</td><td class="t-task">Tablero Kanban</td><td class="t-crit">Arrastre entre columnas con actualización optimista y reversión visible si el servidor rechaza. Totales por columna y filtros por responsable, etiqueta y rango de fechas.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S4-05</td><td class="t-task">Cotizaciones</td><td class="t-crit">Composición de servicios con cantidad, descuento por línea y global, e impuestos. Editar una cotización enviada crea una versión nueva; el histórico completo queda accesible.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S4-06</td><td class="t-task">Bitácora por cuenta</td><td class="t-crit">Cronología única por cliente con notas, llamadas grabadas, archivos y cambios de etapa. Vincular una grabación o un archivo a una cuenta se hace en dos clics desde el canal.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S4-07</td><td class="t-task">Importación CSV</td><td class="t-crit">Importación de clientes y servicios con mapeo de columnas, vista previa, informe de errores por fila y deduplicación. Un fallo a mitad no deja datos a medias.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S4-08</td><td class="t-task">Permisos comerciales</td><td class="t-crit">Visibilidad de solo mi cartera o toda la organización según rol, aplicada en políticas de base de datos. Un comercial no alcanza por API las oportunidades de otro.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 4</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Alta de un cliente, composición de una cotización con tres servicios etiquetados y
+    un descuento, avance de la oportunidad por el embudo hasta ganada, y la grabación de
+    la llamada comercial de la semana 2 vinculada a la ficha del cliente.
+  </div>
+
+  <!-- ---------- SEMANA 5 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">21 puntos</span><span class="week-tag">Semana 5</span></div>
+      <div class="week-title">Objetivos, entrega y seguimiento</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> cerrar el ciclo de venta a ejecución. Lo vendido se convierte en
+    trabajo con responsables y plazos, y los objetivos se mueven solos a partir de
+    hechos reales en lugar de depender de que alguien actualice una hoja de cálculo.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S5-01</td><td class="t-task">Objetivos y resultados clave</td><td class="t-crit">Objetivo con periodo, meta numérica, unidad y ámbito de organización, equipo o persona. Varios resultados clave por objetivo, cada uno con su propia fuente de medición.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S5-02</td><td class="t-task">Progreso automático</td><td class="t-crit">El avance se deriva de hechos —ventas cerradas, tareas terminadas, servicios entregados— sin intervención manual. Al ganar una oportunidad, el objetivo vinculado se actualiza en la misma transacción.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S5-03</td><td class="t-task">De venta ganada a proyecto</td><td class="t-crit">Ganar una oportunidad genera un proyecto con una tarea por servicio contratado, según plantilla configurable por servicio. El proyecto queda vinculado a la cuenta y a la cotización de origen.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S5-04</td><td class="t-task">Tareas, hitos y listas</td><td class="t-crit">Tarea con responsable, fecha límite, estimación, etiquetas y lista de verificación. Hitos que agrupan tareas y muestran porcentaje de avance calculado.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S5-05</td><td class="t-task">Dependencias y estados</td><td class="t-crit">Dependencias entre tareas con detección de ciclos al crearlas. Estados de pendiente, bloqueada, en curso, en revisión y hecha; una tarea con dependencia sin cerrar no puede pasar a en curso.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S5-06</td><td class="t-task">Vista de seguimiento</td><td class="t-crit">Cronología por proyecto con hitos y dependencias, y vista de carga por persona que señala la sobreasignación en un rango de fechas.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S5-07</td><td class="t-task">Reglas de alerta</td><td class="t-crit">Alertas configurables de objetivo en riesgo según ritmo necesario, tarea vencida y oportunidad estancada más de N días. Se evalúan a diario y no repiten aviso sobre el mismo hecho.</td><td class="t-pts">3</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 5</td><td class="t-pts">21</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Un objetivo trimestral de facturación al 40 %. Se gana la oportunidad de la semana
+    anterior: el objetivo salta al 55 % sin que nadie toque nada, se genera el proyecto
+    con sus tareas, y una tarea vencida dispara su alerta.
+  </div>
+
+  <!-- ---------- SEMANA 6 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">20 puntos</span><span class="week-tag">Semana 6</span></div>
+      <div class="week-title">Notificaciones, actividad y búsqueda global</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> coser las tres semanas anteriores en un producto que se pueda usar
+    ocho horas al día. Al cerrar esta semana el equipo <b>abandona sus herramientas
+    actuales y opera dentro de DevUP</b>: es la mejor prueba de calidad disponible y el
+    hito que decide si la base está lista para la fase de infraestructura.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S6-01</td><td class="t-task">Motor de notificaciones</td><td class="t-crit">Canal único de eventos con entrega en la aplicación y por correo, resumen diario agrupado, y garantía de no duplicar un aviso ya entregado aunque el evento se reprocese.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S6-02</td><td class="t-task">Preferencias de aviso</td><td class="t-crit">Preferencias por tipo de evento y por vía de entrega, con horario de silencio. Las menciones directas respetan la configuración del usuario sin excepciones ocultas.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S6-03</td><td class="t-task">Menciones y hilos</td><td class="t-crit">Menciones a persona, rol y canal con autocompletado; hilos de respuesta que no ensucian el canal principal. Mencionar a alguien sin acceso al canal avisa de ello antes de enviar.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S6-04</td><td class="t-task">Feed de actividad</td><td class="t-crit">Cronología por workspace y por entidad —cliente, proyecto, archivo— alimentada por la bitácora de auditoría, con filtros por tipo de evento y por autor.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S6-05</td><td class="t-task">Búsqueda global</td><td class="t-crit">Un único buscador que cubre mensajes, archivos, clientes, oportunidades y tareas, con resultados agrupados por tipo y respeto estricto de permisos: no aparece lo que no se puede abrir.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S6-06</td><td class="t-task">Paleta de comandos y atajos</td><td class="t-crit">Paleta que permite navegar y ejecutar acciones frecuentes sin ratón, más atajos para las diez operaciones más usadas, documentados en la propia aplicación.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S6-07</td><td class="t-task">Estados vacíos y plantillas</td><td class="t-crit">Toda pantalla sin datos explica qué es y ofrece la acción siguiente. Plantillas de workspace —agencia, producto, consultoría— que dejan canales, etiquetas y etapas listos al crear la organización.</td><td class="t-pts">3</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 6</td><td class="t-pts">20</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Migración real: se crea la organización definitiva del equipo desde una plantilla, se
+    importan clientes y servicios, y la planificación del lunes siguiente ocurre ya dentro
+    de DevUP. Fin de la fase de espacio de trabajo y control de ventas.
+  </div>
+
+  <!-- ---------- SEMANA 7 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 7</span></div>
+      <div class="week-title">Bóveda de credenciales y conectores externos</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> empieza la fase de infraestructura. Poder conectar las cuentas
+    reales del cliente —GitHub, Vercel, Render, Postgres— y ver en una sola pantalla lo
+    que hoy exige cuatro pestañas. La bóveda de credenciales es la pieza más sensible de
+    todo el producto y va primero por eso.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S7-01</td><td class="t-task">Bóveda de credenciales</td><td class="t-crit">Cifrado envolvente con clave maestra en KMS y clave de datos por organización. El secreto en claro nunca se persiste ni aparece en registros ni en trazas de error. Todo acceso queda auditado con actor, motivo y momento. Rotación probada sin cortar conexiones activas.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S7-02</td><td class="t-task">Marco de conectores</td><td class="t-crit">Contrato común de autenticación, comprobación de salud, sincronización y recepción de eventos. Añadir un conector nuevo no exige tocar el núcleo. Reintentos con espera creciente y cortacircuitos ante fallo sostenido del proveedor.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S7-03</td><td class="t-task">Conector GitHub</td><td class="t-crit">Instalación como aplicación de GitHub con permisos mínimos. Listado de repositorios, ramas, solicitudes de incorporación y estado de comprobaciones; eventos entrantes verificados por firma y reflejados en menos de 10 s.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S7-04</td><td class="t-task">Conector Vercel</td><td class="t-crit">Proyectos, despliegues con su estado y commit asociado, registros de construcción y variables de entorno con los valores enmascarados. Relanzar un despliegue desde DevUP queda auditado.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S7-05</td><td class="t-task">Conector Render</td><td class="t-crit">Servicios, despliegues, estado de salud y registros en vivo. Distinción clara entre servicio caído y conector caído: nunca se muestra un estado inventado por falta de datos.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S7-06</td><td class="t-task">Conector Postgres genérico</td><td class="t-crit">Conexión a Neon, Supabase, RDS o instancia propia con TLS obligatorio y verificación de certificado. Reserva de conexiones con límite por organización y tiempo máximo de consulta. Destinos validados contra lista blanca para prevenir peticiones a la red interna.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S7-07</td><td class="t-task">Panel de entornos</td><td class="t-crit">Vista única por proyecto: qué commit está desplegado en cada entorno, cuándo, por quién, y contra qué base de datos apunta. Señala la deriva entre lo desplegado y la rama principal.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 7</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Se conecta un proyecto real —el gestor de eventos— y en una sola pantalla aparecen su
+    repositorio, el despliegue de frontend en Vercel, el de backend en Render y su base de
+    datos, con el commit desplegado en cada entorno.
+  </div>
+
+  <!-- ---------- SEMANA 8 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 8</span></div>
+      <div class="week-title">Base de datos como código</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> modelar y explorar la base de datos del cliente desde DevUP. Semana
+    de riesgo alto: <b>estamos tocando datos productivos ajenos</b>, y las guardas de
+    S8-05 no son una funcionalidad opcional sino el permiso para que exista el resto de
+    la semana.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S8-01</td><td class="t-task">Introspección de esquema</td><td class="t-crit">Lectura de tablas, columnas, tipos, valores por defecto, índices, claves ajenas, restricciones y políticas existentes. Funciona sobre una base con más de 100 tablas en menos de 5 s.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S8-02</td><td class="t-task">Editor visual de esquema</td><td class="t-crit">Crear y editar tablas, columnas y relaciones en un lienzo con posiciones persistentes. Los cambios se acumulan como propuesta pendiente y no tocan la base hasta aplicarse en la semana 9.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S8-03</td><td class="t-task">Editor SQL</td><td class="t-crit">Resaltado, autocompletado de tablas y columnas del esquema real, historial de consultas y consultas guardadas por proyecto. Se avisa antes de ejecutar cualquier sentencia que modifique datos.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S8-04</td><td class="t-task">Explorador de datos</td><td class="t-crit">Rejilla con paginación por cursor, ordenación, filtros por columna y edición en celda con confirmación explícita. Navegación por clave ajena entre tablas relacionadas.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S8-05</td><td class="t-task">Guardas de seguridad</td><td class="t-crit">Solo lectura por defecto en todo entorno marcado como producción. La escritura exige activación explícita con motivo escrito. Toda sentencia sin cláusula de filtro se rechaza, y se avisa por encima de un umbral de filas afectadas. Todo queda auditado.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S8-06</td><td class="t-task">Editor de políticas RLS</td><td class="t-crit">Lectura, creación y edición de políticas y roles con vista previa del SQL generado. Simulador que responde qué filas vería un rol concreto antes de aplicar el cambio.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S8-07</td><td class="t-task">Instantáneas previas</td><td class="t-crit">Antes de cualquier operación destructiva se captura el esquema y, bajo un umbral de tamaño, los datos afectados; queda restaurable durante un plazo configurable.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 8</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Sobre la base de datos real del gestor de eventos: se navega el esquema, se explora
+    una tabla siguiendo sus claves ajenas, se propone una tabla nueva en el editor visual,
+    y se enseña que un intento de borrado sin filtro sobre producción queda bloqueado.
+  </div>
+
+  <!-- ---------- SEMANA 9 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">20 puntos</span><span class="week-tag">Semana 9</span></div>
+      <div class="week-title">Migraciones y sincronía con el repositorio</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> cerrar el círculo que define el producto — cambiar el esquema en la
+    interfaz, obtener una migración versionada, verla entrar como solicitud de
+    incorporación en GitHub y aplicarla a la base real con plan previo. Esto es lo que
+    ninguna herramienta actual hace de punta a punta.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S9-01</td><td class="t-task">Motor de diferencias</td><td class="t-crit">Comparación entre esquema deseado y esquema real que produce SQL correcto para altas, cambios y bajas de tabla, columna, índice, restricción y política. Detecta los cambios destructivos y los marca como tales.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S9-02</td><td class="t-task">Plan y aplicación</td><td class="t-crit">Plan legible antes de ejecutar: qué se ejecuta, en qué orden, qué es irreversible y cuántas filas se estiman afectadas. Aplicación transaccional cuando el motor lo permite, con parada y reversión ante el primer error.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S9-03</td><td class="t-task">Reversión e historial</td><td class="t-crit">Cada migración guarda su reversa cuando es posible y avisa cuando no lo es. Historial completo por entorno con quién aplicó qué, cuándo y con qué resultado.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S9-04</td><td class="t-task">Sincronía con el repositorio</td><td class="t-crit">La migración generada se escribe en el repositorio del cliente con la convención de su herramienta y se abre una solicitud de incorporación con el plan en la descripción. Fusionarla no la vuelve a aplicar dos veces.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S9-05</td><td class="t-task">Detección de deriva</td><td class="t-crit">Comprobación periódica que compara el esquema real con el declarado en el repositorio y avisa de las diferencias, señalando cuáles vinieron de fuera de DevUP.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S9-06</td><td class="t-task">Ventanas de mantenimiento</td><td class="t-crit">Programar la aplicación de una migración para una franja concreta, con aviso previo, confirmación posterior y cancelación posible hasta el momento de ejecutarse.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 9</td><td class="t-pts">20</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Se añade una columna en el editor visual; DevUP genera la migración, abre la solicitud
+    de incorporación en GitHub con el plan detallado, se fusiona, se aplica al entorno de
+    pruebas y después a producción dentro de una ventana programada. Todo el recorrido sin
+    salir de la aplicación.
+  </div>
+
+  <!-- ---------- SEMANA 10 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 10</span></div>
+      <div class="week-title">Orquestación de agentes</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> conectar agentes —Codex, Claude Code y otros—, etiquetarlos por
+    capacidad y asignarles tareas del mismo tablero que usan las personas. La aprobación
+    humana antes de aplicar cambios no es negociable: es lo que hace que delegar en un
+    agente sea aceptable sobre un sistema productivo.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S10-01</td><td class="t-task">Registro de agentes</td><td class="t-crit">Alta de agente con proveedor, credencial guardada en la bóveda, alcance de repositorios y entornos permitidos, y comprobación de conectividad al guardar.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S10-02</td><td class="t-task">Capacidades y enrutamiento</td><td class="t-crit">Etiquetas de capacidad —frontend, migraciones, pruebas, revisión— y reglas que deciden qué agente atiende cada tipo de tarea. Sin agente apto, la tarea queda a la espera y lo dice, no falla en silencio.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S10-03</td><td class="t-task">Asignación desde el tablero</td><td class="t-crit">Asignar una tarea a un agente se hace igual que a una persona, en el mismo tablero. El contexto —descripción, archivos vinculados, repositorio, rama— se le entrega automáticamente.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S10-04</td><td class="t-task">Motor de ejecuciones</td><td class="t-crit">Cola con aislamiento por ejecución, límite de tiempo, límite de coste y cancelación en cualquier momento. Una ejecución cancelada no deja cambios a medias en el repositorio del cliente.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S10-05</td><td class="t-task">Bitácora en vivo</td><td class="t-crit">Registro de la ejecución por streaming en el canal, con los pasos dados y el diff propuesto visible antes de decidir. La bitácora queda consultable al terminar.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S10-06</td><td class="t-task">Aprobación humana</td><td class="t-crit">Ningún cambio llega al repositorio ni a la base de datos sin aprobación explícita de una persona con permiso. Aprobar abre la solicitud de incorporación; rechazar cierra la ejecución con el motivo registrado.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S10-07</td><td class="t-task">Resultados y cuotas</td><td class="t-crit">Aviso al terminar con qué se hizo, qué quedó pendiente y qué necesita una decisión humana. Presupuesto por organización con corte al alcanzarlo y aviso previo al 80 %.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 10</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Se crea una tarea, se asigna a un agente etiquetado como «frontend», se sigue su
+    ejecución en vivo desde el canal, se revisa el diff propuesto, se aprueba, y la
+    solicitud de incorporación aparece en GitHub. Todo el recorrido visible para el equipo
+    sin salir del workspace.
+  </div>
+
+  <!-- ---------- SEMANA 11 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">21 puntos</span><span class="week-tag">Semana 11</span></div>
+      <div class="week-title">DevUP ID — identidad propia</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> dejar de depender de proveedores de terceros para autenticar. Va en
+    la semana 11 y no antes de forma deliberada: construir un proveedor de identidad
+    propio antes de saber qué necesita el producto lleva a un diseño equivocado y a una
+    migración cara.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S11-01</td><td class="t-task">Proveedor OIDC</td><td class="t-crit">Flujo de código de autorización con PKCE, credenciales de refresco con rotación y detección de reutilización, punto de claves públicas y descubrimiento estándar. Validado contra una herramienta de conformidad reconocida.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S11-02</td><td class="t-task">Migración de cuentas</td><td class="t-crit">Las cuentas existentes pasan a DevUP ID conservando identificador, pertenencias y sesiones abiertas. Se puede volver atrás si algo falla, y el proceso se ensaya antes sobre el entorno de pruebas.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S11-03</td><td class="t-task">Aplicaciones y claves de API</td><td class="t-crit">Registro de aplicaciones con permisos granulares por recurso y operación. Claves mostradas una sola vez, con prefijo identificable, caducidad opcional y revocación inmediata efectiva.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S11-04</td><td class="t-task">Segundo factor</td><td class="t-crit">TOTP con códigos de recuperación de un solo uso. Exigible por política de organización; sin segundo factor configurado no se accede a la bóveda de credenciales ni a entornos de producción.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S11-05</td><td class="t-task">Sesiones y dispositivos</td><td class="t-crit">Listado de sesiones activas con dispositivo, ubicación aproximada y último uso; revocación individual o total con efecto inmediato en todos los servicios.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S11-06</td><td class="t-task">Auditoría consultable</td><td class="t-crit">Bitácora inmutable filtrable por actor, recurso, acción y rango de fechas, exportable en CSV y JSON. Cubre accesos a credenciales, migraciones aplicadas, ejecuciones de agente y cambios de permisos.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S11-07</td><td class="t-task">Identidad federada entrante</td><td class="t-crit">Una organización puede exigir el inicio de sesión a través de su propio proveedor, con asignación de dominio verificada por registro DNS.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 11</td><td class="t-pts">21</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Inicio de sesión con DevUP ID y segundo factor, una aplicación externa autenticándose
+    contra nuestro proveedor, revocación de una sesión con efecto inmediato, y la bitácora
+    mostrando quién accedió a qué credencial durante la semana.
+  </div>
+
+  <!-- ---------- SEMANA 12 ---------- -->
+  <div class="week">
+    <div class="week-head">
+      <div class="week-kicker"><span class="week-pts">22 puntos</span><span class="week-tag">Semana 12</span></div>
+      <div class="week-title">Métricas, endurecimiento y beta cerrada</div>
+    </div>
+  </div>
+  <div class="week-meta">
+    <b>Objetivo:</b> convertir doce semanas de funcionalidad en un producto que se puede
+    poner delante de equipos ajenos sin vergüenza ni sobresaltos.
+  </div>
+
+  <table>
+    <thead><tr><th style="width:16mm">ID</th><th style="width:54mm">Tarea</th><th>Criterio de aceptación</th><th style="width:11mm">Pts</th></tr></thead>
+    <tbody>
+      <tr><td class="t-id">S12-01</td><td class="t-task">Panel comercial</td><td class="t-crit">Embudo, tasa de conversión por etapa, ticket medio, previsión ponderada y avance de objetivos, con comparación contra el periodo anterior y filtros por responsable y etiqueta.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S12-02</td><td class="t-task">Panel operativo y de infraestructura</td><td class="t-crit">Cumplimiento de plazos, carga por persona, despliegues y migraciones del periodo, ejecuciones de agente y su coste. Todo acotado por organización.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S12-03</td><td class="t-task">Exportaciones e informes</td><td class="t-crit">Exportación a CSV y PDF de cualquier panel, e informes programados por correo con periodicidad configurable.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S12-04</td><td class="t-task">Revisión de seguridad</td><td class="t-crit">Auditoría de políticas RLS tabla por tabla, pruebas de acceso a recursos ajenos por identificador, verificación de la lista blanca de destinos en conectores, límites de peticiones por organización y revisión de dependencias. Cada hallazgo, corregido o aceptado por escrito.</td><td class="t-pts">5</td></tr>
+      <tr><td class="t-id">S12-05</td><td class="t-task">Pruebas de carga</td><td class="t-crit">Objetivos declarados y medidos: N salas de voz simultáneas y M conexiones de tiempo real, con percentil 95 por debajo de 300 ms en las vistas clave y carga inicial por debajo de 2 s.</td><td class="t-pts">3</td></tr>
+      <tr><td class="t-id">S12-06</td><td class="t-task">Copias y restauración</td><td class="t-crit">Copias automáticas del plano de control con retención definida y <b>ensayo real de restauración completa</b> documentado, con tiempo medido. Una copia sin restauración probada no cuenta como copia.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S12-07</td><td class="t-task">Observabilidad</td><td class="t-crit">Trazas distribuidas, métricas de negocio y de sistema, agregación de errores y alertas con destinatario asignado. Todo incidente en beta tiene un panel donde diagnosticarse.</td><td class="t-pts">2</td></tr>
+      <tr><td class="t-id">S12-08</td><td class="t-task">Beta cerrada</td><td class="t-crit">De tres a cinco equipos externos usando el producto con acompañamiento, canal de incidencias abierto y revisión semanal de lo aprendido convertida en el plan del trimestre siguiente.</td><td class="t-pts">2</td></tr>
+    </tbody>
+    <tfoot class="tfoot"><tr><td colspan="3">Total semana 12</td><td class="t-pts">22</td></tr></tfoot>
+  </table>
+
+  <div class="demo">
+    <b>Demostración del viernes</b><br>
+    Un equipo externo, sin formación previa, crea su organización, conecta su repositorio
+    y su base de datos, y completa su primer ciclo de venta a entrega dentro del producto.
+  </div>
+</div>
+
+<!-- ============================ 8. HITOS ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">08 — Hitos</div>
+    <h2>Puntos de control y decisión</h2>
+    <div class="sec-lead">
+      Cada hito es un momento de decisión explícito, no una celebración. Si el criterio
+      no se cumple, la conversación es de recorte de alcance, no de arrastrar deuda.
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th style="width:14mm">Hito</th><th style="width:16mm">Cierre</th><th style="width:48mm">Estado alcanzado</th><th>Criterio de superación</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="t-id">H1</td><td class="t-task">Semana 2</td><td class="t-task">Comunicación completa</td><td class="t-crit">Canales, mensajería y voz cifrada con grabación funcionando entre tres participantes reales, con el modo de cifrado decidido y documentado.</td></tr>
+      <tr><td class="t-id">H2</td><td class="t-task">Semana 3</td><td class="t-task">Workspace terminado</td><td class="t-crit">Gestión documental con etiquetas, versiones y búsqueda por debajo de 300 ms sobre un volumen realista.</td></tr>
+      <tr><td class="t-id">H3</td><td class="t-task">Semana 5</td><td class="t-task">Ciclo comercial cerrado</td><td class="t-crit">De cliente a cotización, a venta ganada, a proyecto con tareas, con el objetivo avanzando de forma automática.</td></tr>
+      <tr><td class="t-id">H4</td><td class="t-task">Semana 6</td><td class="t-task">Autoconsumo</td><td class="t-crit">El equipo opera dentro de DevUP y ha abandonado las herramientas que sustituye. <b>Es el hito que decide si se sigue a la fase de infraestructura.</b></td></tr>
+      <tr><td class="t-id">H5</td><td class="t-task">Semana 9</td><td class="t-task">Plano de control operativo</td><td class="t-crit">Un proyecto real gestionado de punta a punta: repositorio, despliegues y base de datos, con una migración aplicada a producción desde DevUP.</td></tr>
+      <tr><td class="t-id">H6</td><td class="t-task">Semana 10</td><td class="t-task">Agentes en producción</td><td class="t-crit">Una tarea real resuelta por un agente, aprobada por una persona y fusionada, con coste y bitácora auditables.</td></tr>
+      <tr><td class="t-id">H7</td><td class="t-task">Semana 12</td><td class="t-task">Beta cerrada</td><td class="t-crit">Equipos externos usando el producto, sin incidencias de seguridad abiertas y con restauración de copia ensayada.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <div class="note-t">El hito 4 es el punto de no retorno</div>
+    <p>
+      Si en la semana 6 el propio equipo no quiere abandonar sus herramientas actuales
+      para usar DevUP, ningún cliente externo lo hará tampoco. Ese es el momento honesto
+      para parar y arreglar la base, antes de gastar seis semanas más construyendo la
+      capa de infraestructura sobre unos cimientos que nadie disfruta usando.
+    </p>
+  </div>
+</div>
+
+<!-- ============================ 9. RIESGOS ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">09 — Riesgos</div>
+    <h2>Riesgos y mitigaciones</h2>
+  </div>
+
+  <table class="fixed">
+    <thead>
+      <tr><th style="width:52mm">Riesgo</th><th style="width:16mm">Impacto</th><th style="width:16mm">Probab.</th><th>Mitigación</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="t-task">Cifrado extremo a extremo y grabación son incompatibles</td>
+        <td class="t-crit">Alto</td><td class="t-crit">Alta</td>
+        <td class="t-crit">Modo declarado por sala y visible antes de entrar. Decisión cerrada en la semana 0, nunca a mitad de la semana 2 (§7, S2).</td>
+      </tr>
+      <tr>
+        <td class="t-task">Compromiso de la bóveda de credenciales</td>
+        <td class="t-crit">Crítico</td><td class="t-crit">Media</td>
+        <td class="t-crit">Cifrado envolvente con clave maestra en KMS, clave por organización, cero secretos en registros, acceso auditado y segundo factor obligatorio. A medio plazo, agente de conexión alojado por el cliente.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Migración que destruye datos productivos del cliente</td>
+        <td class="t-crit">Crítico</td><td class="t-crit">Media</td>
+        <td class="t-crit">Solo lectura por defecto, plan obligatorio, instantánea previa, marcado de operaciones irreversibles, límite de filas afectadas y confirmación escrita en producción.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Fuga entre organizaciones por política RLS ausente</td>
+        <td class="t-crit">Crítico</td><td class="t-crit">Media</td>
+        <td class="t-crit">Prueba de aislamiento obligatoria por tabla en integración continua; una tabla sin política no pasa el control y no llega a la rama principal.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Peticiones a la red interna a través de conectores</td>
+        <td class="t-crit">Alto</td><td class="t-crit">Media</td>
+        <td class="t-crit">Lista blanca de destinos, resolución DNS validada antes de conectar, redirecciones no seguidas y salida de red segregada.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Coste de almacenamiento y tráfico de grabaciones</td>
+        <td class="t-crit">Medio</td><td class="t-crit">Alta</td>
+        <td class="t-crit">Retención de 30 días por defecto, códec eficiente, cuota por plan y aviso al acercarse al límite. Medir el coste real desde la semana 2, no estimarlo.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Alcance excesivo para un equipo de dos personas</td>
+        <td class="t-crit">Alto</td><td class="t-crit">Alta</td>
+        <td class="t-crit">Demostración obligatoria cada viernes, corte de alcance dentro de la semana afectada y ninguna deuda arrastrada en silencio. Las semanas 2, 8 y 9 absorben el tiempo extra si hace falta.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Cambios o cortes en las APIs de terceros</td>
+        <td class="t-crit">Medio</td><td class="t-crit">Media</td>
+        <td class="t-crit">Contrato de conector desacoplado del núcleo, degradación explícita —«no pudimos consultar» nunca se muestra como «todo bien»— y caché del último estado con su antigüedad visible.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Grabaciones de voz como dato sensible y regulado</td>
+        <td class="t-crit">Alto</td><td class="t-crit">Media</td>
+        <td class="t-crit">Consentimiento registrado por participante, retención configurable, borrado verificable y residencia de datos definida antes de la beta.</td>
+      </tr>
+      <tr>
+        <td class="t-task">Agente que aplica un cambio no deseado</td>
+        <td class="t-crit">Alto</td><td class="t-crit">Media</td>
+        <td class="t-crit">Aprobación humana antes de tocar repositorio o base de datos, alcance acotado por agente, límites de tiempo y coste, y cancelación sin cambios a medias.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ 10. DECISIONES ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">10 — Decisiones</div>
+    <h2>Supuestos y decisiones pendientes</h2>
+    <div class="sec-lead">
+      Este plan se apoya en los supuestos de abajo. Si alguno cambia, cambian las
+      estimaciones. Las decisiones abiertas deben cerrarse en la semana 0: cuestan
+      minutos ahora y semanas más adelante.
+    </div>
+  </div>
+
+  <h3>Supuestos del plan</h3>
+  <ul>
+    <li>Equipo de <strong>2 personas full-stack</strong> a dedicación completa durante las 12 semanas.</li>
+    <li>No hay trabajo de diseño externo: la interfaz se construye sobre el sistema de diseño de S1-06.</li>
+    <li>Las 12 semanas son de construcción; comercialización, precios y soporte quedan fuera.</li>
+    <li>El proyecto del gestor de eventos sirve de banco de pruebas real desde la semana 7.</li>
+    <li>No hay requisitos de cumplimiento normativo formal —SOC 2, ISO— dentro de este horizonte.</li>
+  </ul>
+
+  <h3>Decisiones a cerrar antes de la semana 1</h3>
+  <table>
+    <thead><tr><th style="width:52mm">Decisión</th><th>Qué está en juego</th></tr></thead>
+    <tbody>
+      <tr><td class="t-task">Modo de cifrado de las llamadas</td><td class="t-crit">Determina si la grabación en servidor es viable. Es la decisión con más impacto sobre la semana 2 y sobre lo que podemos prometer comercialmente.</td></tr>
+      <tr><td class="t-task">SFU autoalojado o gestionado</td><td class="t-crit">Autoalojado abarata a escala y da control total; gestionado ahorra entre 3 y 5 puntos en la semana 2 e introduce coste por minuto. Recomendación: gestionado para la beta, migrable después.</td></tr>
+      <tr><td class="t-task">Postgres gestionado o propio para el plano de control</td><td class="t-crit">Un gestionado ahorra operación y trae autenticación, tiempo real y almacenamiento resueltos. Conviene mientras seamos dos personas.</td></tr>
+      <tr><td class="t-task">Aislamiento por RLS o por esquema</td><td class="t-crit">RLS es más simple de operar; esquema por organización aísla mejor pero complica las migraciones. Cambiar de criterio después de la semana 3 es carísimo.</td></tr>
+      <tr><td class="t-task">Modelo de precios</td><td class="t-crit">Por asiento, por conexión de infraestructura o por consumo de agentes. Afecta a qué hay que medir desde la semana 1, no desde la 12.</td></tr>
+      <tr><td class="t-task">Residencia de datos</td><td class="t-crit">Dónde viven grabaciones y archivos. Condiciona la elección de proveedor y lo que se puede vender en Europa.</td></tr>
+      <tr><td class="t-task">Alcance de la beta</td><td class="t-crit">Qué perfil de equipo invitamos y qué se les promete. Define qué recortar si una semana se desborda.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ 11. FASE 2 ============================ -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">11 — Después</div>
+    <h2>Fuera de alcance: fase 2</h2>
+    <div class="sec-lead">
+      Trabajo deliberadamente excluido de las 12 semanas. Está aquí para que nadie lo dé
+      por supuesto y para tener la lista lista cuando la beta empiece a pedirlo.
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:52mm">Línea de trabajo</th><th>Por qué queda fuera ahora</th></tr></thead>
+    <tbody>
+      <tr><td class="t-task">Vídeo y pantalla compartida</td><td class="t-crit">Multiplica el coste de ancho de banda y la complejidad de la grabación. La voz cubre el caso de uso principal en la beta.</td></tr>
+      <tr><td class="t-task">Transcripción y resumen de llamadas</td><td class="t-crit">Alto valor percibido, pero depende de tener grabación estable y coste por minuto medido. Candidato número uno para la semana 13.</td></tr>
+      <tr><td class="t-task">Facturación, contratos y firma</td><td class="t-crit">Extensión natural de las cotizaciones, con implicaciones fiscales por país que exigen tiempo dedicado.</td></tr>
+      <tr><td class="t-task">Aplicación móvil</td><td class="t-crit">Sin la web asentada, una app móvil duplica el mantenimiento. Web adaptable primero.</td></tr>
+      <tr><td class="t-task">Marketplace de plantillas de arquitectura</td><td class="t-crit">Necesita masa crítica de usuarios. Sin ellos, es un catálogo vacío.</td></tr>
+      <tr><td class="t-task">CLI y SDK públicos</td><td class="t-crit">Requieren una API estable. Congelar la API antes de la beta sería prematuro.</td></tr>
+      <tr><td class="t-task">Webhooks salientes y automatizaciones</td><td class="t-crit">Depende de un catálogo de eventos maduro, que solo se estabiliza tras usar el producto varios meses.</td></tr>
+      <tr><td class="t-task">Más conectores (Cloudflare, Fly.io, AWS, Stripe)</td><td class="t-crit">El marco de conectores de S7-02 los hace baratos de añadir después; se priorizarán según lo que pidan los equipos de la beta.</td></tr>
+      <tr><td class="t-task">Cumplimiento formal (SOC 2, ISO 27001)</td><td class="t-crit">Necesario para vender a empresas grandes, irrelevante para la beta cerrada. Las prácticas del plan dejan el terreno preparado.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <div class="note-t">Cierre</div>
+    <p>
+      El recorrido de estas 12 semanas va de una herramienta de comunicación a un plano
+      de control de infraestructura, pasando por un sistema de gestión comercial. El
+      orden importa más que el contenido: cada fase se apoya en que la anterior ya se
+      usa de verdad. La semana 6 —cuando el equipo abandona sus herramientas y se muda a
+      DevUP— es la que decide si el resto merece la pena construirse.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
