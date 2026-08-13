@@ -7,11 +7,12 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { env } from "../env.js";
+import { env, webOrigins } from "../env.js";
 
 export const s3 = new S3Client({
   region: env.S3_REGION,
@@ -21,6 +22,20 @@ export const s3 = new S3Client({
     accessKeyId: env.S3_ACCESS_KEY_ID,
     secretAccessKey: env.S3_SECRET_ACCESS_KEY,
   },
+  // Sin esto, la subida directa desde el navegador devuelve 403 y el mensaje
+  // no dice por qué.
+  //
+  // Desde la versión 3.729 el SDK calcula un checksum por defecto y, al firmar
+  // una URL, mete `x-amz-sdk-checksum-algorithm` y `x-amz-checksum-crc32` entre
+  // los parámetros firmados. El navegador que hace el PUT no manda esas
+  // cabeceras —no las conoce—, así que la firma no cuadra y el almacén
+  // rechaza la subida. Pasa igual con S3, con R2 y con MinIO.
+  //
+  // WHEN_REQUIRED los deja fuera salvo cuando la operación los exige de
+  // verdad. La integridad no se pierde: el PUT sigue yendo por TLS y el
+  // tamaño real se verifica con HEAD al confirmar.
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 /**
@@ -125,20 +140,61 @@ export async function deleteObjects(keys: string[]): Promise<void> {
   }
 }
 
-/** Crea el bucket si falta. Cómodo con MinIO recién levantado. */
+/**
+ * Crea el bucket si falta y le pone la política CORS que necesita la subida
+ * directa desde el navegador.
+ *
+ * Lo segundo es fácil de olvidar y difícil de diagnosticar: sin CORS, el
+ * navegador ni siquiera llega a hacer el PUT — se queda en el preflight y lo
+ * que se ve en la consola es un error de red genérico, sin mención al bucket.
+ * Con curl funciona, que es lo que despista.
+ *
+ * La política solo se aplica a un bucket que acabamos de crear. Si el bucket
+ * ya existía —el caso del cliente que trae el suyo— no se toca su
+ * configuración: es infraestructura ajena y no nos corresponde reescribirla.
+ */
 export async function ensureBucket(): Promise<void> {
   try {
     await s3.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+    return;
   } catch {
-    try {
-      await s3.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
-      console.log(`[s3] bucket «${env.S3_BUCKET}» creado`);
-    } catch (error) {
-      console.warn(
-        `[s3] no se pudo preparar el bucket «${env.S3_BUCKET}». ` +
-          `¿Está levantado el almacén en ${env.S3_ENDPOINT}?`,
-        error instanceof Error ? error.message : error,
-      );
-    }
+    // No existe o no se puede consultar: se intenta crear abajo.
+  }
+
+  try {
+    await s3.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
+    console.log(`[s3] bucket «${env.S3_BUCKET}» creado`);
+  } catch (error) {
+    console.warn(
+      `[s3] no se pudo preparar el bucket «${env.S3_BUCKET}». ` +
+        `¿Está levantado el almacén en ${env.S3_ENDPOINT}?`,
+      error instanceof Error ? error.message : error,
+    );
+    return;
+  }
+
+  try {
+    await s3.send(
+      new PutBucketCorsCommand({
+        Bucket: env.S3_BUCKET,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedOrigins: webOrigins,
+              AllowedMethods: ["GET", "PUT", "HEAD"],
+              AllowedHeaders: ["*"],
+              ExposeHeaders: ["ETag"],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
+      }),
+    );
+  } catch (error) {
+    console.warn(
+      "[s3] no se pudo fijar la política CORS del bucket. La subida desde el " +
+        "navegador fallará en el preflight hasta que se configure a mano.",
+      error instanceof Error ? error.message : error,
+    );
   }
 }
