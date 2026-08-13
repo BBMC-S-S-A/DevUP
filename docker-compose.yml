@@ -1,0 +1,52 @@
+# Infraestructura de desarrollo de DevUP.
+#
+# Levanta lo que en producción son servicios gestionados: Postgres y un
+# almacén compatible con S3. Nada de esto se despliega en nombre de un
+# cliente — es el plano de control de DevUP y su propio entorno local.
+#
+#   docker compose up -d
+#   npm run db:migrate
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: devup-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: devup
+    ports:
+      - "5432:5432"
+    volumes:
+      - devup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d devup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Almacén S3-compatible. En producción se sustituye por Cloudflare R2, AWS
+  # S3 o el bucket del propio cliente: el código es el mismo, solo cambian
+  # S3_ENDPOINT y las credenciales.
+  minio:
+    image: minio/minio:latest
+    container_name: devup-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: devup
+      MINIO_ROOT_PASSWORD: devup-local-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - devup-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  devup-pgdata:
+  devup-minio:

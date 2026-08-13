@@ -2,27 +2,20 @@
   "name": "devup",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["apps/api", "apps/web"],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run migrate --workspace apps/api",
+    "db:reset": "npm run migrate:reset --workspace apps/api",
+    "test:rls": "npm run test:rls --workspace apps/api"
   },
-  "dependencies": {
-    "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.58.0",
-    "lucide-react": "^0.544.0",
-    "next": "^15.5.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.0",
-    "@types/node": "^22.15.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
-    "tailwindcss": "^4.1.0",
-    "typescript": "^5.8.0"
+  "engines": {
+    "node": ">=20.11"
   }
 }
