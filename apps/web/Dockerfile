@@ -24,7 +24,6 @@ ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY package.json package-lock.json ./
 COPY apps/web ./apps/web
 RUN npm run build --workspace apps/web
