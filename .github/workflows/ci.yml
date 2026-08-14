@@ -1,0 +1,82 @@
+# Lo que protege este workflow no son los tipos: es el aislamiento entre
+# organizaciones.
+#
+# `test:rls` levanta dos organizaciones con usuarios distintos y comprueba que
+# ninguna ve nada de la otra, sin un solo `where organization_id` en las
+# consultas. Es el único freno automático que hay contra una fuga entre
+# clientes, y hasta ahora solo corría si alguien se acordaba.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  # Un push nuevo sobre la misma rama cancela el anterior: no tiene sentido
+  # esperar por un resultado que ya no describe el código.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        # La misma versión mayor que en desarrollo y en producción. Probar
+        # contra otra convierte el CI en verde y la producción en sorpresa.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: devup
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d devup"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/devup
+      DATABASE_URL: postgres://devup_app:ci-secret@localhost:5432/devup
+      APP_DB_PASSWORD: ci-secret
+      AUTH_SECRET: secreto-solo-para-integracion-continua
+      # El almacén no se levanta: ninguna de estas comprobaciones sube nada.
+      # Las variables existen porque la configuración se valida al arrancar y
+      # sin ellas el proceso ni empieza.
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: devup-files
+      S3_ACCESS_KEY_ID: ci
+      S3_SECRET_ACCESS_KEY: ci
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Migraciones
+        run: npm run db:migrate
+
+      - name: Aislamiento entre organizaciones
+        run: npm run test:rls
+
+      - name: Migraciones idempotentes
+        # Aplicarlas dos veces no debe cambiar nada ni fallar. Detecta la
+        # migración que se editó después de aplicarse, que es la forma más
+        # silenciosa de que dos entornos acaben con esquemas distintos.
+        run: npm run db:migrate
+
+      - name: Build
+        run: npm run build

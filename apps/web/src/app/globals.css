@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/*
+ * Paleta oscura. La interfaz es una herramienta de trabajo que se mira muchas
+ * horas seguidas, así que el contraste está alto pero sin blancos puros, que
+ * cansan la vista en pantallas grandes.
+ */
+@theme {
+  --color-canvas: #0a0c10;
+  --color-surface: #10141a;
+  --color-raised: #161b23;
+  --color-line: #222831;
+  --color-line-strong: #303845;
+  --color-ink: #e7ebf2;
+  --color-muted: #8a94a6;
+  --color-faint: #5c6577;
+  --color-accent: #5b8cff;
+  --color-accent-soft: #1b2540;
+  --color-live: #34d399;
+  --color-warn: #f59e0b;
+  --color-danger: #f87171;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barras de desplazamiento discretas: en una barra lateral con muchos canales
+   la barra por defecto de Windows domina la vista. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+@keyframes devup-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.animate-pulse-slow {
+  animation: devup-pulse 2s ease-in-out infinite;
+}

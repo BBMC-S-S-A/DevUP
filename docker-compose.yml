@@ -1,0 +1,88 @@
+# Infraestructura de desarrollo de DevUP.
+#
+# Levanta lo que en producción son servicios gestionados: Postgres y un
+# almacén compatible con S3. Nada de esto se despliega en nombre de un
+# cliente — es el plano de control de DevUP y su propio entorno local.
+#
+#   docker compose up -d
+#   npm run db:migrate
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: devup-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: devup
+    ports:
+      - "5432:5432"
+    volumes:
+      - devup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d devup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Almacén S3-compatible. En producción se sustituye por Cloudflare R2, AWS
+  # S3 o el bucket del propio cliente: el código es el mismo, solo cambian
+  # S3_ENDPOINT y las credenciales.
+  minio:
+    image: minio/minio:latest
+    container_name: devup-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: devup
+      MINIO_ROOT_PASSWORD: devup-local-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - devup-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Servidor TURN.
+  #
+  # Sin él la señalización conecta y la interfaz parece correcta, pero en NAT
+  # simétrico y en buena parte de las redes móviles el audio no llega nunca. Es
+  # el fallo número uno de este tipo de sistema y el más difícil de
+  # diagnosticar, porque todo lo demás funciona.
+  #
+  # En desarrollo dentro de una misma red se puede apagar; en producción no.
+  # Ver docs/TURN.md para desplegarlo de verdad — este contenedor sirve para
+  # probar el camino relay en local, no para exponerlo a internet.
+  coturn:
+    image: coturn/coturn:latest
+    container_name: devup-coturn
+    restart: unless-stopped
+    network_mode: host
+    # Los `denied-peer-ip` no son opcionales: TURN es literalmente un proxy que
+    # abre conexiones hacia donde le pida el cliente. Sin restringir los rangos
+    # privados, cualquiera que consiga una credencial puede usarlo para llegar
+    # al resto de la red interna.
+    #
+    # Nada de comentarios dentro del bloque `command`: en un escalar plegado de
+    # YAML el `#` no es un comentario, y cada palabra acabaría siendo un
+    # argumento más para coturn.
+    command: >
+      -n --log-file=stdout
+      --listening-port=3478
+      --fingerprint
+      --lt-cred-mech
+      --realm=devup.local
+      --user=devup:devup-turn-local
+      --no-tls --no-dtls
+      --no-multicast-peers
+      --denied-peer-ip=10.0.0.0-10.255.255.255
+      --denied-peer-ip=172.16.0.0-172.31.255.255
+      --denied-peer-ip=192.168.0.0-192.168.255.255
+
+volumes:
+  devup-pgdata:
+  devup-minio:
