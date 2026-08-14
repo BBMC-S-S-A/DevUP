@@ -2,7 +2,10 @@
   "name": "devup",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/api", "apps/web"],
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "dev:api": "npm run dev --workspace apps/api",
@@ -17,5 +20,9 @@
   },
   "engines": {
     "node": ">=20.11"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "sharp@0.34.5": true
   }
 }
