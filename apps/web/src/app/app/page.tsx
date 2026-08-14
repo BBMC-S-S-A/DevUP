@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, ChevronRight, LogOut, Plus, Terminal } from "lucide-react";
+import { Building2, ChevronRight, LogOut, Plus, Terminal, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
@@ -86,7 +86,19 @@ export default function OrganizationsPage() {
                     href={`/app/w/${workspace.id}`}
                     className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 transition hover:border-line-strong hover:bg-raised"
                   >
-                    <span className="text-sm">{workspace.name}</span>
+                    <span className="flex items-center gap-2 text-sm">
+                      {workspace.visibility === "personal" ? (
+                        <UserRound size={14} className="text-faint" />
+                      ) : (
+                        <Users size={14} className="text-faint" />
+                      )}
+                      {workspace.name}
+                      {workspace.visibility === "personal" && (
+                        <span className="rounded-full border border-line px-1.5 py-0.5 text-[10px] text-faint">
+                          personal
+                        </span>
+                      )}
+                    </span>
                     <ChevronRight size={16} className="text-faint" />
                   </Link>
                 ))}
@@ -112,6 +124,7 @@ function NewWorkspace({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [visibility, setVisibility] = useState<"shared" | "personal">("shared");
   const [busy, setBusy] = useState(false);
 
   if (!open) {
@@ -133,30 +146,63 @@ function NewWorkspace({
         event.preventDefault();
         setBusy(true);
         try {
-          await api.post(`/organizations/${organizationId}/workspaces`, { name });
+          await api.post(`/organizations/${organizationId}/workspaces`, { name, visibility });
           setName("");
+          setVisibility("shared");
           setOpen(false);
           await onCreated();
         } finally {
           setBusy(false);
         }
       }}
-      className="flex gap-2"
+      className="space-y-2 rounded-xl border border-line bg-surface p-3"
     >
-      <input
-        autoFocus
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        placeholder="Nombre del workspace"
-        className="flex-1 rounded-xl border border-line bg-surface px-4 py-3 text-sm outline-none placeholder:text-faint focus:border-accent/60"
-      />
-      <button
-        type="submit"
-        disabled={busy || name.trim().length === 0}
-        className="rounded-xl bg-accent px-4 text-sm font-medium text-canvas disabled:opacity-40"
-      >
-        Crear
-      </button>
+      <div className="flex gap-2">
+        <input
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nombre del workspace"
+          className="flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+        />
+        <button
+          type="submit"
+          disabled={busy || name.trim().length === 0}
+          className="rounded-lg bg-accent px-4 text-sm font-medium text-canvas disabled:opacity-40"
+        >
+          Crear
+        </button>
+      </div>
+
+      <div className="flex gap-1">
+        {(
+          [
+            ["shared", <Users key="s" size={13} />, "De equipo", "Lo ve toda la organización"],
+            ["personal", <UserRound key="p" size={13} />, "Personal", "Solo lo ves tú"],
+          ] as const
+        ).map(([value, icon, label, hint]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setVisibility(value)}
+            title={hint}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition ${
+              visibility === value
+                ? "border-accent/40 bg-accent-soft text-accent"
+                : "border-line text-muted hover:text-ink"
+            }`}
+          >
+            {icon}
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-[11px] text-faint">
+        {visibility === "personal"
+          ? "Un espacio para trabajar solo: sus archivos, canales y tareas no los ve nadie más, ni siquiera quien administra la organización."
+          : "Todo el equipo verá sus archivos, canales y tareas."}
+      </p>
     </form>
   );
 }

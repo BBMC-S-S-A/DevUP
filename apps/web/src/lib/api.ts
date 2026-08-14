@@ -109,6 +109,9 @@ export type Workspace = {
   id: string;
   organizationId: string;
   name: string;
+  /** `personal` solo lo ve quien lo creó, aunque comparta organización. */
+  visibility: "shared" | "personal";
+  createdBy: string;
   createdAt: string;
 };
 
@@ -143,4 +146,45 @@ export type FileRecord = {
   uploadedByName: string;
   createdAt: string;
   tags: Tag[];
+};
+
+export type Task = {
+  id: string;
+  workspaceId: string;
+  columnId: string;
+  title: string;
+  description: string;
+  position: number;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  dueDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  tags: Tag[];
+};
+
+export type BoardColumn = {
+  id: string;
+  name: string;
+  position: number;
+  tasks: Task[];
+};
+
+export type OrganizationMember = {
+  userId: string;
+  role: "owner" | "admin" | "member";
+  displayName: string;
+  avatarUrl: string | null;
+};
+
+export type Recording = {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  startedByName: string | null;
+  fileId: string | null;
+  fileName: string | null;
+  sizeBytes: string | null;
+  mimeType: string | null;
+  consents: { displayName: string; granted: boolean }[];
 };

@@ -126,8 +126,10 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `select id, organization_id as "organizationId", name, created_at as "createdAt"
-           from workspaces where organization_id = $1 order by created_at`,
+        `select id, organization_id as "organizationId", name, visibility,
+                created_by as "createdBy", created_at as "createdAt"
+           from workspaces where organization_id = $1
+          order by visibility desc, created_at`,
         [orgId],
       );
       return { workspaces: rows };
@@ -137,14 +139,24 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   app.post("/organizations/:orgId/workspaces", async (request, reply) => {
     const userId = requireUser(request);
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
-    const body = parseBody(z.object({ name: z.string().trim().min(1).max(80) }), request.body);
+    const body = parseBody(
+      z.object({
+        name: z.string().trim().min(1).max(80),
+        // Personal significa que solo lo ve quien lo crea, aunque el resto de
+        // la organización sea de plena confianza. Es el sitio donde alguien
+        // trabaja solo sin salirse del equipo.
+        visibility: z.enum(["shared", "personal"]).default("shared"),
+      }),
+      request.body,
+    );
 
     const workspace = await withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `insert into workspaces (organization_id, name, created_by)
-         values ($1, $2, $3)
-         returning id, organization_id as "organizationId", name, created_at as "createdAt"`,
-        [orgId, body.name, userId],
+        `insert into workspaces (organization_id, name, created_by, visibility)
+         values ($1, $2, $3, $4)
+         returning id, organization_id as "organizationId", name, visibility,
+                   created_by as "createdBy", created_at as "createdAt"`,
+        [orgId, body.name, userId, body.visibility],
       );
       return rows[0];
     });
@@ -157,7 +169,8 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `select id, organization_id as "organizationId", name, created_at as "createdAt"
+        `select id, organization_id as "organizationId", name, visibility,
+                created_by as "createdBy", created_at as "createdAt"
            from workspaces where id = $1`,
         [workspaceId],
       );

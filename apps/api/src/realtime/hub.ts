@@ -21,6 +21,8 @@ export type Member = {
   displayName: string;
   socket: WebSocket;
   muted: boolean;
+  camera: boolean;
+  sharing: boolean;
   /** Marca del último pong, para detectar sockets zombis. */
   alive: boolean;
 };

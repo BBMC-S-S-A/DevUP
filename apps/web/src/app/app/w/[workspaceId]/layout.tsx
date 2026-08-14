@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Files, Hash, Loader2, Lock, Plus, Volume2 } from "lucide-react";
+import { ArrowLeft, Files, Hash, KanbanSquare, Loader2, Lock, Plus, UserRound, Volume2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -71,7 +71,15 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             <ArrowLeft size={13} />
             Workspaces
           </Link>
-          <h1 className="truncate text-sm font-semibold">{workspace.name}</h1>
+          <h1 className="flex items-center gap-1.5 truncate text-sm font-semibold">
+            {workspace.visibility === "personal" && (
+              <UserRound size={13} className="shrink-0 text-faint" />
+            )}
+            <span className="truncate">{workspace.name}</span>
+          </h1>
+          {workspace.visibility === "personal" && (
+            <p className="mt-0.5 text-[10px] text-faint">Solo tú ves este workspace</p>
+          )}
         </div>
 
         <nav className="flex-1 space-y-6 overflow-y-auto px-2 py-4">
@@ -85,6 +93,18 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           >
             <Files size={15} />
             Biblioteca
+          </Link>
+
+          <Link
+            href={`/app/w/${workspaceId}/board`}
+            className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${
+              pathname === `/app/w/${workspaceId}/board`
+                ? "bg-accent-soft text-accent"
+                : "text-muted hover:bg-raised hover:text-ink"
+            }`}
+          >
+            <KanbanSquare size={15} />
+            Tablero
           </Link>
 
           <ChannelGroup

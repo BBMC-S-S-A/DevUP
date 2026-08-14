@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2, Mic, MicOff } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Loader2, Mic, MicOff, MonitorUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Participant } from "@/lib/voice/useVoiceRoom";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
 
@@ -10,33 +10,48 @@ export function ParticipantTile({
   isSelf = false,
   stream,
 }: {
-  participant: Pick<Participant, "displayName" | "muted" | "connectionState">;
+  participant: Pick<Participant, "displayName" | "muted" | "connectionState" | "camera" | "sharing">;
   isSelf?: boolean;
   stream: MediaStream | null;
 }) {
-  const audio = useRef<HTMLAudioElement>(null);
+  const media = useRef<HTMLVideoElement>(null);
+  const [hasVideo, setHasVideo] = useState(false);
 
-  // El indicador de voz se calcula sobre la propia pista incluso cuando está
-  // silenciada… salvo que lo esté: quien se ha silenciado no debe aparecer
-  // hablando aunque el micrófono siga captando.
+  // El indicador de voz se calcula sobre la propia pista… salvo que esté
+  // silenciada: quien se ha silenciado no debe aparecer hablando aunque el
+  // micrófono siga captando.
   const speaking = useSpeaking(stream, !participant.muted);
 
   useEffect(() => {
-    const element = audio.current;
-    if (!element || !stream || isSelf) return;
+    if (!stream) {
+      setHasVideo(false);
+      return;
+    }
+
+    const sync = () => setHasVideo(stream.getVideoTracks().some((t) => t.readyState === "live"));
+    sync();
+
+    // Encender la cámara a mitad de llamada añade una pista al stream que ya
+    // teníamos. Sin escuchar estos eventos, el recuadro seguiría enseñando las
+    // iniciales con el vídeo llegando por detrás.
+    stream.addEventListener("addtrack", sync);
+    stream.addEventListener("removetrack", sync);
+    return () => {
+      stream.removeEventListener("addtrack", sync);
+      stream.removeEventListener("removetrack", sync);
+    };
+  }, [stream]);
+
+  useEffect(() => {
+    const element = media.current;
+    if (!element || !stream) return;
     element.srcObject = stream;
-    // Puede fallar si el navegador aún no considera que hubo interacción.
-    // Como para llegar aquí hay que haber pulsado «entrar», es raro, pero un
-    // catch vacío es mejor que una excepción sin manejar en consola.
     void element.play().catch(() => {});
     return () => {
       element.srcObject = null;
     };
-  }, [stream, isSelf]);
+  }, [stream, hasVideo]);
 
-  // «completed» pertenece a iceConnectionState, no a connectionState: aquí los
-  // estados posibles son new, connecting, connected, disconnected, failed y
-  // closed.
   const connecting = !isSelf && participant.connectionState !== "connected";
 
   const initials = participant.displayName
@@ -47,45 +62,65 @@ export function ParticipantTile({
 
   return (
     <li
-      className={`relative flex flex-col items-center gap-3 rounded-2xl border bg-surface px-4 py-6 transition ${
+      className={`relative flex flex-col overflow-hidden rounded-2xl border bg-surface transition ${
         speaking ? "border-live/60 shadow-[0_0_0_3px_rgba(52,211,153,0.12)]" : "border-line"
       }`}
     >
-      <div
-        className={`grid size-16 place-items-center rounded-full text-lg font-medium transition ${
-          speaking ? "bg-live/20 text-live" : "bg-raised text-muted"
-        }`}
-      >
-        {initials || "?"}
+      <div className="relative grid aspect-video place-items-center bg-canvas">
+        {hasVideo ? (
+          <video
+            ref={media}
+            autoPlay
+            playsInline
+            // El vídeo propio se refleja como un espejo: es lo que espera
+            // cualquiera que se vea a sí mismo. El de los demás, no.
+            muted={isSelf}
+            className={`size-full ${participant.sharing ? "object-contain" : "object-cover"} ${
+              isSelf && !participant.sharing ? "-scale-x-100" : ""
+            }`}
+          />
+        ) : (
+          <>
+            <div
+              className={`grid size-14 place-items-center rounded-full text-base font-medium transition ${
+                speaking ? "bg-live/20 text-live" : "bg-raised text-muted"
+              }`}
+            >
+              {initials || "?"}
+            </div>
+            {/* Sin vídeo sigue haciendo falta un elemento que reproduzca el
+                audio del otro extremo. */}
+            {!isSelf && <video ref={media} autoPlay playsInline className="hidden" />}
+          </>
+        )}
+
+        {participant.sharing && (
+          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-canvas/80 px-1.5 py-0.5 text-[10px] text-accent">
+            <MonitorUp size={10} />
+            pantalla
+          </span>
+        )}
       </div>
 
-      <div className="text-center">
-        <p className="max-w-36 truncate text-sm">
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <span className="min-w-0 truncate text-xs">
           {participant.displayName}
-          {isSelf && <span className="ml-1 text-xs text-faint">(tú)</span>}
-        </p>
-        <p className="mt-0.5 flex items-center justify-center gap-1 text-xs text-faint">
+          {isSelf && <span className="ml-1 text-faint">(tú)</span>}
+        </span>
+
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-faint">
           {connecting ? (
             <>
               <Loader2 size={11} className="animate-spin" />
               {participant.connectionState === "failed" ? "sin conexión" : "conectando"}
             </>
           ) : participant.muted ? (
-            <>
-              <MicOff size={11} />
-              silenciado
-            </>
+            <MicOff size={12} className="text-warn" />
           ) : (
-            <>
-              <Mic size={11} className={speaking ? "text-live" : ""} />
-              {speaking ? "hablando" : "en línea"}
-            </>
+            <Mic size={12} className={speaking ? "text-live" : ""} />
           )}
-        </p>
+        </span>
       </div>
-
-      {/* El audio propio nunca se reproduce: se oiría a sí mismo con retardo. */}
-      {!isSelf && <audio ref={audio} autoPlay playsInline />}
     </li>
   );
 }

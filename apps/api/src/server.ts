@@ -9,6 +9,8 @@ import { HttpError, translateDbError } from "./lib/http.js";
 import { signalingRoutes } from "./realtime/signaling.js";
 import { authRoutes } from "./routes/auth.js";
 import { fileRoutes } from "./routes/files.js";
+import { recordingRoutes } from "./routes/recordings.js";
+import { taskRoutes } from "./routes/tasks.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { deleteObjects, ensureBucket } from "./storage/s3.js";
 
@@ -67,6 +69,8 @@ app.get("/health", async () => ({ status: "ok", now: new Date().toISOString() })
 await app.register(authRoutes);
 await app.register(workspaceRoutes);
 await app.register(fileRoutes);
+await app.register(taskRoutes);
+await app.register(recordingRoutes);
 await app.register(signalingRoutes);
 
 /**

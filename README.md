@@ -3,9 +3,11 @@
 Centro de mando para la operación comercial y la infraestructura técnica de un
 equipo de desarrollo.
 
-La iteración actual cubre lo mínimo que se sostiene en pie: **identidad y
-multi-tenencia, workspaces y canales, llamadas de voz, y una biblioteca de
-archivos** con etiquetas, búsqueda y previsualización.
+La iteración actual cubre: **identidad y multi-tenencia**, **workspaces
+compartidos o personales**, **canales**, **llamadas con voz, vídeo y pantalla
+compartida**, **grabación con consentimiento**, una **biblioteca de archivos**
+con etiquetas, búsqueda y previsualización, y un **tablero de tareas** por
+workspace.
 
 Documentación: [`docs/CONTEXTO-COMPLETO.md`](docs/CONTEXTO-COMPLETO.md) —
 decisiones, motivos y trampas conocidas. Léelo antes de tocar el esquema.
@@ -63,6 +65,11 @@ registros. `DATABASE_ADMIN_URL` es solo para el runner de migraciones.
 **TURN es opcional en desarrollo y obligatorio en producción.** Sin él la
 señalización conecta y la interfaz parece correcta, pero en NAT simétrico y en
 buena parte de las redes móviles el audio no llega nunca.
+
+**Las llamadas van cifradas extremo a extremo y no se pueden grabar desde el
+servidor.** La grabación ocurre en el navegador de un participante y necesita
+el permiso de todos los presentes. Es una decisión tomada, no una carencia:
+[`docs/decisiones/0001-cifrado-de-salas.md`](docs/decisiones/0001-cifrado-de-salas.md).
 
 **La primera carpeta de la clave de un objeto es la frontera de seguridad.**
 `{organization_id}/{workspace_id}/{uuid}.{ext}`, y la comprobación de

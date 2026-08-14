@@ -113,7 +113,44 @@ async function main(): Promise<void> {
         "member",
       ]);
 
-      return { org, ws, publicChannel, privateChannel };
+      // Workspace personal dentro de la misma organización, con contenido en
+      // las tres tablas que cuelgan de él. Lo interesante no es que Ana lo vea
+      // —eso es trivial— sino que Carla, que sí es de Acme, no vea nada.
+      const soloWs = (
+        await db.query<{ id: string }>(
+          `insert into workspaces (organization_id, name, created_by, visibility)
+           values ($1,$2,$3,'personal') returning id`,
+          [org, "Cuaderno de Ana", ana],
+        )
+      ).rows[0]!.id;
+
+      const soloChannel = (
+        await db.query<{ create_channel: string }>(
+          "select public.create_channel($1,$2,$3,$4)",
+          [soloWs, "notas", "voice", false],
+        )
+      ).rows[0]!.create_channel;
+
+      await db.query(
+        `insert into files (organization_id, workspace_id, storage_key, name, uploaded_by, status)
+         values ($1,$2,$3,$4,$5,'ready')`,
+        [org, soloWs, `${org}/${soloWs}/${randomUUID()}.pdf`, "borrador-privado.pdf", ana],
+      );
+
+      const soloColumn = (
+        await db.query<{ id: string }>(
+          "select id from task_columns where workspace_id = $1 order by position limit 1",
+          [soloWs],
+        )
+      ).rows[0]!.id;
+
+      await db.query(
+        `insert into tasks (workspace_id, column_id, title, position, created_by)
+         values ($1,$2,$3,1000,$4)`,
+        [soloWs, soloColumn, "idea que no comparto todavía", ana],
+      );
+
+      return { org, ws, publicChannel, privateChannel, soloWs, soloChannel };
     });
 
     const bolt = await withUser(bruno, async (db) => {
@@ -150,8 +187,8 @@ async function main(): Promise<void> {
     console.log("\nAislamiento de lectura");
     check("Ana ve una sola organización", (await count(ana, "organizations")) === 1);
     check("Bruno ve una sola organización", (await count(bruno, "organizations")) === 1);
-    check("Ana ve un solo workspace", (await count(ana, "workspaces")) === 1);
-    check("Ana ve un solo archivo", (await count(ana, "files")) === 1);
+    check("Ana ve sus workspaces y solo los suyos", (await count(ana, "workspaces")) === 2);
+    check("Ana ve sus archivos y solo los suyos", (await count(ana, "files")) === 2);
     check("Bruno ve un solo archivo", (await count(bruno, "files")) === 1);
     check("Bruno no ve las etiquetas de Acme", (await count(bruno, "tags")) === 0);
 
@@ -167,9 +204,40 @@ async function main(): Promise<void> {
     check("una conexión sin app.user_id no ve usuarios", (await count(null, "users")) === 0);
 
     console.log("\nCanales privados dentro de la misma organización");
-    check("Ana ve los dos canales que creó", (await count(ana, "channels")) === 2);
+    check("Ana ve los tres canales que creó", (await count(ana, "channels")) === 3);
     check("Carla, miembro de Acme, solo ve el canal público", (await count(carla, "channels")) === 1);
     check("Carla sí ve el workspace compartido", (await count(carla, "workspaces")) === 1);
+
+    console.log("\nWorkspaces personales");
+    // Carla es miembro de pleno derecho de Acme. Todo lo que no ve aquí lo
+    // deja de ver por la visibilidad del workspace, no por la organización.
+    check("Ana ve sus dos workspaces", (await count(ana, "workspaces")) === 2);
+    check("Carla solo ve el workspace compartido", (await count(carla, "workspaces")) === 1);
+    check(
+      "Carla no ve los canales del workspace personal de Ana",
+      (await count(carla, "channels")) === 1,
+    );
+    check(
+      "Carla no ve los archivos del workspace personal de Ana",
+      (await count(carla, "files")) === 1,
+    );
+    check("Carla no ve las tareas de Ana", (await count(carla, "tasks")) === 0);
+    check("Carla no ve ni las columnas de su tablero", (await count(carla, "task_columns")) === 3);
+    check("Ana sí ve las columnas de los dos tableros", (await count(ana, "task_columns")) === 6);
+
+    await denied("Carla no puede entrar en un canal del workspace personal de Ana", () =>
+      withUser(carla, (db) =>
+        db.query("select public.join_call($1,$2)", [acme.soloChannel, "peer-fisgon"]),
+      ),
+    );
+
+    const renamedSolo = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("update workspaces set name = 'Mío' where id = $1", [
+        acme.soloWs,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("un UPDATE sobre el workspace personal ajeno afecta a cero filas", renamedSolo === 0);
 
     console.log("\nPerfiles");
     // Ana y Carla comparten organización; Bruno no comparte con nadie.

@@ -17,25 +17,33 @@ está construida y probada de punta a punta.
 **Hecho y verificado**
 
 - Esquema en `db/migrations/`, aplicado contra un Postgres real. `npm run
-  test:rls` pasa con 28 comprobaciones de aislamiento entre organizaciones.
+  test:rls` pasa con 37 comprobaciones de aislamiento, incluidos los workspaces
+  personales.
 - API en Fastify: alta y acceso con scrypt, sesiones con token de refresco
   rotatorio, organizaciones, workspaces, canales, archivos con URLs firmadas y
   señalización por WebSocket.
 - Interfaz en Next.js: acceso, selector de organización, barra lateral de
   canales, biblioteca de archivos con etiquetas, búsqueda y previsualización, y
-  sala de voz con negociación perfecta.
-- Prueba en navegador con dos pestañas y micrófono sintético: dos pares se
-  conectan, se oyen, se silencian y cuelgan; el historial de la llamada se
-  cierra solo.
+  sala con voz, vídeo, pantalla compartida y duración de la llamada.
+- Grabación en el navegador con consentimiento unánime, que acaba como un
+  archivo más en la biblioteca del canal.
+- Workspaces personales frente a compartidos, y tablero de tareas por workspace
+  con arrastrar y soltar.
+- Prueba en navegador con dos pestañas y micrófono y cámara sintéticos: dos
+  pares se conectan, se oyen, se ven, negocian el permiso de grabación, graban,
+  guardan el archivo y cuelgan; el historial se cierra solo.
 
 **Lo que falta para poder usarlo de verdad**
 
 1. **TURN.** Es lo único que separa la sala de voz de estar terminada: sin él
    solo funciona dentro de una misma red. La configuración ya está prevista en
    `.env.example`.
-2. **Elegir el modo de cifrado de las salas.** Bloquea la grabación y no se
-   puede decidir después sin romper una promesa ya hecha al usuario.
-3. Mensajería de texto, invitaciones por correo, y de ahí a la semana 4.
+2. Mensajería de texto, invitaciones por correo, y de ahí a la semana 4.
+
+El cifrado de las salas **ya está decidido**: extremo a extremo siempre,
+grabación en el cliente con permiso de todos. El razonamiento completo, con lo
+que se descartó y por qué, está en
+[`decisiones/0001-cifrado-de-salas.md`](decisiones/0001-cifrado-de-salas.md).
 
 ---
 
@@ -67,6 +75,10 @@ contradice el discurso justo en la parte que menos se puede mover después.
   la identidad del último usuario dentro.
 - **Las funciones de pertenencia son `SECURITY DEFINER` a propósito.** Quitarlo
   provoca recursión infinita en las políticas.
+- **Un workspace personal no se protege con una columna.** `can_access_channel`
+  y la política de `files` miraban la organización, no el workspace: si vuelven
+  a mirar ahí, los canales y archivos de un espacio personal se ven desde todo
+  el equipo. Tienen que colgar de `can_access_workspace`.
 - **Cada tabla nueva con `organization_id` necesita su política y su caso en
   `apps/api/src/db/isolation.test.ts`.** Es la disciplina que impone elegir RLS,
   y el único freno automático contra una fuga entre clientes.

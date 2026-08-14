@@ -119,9 +119,13 @@ que se sostiene en pie. Concretamente:
 2. Workspaces y canales — **hecho**
 3. Sala de voz funcional entre varios participantes — **hecho**
 4. Biblioteca de archivos con etiquetas, previsualización y búsqueda — **hecho**
+5. Vídeo, pantalla compartida y duración de llamada — **hecho**
+6. Grabación en el cliente con consentimiento unánime — **hecho**
+7. Workspaces personales frente a compartidos — **hecho**
+8. Tablero de tareas por workspace — **hecho**
 
-Lo que **no** entra todavía: mensajería de texto, grabación de llamadas,
-control de ventas, conectores, agentes, identidad propia.
+Lo que **no** entra todavía: mensajería de texto, control de ventas,
+conectores, agentes, identidad propia.
 
 ---
 
@@ -310,7 +314,19 @@ respaldar con Redis pub/sub.
   lo que declaró el cliente al reservar: quien firma la subida puede mentir
   sobre ambos.
 
-### 5.5 Cifrado frente a grabación
+### 5.5 Cifrado frente a grabación — **decidido**
+
+> Decisión completa, con lo descartado y su motivo, en
+> [`decisiones/0001-cifrado-de-salas.md`](decisiones/0001-cifrado-de-salas.md).
+>
+> **Todas las salas van cifradas extremo a extremo, siempre. La grabación
+> ocurre en el navegador de un participante y requiere que todos los presentes
+> den su permiso.** No hay modos de sala: una sola promesa, la misma en toda la
+> aplicación.
+>
+> Se descartó la «sala grabable» sin cifrado extremo a extremo porque para que
+> un servidor grabe, el audio tiene que pasar por él — y eso obliga a un SFU,
+> que es justo lo que la regla permanente del producto (§2) prohíbe.
 
 **El cifrado extremo a extremo y la grabación en servidor se excluyen
 mutuamente.** Si el audio va cifrado de punta a punta, el servidor solo ve
@@ -333,13 +349,15 @@ Las tres salidas, cuando toque grabar:
    grabador del lado servidor. Conserva la arquitectura, rompe la promesa
    estricta.
 
-**Recomendación: modo declarado por sala**, elegido al crearla y visible para
-todos antes de entrar — «Sala privada: cifrada extremo a extremo, no grabable»
-frente a «Sala grabable: cifrada en tránsito y en reposo». Prometer ambas cosas
-a la vez es una promesa de seguridad falsa, y en este terreno una promesa falsa
-cuesta más que una funcionalidad ausente.
+Se eligió la **1**. Prometer las dos cosas a la vez es una promesa de seguridad
+falsa, y en este terreno una promesa falsa cuesta más que una funcionalidad
+ausente.
 
-Hay que elegir **antes** de implementar la grabación, no después.
+Consecuencias que hay que contarle al usuario, no esconder: la grabación
+depende de que quien graba no cierre la pestaña, es lo que esa persona oyó, y
+de momento es solo audio. Un solo «no» cancela la grabación para todos —en una
+malla, quien graba recibe el audio de todos, así que «grabo solo a los que
+dijeron que sí» no se puede cumplir—.
 
 ---
 
@@ -353,6 +371,7 @@ cabecera el porqué de lo que hace:
 | `0001_core.sql` | Usuarios, perfiles, sesiones, organizaciones, miembros, workspaces, canales. Funciones de pertenencia y de autenticación. RLS en todo. |
 | `0002_files.sql` | Etiquetas polimórficas, archivos, búsqueda de texto completo, barrendero de subidas abandonadas. |
 | `0003_calls.sql` | Historial de llamadas y las funciones transaccionales `join_call` / `leave_call` / `reap_call_peer`. |
+| `0004_workspaces_tasks_recordings.sql` | Visibilidad de workspace (compartido/personal), tablero de tareas y grabaciones con consentimiento. |
 | `db/grants.sql` | Privilegios de `devup_app`. Se reaplica en cada migración, es idempotente. |
 
 Dos separaciones que parecen redundantes y no lo son:
@@ -367,9 +386,16 @@ Dos separaciones que parecen redundantes y no lo son:
 ### Estado de verificación
 
 Las migraciones **se han aplicado contra un Postgres real** y `npm run test:rls`
-pasa con 28 comprobaciones: lectura cruzada entre organizaciones, escritura
+pasa con 37 comprobaciones: lectura cruzada entre organizaciones, escritura
 cruzada, canales privados dentro de la misma organización, visibilidad de
-perfiles, credenciales, y el ciclo completo de una llamada.
+perfiles, credenciales, workspaces personales, y el ciclo
+completo de una llamada.
+
+Un aviso que costó entenderlo la primera vez: **añadir «personal» a workspaces
+no fue añadir una columna.** `can_access_channel` y la política de `files`
+miraban la organización, no el workspace, así que los canales y los archivos de
+un workspace personal habrían seguido siendo visibles para todo el equipo. La
+prueba de aislamiento cubre ahora ese caso exacto.
 
 Es la mitad barata de la disciplina que impone elegir RLS. La otra mitad es
 acordarse de escribir la política.
@@ -440,6 +466,8 @@ Todas encontradas ejecutando el sistema, no revisándolo a ojo.
 | Se acumulan objetos que nadie referencia | Se subió el objeto antes de crear la fila | Reservar la fila primero, en `pending` (§5.4) |
 | La misma persona en dos pestañas se pisa | Se usó `userId` como identidad de par | Un `peerId` por conexión, asignado por el servidor |
 | El micrófono queda encendido tras colgar | Faltó parar las pistas al desmontar | Limpieza completa: pistas, conexiones y socket |
+| Un workspace personal filtra sus canales o archivos | Las funciones de acceso miraban la organización, no el workspace | `can_access_channel` y `files_select` tienen que colgar de `can_access_workspace` |
+| Al encender la cámara el otro no ve nada | `ontrack` vuelve a saltar con el mismo stream y no se reasignó | Escuchar `addtrack`/`removetrack` en el stream remoto |
 | Una etiqueta de color sale en gris | Se compuso la clase con una plantilla, `bg-${color}` | Tailwind analiza clases literales; escribirlas una a una |
 
 ---
@@ -476,8 +504,10 @@ seis semanas más construyendo la capa de infraestructura encima.
 
 ### Decisiones aún abiertas
 
-- Modo de cifrado de las llamadas (§5.5) — bloquea la grabación
-- SFU autoalojado o gestionado, cuando la malla se quede corta
+- SFU autoalojado o gestionado, cuando la malla se quede corta. **Ojo:** meter
+  un SFU pierde el cifrado extremo a extremo por la puerta de atrás, aunque
+  nadie lo decida explícitamente. Hay que decirlo antes de desplegarlo
+- Grabación con vídeo, que hoy es solo audio a propósito (§5.5)
 - Presencia distribuida (Redis) cuando haya más de una instancia de la API
 - Modelo de precios: por asiento, por conexión o por consumo de agentes
 - Residencia de datos: dónde viven grabaciones y archivos
@@ -487,3 +517,5 @@ seis semanas más construyendo la capa de infraestructura encima.
 - **Aislamiento por RLS**, no por esquema por organización. Cambiarlo después de
   la semana 3 era carísimo; ya está tomado y probado.
 - **Sin Supabase.** El plano de control es propio (§4).
+- **Cifrado extremo a extremo siempre, grabación en el cliente** con
+  consentimiento unánime (§5.5 y `decisiones/0001-cifrado-de-salas.md`).
