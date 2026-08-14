@@ -124,9 +124,13 @@ que se sostiene en pie. Concretamente:
 7. Workspaces personales frente a compartidos — **hecho**
 8. Tablero de tareas por workspace — **hecho**
 9. Mensajería de texto en tiempo real, con hilos y no leídos — **hecho**
+10. Altas por invitación, verificación de correo y recuperación — **hecho**
+11. Notificaciones de menciones, tareas e invitaciones — **hecho**
+12. CI, endurecimiento e imágenes de despliegue — **hecho**
 
-Con esto queda cerrada la capa de **espacio de trabajo** completa. Lo que
-**no** entra todavía: control de ventas, conectores, agentes, identidad propia.
+Con esto queda cerrada la capa de **espacio de trabajo** completa y la
+aplicación está en condiciones de exponerse a internet. Lo que **no** entra
+todavía: control de ventas, conectores, agentes, identidad propia.
 
 ---
 
@@ -374,6 +378,7 @@ cabecera el porqué de lo que hace:
 | `0003_calls.sql` | Historial de llamadas y las funciones transaccionales `join_call` / `leave_call` / `reap_call_peer`. |
 | `0004_workspaces_tasks_recordings.sql` | Visibilidad de workspace (compartido/personal), tablero de tareas y grabaciones con consentimiento. |
 | `0005_messages.sql` | Mensajes con hilos y adjuntos, marcas de lectura y recuento de no leídos. |
+| `0006_invitations_notifications.sql` | Invitaciones, tokens de verificación y recuperación, y notificaciones. |
 | `db/grants.sql` | Privilegios de `devup_app`. Se reaplica en cada migración, es idempotente. |
 
 Dos separaciones que parecen redundantes y no lo son:
@@ -409,15 +414,15 @@ acordarse de escribir la política.
 Lo construido está en `apps/api` y `apps/web`; el README tiene el mapa. Lo
 siguiente, por orden de dependencia:
 
-1. **Credenciales temporales de TURN.** El `coturn` de desarrollo ya está en
-   `docker-compose.yml`, pero usa una credencial fija. En producción eso es un
-   relé abierto para cualquiera que lea el bundle de JavaScript: hay que emitir
-   credenciales firmadas con caducidad. Ver [`TURN.md`](TURN.md), que tiene el
-   cálculo del HMAC listo para copiar.
-2. **Invitaciones por correo.** Hoy `add_member_by_email` exige que la cuenta ya
-   exista. Hace falta un token de invitación y, con él, SMTP.
-3. **Notificaciones y búsqueda global** (semana 6 del plan). Es el hito que
-   decide si el equipo abandona sus herramientas actuales.
+1. **Desplegarlo y usarlo.** Todo lo que bloqueaba esto está resuelto: ver
+   [`DESPLIEGUE.md`](DESPLIEGUE.md). El hito de la semana 6 —que el equipo
+   abandone sus herramientas actuales— no se alcanza con algo que solo corre en
+   localhost, y lo que salga de dos semanas de uso real vale más que cualquier
+   planificación que se haga antes.
+2. **Búsqueda global** entre canales, archivos y tareas. Hoy la búsqueda es por
+   workspace.
+3. **Redis para la presencia y el límite de peticiones**, el día que haya más
+   de una instancia de API. Ver §5.3.
 4. **Semana 4 en adelante** del plan: servicios, clientes y embudo de ventas.
 
 Antes de empezar cualquiera de ellas, `npm run test:rls` tiene que estar en
@@ -471,6 +476,9 @@ Todas encontradas ejecutando el sistema, no revisándolo a ojo.
 | Al encender la cámara el otro no ve nada | `ontrack` vuelve a saltar con el mismo stream y no se reasignó | Escuchar `addtrack`/`removetrack` en el stream remoto |
 | Un canal de texto no reparte en tiempo real | Se reutilizó la sala de voz para los mensajes | Son salas distintas: se lee un canal sin estar en su llamada |
 | coturn no arranca y los argumentos salen raros | Se pusieron comentarios `#` dentro de un `command: >` de YAML | En un escalar plegado no hay comentarios: cada palabra es un argumento |
+| Un límite de peticiones que parece puesto y no actúa | Se configuró en un hook `onRoute` añadido después del plugin | El hook del plugin corre antes; el límite va en la definición de cada ruta |
+| Un 429 llega al cliente como 500 | El manejador global no miraba `error.statusCode` | Dejar pasar los 4xx que genera Fastify con su propio código |
+| `NEXT_PUBLIC_*` cambiado y la web sigue igual | Se incrusta en el bundle durante el build, no al arrancar | Reconstruir la imagen; nunca meter secretos ahí |
 | Una etiqueta de color sale en gris | Se compuso la clase con una plantilla, `bg-${color}` | Tailwind analiza clases literales; escribirlas una a una |
 
 ---

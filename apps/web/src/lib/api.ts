@@ -95,6 +95,43 @@ export type User = {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  emailVerified: boolean;
+};
+
+export type SignupPolicy = {
+  mode: "invite" | "open";
+  /** Instancia vacía: la primera cuenta siempre se puede crear. */
+  bootstrap: boolean;
+  requiresEmailVerification: boolean;
+};
+
+export type Invitation = {
+  organizationName: string;
+  email: string;
+  role: "owner" | "admin" | "member";
+  invitedByName: string;
+  expired: boolean;
+  accepted: boolean;
+};
+
+export type PendingInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+};
+
+export type Notification = {
+  id: string;
+  kind: "mention" | "task_assigned" | "invitation" | "recording";
+  title: string;
+  body: string;
+  link: string;
+  actorName: string;
+  createdAt: string;
+  readAt: string | null;
 };
 
 export type Organization = {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useSession } from "@/lib/session";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
@@ -146,15 +147,18 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           <NewChannel workspaceId={workspaceId} onCreated={load} />
         </nav>
 
-        <div className="border-t border-line px-4 py-3">
-          <p className="truncate text-xs text-muted">{user?.displayName}</p>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="mt-1 text-xs text-faint transition hover:text-danger"
-          >
-            Cerrar sesión
-          </button>
+        <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-xs text-muted">{user?.displayName}</p>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="mt-1 text-xs text-faint transition hover:text-danger"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+          <NotificationBell />
         </div>
       </aside>
 

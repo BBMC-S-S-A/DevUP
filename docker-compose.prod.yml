@@ -1,0 +1,52 @@
+# Ejemplo de despliegue con Docker Compose.
+#
+# Sirve para una máquina sola con un proxy inverso delante que termine TLS
+# (Caddy, Traefik, nginx). Para algo más grande, las imágenes son las mismas y
+# lo que cambia es quién las orquesta.
+#
+# Lee la lista de comprobación de docs/DESPLIEGUE.md antes de levantarlo: hay
+# cuatro variables que la API se niega a arrancar sin ellas bien puestas.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+    ports: ["4000:4000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      # Se incrusta en el bundle durante el build: cambiarlo en `environment`
+      # no tendría ningún efecto.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?falta NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:?falta NEXT_PUBLIC_WS_URL}
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}
+      POSTGRES_DB: devup
+    volumes:
+      - devup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d devup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  devup-pgdata:

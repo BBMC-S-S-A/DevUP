@@ -30,19 +30,25 @@ está construida y probada de punta a punta.
 - Workspaces personales frente a compartidos, y tablero de tareas por workspace
   con arrastrar y soltar.
 - Mensajería de texto en tiempo real: hilos, edición, borrado, adjuntos de la
-  biblioteca y no leídos en la barra lateral. Con esto se cierra la capa de
-  espacio de trabajo entera.
+  biblioteca y no leídos en la barra lateral.
+- Altas solo por invitación, verificación de correo, recuperación de
+  contraseña, límite de intentos y notificaciones con campana.
+- CI que corre tipos, migraciones, aislamiento y build en cada push.
+- Imágenes de Docker para API y web, y guía de despliegue.
 - Prueba en navegador con dos pestañas y micrófono y cámara sintéticos: dos
   pares se conectan, se oyen, se ven, negocian el permiso de grabación, graban,
   guardan el archivo y cuelgan; el historial se cierra solo.
 
-**Lo que falta para poder usarlo de verdad**
+**Lo siguiente**
 
-1. **Credenciales temporales de TURN.** El servidor de desarrollo ya está en
-   `docker-compose.yml` y funciona, pero con una credencial fija que en
-   producción sería un relé abierto a cualquiera que lea el JavaScript. El
-   cálculo del HMAC está resuelto en [`TURN.md`](TURN.md); falta el endpoint.
-2. Invitaciones por correo, notificaciones, y de ahí a la semana 4.
+**Desplegarlo y usarlo dos semanas.** Ya no queda nada que lo bloquee: la lista
+de comprobación previa está en [`DESPLIEGUE.md`](DESPLIEGUE.md), con las cuatro
+variables sin las cuales la API se niega a arrancar en producción.
+
+El hito que decide el proyecto —que el propio equipo abandone sus herramientas
+actuales— no se alcanza con algo que solo corre en localhost. Lo que salga de
+ese uso real vale más que seguir añadiendo funcionalidades sobre unos cimientos
+que nadie ha estresado.
 
 El cifrado de las salas **ya está decidido**: extremo a extremo siempre,
 grabación en el cliente con permiso de todos. El razonamiento completo, con lo
@@ -89,6 +95,9 @@ contradice el discurso justo en la parte que menos se puede mover después.
 - **Nunca firmar una URL de almacenamiento sin comprobar antes la pertenencia.**
   La primera carpeta de la clave es la frontera de seguridad, y ya no hay
   políticas en el almacén que la vigilen por nosotros.
+- **Nada secreto en una variable `NEXT_PUBLIC_*`.** Se incrusta en el bundle
+  durante el build y cualquiera puede leerla. Por eso las credenciales de TURN
+  las sirve la API y no el entorno de la web.
 
 ---
 

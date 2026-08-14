@@ -7,10 +7,16 @@ La iteración actual cubre: **identidad y multi-tenencia**, **workspaces
 compartidos o personales**, **canales**, **llamadas con voz, vídeo y pantalla
 compartida**, **grabación con consentimiento**, una **biblioteca de archivos**
 con etiquetas, búsqueda y previsualización, un **tablero de tareas** por
-workspace y **mensajería de texto** en tiempo real con hilos y no leídos.
+workspace, **mensajería de texto** en tiempo real con hilos y no leídos, y
+**altas por invitación** con notificaciones.
 
-Documentación: [`docs/CONTEXTO-COMPLETO.md`](docs/CONTEXTO-COMPLETO.md) —
-decisiones, motivos y trampas conocidas. Léelo antes de tocar el esquema.
+Documentación:
+- [`docs/CONTEXTO-COMPLETO.md`](docs/CONTEXTO-COMPLETO.md) — decisiones, motivos
+  y trampas conocidas. Léelo antes de tocar el esquema.
+- [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) — lista de comprobación antes de
+  exponerlo a internet.
+- [`docs/TURN.md`](docs/TURN.md) — lo único que separa la voz de funcionar
+  fuera de una red local.
 
 ---
 

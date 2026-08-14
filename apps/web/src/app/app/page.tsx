@@ -1,9 +1,19 @@
 "use client";
 
-import { Building2, ChevronRight, LogOut, Plus, Terminal, UserRound, Users } from "lucide-react";
+import {
+  Building2,
+  ChevronRight,
+  LogOut,
+  Mail,
+  Plus,
+  Terminal,
+  UserRound,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
+import { ApiError, type Organization, type PendingInvitation, type Workspace, api } from "@/lib/api";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useSession } from "@/lib/session";
 
 export default function OrganizationsPage() {
@@ -53,14 +63,17 @@ export default function OrganizationsPage() {
             <p className="text-xs text-faint">{user?.email}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition hover:border-line-strong hover:text-ink"
-        >
-          <LogOut size={14} />
-          Salir
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition hover:border-line-strong hover:text-ink"
+          >
+            <LogOut size={14} />
+            Salir
+          </button>
+        </div>
       </header>
 
       {error && <p className="mb-6 text-sm text-danger">{error}</p>}
@@ -105,6 +118,8 @@ export default function OrganizationsPage() {
 
                 <NewWorkspace organizationId={org.id} onCreated={load} />
               </div>
+
+              {org.role !== "member" && <Invitaciones organizationId={org.id} />}
             </section>
           ))}
 
@@ -112,6 +127,127 @@ export default function OrganizationsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Invitar gente y ver las invitaciones vivas.
+ *
+ * Solo para quien administra: la API lo comprueba igualmente dentro de
+ * `create_invitation`, esto solo evita enseñar un botón que va a fallar.
+ */
+function Invitaciones({ organizationId }: { organizationId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [pendientes, setPendientes] = useState<PendingInvitation[]>([]);
+  const [email, setEmail] = useState("");
+  const [rol, setRol] = useState<"member" | "admin">("member");
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const cargar = useCallback(async () => {
+    const { invitations } = await api
+      .get<{ invitations: PendingInvitation[] }>(`/organizations/${organizationId}/invitations`)
+      .catch(() => ({ invitations: [] }));
+    setPendientes(invitations.filter((i) => !i.acceptedAt));
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (abierto) void cargar();
+  }, [abierto, cargar]);
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="mt-3 flex items-center gap-1.5 text-xs text-faint transition hover:text-muted"
+      >
+        <Mail size={13} />
+        Invitar a alguien
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-line bg-surface p-4">
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setAviso(null);
+          setBusy(true);
+          try {
+            await api.post(`/organizations/${organizationId}/invitations`, { email, role: rol });
+            setAviso(`Invitación enviada a ${email}.`);
+            setEmail("");
+            await cargar();
+          } catch (caught) {
+            setAviso(caught instanceof ApiError ? caught.message : "no se pudo invitar");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="flex flex-wrap gap-2"
+      >
+        <input
+          autoFocus
+          type="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="correo@empresa.com"
+          className="min-w-48 flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+        />
+        <select
+          value={rol}
+          onChange={(event) => setRol(event.target.value as "member" | "admin")}
+          className="rounded-lg border border-line bg-canvas px-2 py-2 text-sm outline-none"
+        >
+          <option value="member">Miembro</option>
+          <option value="admin">Administrador</option>
+        </select>
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-canvas disabled:opacity-40"
+        >
+          Enviar
+        </button>
+        <button
+          type="button"
+          onClick={() => setAbierto(false)}
+          className="rounded-lg border border-line px-3 py-2 text-sm text-muted"
+        >
+          Cerrar
+        </button>
+      </form>
+
+      {aviso && <p className="mt-2 text-xs text-muted">{aviso}</p>}
+
+      {pendientes.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {pendientes.map((invitacion) => (
+            <li
+              key={invitacion.id}
+              className="flex items-center justify-between gap-2 text-xs text-faint"
+            >
+              <span className="min-w-0 truncate">
+                {invitacion.email} · {invitacion.role}
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await api.delete(`/invitations/${invitacion.id}`);
+                  await cargar();
+                }}
+                className="shrink-0 transition hover:text-danger"
+              >
+                revocar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
