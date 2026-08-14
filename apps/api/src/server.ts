@@ -1,5 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyError } from "fastify";
 import { authPlugin } from "./auth/plugin.js";
@@ -7,9 +9,12 @@ import { closePool, withUser } from "./db/pool.js";
 import { env, webOrigins } from "./env.js";
 import { HttpError, translateDbError } from "./lib/http.js";
 import { signalingRoutes } from "./realtime/signaling.js";
+import { accountRoutes } from "./routes/account.js";
 import { authRoutes } from "./routes/auth.js";
 import { fileRoutes } from "./routes/files.js";
+import { iceRoutes } from "./routes/ice.js";
 import { messageRoutes } from "./routes/messages.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { recordingRoutes } from "./routes/recordings.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
@@ -40,6 +45,44 @@ await app.register(cors, {
 });
 
 await app.register(cookie);
+
+// La API solo devuelve JSON, así que la mayor parte de helmet sobra; lo que
+// aporta es impedir que un navegador adivine el tipo de una respuesta y la
+// trate como HTML. La CSP se desactiva porque aquí no se sirven páginas.
+await app.register(helmet, { contentSecurityPolicy: false });
+
+/**
+ * Límite de peticiones.
+ *
+ * El global es generoso: lo que de verdad protege es el límite específico de
+ * /auth/login y /auth/register, más abajo. Sin él, probar contraseñas contra
+ * una cuenta conocida es cuestión de dejar un script corriendo — scrypt hace
+ * caro cada intento para el servidor, pero no impide que se intenten miles.
+ *
+ * El contador vive en memoria. Con varias instancias detrás de un balanceador
+ * cada una cuenta por su cuenta y el límite efectivo se multiplica; ahí hay
+ * que pasarle un almacén en Redis.
+ */
+await app.register(rateLimit, {
+  global: true,
+  max: 300,
+  timeWindow: "1 minute",
+  // Detrás de un proxy, `ip` ya viene de X-Forwarded-For porque trustProxy
+  // está activo. Sin eso, todas las peticiones parecerían venir del balanceador
+  // y el límite caería sobre todo el mundo a la vez.
+  keyGenerator: (request) => request.ip,
+  // El plugin lanza tal cual lo que devuelva esto, así que el `statusCode`
+  // tiene que venir dentro: sin él, Fastify no sabe que es un 429 y acaba
+  // respondiendo 500 a algo que solo pedía esperar un minuto.
+  errorResponseBuilder: (_request, context) => ({
+    statusCode: 429,
+    // `code` y no `error`: es lo que lee el manejador global para componer la
+    // respuesta, y así el cliente distingue un 429 de una validación fallida.
+    code: "demasiadas_peticiones",
+    message: `demasiadas peticiones seguidas; vuelve a intentarlo en ${context.after}`,
+  }),
+});
+
 await app.register(websocket, { options: { maxPayload: 256 * 1024 } });
 await app.register(authPlugin);
 
@@ -55,8 +98,20 @@ app.setErrorHandler((error: FastifyError, request, reply) => {
       .send({ error: translated.code, message: translated.message });
   }
 
-  if (error.validation || error.statusCode === 400) {
+  if (error.validation) {
     return reply.status(400).send({ error: "solicitud_invalida", message: error.message });
+  }
+
+  // Los 4xx que genera el propio Fastify —límite de peticiones, ruta
+  // inexistente, cuerpo demasiado grande— ya traen su código y su mensaje.
+  // Sin esto se convertían en un 500 genérico, y el cliente que recibía un 429
+  // no tenía forma de saber que solo tenía que esperar.
+  const status = error.statusCode ?? 500;
+  if (status >= 400 && status < 500) {
+    return reply.status(status).send({
+      error: error.code ?? "solicitud_invalida",
+      message: error.message,
+    });
   }
 
   // Lo que llega aquí es un fallo nuestro: se registra entero y se responde
@@ -68,10 +123,13 @@ app.setErrorHandler((error: FastifyError, request, reply) => {
 app.get("/health", async () => ({ status: "ok", now: new Date().toISOString() }));
 
 await app.register(authRoutes);
+await app.register(accountRoutes);
 await app.register(workspaceRoutes);
 await app.register(fileRoutes);
+await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
+await app.register(notificationRoutes);
 await app.register(recordingRoutes);
 await app.register(signalingRoutes);
 

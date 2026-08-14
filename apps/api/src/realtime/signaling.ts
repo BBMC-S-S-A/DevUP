@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { verifyAccessToken } from "../auth/tokens.js";
 import { withUser } from "../db/pool.js";
-import { type Member, channelHub, fileHub, send, voiceHub } from "./hub.js";
+import { type Member, channelHub, fileHub, send, userHub, voiceHub } from "./hub.js";
 
 const HEARTBEAT_MS = 30_000;
 
@@ -510,6 +510,44 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     send(socket, { type: "welcome" });
     socket.on("close", () => channelHub.leave(channelId, peerId));
   });
+
+  /**
+   * Notificaciones de una persona.
+   *
+   * No lleva ámbito: la sala es el propio usuario, y la autorización es el
+   * ticket. Una pestaña por sesión abierta, así que la misma persona con tres
+   * pestañas recibe el aviso en las tres.
+   */
+  app.get("/ws/user", { websocket: true }, async (socket, request) => {
+    const identity = await authorize(request, {});
+    if (!identity) {
+      socket.close(1008, "sin acceso");
+      return;
+    }
+
+    const peerId = randomUUID();
+    userHub.join(identity.userId, {
+      peerId,
+      userId: identity.userId,
+      displayName: identity.displayName,
+      socket,
+      muted: false,
+      camera: false,
+      sharing: false,
+      alive: true,
+    });
+
+    send(socket, { type: "welcome" });
+    socket.on("close", () => userHub.leave(identity.userId, peerId));
+  });
+}
+
+/** Empuja una notificación a todas las pestañas abiertas de esa persona. */
+export function announceNotification(
+  userId: string,
+  notification: Record<string, unknown>,
+): void {
+  userHub.broadcast(userId, { type: "notification", notification });
 }
 
 /** Reparte un mensaje nuevo, editado o borrado a quien tenga el canal abierto. */

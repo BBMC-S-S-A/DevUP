@@ -86,3 +86,5 @@ export const voiceHub = new Hub();
 export const fileHub = new Hub();
 /** Una sala por canal de conversación, para repartir los mensajes nuevos. */
 export const channelHub = new Hub();
+/** Una sala por persona, para las notificaciones. */
+export const userHub = new Hub();

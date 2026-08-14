@@ -11,6 +11,9 @@ loadEnv({ path: resolve(here, "../../.env") });
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Salida autocontenida para la imagen de Docker: node_modules entero en una
+  // imagen de producción son cientos de megas que no hacen falta.
+  output: "standalone",
   eslint: { ignoreDuringBuilds: true },
   // Declaradas explícitamente para que Next las inserte en el bundle del
   // cliente; con solo process.env no está garantizado al venir de fuera de
@@ -18,10 +21,6 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000",
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000",
-    NEXT_PUBLIC_STUN_URLS: process.env.NEXT_PUBLIC_STUN_URLS ?? "",
-    NEXT_PUBLIC_TURN_URL: process.env.NEXT_PUBLIC_TURN_URL ?? "",
-    NEXT_PUBLIC_TURN_USERNAME: process.env.NEXT_PUBLIC_TURN_USERNAME ?? "",
-    NEXT_PUBLIC_TURN_CREDENTIAL: process.env.NEXT_PUBLIC_TURN_CREDENTIAL ?? "",
   },
 };
 

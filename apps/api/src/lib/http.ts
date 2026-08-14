@@ -91,3 +91,19 @@ export function requireUser(request: FastifyRequest): string {
 export function noContent(reply: FastifyReply): void {
   void reply.status(204).send();
 }
+
+/**
+ * Límite estricto para lo que se puede probar por fuerza bruta: acceso, alta y
+ * los enlaces de un solo uso.
+ *
+ * Va en la definición de cada ruta y no en un hook `onRoute` común. Motivo: el
+ * hook del propio plugin de límites corre en el orden en que se registró —
+ * antes que cualquiera que se añada después—, así que una configuración puesta
+ * más tarde nunca llega a leerse y el límite parece aplicado sin estarlo.
+ *
+ * Diez por minuto y dirección: sobra para quien escribe mal su contraseña, y no
+ * llega a ningún sitio con un diccionario.
+ */
+export const limiteEstricto = {
+  config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+} as const;

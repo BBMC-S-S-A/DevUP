@@ -4,6 +4,7 @@ import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { announceMessage } from "../realtime/signaling.js";
+import { notificar } from "./notifications.js";
 
 const uuid = z.string().uuid();
 
@@ -92,7 +93,38 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       // Escribir cuenta como haber leído: no tiene sentido que tu propio
       // mensaje te deje el canal marcado como no leído.
       await db.query("select public.mark_channel_read($1)", [channelId]);
-      return loadMessage(db, rows[0]!.id);
+      const creado = await loadMessage(db, rows[0]!.id);
+
+      // Menciones. `resolve_mentions` solo devuelve gente con acceso al canal,
+      // así que escribir «@Alguien» en un canal privado no le notifica nada a
+      // quien no está dentro — que además le revelaría que ese canal existe.
+      const { rows: mencionados } = await db.query<{ user_id: string; display_name: string }>(
+        "select user_id, display_name from public.resolve_mentions($1,$2)",
+        [channelId, body.body],
+      );
+
+      const { rows: contexto } = await db.query<{ canal: string; workspace: string }>(
+        `select c.name as canal, c.workspace_id::text as workspace
+           from channels c where c.id = $1`,
+        [channelId],
+      );
+
+      for (const mencionado of mencionados) {
+        if (mencionado.user_id === userId) continue; // mencionarse a uno mismo no avisa
+        await notificar(
+          db,
+          mencionado.user_id,
+          "mention",
+          `Te han mencionado en #${contexto[0]?.canal ?? "un canal"}`,
+          body.body.slice(0, 140),
+          `/app/w/${contexto[0]?.workspace ?? ""}/c/${channelId}`,
+        ).catch(() => {
+          // Que falle un aviso no debe tumbar el mensaje: lo importante ya
+          // está escrito y repartido.
+        });
+      }
+
+      return creado;
     });
 
     announceMessage(channelId, "created", message);

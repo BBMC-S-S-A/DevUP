@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { notificar } from "./notifications.js";
 
 const uuid = z.string().uuid();
 
@@ -49,6 +50,30 @@ async function attachTaskTags(db: Db, taskId: string, tagIds: string[]): Promise
 }
 
 const STEP = 1000;
+
+/** Avisa a quien recibe una tarea, salvo que se la haya asignado a sí mismo. */
+async function avisarAsignacion(
+  db: Db,
+  taskId: string,
+  assigneeId: string,
+  actorId: string,
+): Promise<void> {
+  if (assigneeId === actorId) return;
+  const { rows } = await db.query<{ title: string; workspace_id: string }>(
+    "select title, workspace_id::text as workspace_id from tasks where id = $1",
+    [taskId],
+  );
+  const tarea = rows[0];
+  if (!tarea) return;
+  await notificar(
+    db,
+    assigneeId,
+    "task_assigned",
+    "Te han asignado una tarea",
+    tarea.title,
+    `/app/w/${tarea.workspace_id}/board`,
+  ).catch(() => {});
+}
 
 export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
@@ -172,6 +197,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       );
       const taskId = rows[0]!.id;
       await attachTaskTags(db, taskId, body.tagIds);
+      if (body.assigneeId) await avisarAsignacion(db, taskId, body.assigneeId, userId);
       return loadTask(db, taskId);
     });
 
@@ -198,6 +224,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const body_ = body as Record<string, unknown>;
 
     return withUser(userId, async (db) => {
+      const { rows: previa } = await db.query<{ assignee_id: string | null }>(
+        "select assignee_id from tasks where id = $1",
+        [taskId],
+      );
+      const anterior = previa[0]?.assignee_id ?? null;
+
       const { rowCount } = await db.query(
         `update tasks set
            title       = coalesce($2, title),
@@ -223,6 +255,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           body.tagIds,
         ]);
         await attachTaskTags(db, taskId, body.tagIds);
+      }
+
+      // Solo cuando la asignación cambia: guardar la tarjeta por cualquier otro
+      // motivo no debe volver a avisar a quien ya la tenía.
+      if ("assigneeId" in body_ && body.assigneeId && body.assigneeId !== anterior) {
+        await avisarAsignacion(db, taskId, body.assigneeId, userId);
       }
 
       return { task: await loadTask(db, taskId) };

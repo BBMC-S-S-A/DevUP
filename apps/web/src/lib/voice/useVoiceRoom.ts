@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { buildWsUrl, requestTicket } from "../ws";
 import { type RecordingHandle, createRecorder } from "./recorder";
@@ -102,7 +102,11 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
   const recorder = useRef<RecordingHandle | null>(null);
   const leaving = useRef(false);
 
-  const { iceServers, turnConfigured } = useMemo(buildIceConfig, []);
+  // Los servidores ICE llegan de la API al entrar en la sala, no del bundle.
+  // Ver apps/api/src/routes/ice.ts: una credencial de TURN en una variable
+  // NEXT_PUBLIC_ sería un relé abierto para cualquiera que lea el JavaScript.
+  const ice = useRef<RTCIceServer[]>([]);
+  const [turnConfigured, setTurnConfigured] = useState(true);
 
   const emit = useCallback((message: Record<string, unknown>) => {
     if (socket.current?.readyState === WebSocket.OPEN) {
@@ -155,7 +159,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       const existing = peers.current.get(remote);
       if (existing) return existing;
 
-      const pc = new RTCPeerConnection({ iceServers });
+      const pc = new RTCPeerConnection({ iceServers: ice.current });
 
       const local = stream.current;
       if (local) for (const track of local.getTracks()) pc.addTrack(track, local);
@@ -203,7 +207,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       peers.current.set(remote, pc);
       return pc;
     },
-    [iceServers, emit, upsert],
+    [emit, upsert],
   );
 
   const handleSignal = useCallback(
@@ -341,6 +345,14 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     setStatus("connecting");
 
     try {
+      // Antes de pedir el micrófono: si esto falla, mejor fallar sin haber
+      // encendido nada.
+      const config = await api.get<{ iceServers: RTCIceServer[]; turnConfigured: boolean }>(
+        "/calls/ice-servers",
+      );
+      ice.current = config.iceServers;
+      setTurnConfigured(config.turnConfigured);
+
       const media = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
@@ -660,23 +672,3 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
   };
 }
 
-function buildIceConfig(): { iceServers: RTCIceServer[]; turnConfigured: boolean } {
-  const iceServers: RTCIceServer[] = [];
-
-  const stun = (process.env.NEXT_PUBLIC_STUN_URLS ?? "")
-    .split(",")
-    .map((url) => url.trim())
-    .filter(Boolean);
-  if (stun.length > 0) iceServers.push({ urls: stun });
-
-  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL?.trim();
-  if (turnUrl) {
-    iceServers.push({
-      urls: turnUrl,
-      username: process.env.NEXT_PUBLIC_TURN_USERNAME ?? "",
-      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL ?? "",
-    });
-  }
-
-  return { iceServers, turnConfigured: Boolean(turnUrl) };
-}
