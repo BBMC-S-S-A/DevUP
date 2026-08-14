@@ -123,9 +123,10 @@ que se sostiene en pie. Concretamente:
 6. Grabación en el cliente con consentimiento unánime — **hecho**
 7. Workspaces personales frente a compartidos — **hecho**
 8. Tablero de tareas por workspace — **hecho**
+9. Mensajería de texto en tiempo real, con hilos y no leídos — **hecho**
 
-Lo que **no** entra todavía: mensajería de texto, control de ventas,
-conectores, agentes, identidad propia.
+Con esto queda cerrada la capa de **espacio de trabajo** completa. Lo que
+**no** entra todavía: control de ventas, conectores, agentes, identidad propia.
 
 ---
 
@@ -372,6 +373,7 @@ cabecera el porqué de lo que hace:
 | `0002_files.sql` | Etiquetas polimórficas, archivos, búsqueda de texto completo, barrendero de subidas abandonadas. |
 | `0003_calls.sql` | Historial de llamadas y las funciones transaccionales `join_call` / `leave_call` / `reap_call_peer`. |
 | `0004_workspaces_tasks_recordings.sql` | Visibilidad de workspace (compartido/personal), tablero de tareas y grabaciones con consentimiento. |
+| `0005_messages.sql` | Mensajes con hilos y adjuntos, marcas de lectura y recuento de no leídos. |
 | `db/grants.sql` | Privilegios de `devup_app`. Se reaplica en cada migración, es idempotente. |
 
 Dos separaciones que parecen redundantes y no lo son:
@@ -386,7 +388,7 @@ Dos separaciones que parecen redundantes y no lo son:
 ### Estado de verificación
 
 Las migraciones **se han aplicado contra un Postgres real** y `npm run test:rls`
-pasa con 37 comprobaciones: lectura cruzada entre organizaciones, escritura
+pasa con 45 comprobaciones: lectura cruzada entre organizaciones, escritura
 cruzada, canales privados dentro de la misma organización, visibilidad de
 perfiles, credenciales, workspaces personales, y el ciclo
 completo de una llamada.
@@ -407,17 +409,16 @@ acordarse de escribir la política.
 Lo construido está en `apps/api` y `apps/web`; el README tiene el mapa. Lo
 siguiente, por orden de dependencia:
 
-1. **TURN en producción.** Sin esto, la voz no funciona fuera de una LAN. Es lo
-   único que separa la sala de voz de estar terminada. Un `coturn` propio o un
-   servicio gestionado; la configuración ya está prevista en `.env.example`.
-2. **Decidir el modo de cifrado de las salas** (§5.5). Bloquea la grabación y no
-   se puede decidir después sin romper una promesa hecha.
-3. **Mensajería de texto.** Los canales de tipo `text` ya existen en el esquema
-   y la interfaz los enseña apagados. Falta la tabla de mensajes, su política y
-   el reparto por el WebSocket que ya está montado.
-4. **Invitaciones por correo.** Hoy `add_member_by_email` exige que la cuenta ya
+1. **Credenciales temporales de TURN.** El `coturn` de desarrollo ya está en
+   `docker-compose.yml`, pero usa una credencial fija. En producción eso es un
+   relé abierto para cualquiera que lea el bundle de JavaScript: hay que emitir
+   credenciales firmadas con caducidad. Ver [`TURN.md`](TURN.md), que tiene el
+   cálculo del HMAC listo para copiar.
+2. **Invitaciones por correo.** Hoy `add_member_by_email` exige que la cuenta ya
    exista. Hace falta un token de invitación y, con él, SMTP.
-5. **Semana 4 en adelante** del plan: servicios, clientes y embudo de ventas.
+3. **Notificaciones y búsqueda global** (semana 6 del plan). Es el hito que
+   decide si el equipo abandona sus herramientas actuales.
+4. **Semana 4 en adelante** del plan: servicios, clientes y embudo de ventas.
 
 Antes de empezar cualquiera de ellas, `npm run test:rls` tiene que estar en
 verde. Es el único freno automático que hay contra una fuga entre clientes.
@@ -468,6 +469,8 @@ Todas encontradas ejecutando el sistema, no revisándolo a ojo.
 | El micrófono queda encendido tras colgar | Faltó parar las pistas al desmontar | Limpieza completa: pistas, conexiones y socket |
 | Un workspace personal filtra sus canales o archivos | Las funciones de acceso miraban la organización, no el workspace | `can_access_channel` y `files_select` tienen que colgar de `can_access_workspace` |
 | Al encender la cámara el otro no ve nada | `ontrack` vuelve a saltar con el mismo stream y no se reasignó | Escuchar `addtrack`/`removetrack` en el stream remoto |
+| Un canal de texto no reparte en tiempo real | Se reutilizó la sala de voz para los mensajes | Son salas distintas: se lee un canal sin estar en su llamada |
+| coturn no arranca y los argumentos salen raros | Se pusieron comentarios `#` dentro de un `command: >` de YAML | En un escalar plegado no hay comentarios: cada palabra es un argumento |
 | Una etiqueta de color sale en gris | Se compuso la clase con una plantilla, `bg-${color}` | Tailwind analiza clases literales; escribirlas una a una |
 
 ---

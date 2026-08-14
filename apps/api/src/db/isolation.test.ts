@@ -306,6 +306,73 @@ async function main(): Promise<void> {
     });
     check("un DELETE sobre archivos ajenos afecta a cero filas", deleted === 0);
 
+    console.log("\nMensajes");
+    await withUser(ana, (db) =>
+      db.query("insert into messages (channel_id, author_id, body) values ($1,$2,$3)", [
+        acme.privateChannel,
+        ana,
+        "esto solo lo ve dirección",
+      ]),
+    );
+    await withUser(ana, (db) =>
+      db.query("insert into messages (channel_id, author_id, body) values ($1,$2,$3)", [
+        acme.publicChannel,
+        ana,
+        "hola equipo",
+      ]),
+    );
+
+    check("Ana ve sus dos mensajes", (await count(ana, "messages")) === 2);
+    check(
+      "Carla solo ve el del canal público, no el del privado",
+      (await count(carla, "messages")) === 1,
+    );
+    check("Bruno no ve ningún mensaje de Acme", (await count(bruno, "messages")) === 0);
+
+    await denied("Bruno no puede escribir en un canal ajeno", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into messages (channel_id, author_id, body) values ($1,$2,$3)", [
+          acme.publicChannel,
+          bruno,
+          "intruso",
+        ]),
+      ),
+    );
+
+    await denied("nadie puede publicar firmando como otra persona", () =>
+      withUser(carla, (db) =>
+        db.query("insert into messages (channel_id, author_id, body) values ($1,$2,$3)", [
+          acme.publicChannel,
+          ana,
+          "esto no lo dijo Ana",
+        ]),
+      ),
+    );
+
+    const edited = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("update messages set body = 'manipulado'");
+      return rowCount ?? 0;
+    });
+    check("nadie puede editar el mensaje de otro, ni siendo del mismo canal", edited === 0);
+
+    const unread = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ unread: string }>(
+        "select unread from public.unread_counts($1) where channel_id = $2",
+        [acme.ws, acme.publicChannel],
+      );
+      return Number(rows[0]?.unread ?? -1);
+    });
+    check("Carla tiene un mensaje sin leer en el canal público", unread === 1);
+
+    const privateUnread = await withUser(carla, async (db) => {
+      const { rows } = await db.query("select * from public.unread_counts($1)", [acme.ws]);
+      return rows.length;
+    });
+    check(
+      "el recuento de no leídos no revela la existencia del canal privado",
+      privateUnread === 1,
+    );
+
     console.log("\nLlamadas");
     await denied("Bruno no puede entrar en la llamada de un canal ajeno", () =>
       withUser(bruno, (db) =>

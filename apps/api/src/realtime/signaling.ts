@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { verifyAccessToken } from "../auth/tokens.js";
 import { withUser } from "../db/pool.js";
-import { type Member, fileHub, send, voiceHub } from "./hub.js";
+import { type Member, channelHub, fileHub, send, voiceHub } from "./hub.js";
 
 const HEARTBEAT_MS = 30_000;
 
@@ -472,6 +472,53 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     send(socket, { type: "welcome" });
     socket.on("close", () => fileHub.leave(workspaceId, peerId));
   });
+
+  /**
+   * Conversación de un canal.
+   *
+   * Sala aparte de la de voz porque son cosas distintas: se puede estar
+   * leyendo un canal sin estar en su llamada, y al revés. La autorización es
+   * la misma `can_access_channel`, así que un canal privado no reparte nada a
+   * quien no está dentro.
+   */
+  app.get("/ws/channel", { websocket: true }, async (socket, request) => {
+    const params = z.object({ channelId: z.string().uuid() }).safeParse(request.query);
+    if (!params.success) {
+      socket.close(1008, "canal invalido");
+      return;
+    }
+
+    const channelId = params.data.channelId;
+    const identity = await authorize(request, { channelId });
+    if (!identity) {
+      socket.close(1008, "sin acceso");
+      return;
+    }
+
+    const peerId = randomUUID();
+    channelHub.join(channelId, {
+      peerId,
+      userId: identity.userId,
+      displayName: identity.displayName,
+      socket,
+      muted: false,
+      camera: false,
+      sharing: false,
+      alive: true,
+    });
+
+    send(socket, { type: "welcome" });
+    socket.on("close", () => channelHub.leave(channelId, peerId));
+  });
+}
+
+/** Reparte un mensaje nuevo, editado o borrado a quien tenga el canal abierto. */
+export function announceMessage(
+  channelId: string,
+  action: "created" | "updated" | "deleted",
+  message: Record<string, unknown>,
+): void {
+  channelHub.broadcast(channelId, { type: "message", action, message });
 }
 
 /** Avisa al workspace de que su biblioteca ha cambiado. */

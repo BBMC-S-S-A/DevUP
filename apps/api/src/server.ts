@@ -9,6 +9,7 @@ import { HttpError, translateDbError } from "./lib/http.js";
 import { signalingRoutes } from "./realtime/signaling.js";
 import { authRoutes } from "./routes/auth.js";
 import { fileRoutes } from "./routes/files.js";
+import { messageRoutes } from "./routes/messages.js";
 import { recordingRoutes } from "./routes/recordings.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
@@ -70,6 +71,7 @@ await app.register(authRoutes);
 await app.register(workspaceRoutes);
 await app.register(fileRoutes);
 await app.register(taskRoutes);
+await app.register(messageRoutes);
 await app.register(recordingRoutes);
 await app.register(signalingRoutes);
 

@@ -17,8 +17,8 @@ está construida y probada de punta a punta.
 **Hecho y verificado**
 
 - Esquema en `db/migrations/`, aplicado contra un Postgres real. `npm run
-  test:rls` pasa con 37 comprobaciones de aislamiento, incluidos los workspaces
-  personales.
+  test:rls` pasa con 45 comprobaciones de aislamiento, incluidos los workspaces
+  personales y los mensajes de canales privados.
 - API en Fastify: alta y acceso con scrypt, sesiones con token de refresco
   rotatorio, organizaciones, workspaces, canales, archivos con URLs firmadas y
   señalización por WebSocket.
@@ -29,16 +29,20 @@ está construida y probada de punta a punta.
   archivo más en la biblioteca del canal.
 - Workspaces personales frente a compartidos, y tablero de tareas por workspace
   con arrastrar y soltar.
+- Mensajería de texto en tiempo real: hilos, edición, borrado, adjuntos de la
+  biblioteca y no leídos en la barra lateral. Con esto se cierra la capa de
+  espacio de trabajo entera.
 - Prueba en navegador con dos pestañas y micrófono y cámara sintéticos: dos
   pares se conectan, se oyen, se ven, negocian el permiso de grabación, graban,
   guardan el archivo y cuelgan; el historial se cierra solo.
 
 **Lo que falta para poder usarlo de verdad**
 
-1. **TURN.** Es lo único que separa la sala de voz de estar terminada: sin él
-   solo funciona dentro de una misma red. La configuración ya está prevista en
-   `.env.example`.
-2. Mensajería de texto, invitaciones por correo, y de ahí a la semana 4.
+1. **Credenciales temporales de TURN.** El servidor de desarrollo ya está en
+   `docker-compose.yml` y funciona, pero con una credencial fija que en
+   producción sería un relé abierto a cualquiera que lea el JavaScript. El
+   cálculo del HMAC está resuelto en [`TURN.md`](TURN.md); falta el endpoint.
+2. Invitaciones por correo, notificaciones, y de ahí a la semana 4.
 
 El cifrado de las salas **ya está decidido**: extremo a extremo siempre,
 grabación en el cliente con permiso de todos. El razonamiento completo, con lo

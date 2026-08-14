@@ -4,6 +4,7 @@ import { Hash, Loader2, Lock, Volume2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FileLibrary } from "@/components/files/FileLibrary";
+import { ChannelChat } from "@/components/chat/ChannelChat";
 import { VoiceRoom } from "@/components/voice/VoiceRoom";
 import { ApiError, type Channel, api } from "@/lib/api";
 
@@ -61,6 +62,13 @@ export default function ChannelPage() {
           <VoiceRoom channel={channel} />
         </div>
       )}
+
+      {/* La conversación también en los canales de voz: hablar y dejar por
+          escrito lo acordado es lo mismo que se hace en una reunión. */}
+      <section className="mb-8">
+        <h2 className="mb-4 text-sm font-semibold">Conversación</h2>
+        <ChannelChat channelId={channelId} />
+      </section>
 
       <section>
         <h2 className="mb-4 text-sm font-semibold">Archivos del canal</h2>

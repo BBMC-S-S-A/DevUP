@@ -188,3 +188,17 @@ export type Recording = {
   mimeType: string | null;
   consents: { displayName: string; granted: boolean }[];
 };
+
+export type Message = {
+  id: string;
+  channelId: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  replyTo: string | null;
+  replyPreview: { id: string; authorName: string; body: string } | null;
+  fileId: string | null;
+  file: { id: string; name: string; mimeType: string; sizeBytes: string } | null;
+  createdAt: string;
+  editedAt: string | null;
+};

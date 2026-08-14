@@ -14,6 +14,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [unread, setUnread] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,9 +33,27 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     }
   }, [workspaceId]);
 
+  const loadUnread = useCallback(async () => {
+    const { unread } = await api
+      .get<{ unread: Record<string, number> }>(`/workspaces/${workspaceId}/unread`)
+      .catch(() => ({ unread: {} }));
+    setUnread(unread);
+  }, [workspaceId]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Los no leídos se consultan al entrar, al cambiar de canal y cada medio
+  // minuto. Empujarlos por el socket exigiría que el servidor supiera, para
+  // cada persona conectada, a qué canales privados tiene acceso — una consulta
+  // por miembro y por mensaje. A este tamaño no compensa; cuando compense, el
+  // sitio es el hub.
+  useEffect(() => {
+    void loadUnread();
+    const timer = setInterval(() => void loadUnread(), 30_000);
+    return () => clearInterval(timer);
+  }, [loadUnread, pathname]);
 
   if (loading) {
     return (
@@ -107,21 +126,22 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             Tablero
           </Link>
 
-          <ChannelGroup
-            title="Voz"
-            channels={voice}
-            workspaceId={workspaceId}
-            pathname={pathname}
-          />
           {text.length > 0 && (
             <ChannelGroup
               title="Texto"
               channels={text}
               workspaceId={workspaceId}
               pathname={pathname}
-              disabled
+              unread={unread}
             />
           )}
+          <ChannelGroup
+            title="Voz"
+            channels={voice}
+            workspaceId={workspaceId}
+            pathname={pathname}
+            unread={unread}
+          />
 
           <NewChannel workspaceId={workspaceId} onCreated={load} />
         </nav>
@@ -148,13 +168,13 @@ function ChannelGroup({
   channels,
   workspaceId,
   pathname,
-  disabled = false,
+  unread,
 }: {
   title: string;
   channels: Channel[];
   workspaceId: string;
   pathname: string;
-  disabled?: boolean;
+  unread: Record<string, number>;
 }) {
   return (
     <div>
@@ -165,36 +185,29 @@ function ChannelGroup({
         {channels.map((channel) => {
           const href = `/app/w/${workspaceId}/c/${channel.id}`;
           const active = pathname === href;
-          const content = (
-            <>
-              {channel.kind === "voice" ? <Volume2 size={15} /> : <Hash size={15} />}
-              <span className="min-w-0 flex-1 truncate">{channel.name}</span>
-              {channel.isPrivate && <Lock size={11} className="shrink-0 text-faint" />}
-            </>
-          );
+          const pending = unread[channel.id] ?? 0;
 
           return (
             <li key={channel.id}>
-              {disabled ? (
-                // Los canales de texto existen en el esquema pero la mensajería
-                // no entra en esta iteración. Se enseñan apagados en vez de
-                // ocultarlos: así se ve que el canal está creado.
-                <span
-                  title="La mensajería llega en una iteración posterior"
-                  className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-faint/60"
-                >
-                  {content}
-                </span>
-              ) : (
-                <Link
-                  href={href}
-                  className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition ${
-                    active ? "bg-accent-soft text-accent" : "text-muted hover:bg-raised hover:text-ink"
-                  }`}
-                >
-                  {content}
-                </Link>
-              )}
+              <Link
+                href={href}
+                className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition ${
+                  active
+                    ? "bg-accent-soft text-accent"
+                    : pending > 0
+                      ? "font-medium text-ink hover:bg-raised"
+                      : "text-muted hover:bg-raised hover:text-ink"
+                }`}
+              >
+                {channel.kind === "voice" ? <Volume2 size={15} /> : <Hash size={15} />}
+                <span className="min-w-0 flex-1 truncate">{channel.name}</span>
+                {channel.isPrivate && <Lock size={11} className="shrink-0 text-faint" />}
+                {pending > 0 && !active && (
+                  <span className="shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-medium text-canvas">
+                    {pending > 99 ? "99+" : pending}
+                  </span>
+                )}
+              </Link>
             </li>
           );
         })}
@@ -212,6 +225,7 @@ function NewChannel({
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<"text" | "voice">("text");
   const [isPrivate, setIsPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -236,10 +250,11 @@ function NewChannel({
         try {
           await api.post(`/workspaces/${workspaceId}/channels`, {
             name,
-            kind: "voice",
+            kind,
             isPrivate,
           });
           setName("");
+          setKind("text");
           setIsPrivate(false);
           setOpen(false);
           await onCreated();
@@ -256,6 +271,23 @@ function NewChannel({
         placeholder="nombre-del-canal"
         className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
       />
+      <div className="flex gap-1">
+        {(["text", "voice"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setKind(option)}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition ${
+              kind === option
+                ? "border-accent/40 bg-accent-soft text-accent"
+                : "border-line text-muted hover:text-ink"
+            }`}
+          >
+            {option === "text" ? <Hash size={11} /> : <Volume2 size={11} />}
+            {option === "text" ? "Texto" : "Voz"}
+          </button>
+        ))}
+      </div>
       <label className="flex items-center gap-2 text-xs text-muted">
         <input
           type="checkbox"

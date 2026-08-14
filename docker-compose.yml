@@ -47,6 +47,42 @@ services:
       timeout: 5s
       retries: 10
 
+  # Servidor TURN.
+  #
+  # Sin él la señalización conecta y la interfaz parece correcta, pero en NAT
+  # simétrico y en buena parte de las redes móviles el audio no llega nunca. Es
+  # el fallo número uno de este tipo de sistema y el más difícil de
+  # diagnosticar, porque todo lo demás funciona.
+  #
+  # En desarrollo dentro de una misma red se puede apagar; en producción no.
+  # Ver docs/TURN.md para desplegarlo de verdad — este contenedor sirve para
+  # probar el camino relay en local, no para exponerlo a internet.
+  coturn:
+    image: coturn/coturn:latest
+    container_name: devup-coturn
+    restart: unless-stopped
+    network_mode: host
+    # Los `denied-peer-ip` no son opcionales: TURN es literalmente un proxy que
+    # abre conexiones hacia donde le pida el cliente. Sin restringir los rangos
+    # privados, cualquiera que consiga una credencial puede usarlo para llegar
+    # al resto de la red interna.
+    #
+    # Nada de comentarios dentro del bloque `command`: en un escalar plegado de
+    # YAML el `#` no es un comentario, y cada palabra acabaría siendo un
+    # argumento más para coturn.
+    command: >
+      -n --log-file=stdout
+      --listening-port=3478
+      --fingerprint
+      --lt-cred-mech
+      --realm=devup.local
+      --user=devup:devup-turn-local
+      --no-tls --no-dtls
+      --no-multicast-peers
+      --denied-peer-ip=10.0.0.0-10.255.255.255
+      --denied-peer-ip=172.16.0.0-172.31.255.255
+      --denied-peer-ip=192.168.0.0-192.168.255.255
+
 volumes:
   devup-pgdata:
   devup-minio:
