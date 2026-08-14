@@ -239,3 +239,14 @@ export type Message = {
   createdAt: string;
   editedAt: string | null;
 };
+
+export type SearchResult = {
+  kind: "message" | "file" | "task";
+  id: string;
+  title: string;
+  snippet: string;
+  link: string;
+  workspaceId: string;
+  workspaceName: string;
+  createdAt: string;
+};

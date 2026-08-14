@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { ZodError, type ZodTypeAny, type output } from "zod";
+import { env } from "../env.js";
 
 /** Error con código HTTP. Lo traduce el manejador global de server.ts. */
 export class HttpError extends Error {
@@ -103,7 +104,11 @@ export function noContent(reply: FastifyReply): void {
  *
  * Diez por minuto y dirección: sobra para quien escribe mal su contraseña, y no
  * llega a ningún sitio con un diccionario.
+ *
+ * «Y dirección» descansa sobre TRUST_PROXY. Mal puesto, todas las peticiones
+ * parecen venir del balanceador —y el límite cae sobre todo el mundo— o
+ * cualquiera se inventa la suya y no cae sobre nadie.
  */
 export const limiteEstricto = {
-  config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+  config: { rateLimit: { max: env.AUTH_RATE_LIMIT_MAX, timeWindow: "1 minute" } },
 } as const;

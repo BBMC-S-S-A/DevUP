@@ -2,7 +2,10 @@
   "name": "devup",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/api", "apps/web"],
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "dev:api": "npm run dev --workspace apps/api",
@@ -13,9 +16,16 @@
     "db:down": "docker compose down",
     "db:migrate": "npm run migrate --workspace apps/api",
     "db:reset": "npm run migrate:reset --workspace apps/api",
-    "test:rls": "npm run test:rls --workspace apps/api"
+    "test:rls": "npm run test:rls --workspace apps/api",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "engines": {
     "node": ">=20.11"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "dotenv": "^16.6.1"
   }
 }

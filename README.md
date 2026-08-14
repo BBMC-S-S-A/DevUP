@@ -7,8 +7,9 @@ La iteración actual cubre: **identidad y multi-tenencia**, **workspaces
 compartidos o personales**, **canales**, **llamadas con voz, vídeo y pantalla
 compartida**, **grabación con consentimiento**, una **biblioteca de archivos**
 con etiquetas, búsqueda y previsualización, un **tablero de tareas** por
-workspace, **mensajería de texto** en tiempo real con hilos y no leídos, y
-**altas por invitación** con notificaciones.
+workspace, **mensajería de texto** en tiempo real con hilos y no leídos,
+**búsqueda global** con ⌘K sobre mensajes, archivos y tareas, y **altas por
+invitación** con notificaciones.
 
 Documentación:
 - [`docs/CONTEXTO-COMPLETO.md`](docs/CONTEXTO-COMPLETO.md) — decisiones, motivos
@@ -95,4 +96,5 @@ pertenencia va siempre antes de firmar una URL.
 | `npm run db:migrate` | aplica lo pendiente y reaplica privilegios |
 | `npm run db:reset` | borra el esquema y lo reconstruye (solo desarrollo) |
 | `npm run test:rls` | prueba de aislamiento entre organizaciones |
+| `npm run test:e2e` | pruebas de navegador contra la aplicación real |
 | `npm run typecheck` | TypeScript en los dos paquetes |

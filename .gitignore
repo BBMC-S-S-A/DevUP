@@ -17,3 +17,10 @@ npm-debug.log*
 
 .vercel
 .supabase/
+
+# Playwright
+/test-results
+/playwright-report
+/blob-report
+# Estado de sesión de la cuenta semilla: son cookies vivas, no un fixture.
+/tests/.auth

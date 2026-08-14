@@ -373,6 +373,29 @@ async function main(): Promise<void> {
       privateUnread === 1,
     );
 
+    // Una mención genera una notificación con el nombre del canal y un trozo
+    // del mensaje. Resolverla contra la organización en vez de contra el acceso
+    // al canal —que es lo que hacía hasta la migración 0008— convertía cada
+    // «@alguien» en un canal privado en un aviso a quien no está dentro. El
+    // control público de abajo está para que esto no pase por mirar mal.
+    const mencionEnPrivado = await withUser(ana, async (db) => {
+      const { rows } = await db.query("select * from public.resolve_mentions($1,$2)", [
+        acme.privateChannel,
+        "@carla esto no lo verás",
+      ]);
+      return rows.length;
+    });
+    check("mencionar en un canal privado no alcanza a quien no está dentro", mencionEnPrivado === 0);
+
+    const mencionEnPublico = await withUser(ana, async (db) => {
+      const { rows } = await db.query("select * from public.resolve_mentions($1,$2)", [
+        acme.publicChannel,
+        "@carla ¿lo miras?",
+      ]);
+      return rows.length;
+    });
+    check("y en uno público sí llega", mencionEnPublico === 1);
+
     console.log("\nLlamadas");
     await denied("Bruno no puede entrar en la llamada de un canal ajeno", () =>
       withUser(bruno, (db) =>

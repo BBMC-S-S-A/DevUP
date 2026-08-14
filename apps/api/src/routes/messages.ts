@@ -98,6 +98,8 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       // Menciones. `resolve_mentions` solo devuelve gente con acceso al canal,
       // así que escribir «@Alguien» en un canal privado no le notifica nada a
       // quien no está dentro — que además le revelaría que ese canal existe.
+      // Esto fue falso hasta la migración 0008: la función miraba la
+      // pertenencia a la organización y no el acceso al canal.
       const { rows: mencionados } = await db.query<{ user_id: string; display_name: string }>(
         "select user_id, display_name from public.resolve_mentions($1,$2)",
         [channelId, body.body],

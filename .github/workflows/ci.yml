@@ -80,3 +80,102 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Extremo a extremo
+  # ---------------------------------------------------------------------------
+  # Corre contra la aplicación entera: Postgres, almacén, API y web. Va en un
+  # job aparte porque necesita navegador y almacén, y porque cuando falla
+  # interesa saber que lo que se rompió es el producto y no los tipos.
+  extremo-a-extremo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: devup
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d devup"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/devup
+      DATABASE_URL: postgres://devup_app:ci-secret@localhost:5432/devup
+      APP_DB_PASSWORD: ci-secret
+      AUTH_SECRET: secreto-solo-para-integracion-continua
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: devup-files
+      S3_ACCESS_KEY_ID: devup
+      S3_SECRET_ACCESS_KEY: devup-local-secret
+      S3_FORCE_PATH_STYLE: "true"
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      # Sin SMTP a propósito: así los enlaces de invitación y de recuperación
+      # acaban en el registro, que es de donde los lee la suite.
+      E2E_API_LOG: /tmp/api.log
+      # Cada contexto de prueba se presenta con su propia dirección para no
+      # ahogarse contra el límite de intentos de acceso, que aquí corre con el
+      # mismo valor que en producción. Ver tests/e2e/ayudantes.ts.
+      TRUST_PROXY: "1"
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # Como servicio no se puede: la imagen necesita el argumento `server`, y
+      # los service containers de Actions no admiten `command`.
+      - name: Almacén S3
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=devup \
+            -e MINIO_ROOT_PASSWORD=devup-local-secret \
+            minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 2
+          done
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Migraciones
+        run: npm run db:migrate
+
+      - name: Levantar la aplicación
+        run: |
+          npm run dev:api > /tmp/api.log 2>&1 &
+          npm run dev:web > /tmp/web.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:4000/health > /dev/null && break
+            sleep 2
+          done
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:3000/login > /dev/null && break
+            sleep 2
+          done
+
+      - name: Pruebas de extremo a extremo
+        run: npm run test:e2e
+
+      - name: Registros de la aplicación
+        if: failure()
+        run: tail -200 /tmp/api.log /tmp/web.log
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

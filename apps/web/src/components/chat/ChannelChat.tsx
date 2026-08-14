@@ -100,15 +100,26 @@ export function ChannelChat({ channelId }: { channelId: string }) {
     setDraft("");
 
     try {
+      // Lo que devuelve la API se pinta aquí mismo, sin esperar al eco del
+      // socket. Esperarlo parecía suficiente —el mensaje siempre acababa
+      // llegando— hasta que se ve el caso real: escribir nada más entrar en un
+      // canal, con el socket todavía abriéndose. El eco se emite antes de que
+      // esta pestaña esté suscrita, no llega nunca, y el mensaje desaparece de
+      // la vista de quien lo escribió hasta que recarga. `onIncoming` descarta
+      // por id, así que cuando el eco sí llega no se duplica.
       if (editing) {
-        await api.patch(`/messages/${editing.id}`, { body });
+        const { message } = await api.patch<{ message: Message }>(`/messages/${editing.id}`, {
+          body,
+        });
+        onIncoming("updated", message);
         setEditing(null);
       } else {
         atBottom.current = true;
-        await api.post(`/channels/${channelId}/messages`, {
-          body,
-          replyTo: replyTo?.id ?? null,
-        });
+        const { message } = await api.post<{ message: Message }>(
+          `/channels/${channelId}/messages`,
+          { body, replyTo: replyTo?.id ?? null },
+        );
+        onIncoming("created", message);
         setReplyTo(null);
       }
     } catch {

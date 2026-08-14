@@ -6,6 +6,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { useSession } from "@/lib/session";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
@@ -100,6 +101,10 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           {workspace.visibility === "personal" && (
             <p className="mt-0.5 text-[10px] text-faint">Solo tú ves este workspace</p>
           )}
+        </div>
+
+        <div className="px-2 pt-3">
+          <GlobalSearch organizationId={workspace.organizationId} />
         </div>
 
         <nav className="flex-1 space-y-6 overflow-y-auto px-2 py-4">

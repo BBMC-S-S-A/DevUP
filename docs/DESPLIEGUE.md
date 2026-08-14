@@ -17,6 +17,7 @@ no levanta sí se ve.
 | `COOKIE_SECURE=true` | Con `false`, la cookie de sesión viaja por HTTP plano y cualquiera en la red la roba |
 | `APP_BASE_URL` en `https://` | De ahí salen los enlaces de invitación y de recuperación, que son credenciales de un solo uso |
 | `TURN_SECRET` | Si hay TURN con credencial fija en vez de temporal, es un relé abierto con tu factura |
+| `TRUST_PROXY` ≠ `true` | De ahí sale la dirección con la que se cuentan los intentos de acceso. Confiando en toda cabecera `X-Forwarded-For`, cualquiera manda una distinta en cada petición y el límite contra fuerza bruta deja de existir. Pon el número de proxis que hay delante (normalmente `1`), su lista de direcciones, o `false` |
 
 Y estas dos, que no abortan pero avisan al arrancar:
 
@@ -155,3 +156,34 @@ Dicho aquí para que no sorprenda:
 - **Sin métricas ni trazas.** Los registros van a stdout en JSON.
 - **La grabación depende del navegador de quien graba** — por diseño, ver
   [`decisiones/0001-cifrado-de-salas.md`](decisiones/0001-cifrado-de-salas.md).
+
+---
+
+## Pruebas de extremo a extremo
+
+Corren contra la aplicación de verdad, sin dobles de prueba: Postgres real,
+almacén real y los dos servidores levantados.
+
+```bash
+npm run dev                    # en otra terminal
+npm run test:e2e
+```
+
+Dos cosas que la suite necesita del entorno, y por qué:
+
+- **`TRUST_PROXY=1`** (el valor por defecto fuera de producción). Las pruebas
+  crean decenas de cuentas seguidas y el límite de acceso —diez por minuto y
+  dirección— las ahogaría, así que cada contexto se presenta con una dirección
+  distinta en `X-Forwarded-For`. La alternativa era subir el límite mientras
+  corren, pero entonces lo que se prueba no es lo que se despliega, y la prueba
+  que comprueba el límite no puede alcanzarlo. **En producción esa cabecera no
+  se cree**, que es justo lo que hace que el truco no sirva contra un
+  despliegue real.
+- **Sin `SMTP_URL`.** Los enlaces de invitación y de recuperación se leen del
+  registro de la API, que es donde acaban cuando no hay servidor de correo.
+  `E2E_API_LOG` apunta a ese archivo (`/tmp/api.log` por defecto).
+
+La primera cuenta la crea `global-setup.ts` aprovechando que una instancia
+vacía admite un alta sin invitación; **todas las demás entran por una
+invitación real**, como una persona. Es más lento y prueba lo que de verdad
+ocurre. Si la base ya tiene cuentas de una ejecución anterior, vacíala antes.

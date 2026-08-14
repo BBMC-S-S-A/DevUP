@@ -6,7 +6,7 @@ import websocket from "@fastify/websocket";
 import Fastify, { type FastifyError } from "fastify";
 import { authPlugin } from "./auth/plugin.js";
 import { closePool, withUser } from "./db/pool.js";
-import { env, webOrigins } from "./env.js";
+import { env, trustProxy, webOrigins } from "./env.js";
 import { HttpError, translateDbError } from "./lib/http.js";
 import { signalingRoutes } from "./realtime/signaling.js";
 import { accountRoutes } from "./routes/account.js";
@@ -16,6 +16,7 @@ import { iceRoutes } from "./routes/ice.js";
 import { messageRoutes } from "./routes/messages.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { recordingRoutes } from "./routes/recordings.js";
+import { searchRoutes } from "./routes/search.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { deleteObjects, ensureBucket } from "./storage/s3.js";
@@ -34,7 +35,11 @@ const app = Fastify({
     // WebSocket viaja en la URL.
     redact: ["req.headers.cookie", "req.headers.authorization", "req.query.ticket"],
   },
-  trustProxy: true,
+  // De esto sale `request.ip`, y de `request.ip` sale el contador del límite de
+  // intentos. Confiar en todos los saltos —que es lo que había aquí— convierte
+  // ese límite en decoración: basta con mandar una X-Forwarded-For distinta en
+  // cada petición. Ver TRUST_PROXY en env.ts.
+  trustProxy,
 });
 
 await app.register(cors, {
@@ -130,6 +135,7 @@ await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(notificationRoutes);
+await app.register(searchRoutes);
 await app.register(recordingRoutes);
 await app.register(signalingRoutes);
 

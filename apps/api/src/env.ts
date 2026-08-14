@@ -30,6 +30,33 @@ const schema = z.object({
   REFRESH_TOKEN_TTL: z.string().default("30d"),
   COOKIE_SECURE: bool("false"),
 
+  /**
+   * Intentos por minuto y dirección en acceso, alta y enlaces de un solo uso.
+   *
+   * Diez es lo correcto en producción: sobra para quien escribe mal su
+   * contraseña y no llega a ningún lado con un diccionario. Se deja
+   * configurable porque una suite de pruebas de extremo a extremo crea
+   * decenas de cuentas seguidas desde la misma dirección y se ahogaría con el
+   * valor de producción.
+   */
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+
+  /**
+   * En quién confiar cuando llega una cabecera `X-Forwarded-For`.
+   *
+   * No es un detalle de despliegue: de ahí sale la dirección con la que se
+   * cuentan los intentos de acceso. Con `true` —confiar en todos los saltos—
+   * cualquiera puede mandar una dirección inventada y distinta en cada
+   * petición, y el límite de arriba deja de existir sin dar ni un error.
+   *
+   * Valores: `false` (la API está expuesta directamente), un número de saltos
+   * de proxy hasta el cliente, o una lista de direcciones o redes de confianza
+   * separadas por comas. Por defecto `false` en producción y `1` fuera, donde
+   * no hay nada expuesto y las pruebas necesitan poder repartirse las
+   * direcciones para no ahogarse entre ellas.
+   */
+  TRUST_PROXY: z.string().optional(),
+
   API_PORT: z.coerce.number().int().positive().default(4000),
   API_HOST: z.string().default("0.0.0.0"),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
@@ -101,6 +128,18 @@ export const turnUrls = env.TURN_URLS.split(",")
   .map((u) => u.trim())
   .filter(Boolean);
 
+/** Lo que espera Fastify: booleano, número de saltos o lista de direcciones. */
+export const trustProxy: boolean | number | string[] = (() => {
+  const crudo = (env.TRUST_PROXY ?? (env.NODE_ENV === "production" ? "false" : "1")).trim();
+  if (crudo === "false") return false;
+  if (crudo === "true") return true;
+  if (/^\d+$/.test(crudo)) return Number(crudo);
+  return crudo
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+})();
+
 /**
  * Comprobaciones que solo importan en producción.
  *
@@ -131,6 +170,17 @@ if (env.NODE_ENV === "production") {
       `APP_BASE_URL apunta a HTTP plano (${env.APP_BASE_URL}). Los enlaces de ` +
         "invitación y de recuperar contraseña son credenciales de un solo uso y " +
         "no pueden viajar sin cifrar.",
+    );
+  }
+
+  if (trustProxy === true) {
+    fatales.push(
+      "TRUST_PROXY=true confía en toda cabecera X-Forwarded-For, venga de donde " +
+        "venga. El límite de intentos de acceso cuenta por dirección: quien " +
+        "mande una distinta en cada petición lo salta entero y puede probar " +
+        "contraseñas sin freno.\n" +
+        "    Pon el número de proxis que hay delante (normalmente 1), la lista " +
+        "de sus direcciones, o false si la API está expuesta directamente.",
     );
   }
 

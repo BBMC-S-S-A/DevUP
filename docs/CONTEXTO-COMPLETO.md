@@ -127,6 +127,8 @@ que se sostiene en pie. Concretamente:
 10. Altas por invitación, verificación de correo y recuperación — **hecho**
 11. Notificaciones de menciones, tareas e invitaciones — **hecho**
 12. CI, endurecimiento e imágenes de despliegue — **hecho**
+13. Búsqueda global (⌘K) sobre mensajes, archivos y tareas — **hecho**
+14. Suite de extremo a extremo con navegador, en CI — **hecho**
 
 Con esto queda cerrada la capa de **espacio de trabajo** completa y la
 aplicación está en condiciones de exponerse a internet. Lo que **no** entra
@@ -169,6 +171,10 @@ para `docker compose up -d`. Las dos que más daño hacen si se equivocan:
 - `DATABASE_URL` — conexión de la API. **Tiene que ser el rol `devup_app`**, no
   el propietario del esquema. Ver §5.1.
 - `NEXT_PUBLIC_TURN_URL` — vacío vale en desarrollo, en producción no. Ver §5.2.
+- `TRUST_PROXY` — de ahí sale la dirección con la que se cuentan los intentos
+  de acceso. Con `true` el límite contra fuerza bruta no protege de nada: basta
+  con mandar una `X-Forwarded-For` distinta en cada petición. La API aborta el
+  arranque en producción si vale `true`.
 
 ---
 
@@ -379,6 +385,8 @@ cabecera el porqué de lo que hace:
 | `0004_workspaces_tasks_recordings.sql` | Visibilidad de workspace (compartido/personal), tablero de tareas y grabaciones con consentimiento. |
 | `0005_messages.sql` | Mensajes con hilos y adjuntos, marcas de lectura y recuento de no leídos. |
 | `0006_invitations_notifications.sql` | Invitaciones, tokens de verificación y recuperación, y notificaciones. |
+| `0007_busqueda.sql` | `search_everything`: mensajes, archivos y tareas en una consulta. **Sin `SECURITY DEFINER` a propósito** — es lo que hace que RLS decida qué sale. |
+| `0008_menciones_y_acceso.sql` | `can_user_access_channel`, y `resolve_mentions` colgada de ella: mencionar en un canal privado ya no notifica a quien no está dentro. |
 | `db/grants.sql` | Privilegios de `devup_app`. Se reaplica en cada migración, es idempotente. |
 
 Dos separaciones que parecen redundantes y no lo son:
@@ -393,10 +401,15 @@ Dos separaciones que parecen redundantes y no lo son:
 ### Estado de verificación
 
 Las migraciones **se han aplicado contra un Postgres real** y `npm run test:rls`
-pasa con 45 comprobaciones: lectura cruzada entre organizaciones, escritura
+pasa con 47 comprobaciones: lectura cruzada entre organizaciones, escritura
 cruzada, canales privados dentro de la misma organización, visibilidad de
-perfiles, credenciales, workspaces personales, y el ciclo
+perfiles, credenciales, workspaces personales, menciones, y el ciclo
 completo de una llamada.
+
+Encima corre una suite de extremo a extremo con navegador de verdad contra la
+aplicación entera (`npm run test:e2e`), que es donde aparecen las cosas que el
+esquema no puede ver: que un mensaje se pinte, que una invitación llegue, que
+una llamada conecte.
 
 Un aviso que costó entenderlo la primera vez: **añadir «personal» a workspaces
 no fue añadir una columna.** `can_access_channel` y la política de `files`
@@ -419,11 +432,9 @@ siguiente, por orden de dependencia:
    abandone sus herramientas actuales— no se alcanza con algo que solo corre en
    localhost, y lo que salga de dos semanas de uso real vale más que cualquier
    planificación que se haga antes.
-2. **Búsqueda global** entre canales, archivos y tareas. Hoy la búsqueda es por
-   workspace.
-3. **Redis para la presencia y el límite de peticiones**, el día que haya más
+2. **Redis para la presencia y el límite de peticiones**, el día que haya más
    de una instancia de API. Ver §5.3.
-4. **Semana 4 en adelante** del plan: servicios, clientes y embudo de ventas.
+3. **Semana 4 en adelante** del plan: servicios, clientes y embudo de ventas.
 
 Antes de empezar cualquiera de ellas, `npm run test:rls` tiene que estar en
 verde. Es el único freno automático que hay contra una fuga entre clientes.
@@ -480,6 +491,11 @@ Todas encontradas ejecutando el sistema, no revisándolo a ojo.
 | Un 429 llega al cliente como 500 | El manejador global no miraba `error.statusCode` | Dejar pasar los 4xx que genera Fastify con su propio código |
 | `NEXT_PUBLIC_*` cambiado y la web sigue igual | Se incrusta en el bundle durante el build, no al arrancar | Reconstruir la imagen; nunca meter secretos ahí |
 | Una etiqueta de color sale en gris | Se compuso la clase con una plantilla, `bg-${color}` | Tailwind analiza clases literales; escribirlas una a una |
+| El límite contra fuerza bruta parece puesto y se salta con una cabecera | `trustProxy: true` se cree cualquier `X-Forwarded-For`, así que basta con mandar una distinta en cada intento | `TRUST_PROXY` con el número de proxis reales o su lista; en producción se aborta el arranque si vale `true` |
+| Mencionar a alguien en un canal privado le llega | `resolve_mentions` resolvía contra la organización, no contra el acceso al canal | `can_user_access_channel` (migración 0008). La notificación lleva el nombre del canal: notificar ya filtra que existe |
+| Un mensaje recién escrito no aparece hasta recargar | Se pintaba solo con el eco del socket, y al escribir nada más entrar en el canal el socket aún no está suscrito | Pintar lo que devuelve la propia respuesta; el eco se descarta por id |
+| Un `grep` sobre el registro de la API no encuentra nada que está ahí | pino-pretty colorea, grep ve bytes de escape y decide que el archivo es binario | Leerlo en Node y quitar los códigos ANSI antes de buscar |
+| La suite de extremo a extremo se ahoga contra su propio límite de acceso | Decenas de altas seguidas desde una sola dirección | Una dirección por contexto, no subir el límite: subirlo deja de probar lo que se despliega |
 
 ---
 
