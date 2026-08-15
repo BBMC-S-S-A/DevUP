@@ -496,6 +496,7 @@ Todas encontradas ejecutando el sistema, no revisándolo a ojo.
 | Un mensaje recién escrito no aparece hasta recargar | Se pintaba solo con el eco del socket, y al escribir nada más entrar en el canal el socket aún no está suscrito | Pintar lo que devuelve la propia respuesta; el eco se descarta por id |
 | Un `grep` sobre el registro de la API no encuentra nada que está ahí | pino-pretty colorea, grep ve bytes de escape y decide que el archivo es binario | Leerlo en Node y quitar los códigos ANSI antes de buscar |
 | La suite de extremo a extremo se ahoga contra su propio límite de acceso | Decenas de altas seguidas desde una sola dirección | Una dirección por contexto, no subir el límite: subirlo deja de probar lo que se despliega |
+| Marcar un canal como leído devuelve `415` en producción y funciona en local | Un intermediario (Cloudflare Tunnel) le pone `application/x-www-form-urlencoded` a los POST sin cuerpo, y Fastify no trae analizador para ese tipo: rechaza antes del handler | Analizador comodín que acepta el cuerpo vacío venga el tipo que venga. Con cuerpo y tipo desconocido sigue siendo 415 |
 
 ---
 

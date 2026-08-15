@@ -155,6 +155,55 @@ test.describe("Conversación", () => {
     expect(respuesta.status()).toBe(401);
   });
 
+  test("marcar leído funciona con cualquier Content-Type", async ({ browser }) => {
+    // Esto se rompió en producción sin que cambiara una línea de código: detrás
+    // de Cloudflare Tunnel, los POST sin cuerpo empezaron a llegar con
+    // `application/x-www-form-urlencoded`, que Fastify no sabe leer, y los
+    // rechazaba con 415 antes del handler. Marcar un canal como leído dejó de
+    // funcionar para todo el equipo.
+    //
+    // Se prueba con la petición cruda y no por la interfaz a propósito: lo que
+    // falla es lo que un intermediario le hace a la cabecera, y el navegador de
+    // la prueba nunca la pondría por su cuenta.
+    const id = marca();
+    const page = await altaInvitada(browser, "Ana Prueba", `tipos-${id}@devup.test`);
+    await crearOrganizacion(page, `Tipos ${id}`);
+    await crearWorkspace(page, "Producto");
+    await abrirWorkspace(page, "Producto");
+    await crearCanal(page, "general", "Texto");
+    await page.getByRole("link", { name: "general" }).click();
+
+    // Esperar a la URL, no leerla y ya: el `click` vuelve antes de que la
+    // navegación termine, y entonces el id sale `undefined` y la prueba falla
+    // con un 400 que parece del arreglo y es de la prueba.
+    await page.waitForURL(/\/c\/[0-9a-f-]{36}/);
+    const canal = /\/c\/([0-9a-f-]{36})/.exec(page.url())![1]!;
+
+    for (const contentType of [
+      "application/json",
+      "application/x-www-form-urlencoded",
+      "text/plain;charset=UTF-8",
+      "application/octet-stream",
+    ]) {
+      const respuesta = await page.request.post(`${API}/channels/${canal}/read`, {
+        headers: { "content-type": contentType },
+        failOnStatusCode: false,
+      });
+      expect(respuesta.status(), `Content-Type: ${contentType}`).toBe(204);
+    }
+
+    // Un cuerpo de verdad con un tipo que no sabemos leer sigue siendo 415:
+    // ahí sí hay algo que no entendemos y callarlo sería peor.
+    const conCuerpo = await page.request.post(`${API}/channels/${canal}/read`, {
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      data: "a=1",
+      failOnStatusCode: false,
+    });
+    expect(conCuerpo.status()).toBe(415);
+
+    await page.context().close();
+  });
+
   test("acceder con la contraseña equivocada acaba limitado", async ({ page }) => {
     const correo = `bruta-${marca()}@devup.test`;
     const maximo = Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10);

@@ -88,6 +88,40 @@ await app.register(rateLimit, {
   }),
 });
 
+/**
+ * Un POST sin cuerpo se acepta, diga lo que diga su `Content-Type`.
+ *
+ * Varias rutas no llevan cuerpo: `/channels/:id/read`, `/notifications/:id/read`,
+ * `/auth/logout`, `/auth/refresh`. El navegador las manda sin `Content-Type`, y
+ * así Fastify las aceptaba. Pero **un intermediario puede añadir uno**: detrás
+ * de Cloudflare Tunnel empezaron a llegar como
+ * `application/x-www-form-urlencoded`, para el que Fastify no trae analizador,
+ * y las rechazaba con 415 antes de ejecutar el handler. Marcar un canal como
+ * leído dejó de funcionar en producción sin que nada cambiara en el código.
+ *
+ * Se registra un analizador comodín que solo acepta el cuerpo vacío. Un cuerpo
+ * con contenido y un tipo que no sabemos leer sigue siendo 415, que es lo
+ * correcto: ahí sí hay algo que no entendemos.
+ */
+app.addContentTypeParser("*", { parseAs: "buffer" }, (_request, payload, done) => {
+  if (payload.length === 0) return done(null, undefined);
+  done(new HttpError(415, "tipo de contenido no admitido", "tipo_no_admitido"));
+});
+
+// Y lo mismo para `application/json`, que trae analizador propio y por tanto no
+// pasa por el comodín de arriba: con el cuerpo vacío responde 400 («Body cannot
+// be empty»). Es el mismo fallo con otro número, y le pasaría a las mismas
+// rutas si el intermediario de turno decide que un POST sin cuerpo es JSON.
+app.addContentTypeParser("application/json", { parseAs: "string" }, (_request, body, done) => {
+  const texto = typeof body === "string" ? body : body.toString("utf8");
+  if (texto.length === 0) return done(null, undefined);
+  try {
+    done(null, JSON.parse(texto));
+  } catch {
+    done(new HttpError(400, "el cuerpo no es JSON válido", "solicitud_invalida"));
+  }
+});
+
 await app.register(websocket, { options: { maxPayload: 256 * 1024 } });
 await app.register(authPlugin);
 
