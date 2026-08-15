@@ -41,6 +41,7 @@ function HiddenAudio({ stream }: { stream: MediaStream | null }) {
 export function ParticipantVideos({
   participant,
   isSelf = false,
+  spotlightScreen = false,
 }: {
   participant: Pick<
     Participant,
@@ -54,6 +55,8 @@ export function ParticipantVideos({
     | "screenStream"
   >;
   isSelf?: boolean;
+  /** Con alguien compartiendo pantalla en la sala, ese recuadro se agranda. */
+  spotlightScreen?: boolean;
 }) {
   const speaking = useSpeaking(participant.audioStream, !participant.muted);
 
@@ -80,6 +83,7 @@ export function ParticipantVideos({
           connectionState={participant.connectionState}
           speaking={speaking}
           videoStream={tile.videoStream}
+          spotlight={tile.kind === "screen" && spotlightScreen}
         />
       ))}
     </>
@@ -94,6 +98,7 @@ function ParticipantTile({
   connectionState,
   speaking,
   videoStream,
+  spotlight = false,
 }: {
   kind: "camera" | "screen" | "voice";
   displayName: string;
@@ -102,6 +107,7 @@ function ParticipantTile({
   connectionState: Participant["connectionState"];
   speaking: boolean;
   videoStream: MediaStream | null;
+  spotlight?: boolean;
 }) {
   const media = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -194,7 +200,7 @@ function ParticipantTile({
     <li
       className={`relative flex flex-col overflow-hidden rounded-2xl border bg-surface transition ${
         speaking ? "border-live/60 shadow-[0_0_0_3px_rgba(52,211,153,0.12)]" : "border-line"
-      }`}
+      } ${spotlight ? "col-span-full row-span-2 sm:col-span-2 lg:col-span-3" : ""}`}
     >
       <div
         ref={frame}

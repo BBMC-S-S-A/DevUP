@@ -3,7 +3,9 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
 import { useSession } from "@/lib/session";
+import { VoiceCallProvider } from "@/lib/voice/VoiceCallProvider";
 
 /**
  * Guarda de sesión del lado del cliente.
@@ -29,5 +31,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <VoiceCallProvider>
+      {children}
+      <ActiveCallBar />
+    </VoiceCallProvider>
+  );
 }
