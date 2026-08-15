@@ -1,12 +1,42 @@
-# Ejemplo de despliegue con Docker Compose.
+# Despliegue autoalojado de DevUP, sin exponer ningún puerto del router.
 #
-# Sirve para una máquina sola con un proxy inverso delante que termine TLS
-# (Caddy, Traefik, nginx). Para algo más grande, las imágenes son las mismas y
-# lo que cambia es quién las orquesta.
+# Cloudflare Tunnel (`cloudflared`) hace una conexión saliente desde esta
+# máquina hacia Cloudflare; Cloudflare termina el TLS en su borde y enruta el
+# tráfico entrante hacia los contenedores internos. No hace falta abrir 80,
+# 443 ni ningún puerto de voz en el router: la conexión siempre sale, nunca
+# entra directamente a esta máquina.
+#
+# La voz usa STUN + un servidor TURN gratuito de terceros (Metered.ca) en vez
+# de un coturn propio — así tampoco hace falta reenviar los puertos UDP de
+# TURN. Ver docs/DESPLIEGUE.md.
 #
 # Lee la lista de comprobación de docs/DESPLIEGUE.md antes de levantarlo: hay
 # cuatro variables que la API se niega a arrancar sin ellas bien puestas.
+#
+# `name:` fija el proyecto de Compose. Sin esto, Compose usa el nombre de la
+# carpeta ("devup") como proyecto — el mismo que docker-compose.yml de
+# desarrollo — y los dos ficheros terminan compartiendo contenedores y
+# volúmenes con el mismo nombre corto. Ya pasó una vez: levantar este fichero
+# recreó y luego borró los contenedores de desarrollo.
+name: devup-prod
+
 services:
+  # Túnel saliente hacia Cloudflare. El token se genera al crear el túnel en
+  # Cloudflare Zero Trust → Networks → Tunnels, y ahí mismo se configuran las
+  # reglas de "Public Hostname" (hytrex.co -> web:3000, api.hytrex.co ->
+  # api:4000, files.hytrex.co -> minio:9000) — no hace falta un archivo de
+  # configuración local para eso.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # QUIC (el protocolo por defecto) usa UDP, y el router/NAT de una red
+    # doméstica normal corta esas sesiones constantemente. http2 va sobre TCP
+    # y es mucho más estable detrás de un NAT sin configurar puertos.
+    command: tunnel --protocol http2 run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?falta CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [api, web, minio]
+
   api:
     build:
       context: .
@@ -15,7 +45,6 @@ services:
     env_file: .env.production
     environment:
       NODE_ENV: production
-    ports: ["4000:4000"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,7 +59,12 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?falta NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:?falta NEXT_PUBLIC_WS_URL}
     restart: unless-stopped
-    ports: ["3000:3000"]
+    environment:
+      # Docker define HOSTNAME con el ID del contenedor, y el server standalone
+      # de Next.js lo usa como dirección de escucha: sin esto, escucha solo en
+      # su propia IP de contenedor y el healthcheck (que prueba 127.0.0.1)
+      # falla aunque el tráfico real por la red de Docker funcione bien.
+      HOSTNAME: "0.0.0.0"
     depends_on: [api]
 
   postgres:
@@ -40,6 +74,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}
       POSTGRES_DB: devup
+    # Sin publicar al host: la API llega por la red interna de Docker, y no
+    # hace falta exponerlo — además chocaría con el Postgres de desarrollo,
+    # que ya ocupa el 5432 del host.
     volumes:
       - devup-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -48,5 +85,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # Almacén S3-compatible propio. El túnel lo expone en files.hytrex.co para
+  # que las URLs firmadas sean alcanzables desde cualquier navegador, no solo
+  # desde dentro de la red de contenedores.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:?falta S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?falta S3_SECRET_ACCESS_KEY}
+    volumes:
+      - devup-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   devup-pgdata:
+    name: devup-prod-pgdata
+  devup-minio:
+    name: devup-prod-minio
