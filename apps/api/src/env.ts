@@ -75,6 +75,14 @@ const schema = z.object({
   /** Solo para el coturn de desarrollo, que usa credenciales fijas. */
   TURN_STATIC_USERNAME: z.string().default(""),
   TURN_STATIC_CREDENTIAL: z.string().default(""),
+  /**
+   * TURN gestionado de un tercero (Metered.ca) en vez de coturn propio. La API
+   * pide una credencial nueva a Metered en cada petición a /calls/ice-servers
+   * — nunca guardamos una credencial fija de Metered en nuestro propio
+   * entorno, así que no dispara la misma protección que TURN_STATIC_*.
+   */
+  METERED_APP_NAME: z.string().default(""),
+  METERED_API_KEY: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);

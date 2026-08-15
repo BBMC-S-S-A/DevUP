@@ -16,7 +16,7 @@ no levanta sí se ve.
 | `AUTH_SECRET` | Con el valor de `.env.example`, cualquiera que haya leído el repositorio puede firmar sesiones válidas. Genera 32 bytes: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `COOKIE_SECURE=true` | Con `false`, la cookie de sesión viaja por HTTP plano y cualquiera en la red la roba |
 | `APP_BASE_URL` en `https://` | De ahí salen los enlaces de invitación y de recuperación, que son credenciales de un solo uso |
-| `TURN_SECRET` | Si hay TURN con credencial fija en vez de temporal, es un relé abierto con tu factura |
+| `TURN_SECRET` (o `METERED_API_KEY`) | Si hay `TURN_URLS` con credencial fija en vez de temporal o gestionada, es un relé abierto con tu factura |
 
 Y estas dos, que no abortan pero avisan al arrancar:
 
@@ -37,15 +37,42 @@ Y estas dos, que no abortan pero avisan al arrancar:
 | **Web** (`apps/web/Dockerfile`) | Otro contenedor. Escucha en 3000 |
 | **Postgres 17** | Gestionado (Neon, RDS, Supabase como base a secas) o propio |
 | **Almacén S3** | Cloudflare R2, S3 o MinIO. Bucket **privado** |
-| **TURN** | `coturn` propio o servicio gestionado |
+| **TURN** | `coturn` propio o servicio gestionado (Metered.ca, Cloudflare Calls) |
 | **SMTP** | Cualquiera. Sin esto no hay invitaciones |
-| **Proxy inverso** | Termina TLS y reparte entre web y API |
+| **Entrada pública** | Proxy inverso propio (Caddy/nginx) que termine TLS, o un Cloudflare Tunnel — ver «Sin VPS» más abajo |
 
 ```bash
 cp .env.example .env.production   # y rellenarlo de verdad
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec api npm run db:migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml exec api node apps/api/dist/db/migrate.js
 ```
+
+**Ojo con las dos cosas que cambian frente a lo que parece obvio:**
+- **`--env-file .env.production`** en el propio `docker compose`, no solo `env_file:` dentro del servicio. Compose solo lee `.env` automáticamente para sus propias variables `${...}`; un archivo con otro nombre hay que indicárselo explícitamente, o `POSTGRES_PASSWORD` y compañía se quedan sin valor al construir.
+- **`node apps/api/dist/db/migrate.js`**, no `npm run db:migrate`. Ese script invoca `tsx src/db/migrate.ts`, y la imagen de producción no lleva el código fuente en TypeScript — solo el compilado en `dist/`. `npm run db:migrate` falla con `ERR_MODULE_NOT_FOUND` dentro del contenedor.
+
+### Sin VPS: autoalojado con Cloudflare Tunnel
+
+Si no quieres pagar un VPS ni abrir puertos en tu router, hay una variante que
+funciona igual de bien para un equipo pequeño:
+
+- **Cloudflare Tunnel** (`cloudflared`, como servicio de `docker-compose.prod.yml`)
+  en vez de un proxy inverso propio. La conexión sale siempre desde tu máquina
+  hacia Cloudflare; nunca hace falta abrir 80 ni 443. Cloudflare termina el TLS
+  en su borde. Las rutas (`Public Hostname`) se configuran en su panel
+  (Zero Trust → Networks → Tunnels), no en un archivo local.
+- Si tu red no aguanta bien conexiones UDP largas, fuerza `tunnel --protocol
+  http2` en el comando del servicio — QUIC (el protocolo por defecto) se corta
+  seguido detrás de un NAT doméstico normal.
+- **Metered.ca** (u otro TURN gestionado) en vez de `coturn` propio, para no
+  tener que reenviar tampoco los puertos de voz. La integración vive en
+  `apps/api/src/routes/ice.ts`: con `METERED_APP_NAME` y `METERED_API_KEY`
+  puestos, la API le pide a Metered una credencial nueva en cada petición a
+  `/calls/ice-servers` — nunca se guarda una credencial fija, así que no choca
+  con la comprobación de `env.ts` que bloquea `TURN_STATIC_CREDENTIAL` en
+  producción.
+- Con esta variante no hace falta `PUBLIC_IP` ni reenviar ningún puerto del
+  router: todo el tráfico entra por el túnel saliente.
 
 ---
 
@@ -90,7 +117,7 @@ migrar tienen que poder hacerse con el mismo artefacto, o acaban
 desincronizados.
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api npm run db:migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml exec api node apps/api/dist/db/migrate.js
 ```
 
 El runner lleva un checksum de cada archivo aplicado. Si alguien editó una

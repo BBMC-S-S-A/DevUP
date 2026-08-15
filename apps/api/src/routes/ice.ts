@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession } from "../auth/plugin.js";
 import { env, stunUrls, turnUrls } from "../env.js";
 import { requireUser } from "../lib/http.js";
@@ -23,6 +23,11 @@ import { requireUser } from "../lib/http.js";
 export async function iceRoutes(app: FastifyInstance): Promise<void> {
   app.get("/calls/ice-servers", { onRequest: requireSession }, async (request) => {
     const userId = requireUser(request);
+
+    if (env.METERED_API_KEY) {
+      return fetchMeteredIceServers(request);
+    }
+
     const iceServers: RTCIceServerLike[] = [];
 
     if (stunUrls.length > 0) iceServers.push({ urls: stunUrls });
@@ -66,3 +71,47 @@ type RTCIceServerLike = {
   username?: string;
   credential?: string;
 };
+
+type MeteredIceServer = {
+  urls: string;
+  username?: string;
+  credential?: string;
+};
+
+/**
+ * TURN de Metered.ca en vez de coturn propio: cada llamada le pide a Metered
+ * una credencial nueva con su propia API, así que aquí nunca se guarda ni se
+ * reutiliza un secreto fijo — la caducidad y la rotación las gestiona Metered.
+ * Si su API falla, se sirve solo STUN en vez de tumbar la petición entera.
+ */
+async function fetchMeteredIceServers(request: FastifyRequest) {
+  const url =
+    `https://${env.METERED_APP_NAME}.metered.live/api/v1/turn/credentials` +
+    `?apiKey=${encodeURIComponent(env.METERED_API_KEY)}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Metered respondió ${response.status}`);
+    }
+    const servers = (await response.json()) as MeteredIceServer[];
+    const iceServers: RTCIceServerLike[] = servers.map((s) => ({
+      urls: [s.urls],
+      ...(s.username ? { username: s.username } : {}),
+      ...(s.credential ? { credential: s.credential } : {}),
+    }));
+    return {
+      iceServers,
+      turnConfigured: iceServers.some((s) => s.username),
+    };
+  } catch (error) {
+    request.log.warn(
+      { error },
+      "No se pudo obtener credenciales de Metered.ca; se sirve solo STUN",
+    );
+    return {
+      iceServers: stunUrls.length > 0 ? [{ urls: stunUrls }] : [],
+      turnConfigured: false,
+    };
+  }
+}
