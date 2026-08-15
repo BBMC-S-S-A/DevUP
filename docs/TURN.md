@@ -93,8 +93,15 @@ const username = `${Math.floor(Date.now() / 1000) + 12 * 3600}:${userId}`;
 const password = createHmac("sha1", TURN_SECRET).update(username).digest("base64");
 ```
 
-El frontend las pide al entrar en la sala en vez de leerlas del entorno. **Esto
-todavía no está implementado**: es el primer paso cuando se despliegue.
+El frontend las pide al entrar en la sala en vez de leerlas del entorno. **Ya
+está implementado**: lo sirve `GET /calls/ice-servers`
+(`apps/api/src/routes/ice.ts`). Basta con poner `TURN_SECRET` y `TURN_URLS`; si
+hay `TURN_SECRET`, la rama de credencial fija ni se toca, y `env.ts` aborta el
+arranque en producción si se intenta lo contrario.
+
+El usuario emitido es `<caducidad>:<userId>`, no un genérico: si hay que
+investigar un abuso del relé, los registros de coturn dicen de quién era la
+credencial.
 
 ### 2. TLS y el puerto 443
 
