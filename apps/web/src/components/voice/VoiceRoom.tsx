@@ -16,41 +16,25 @@ import {
   VideoOff,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import type { Channel } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { useVoiceRoom } from "@/lib/voice/useVoiceRoom";
+import { useElapsed } from "@/lib/voice/useElapsed";
+import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { ParticipantVideos } from "./ParticipantTile";
-
-/** Duración de la llamada, contada desde que se abrió la sesión en el servidor. */
-function useElapsed(startedAt: string | null): string | null {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!startedAt) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [startedAt]);
-
-  if (!startedAt) return null;
-
-  // Quien entra a los diez minutos ve diez minutos, no cero: es la duración de
-  // la llamada, no la suya.
-  const seconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const rest = seconds % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
-}
 
 export function VoiceRoom({ channel }: { channel: Channel }) {
   const { user } = useSession();
-  const room = useVoiceRoom(channel.id, channel.workspaceId);
+  const { room, activeChannelId, joinChannel, leaveChannel } = useVoiceCall();
   const elapsed = useElapsed(room.startedAt);
 
-  const inRoom = room.status === "live" || room.status === "connecting";
+  // La llamada vive fuera de esta página (ver VoiceCallProvider): puede haber
+  // una activa en OTRO canal mientras se mira este. `room` refleja siempre la
+  // que esté activa, así que sin esta comprobación este canal mostraría los
+  // controles de una llamada que en realidad es de otro.
+  const isThisChannel = activeChannelId === channel.id;
+  const inRoom = isThisChannel && (room.status === "live" || room.status === "connecting");
   const total = room.participants.length + 1;
+  const spotlightScreen = inRoom && (room.sharing || room.participants.some((p) => p.sharing));
 
   return (
     <section className="relative rounded-2xl border border-line bg-surface/60 p-6">
@@ -87,7 +71,7 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
         {!inRoom ? (
           <button
             type="button"
-            onClick={() => void room.join()}
+            onClick={() => joinChannel(channel.id, channel.workspaceId, channel.name)}
             className="flex items-center gap-2 rounded-lg bg-live px-4 py-2 text-sm font-medium text-canvas transition hover:brightness-110"
           >
             <Mic size={15} />
@@ -143,7 +127,7 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
 
             <button
               type="button"
-              onClick={room.leave}
+              onClick={leaveChannel}
               className="flex items-center gap-2 rounded-lg bg-danger/90 px-3 py-2 text-sm font-medium text-canvas transition hover:brightness-110"
             >
               <PhoneOff size={15} />
@@ -215,9 +199,14 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
                 screenStream: room.localScreenStream,
               }}
               isSelf
+              spotlightScreen={spotlightScreen}
             />
             {room.participants.map((participant) => (
-              <ParticipantVideos key={participant.peerId} participant={participant} />
+              <ParticipantVideos
+                key={participant.peerId}
+                participant={participant}
+                spotlightScreen={spotlightScreen}
+              />
             ))}
           </ul>
 
@@ -246,11 +235,11 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
         </>
       )}
 
-      {room.prompt && (
+      {inRoom && room.prompt && (
         <ConsentDialog
           prompt={room.prompt}
           onAnswer={room.answerRecordingPrompt}
-          onLeave={room.leave}
+          onLeave={leaveChannel}
         />
       )}
     </section>
