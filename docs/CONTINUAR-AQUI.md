@@ -39,21 +39,91 @@ está construida y probada de punta a punta.
   pares se conectan, se oyen, se ven, negocian el permiso de grabación, graban,
   guardan el archivo y cuelgan; el historial se cierra solo.
 
-**Lo siguiente**
+**Ya desplegado — agosto 2026**
 
-**Desplegarlo y usarlo dos semanas.** Ya no queda nada que lo bloquee: la lista
-de comprobación previa está en [`DESPLIEGUE.md`](DESPLIEGUE.md), con las cuatro
-variables sin las cuales la API se niega a arrancar en producción.
-
-El hito que decide el proyecto —que el propio equipo abandone sus herramientas
-actuales— no se alcanza con algo que solo corre en localhost. Lo que salga de
-ese uso real vale más que seguir añadiendo funcionalidades sobre unos cimientos
-que nadie ha estresado.
+Está en producción real, en **https://devup.hytrex.co**, autoalojado en la
+máquina de Juan sin VPS y sin exponer ningún puerto del router. El detalle
+completo de esa arquitectura y por qué está en la sección
+[Despliegue actual](#despliegue-actual-sin-vps) más abajo.
 
 El cifrado de las salas **ya está decidido**: extremo a extremo siempre,
 grabación en el cliente con permiso de todos. El razonamiento completo, con lo
 que se descartó y por qué, está en
 [`decisiones/0001-cifrado-de-salas.md`](decisiones/0001-cifrado-de-salas.md).
+
+---
+
+## Despliegue actual (sin VPS)
+
+Decisión de producto: sin presupuesto para un VPS, y sin querer exponer la red
+doméstica abriendo puertos en el router. La combinación que sí cumple las tres
+cosas a la vez (gratis, sin exponer la red, funcionalidad completa incluida la
+voz) es esta:
+
+| Pieza | Qué se usa | Por qué |
+|---|---|---|
+| Entrada pública | **Cloudflare Tunnel** (`cloudflared`, contenedor más en `docker-compose.prod.yml`) | Conexión siempre saliente desde la máquina hacia Cloudflare; nunca hay que abrir 80/443. Forzado a `--protocol http2` porque QUIC (UDP) se corta seguido en una red doméstica normal |
+| TLS | Lo termina Cloudflare en su borde | Ya no hace falta Caddy ni gestionar certificados |
+| TURN | **Metered.ca** (free tier, 500MB/mes, sin tarjeta) | Reemplaza a `coturn` propio — así tampoco hace falta reenviar puertos UDP de voz. Integrado en `apps/api/src/routes/ice.ts`: la API le pide una credencial *nueva* a Metered en cada llamada a `/calls/ice-servers`, nunca guarda una fija — respeta la comprobación de `env.ts` que bloquea credenciales estáticas de TURN en producción |
+| DNS | Dominio `hytrex.co` movido de Hostinger a **Cloudflare** (solo el DNS, el registro sigue en Hostinger) | Necesario para que el Tunnel pueda enrutar por hostname. Los registros de correo (`Starter Business Email`, MX/SPF/DMARC/autodiscover) se replicaron a mano antes del cambio de nameservers — si hace falta tocar DNS de nuevo, cuidado con no perderlos |
+| Subdominios | `devup.hytrex.co` (web), `api.hytrex.co` (API + WebSocket), `files.hytrex.co` (MinIO) | La raíz `hytrex.co` se dejó libre a propósito, para un futuro sitio de la empresa |
+
+Variables nuevas en `.env.production` que no existían antes: `CLOUDFLARE_TUNNEL_TOKEN`
+(token del túnel, se genera en Cloudflare Zero Trust → Networks → Tunnels),
+`METERED_APP_NAME` y `METERED_API_KEY` (panel de Metered.ca → TURN Server).
+`TURN_SECRET`/`TURN_URLS` quedan vacíos: no hay coturn propio en este despliegue.
+
+**Aislamiento de proyectos de Compose.** `docker-compose.prod.yml` fija
+`name: devup-prod` y da nombre explícito a sus volúmenes. Sin esto, Compose usa
+el nombre de la carpeta como proyecto —el mismo que `docker-compose.yml` de
+desarrollo— y los dos ficheros terminan compartiendo contenedores y volúmenes
+con el mismo nombre corto. Ya pasó una vez en esta sesión: levantar el de
+producción recreó y borró los contenedores de desarrollo (sin pérdida de datos
+porque los volúmenes sobrevivieron, pero fue una advertencia real).
+
+**Migrar en esta imagen no es `npm run db:migrate`.** La imagen de producción
+no lleva el código fuente TypeScript, solo el compilado. El comando correcto:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec api \
+  node apps/api/dist/db/migrate.js
+```
+
+**Punto único de fallo, a propósito.** Todo corre en una sola máquina de
+escritorio. Si se apaga o pierde internet, DevUP deja de responder para todo el
+equipo. Es la contrapartida aceptada de no pagar un VPS; si el equipo crece o
+esto se vuelve crítico, migrar a un VPS (~$5/mes, KVM 1 de Hostinger) es
+sencillo porque las imágenes y el `docker-compose.prod.yml` son los mismos —
+solo cambiaría quién aloja el Tunnel, o se podría volver a Caddy + coturn si se
+prefiere no depender de terceros.
+
+**Estado de las cuentas.** Altas por invitación (`SIGNUP_MODE=invite`);
+`juan.bonilla@hytrex.co` es la cuenta administradora real de la organización
+`hytrex`. **Sin SMTP configurado todavía**: las invitaciones no llegan por
+correo, el enlace se escribe en el registro de la API
+(`docker compose logs api`, buscar «correo sin enviar»). Hay que sacarlo de ahí
+y reenviarlo a mano a cada persona invitada hasta que se configure un
+proveedor SMTP (el correo de Hostinger de la propia empresa serviría).
+
+**Bugs reales encontrados y corregidos en el despliegue** (no eran solo
+configuración, sino código o documentación que no funcionaba como decía):
+- `apps/web/Dockerfile` copiaba un `node_modules` que nunca existe por el
+  *hoisting* de npm — el build de producción de la web fallaba siempre.
+- `npm run dev` en la raíz corría los workspaces *secuencialmente*: la API
+  arrancaba y la web nunca llegaba a hacerlo. Arreglado con `concurrently`.
+- `.gitignore` no cubría `.env.production` — pudo haberse subido con secretos.
+- El comando de migración documentado en `DESPLIEGUE.md` no funciona contra la
+  imagen real (ver arriba).
+
+**Sin resolver todavía**: un compañero reportó un `415` al marcar un canal como
+leído (`POST /channels/:id/read`) desde el navegador, mientras que la misma
+llamada sin cuerpo a `/auth/logout` funciona bien con el mismo cliente HTTP
+compartido (`apps/web/src/lib/api.ts`). No se confirmó la causa raíz antes de
+cortar la sesión de depuración — el mensaje de error del navegador
+mencionaba también CORS en `/auth/ws-ticket`, que sí parece ruido transitorio
+del túnel (el log del servidor muestra 200 en esas llamadas). Retomar
+reproduciendo la petición exacta desde la consola del navegador con la sesión
+real ya logueada, en vez de intentar reproducirla con curl.
 
 ---
 
@@ -111,3 +181,42 @@ npm run db:migrate
 npm run dev          # API en :4000, web en :3000
 npm run test:rls     # que esté en verde antes de empezar nada
 ```
+
+Para tocar la instancia de producción real (no la de desarrollo local), todos
+los comandos de `docker compose` necesitan `--env-file .env.production` y
+`-f docker-compose.prod.yml`; ver la sección
+[Despliegue actual](#despliegue-actual-sin-vps) de arriba.
+
+---
+
+## Plan de desarrollo desde aquí
+
+En orden, cada uno depende de que el anterior esté resuelto:
+
+1. **Cerrar el `415` de `/channels/:id/read`.** Es lo único que queda a medias
+   de esta sesión. Bloquea confiar del todo en la mensajería en producción.
+2. **Configurar SMTP.** Sin esto, cada invitación exige que alguien con acceso
+   a los contenedores saque el enlace del registro a mano — no escala ni a un
+   equipo pequeño. El correo de empresa de Hostinger (`@hytrex.co`) ya existe y
+   debería servir.
+3. **Usarlo dos semanas de verdad, como equipo.** Es el hito que decide el
+   proyecto (`CONTEXTO-COMPLETO.md`, hito H4): si el propio equipo no
+   abandona sus herramientas actuales por DevUP, ningún cliente lo hará
+   tampoco. Vale más lo que salga de ese uso real que seguir construyendo
+   sobre una base sin estresar.
+4. **Vigilar el consumo de Metered.ca** (500MB/mes gratis) durante esas dos
+   semanas. Si el equipo lo agota, hay que decidir entre pagar su siguiente
+   nivel o levantar coturn propio con reenvío de puertos.
+5. **Decidir sobre el punto único de fallo.** Si para entonces DevUP ya es
+   crítico para el día a día, evaluar mover el autoalojado a un VPS barato
+   (~$5/mes) — es un cambio mecánico, no de arquitectura, porque las mismas
+   imágenes y el mismo `docker-compose.prod.yml` sirven ahí.
+6. **Control de ventas** (servicios, clientes, oportunidades, cotizaciones —
+   semanas 4-5 del plan original en `DevUP-Plan-de-Desarrollo.pdf`). El nombre
+   de la rama de este trabajo (`sales-control-workspace-platform`) ya apunta
+   para acá. No arrancar esto antes de que el paso 3 esté cumplido: es
+   exactamente la trampa que el propio plan advierte evitar.
+7. Pendientes menores de la capa de espacio de trabajo, sin prisa: **búsqueda
+   global** (hoy es por workspace) y **Redis para presencia/límite de
+   peticiones** (solo hace falta el día que haya más de una instancia de la
+   API corriendo a la vez).
