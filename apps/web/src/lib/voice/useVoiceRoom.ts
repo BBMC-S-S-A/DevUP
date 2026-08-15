@@ -15,8 +15,10 @@ import { type RecordingHandle, createRecorder } from "./recorder";
  * dos cosas a la vez no existen, por mucho que se prometan juntas.
  *
  * Límite honesto: cada cliente sube su medio N−1 veces. Con solo voz la malla
- * aguanta unas seis personas; con cámara, cuatro. A partir de ahí toca un SFU,
- * y esa migración solo debería tocar este archivo.
+ * aguanta unas seis personas; con cámara, cuatro. Compartir cámara y pantalla
+ * a la vez sube el doble de vídeo por esa cuenta — `videoStrain` ya lo pesa
+ * así. A partir de ahí toca un SFU, y esa migración solo debería tocar este
+ * archivo.
  *
  * La dificultad real está en la negociación. Dos pares pueden ofrecer a la
  * vez, y sin un desempate acordado los dos se quedan colgados en
@@ -28,6 +30,16 @@ import { type RecordingHandle, createRecorder } from "./recorder";
  * Encender la cámara a mitad de llamada renegocia. No hace falta nada especial
  * para eso: `addTrack` dispara `onnegotiationneeded` y el mismo patrón que
  * resuelve la entrada resuelve también esto.
+ *
+ * Cámara y pantalla compartida son dos vías de vídeo independientes —
+ * `publishVideoTrack` — cada una con su propio `RTCRtpSender` y su propio
+ * `MediaStream` local, así que las dos pueden estar encendidas a la vez sin
+ * que una sustituya a la otra. El otro extremo distingue cuál es cuál
+ * comparando el `.id` de cada stream recibido por `ontrack` contra el
+ * `cameraStreamId`/`screenStreamId` que se anuncia por el mismo canal de
+ * estado que ya llevaba `camera`/`sharing` — nunca hace falta tocar el
+ * servidor de señalización para el vídeo en sí, solo reenvía ese identificador
+ * como reenvía todo lo demás.
  */
 export type Status = "idle" | "connecting" | "live" | "error";
 
@@ -38,7 +50,12 @@ export type Participant = {
   muted: boolean;
   camera: boolean;
   sharing: boolean;
-  stream: MediaStream | null;
+  cameraStreamId: string | null;
+  screenStreamId: string | null;
+  /** Voz. Cámara y pantalla van en streams propios — ver publishVideoTrack. */
+  audioStream: MediaStream | null;
+  cameraStream: MediaStream | null;
+  screenStream: MediaStream | null;
   connectionState: RTCPeerConnectionState;
 };
 
@@ -81,7 +98,9 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [localAudioStream, setLocalAudioStream] = useState<MediaStream | null>(null);
+  const [localCameraStream, setLocalCameraStream] = useState<MediaStream | null>(null);
+  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
   const [selfPeerId, setSelfPeerId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Record<string, Participant>>({});
   const [muted, setMuted] = useState(false);
@@ -94,11 +113,27 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
 
   const socket = useRef<WebSocket | null>(null);
   const stream = useRef<MediaStream | null>(null);
+  // Cámara y pantalla compartida son streams locales propios, separados del
+  // de voz — es lo que permite que las dos vías salgan a la vez sin que una
+  // pise el sender de la otra. Cada uno conserva su identidad (mismo
+  // MediaStream, pista sustituida por dentro) durante toda la llamada, así
+  // que su `.id` es estable y sirve para que el otro extremo distinga cuál es
+  // cuál al recibirlas — ver publishVideoTrack y resolveVideoRoles.
+  const cameraMedia = useRef<MediaStream | null>(null);
+  const screenMedia = useRef<MediaStream | null>(null);
+  const cameraSenders = useRef(new Map<string, RTCRtpSender>());
+  const screenSenders = useRef(new Map<string, RTCRtpSender>());
   const self = useRef<string | null>(null);
   const peers = useRef(new Map<string, RTCPeerConnection>());
   const makingOffer = useRef(new Map<string, boolean>());
   const ignoreOffer = useRef(new Map<string, boolean>());
-  const remoteStreams = useRef(new Map<string, MediaStream>());
+  // Todo stream visto por `ontrack`, por par — para la grabadora, que ignora
+  // sola cualquiera sin pista de audio (mic, cámara y pantalla conviven aquí).
+  const remoteStreamsByPeer = useRef(new Map<string, Set<MediaStream>>());
+  // De esos streams, cuáles son «la cámara» o «la pantalla» de cada par, según
+  // el `cameraStreamId`/`screenStreamId` que llega por `peer-state`. El resto
+  // — el que sí tiene audio y no es ni uno ni otro — es la voz.
+  const remoteRoleStreams = useRef(new Map<string, Map<string, MediaStream>>());
   const recorder = useRef<RecordingHandle | null>(null);
   const leaving = useRef(false);
 
@@ -123,10 +158,52 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
         muted: false,
         camera: false,
         sharing: false,
-        stream: null,
+        cameraStreamId: null,
+        screenStreamId: null,
+        audioStream: null,
+        cameraStream: null,
+        screenStream: null,
         connectionState: "new" as RTCPeerConnectionState,
       };
       return { ...current, [peerId]: { ...existing, ...patch } };
+    });
+  }, []);
+
+  /**
+   * Reparte los streams vistos por `ontrack` de un par entre voz, cámara y
+   * pantalla, comparando su `.id` contra lo último que ese par anunció por
+   * `peer-state`. Se llama tanto al llegar una pista nueva como al cambiar el
+   * estado — cualquiera de las dos puede llegar primero, y hasta que llegan
+   * las dos el vídeo correspondiente queda en `null` (la interfaz ya sabe
+   * mostrar «conectando» para eso, no hace falta nada especial).
+   */
+  const resolveVideoRoles = useCallback((peerId: string) => {
+    const known = remoteRoleStreams.current.get(peerId);
+    setParticipants((current) => {
+      const participant = current[peerId];
+      if (!participant || !known) return current;
+
+      let audioStream: MediaStream | null = null;
+      let cameraStream: MediaStream | null = null;
+      let screenStream: MediaStream | null = null;
+      for (const candidate of known.values()) {
+        if (participant.cameraStreamId && candidate.id === participant.cameraStreamId) {
+          cameraStream = candidate;
+        } else if (participant.screenStreamId && candidate.id === participant.screenStreamId) {
+          screenStream = candidate;
+        } else if (candidate.getAudioTracks().length > 0) {
+          audioStream = candidate;
+        }
+      }
+
+      if (
+        participant.audioStream === audioStream &&
+        participant.cameraStream === cameraStream &&
+        participant.screenStream === screenStream
+      ) {
+        return current;
+      }
+      return { ...current, [peerId]: { ...participant, audioStream, cameraStream, screenStream } };
     });
   }, []);
 
@@ -135,9 +212,12 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     peers.current.delete(peerId);
     makingOffer.current.delete(peerId);
     ignoreOffer.current.delete(peerId);
-    const gone = remoteStreams.current.get(peerId);
-    remoteStreams.current.delete(peerId);
-    if (gone) recorder.current?.removeStream(gone);
+    cameraSenders.current.delete(peerId);
+    screenSenders.current.delete(peerId);
+    const gone = remoteStreamsByPeer.current.get(peerId);
+    remoteStreamsByPeer.current.delete(peerId);
+    remoteRoleStreams.current.delete(peerId);
+    if (gone) for (const s of gone) recorder.current?.removeStream(s);
     setParticipants((current) => {
       const next = { ...current };
       delete next[peerId];
@@ -164,6 +244,18 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       const local = stream.current;
       if (local) for (const track of local.getTracks()) pc.addTrack(track, local);
 
+      // Si ya estaba compartiendo cámara o pantalla cuando este par se une a
+      // mitad de llamada, hay que dárselas desde ya — si no, vería a los demás
+      // sin vídeo hasta el siguiente toggle.
+      const camTrack = cameraMedia.current?.getVideoTracks()[0];
+      if (camTrack && cameraMedia.current) {
+        cameraSenders.current.set(remote, pc.addTrack(camTrack, cameraMedia.current));
+      }
+      const screenTrack = screenMedia.current?.getVideoTracks()[0];
+      if (screenTrack && screenMedia.current) {
+        screenSenders.current.set(remote, pc.addTrack(screenTrack, screenMedia.current));
+      }
+
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           emit({ type: "signal", to: remote, data: { candidate: event.candidate.toJSON() } });
@@ -173,12 +265,28 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       pc.ontrack = (event) => {
         const incoming = event.streams[0] ?? null;
         if (!incoming) return;
-        // `ontrack` salta una vez por pista: al encender la cámara vuelve a
-        // saltar con el mismo stream. Guardarlo por par y reasignarlo hace que
-        // el vídeo aparezca sin tocar nada más.
-        remoteStreams.current.set(remote, incoming);
-        recorder.current?.addStream(incoming);
-        upsert(remote, { stream: incoming });
+
+        let seen = remoteStreamsByPeer.current.get(remote);
+        if (!seen) {
+          seen = new Set();
+          remoteStreamsByPeer.current.set(remote, seen);
+        }
+        // `ontrack` salta una vez por pista: al encender la cámara o la
+        // pantalla a mitad de llamada vuelve a saltar, con un stream nuevo
+        // porque cada vía tiene el suyo propio. La grabadora ignora sola
+        // cualquiera sin pista de audio, así que no hace falta filtrar aquí.
+        if (!seen.has(incoming)) {
+          seen.add(incoming);
+          recorder.current?.addStream(incoming);
+        }
+
+        let known = remoteRoleStreams.current.get(remote);
+        if (!known) {
+          known = new Map();
+          remoteRoleStreams.current.set(remote, known);
+        }
+        known.set(incoming.id, incoming);
+        resolveVideoRoles(remote);
       };
 
       pc.onnegotiationneeded = async () => {
@@ -207,7 +315,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       peers.current.set(remote, pc);
       return pc;
     },
-    [emit, upsert],
+    [emit, upsert, resolveVideoRoles],
   );
 
   const handleSignal = useCallback(
@@ -313,19 +421,28 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     peers.current.clear();
     makingOffer.current.clear();
     ignoreOffer.current.clear();
-    remoteStreams.current.clear();
+    cameraSenders.current.clear();
+    screenSenders.current.clear();
+    remoteStreamsByPeer.current.clear();
+    remoteRoleStreams.current.clear();
 
     // Parar las pistas es lo que apaga la luz del micrófono y de la cámara.
     // Olvidarlo las deja encendidas después de colgar, que es de las cosas que
     // más desconfianza generan en una herramienta de voz.
     for (const track of stream.current?.getTracks() ?? []) track.stop();
     stream.current = null;
+    for (const track of cameraMedia.current?.getTracks() ?? []) track.stop();
+    cameraMedia.current = null;
+    for (const track of screenMedia.current?.getTracks() ?? []) track.stop();
+    screenMedia.current = null;
 
     socket.current?.close();
     socket.current = null;
     self.current = null;
 
-    setLocalStream(null);
+    setLocalAudioStream(null);
+    setLocalCameraStream(null);
+    setLocalScreenStream(null);
     setParticipants({});
     setSelfPeerId(null);
     setMuted(false);
@@ -357,7 +474,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       stream.current = media;
-      setLocalStream(media);
+      setLocalAudioStream(media);
 
       // La lista de micrófonos solo trae etiquetas después de conceder
       // permiso; pedirla antes devuelve entradas sin nombre.
@@ -382,7 +499,10 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
           case "welcome": {
             const { peerId, peers: existing, startedAt } = message as unknown as {
               peerId: string;
-              peers: Omit<Participant, "stream" | "connectionState">[];
+              peers: Omit<
+                Participant,
+                "audioStream" | "cameraStream" | "screenStream" | "connectionState"
+              >[];
               startedAt: string | null;
             };
             self.current = peerId;
@@ -402,9 +522,16 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
 
           case "peer-joined": {
             const { peer } = message as unknown as {
-              peer: Omit<Participant, "stream" | "connectionState">;
+              peer: Omit<
+                Participant,
+                "audioStream" | "cameraStream" | "screenStream" | "connectionState"
+              >;
             };
             upsert(peer.peerId, peer);
+            // Defensivo: en el orden habitual el vídeo llega después y su
+            // propio `ontrack` ya resuelve esto, pero si por lo que sea
+            // llegara antes, que no se quede sin resolver para siempre.
+            resolveVideoRoles(peer.peerId);
             break;
           }
 
@@ -412,13 +539,24 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
             dropPeer(String(payload.peerId));
             break;
 
-          case "peer-state":
-            upsert(String(payload.peerId), {
+          case "peer-state": {
+            const peerId = String(payload.peerId);
+            const data = message as unknown as {
+              cameraStreamId?: string | null;
+              screenStreamId?: string | null;
+            };
+            upsert(peerId, {
               muted: Boolean(payload.muted),
               camera: Boolean(payload.camera),
               sharing: Boolean(payload.sharing),
+              cameraStreamId: data.cameraStreamId ?? null,
+              screenStreamId: data.screenStreamId ?? null,
             });
+            // El vídeo puede haber llegado por `ontrack` antes de saber cuál
+            // era cuál — al saberlo ahora, hay que resolver lo que ya llegó.
+            resolveVideoRoles(peerId);
             break;
+          }
 
           case "signal": {
             const { from, data } = message as unknown as { from: string; data: SignalPayload };
@@ -444,11 +582,22 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
 
           case "recording-started": {
             const recordingId = String(payload.recordingId);
+            // Solo hay una grabación posible a la vez por canal: si esto
+            // llega, cualquier diálogo pendiente era sobre esta misma
+            // grabación y ya se resolvió. Dejarlo abierto tapa el resto de la
+            // interfaz con un mensaje que ya no es cierto.
+            setPrompt(null);
             setRecording((current) => {
               const mine = current.mine || current.awaitingConsent;
               if (mine && !recorder.current) {
                 // Solo el navegador de quien pidió grabar abre el MediaRecorder.
-                const handle = createRecorder(stream.current, [...remoteStreams.current.values()]);
+                // `createRecorder` ignora solo cualquier stream sin pista de
+                // audio, así que pasarle también los de cámara/pantalla no
+                // hace daño — no hace falta filtrarlos aquí.
+                const allRemote = [...remoteStreamsByPeer.current.values()].flatMap((set) => [
+                  ...set,
+                ]);
+                const handle = createRecorder(stream.current, allRemote);
                 recorder.current = handle;
                 handle?.start();
               }
@@ -465,12 +614,14 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
           }
 
           case "recording-denied":
+            setPrompt(null);
             setRecording(IDLE_RECORDING);
             setNotice(`${String(payload.by)} no aceptó que se grabara la llamada.`);
             break;
 
           case "recording-stopped": {
             const recordingId = String(payload.recordingId);
+            setPrompt(null);
             setRecording((current) => {
               if (current.mine && recorder.current) void saveRecording(recordingId);
               return current.mine ? { ...current, active: false } : IDLE_RECORDING;
@@ -511,9 +662,19 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       setStatus("error");
       for (const track of stream.current?.getTracks() ?? []) track.stop();
       stream.current = null;
-      setLocalStream(null);
+      setLocalAudioStream(null);
     }
-  }, [status, channelId, peerFor, handleSignal, upsert, dropPeer, leave, saveRecording]);
+  }, [
+    status,
+    channelId,
+    peerFor,
+    handleSignal,
+    upsert,
+    dropPeer,
+    leave,
+    saveRecording,
+    resolveVideoRoles,
+  ]);
 
   /**
    * Silenciar apaga la pista, no la cierra.
@@ -529,65 +690,101 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     emit({ type: "state", muted: next, camera: cameraOn, sharing });
   }, [muted, cameraOn, sharing, emit]);
 
-  /** Añade o quita una pista de vídeo en todas las conexiones. */
-  const publishVideo = useCallback(
-    async (track: MediaStreamTrack | null) => {
-      const local = stream.current;
-      if (!local) return;
+  /**
+   * Añade o quita la pista de una vía de vídeo (cámara o pantalla) en todas
+   * las conexiones. Cada vía tiene su propio MediaStream local, creado una
+   * sola vez y reutilizado durante toda la llamada — por eso su `.id` es
+   * estable y sirve para que el otro extremo distinga cuál es cuál (ver
+   * `resolveVideoRoles`). Esto es lo que permite que cámara y pantalla estén
+   * las dos encendidas a la vez: no comparten sender ni stream.
+   */
+  const publishVideoTrack = useCallback(
+    async (kind: "camera" | "screen", track: MediaStreamTrack | null): Promise<string> => {
+      const mediaRef = kind === "camera" ? cameraMedia : screenMedia;
+      const senderMap = kind === "camera" ? cameraSenders : screenSenders;
 
-      for (const pc of peers.current.values()) {
-        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-        if (track && sender) {
-          // Sustituir no renegocia: es lo que hace que pasar de cámara a
-          // pantalla compartida no corte nada.
-          await sender.replaceTrack(track);
-        } else if (track) {
-          // Añadir sí renegocia, y de eso se encarga el patrón cortés.
-          pc.addTrack(track, local);
-        } else if (sender) {
-          pc.removeTrack(sender);
+      if (!mediaRef.current) mediaRef.current = new MediaStream();
+      const media = mediaRef.current;
+      for (const old of media.getVideoTracks()) {
+        old.stop();
+        media.removeTrack(old);
+      }
+      if (track) media.addTrack(track);
+
+      for (const [peerId, pc] of peers.current.entries()) {
+        try {
+          const sender = senderMap.current.get(peerId);
+          if (sender) {
+            // Sustituir no renegocia: encender o apagar esta vía no corta nada.
+            await sender.replaceTrack(track);
+          } else if (track) {
+            // La primera vez que esta vía se activa con un par sí renegocia,
+            // y de eso se encarga el patrón cortés.
+            senderMap.current.set(peerId, pc.addTrack(track, media));
+          }
+        } catch (caught) {
+          // Una conexión rota con un par no debería impedir que los demás
+          // vean la cámara o la pantalla — se avisa y se sigue con el resto.
+          console.warn("[voz] no se pudo publicar vídeo a", peerId, caught);
         }
       }
 
-      for (const old of local.getVideoTracks()) {
-        old.stop();
-        local.removeTrack(old);
-      }
-      if (track) local.addTrack(track);
-
+      const setLocal = kind === "camera" ? setLocalCameraStream : setLocalScreenStream;
       // El objeto MediaStream es el mismo, así que React no ve un cambio de
       // referencia. Se clona para que las vistas que lo pintan se enteren.
-      setLocalStream(new MediaStream(local.getTracks()));
+      setLocal(track ? new MediaStream(media.getTracks()) : null);
+
+      return media.id;
     },
     [],
   );
 
   const toggleCamera = useCallback(async () => {
     try {
-      if (cameraOn || sharing) {
-        await publishVideo(null);
+      if (cameraOn) {
+        await publishVideoTrack("camera", null);
         setCameraOn(false);
-        setSharing(false);
-        emit({ type: "state", muted, camera: false, sharing: false });
+        emit({
+          type: "state",
+          muted,
+          camera: false,
+          sharing,
+          cameraStreamId: null,
+          screenStreamId: screenMedia.current?.id ?? null,
+        });
         return;
       }
       const media = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
       });
-      await publishVideo(media.getVideoTracks()[0] ?? null);
+      const streamId = await publishVideoTrack("camera", media.getVideoTracks()[0] ?? null);
       setCameraOn(true);
-      emit({ type: "state", muted, camera: true, sharing: false });
+      emit({
+        type: "state",
+        muted,
+        camera: true,
+        sharing,
+        cameraStreamId: streamId,
+        screenStreamId: screenMedia.current?.id ?? null,
+      });
     } catch {
       setError("no se pudo abrir la cámara");
     }
-  }, [cameraOn, sharing, muted, publishVideo, emit]);
+  }, [cameraOn, sharing, muted, publishVideoTrack, emit]);
 
   const toggleScreenShare = useCallback(async () => {
     try {
       if (sharing) {
-        await publishVideo(null);
+        await publishVideoTrack("screen", null);
         setSharing(false);
-        emit({ type: "state", muted, camera: false, sharing: false });
+        emit({
+          type: "state",
+          muted,
+          camera: cameraOn,
+          sharing: false,
+          cameraStreamId: cameraMedia.current?.id ?? null,
+          screenStreamId: null,
+        });
         return;
       }
       const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -596,18 +793,31 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       // nuestra interfaz. Sin escuchar esto, el botón de la página se quedaría
       // diciendo que sigues compartiendo cuando ya no.
       track?.addEventListener("ended", () => {
-        void publishVideo(null);
+        void publishVideoTrack("screen", null);
         setSharing(false);
-        emit({ type: "state", muted, camera: false, sharing: false });
+        emit({
+          type: "state",
+          muted,
+          camera: cameraOn,
+          sharing: false,
+          cameraStreamId: cameraMedia.current?.id ?? null,
+          screenStreamId: null,
+        });
       });
-      await publishVideo(track);
+      const streamId = await publishVideoTrack("screen", track);
       setSharing(true);
-      setCameraOn(false);
-      emit({ type: "state", muted, camera: false, sharing: true });
+      emit({
+        type: "state",
+        muted,
+        camera: cameraOn,
+        sharing: true,
+        cameraStreamId: cameraMedia.current?.id ?? null,
+        screenStreamId: streamId,
+      });
     } catch {
       // Cancelar el diálogo del navegador no es un error que haya que enseñar.
     }
-  }, [sharing, muted, publishVideo, emit]);
+  }, [sharing, cameraOn, muted, publishVideoTrack, emit]);
 
   /**
    * Cambiar de micrófono en caliente. `replaceTrack` sustituye la pista en
@@ -632,7 +842,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
         local.removeTrack(old);
       }
       local.addTrack(track);
-      setLocalStream(new MediaStream(local.getTracks()));
+      setLocalAudioStream(new MediaStream(local.getTracks()));
     }
   }, []);
 
@@ -647,7 +857,9 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     error,
     notice,
     dismissNotice: () => setNotice(null),
-    localStream,
+    localAudioStream,
+    localCameraStream,
+    localScreenStream,
     selfPeerId,
     participants: list,
     muted,
@@ -658,8 +870,15 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     startedAt,
     recording,
     prompt,
-    /** Con cámara la malla aguanta menos: a partir de aquí se avisa. */
-    videoStrain: list.filter((p) => p.camera || p.sharing).length + (cameraOn || sharing ? 1 : 0),
+    /**
+     * Con cámara la malla aguanta menos: a partir de aquí se avisa. Cámara y
+     * pantalla cuentan cada una por separado — quien comparte las dos a la
+     * vez sube el doble de vídeo, no lo mismo que antes.
+     */
+    videoStrain:
+      list.reduce((n, p) => n + (p.camera ? 1 : 0) + (p.sharing ? 1 : 0), 0) +
+      (cameraOn ? 1 : 0) +
+      (sharing ? 1 : 0),
     join,
     leave,
     toggleMute,

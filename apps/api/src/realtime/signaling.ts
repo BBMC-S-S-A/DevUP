@@ -26,6 +26,13 @@ const inbound = z.discriminatedUnion("type", [
     muted: z.boolean(),
     camera: z.boolean().optional(),
     sharing: z.boolean().optional(),
+    // El `MediaStream.id` real que genera el navegador tiene forma de UUID
+    // (36 caracteres); el límite es generoso pero acotado a propósito — sin
+    // uno, un cliente hablando el protocolo a mano podría rellenar esto con
+    // cadenas arbitrariamente grandes y el servidor las reenviaría tal cual a
+    // toda la sala en cada mensaje.
+    cameraStreamId: z.string().max(128).nullable().optional(),
+    screenStreamId: z.string().max(128).nullable().optional(),
   }),
   z.object({ type: z.literal("recording-request") }),
   z.object({ type: z.literal("recording-consent"), recordingId: z.string().uuid(), granted: z.boolean() }),
@@ -79,6 +86,8 @@ const publicMember = (m: Member) => ({
   muted: m.muted,
   camera: m.camera,
   sharing: m.sharing,
+  cameraStreamId: m.cameraStreamId ?? null,
+  screenStreamId: m.screenStreamId ?? null,
 });
 
 /**
@@ -358,6 +367,8 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
           me.muted = message.muted;
           if (message.camera !== undefined) me.camera = message.camera;
           if (message.sharing !== undefined) me.sharing = message.sharing;
+          if (message.cameraStreamId !== undefined) me.cameraStreamId = message.cameraStreamId;
+          if (message.screenStreamId !== undefined) me.screenStreamId = message.screenStreamId;
           voiceHub.broadcast(
             channelId,
             {
@@ -366,6 +377,8 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
               muted: me.muted,
               camera: me.camera,
               sharing: me.sharing,
+              cameraStreamId: me.cameraStreamId ?? null,
+              screenStreamId: me.screenStreamId ?? null,
             },
             peerId,
           );

@@ -20,7 +20,7 @@ import { useEffect, useState } from "react";
 import type { Channel } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useVoiceRoom } from "@/lib/voice/useVoiceRoom";
-import { ParticipantTile } from "./ParticipantTile";
+import { ParticipantVideos } from "./ParticipantTile";
 
 /** Duración de la llamada, contada desde que se abrió la sesión en el servidor. */
 function useElapsed(startedAt: string | null): string | null {
@@ -53,7 +53,7 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
   const total = room.participants.length + 1;
 
   return (
-    <section className="rounded-2xl border border-line bg-surface/60 p-6">
+    <section className="relative rounded-2xl border border-line bg-surface/60 p-6">
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -203,23 +203,21 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
       ) : (
         <>
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-            <ParticipantTile
+            <ParticipantVideos
               participant={{
                 displayName: user?.displayName ?? "Tú",
                 muted: room.muted,
                 camera: room.cameraOn,
                 sharing: room.sharing,
                 connectionState: "connected",
+                audioStream: room.localAudioStream,
+                cameraStream: room.localCameraStream,
+                screenStream: room.localScreenStream,
               }}
               isSelf
-              stream={room.localStream}
             />
             {room.participants.map((participant) => (
-              <ParticipantTile
-                key={participant.peerId}
-                participant={participant}
-                stream={participant.stream}
-              />
+              <ParticipantVideos key={participant.peerId} participant={participant} />
             ))}
           </ul>
 
@@ -298,6 +296,11 @@ function Control({
  * El diálogo bloquea y no se puede cerrar: las dos salidas son aceptar o irse
  * de la llamada. Un «quizá luego» dejaría a alguien dentro de una grabación
  * que no ha autorizado, que es exactamente lo que esto existe para evitar.
+ *
+ * El bloqueo es solo de la sala de voz — `absolute inset-0` sobre la
+ * `<section>` de la llamada (que por eso lleva `relative`), no `fixed` sobre
+ * toda la ventana. Antes tapaba también la barra lateral y el resto de
+ * canales: no se podía ni mirar otra conversación mientras se contestaba.
  */
 function ConsentDialog({
   prompt,
@@ -309,7 +312,7 @@ function ConsentDialog({
   onLeave: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-6">
+    <div className="absolute inset-0 z-50 grid place-items-center rounded-2xl bg-black/70 p-6">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6">
         <div className="mb-3 flex items-center gap-2 text-danger">
           <Circle size={12} className="fill-current" />
