@@ -23,6 +23,15 @@ export type Member = {
   muted: boolean;
   camera: boolean;
   sharing: boolean;
+  /**
+   * `MediaStream.id` de cada vía de vídeo, si está activa. Cámara y pantalla
+   * viajan en streams separados para poder estar las dos encendidas a la vez;
+   * esto es lo que le permite al otro extremo saber cuál es cuál al recibir
+   * las pistas por `ontrack`, sin que el servidor toque el vídeo en ningún
+   * momento — solo reenvía este identificador junto al resto del estado.
+   */
+  cameraStreamId?: string | null;
+  screenStreamId?: string | null;
   /** Marca del último pong, para detectar sockets zombis. */
   alive: boolean;
 };
