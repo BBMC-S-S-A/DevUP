@@ -19,14 +19,16 @@
 import {
   TILE,
   drawAvatar,
+  drawDoorway,
   drawFloor,
-  drawFurniture,
   drawNameplate,
   drawOuterWall,
   drawWall,
   drawZoneFloor,
   drawZoneLabel,
 } from "./atlas";
+import { drawProp } from "./furniture";
+import type { Prop } from "./props";
 import type { Scene } from "./scene";
 import type { Avatar, Facing, Peer } from "./types";
 
@@ -49,6 +51,7 @@ export type RenderInput = {
 /** Algo que se levanta del suelo y por tanto entra en el orden por Y. */
 type Standing =
   | { y: number; kind: "cell"; x: number; ty: number; cell: Scene["cells"][number] }
+  | { y: number; kind: "prop"; piece: Prop }
   | { y: number; kind: "peer"; peer: Peer; avatar: Avatar; isSelf: boolean };
 
 export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void {
@@ -80,11 +83,27 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
   for (let ty = minY; ty <= maxY; ty += 1) {
     for (let tx = minX; tx <= maxX; tx += 1) {
       const cell = scene.cells[ty * scene.width + tx]!;
-      if (cell.kind === "zone-floor") drawZoneFloor(ctx, tx, ty, cell.zone.palette);
-      else if (cell.kind === "furniture") drawZoneFloor(ctx, tx, ty, cell.palette);
-      else if (cell.kind === "wall") drawZoneFloor(ctx, tx, ty, cell.palette);
-      else drawFloor(ctx, tx, ty);
+      if (cell.kind === "zone-floor") {
+        drawZoneFloor(ctx, tx, ty, cell.zone.palette, cell.material);
+      } else if (cell.kind === "door") {
+        drawDoorway(ctx, tx, ty, cell.zone.palette, cell.material);
+      } else if (cell.kind === "wall") {
+        // El suelo debajo de un muro no se ve, pero pintarlo evita que asome
+        // el vacío por el borde de la casilla al desplazarse la cámara.
+        drawFloor(ctx, tx, ty);
+      } else {
+        drawFloor(ctx, tx, ty);
+      }
     }
+  }
+
+  // Alfombras y demás objetos planos: sobre el suelo y debajo de todo lo que
+  // tenga altura. Si entraran en el orden por Y taparían el sofá que deberían
+  // tener encima, porque suelen estar en la parte baja de la sala.
+  for (const piece of scene.floorProps) {
+    if (piece.x < minX - 3 || piece.x > maxX + 3) continue;
+    if (piece.y < minY - 3 || piece.y > maxY + 3) continue;
+    drawProp(ctx, piece);
   }
 
   // --- El halo de lo que se oye -------------------------------------------
@@ -115,9 +134,18 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
   for (let ty = minY; ty <= maxY; ty += 1) {
     for (let tx = minX; tx <= maxX; tx += 1) {
       const cell = scene.cells[ty * scene.width + tx]!;
-      if (cell.kind === "floor" || cell.kind === "zone-floor") continue;
+      if (cell.kind === "floor" || cell.kind === "zone-floor" || cell.kind === "door") continue;
       standing.push({ y: ty * TILE + TILE, kind: "cell", x: tx, ty, cell });
     }
+  }
+
+  for (const piece of scene.props) {
+    if (piece.x < minX - 2 || piece.x > maxX + 2) continue;
+    if (piece.y < minY - 2 || piece.y > maxY + 2) continue;
+    // Se ordena por el pie del mueble, igual que un avatar. Así una persona
+    // delante de un sofá lo tapa y detrás queda tapada, sin ningún caso
+    // especial: la misma regla para todo lo que se apoya en el suelo.
+    standing.push({ y: piece.y * TILE + TILE, kind: "prop", piece });
   }
 
   const selfPeer: Peer = {
@@ -157,7 +185,19 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
 
       if (cell.kind === "outer-wall") drawOuterWall(ctx, x, ty, cell.face, capped);
       else if (cell.kind === "wall") drawWall(ctx, x, ty, cell.palette, cell.face, capped);
-      else if (cell.kind === "furniture") drawFurniture(ctx, x, ty, cell.palette);
+
+      // Lo que cuelga de esta pared se pinta justo después de ella: está
+      // sobre el muro, no delante. Ordenarlo por Y con el resto lo colocaría
+      // por detrás y desaparecería.
+      for (const piece of scene.wallProps) {
+        if (Math.round(piece.x) !== x || Math.round(piece.y) !== ty) continue;
+        drawProp(ctx, piece);
+      }
+      continue;
+    }
+
+    if (item.kind === "prop") {
+      drawProp(ctx, item.piece);
       continue;
     }
 

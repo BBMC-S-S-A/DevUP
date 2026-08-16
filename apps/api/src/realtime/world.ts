@@ -85,6 +85,15 @@ async function authorize(
     );
     if (!ok[0]?.ok) return null;
 
+    // La organización puede tener la oficina apagada. Se comprueba también
+    // aquí y no solo en la ruta HTTP: un cliente que se salte el mapa y abra
+    // el socket directamente entraría igual.
+    const { rows: enabled } = await db.query<{ ok: boolean }>(
+      "select public.world_enabled_for_workspace($1) as ok",
+      [workspaceId],
+    );
+    if (!enabled[0]?.ok) return null;
+
     // Prepara la planta de paso: un canal creado hace diez segundos ya tiene
     // su zona cuando alguien entra, sin ningún proceso de fondo vigilando.
     const { rows: room } = await db.query<{ ensure_world_room: string }>(

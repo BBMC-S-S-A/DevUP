@@ -2,11 +2,13 @@
  * La planta: de la lista de zonas a algo dibujable y contra lo que chocar.
  *
  * El servidor manda rectángulos —una zona por canal, ya filtrada por acceso—.
- * Aquí se convierten en muros, puertas y mobiliario. Que esto viva en el
- * cliente y no en la base es deliberado: cambiar el aspecto de una sala no
- * debería ser una migración.
+ * Aquí se convierten en salas amuebladas. Que esto viva en el cliente y no en
+ * la base es deliberado: cambiar el aspecto de una sala no debería ser una
+ * migración, y el mobiliario es exactamente el tipo de cosa que el documento
+ * 0002 permite que exista solo en el mundo.
  */
-import { TILE } from "./atlas";
+import { type FloorMaterial, FLOOR_OF, furnish, type Theme, themeOf } from "./rooms";
+import type { Prop } from "./props";
 import type { Room, Zone } from "./types";
 
 /**
@@ -22,16 +24,25 @@ export type WallFace = "back" | "side" | "front";
 
 export type Cell =
   | { kind: "floor" }
-  | { kind: "zone-floor"; zone: Zone }
+  | { kind: "zone-floor"; zone: Zone; material: FloorMaterial }
   | { kind: "wall"; palette: number; face: WallFace }
   | { kind: "outer-wall"; face: WallFace }
-  | { kind: "furniture"; palette: number };
+  | { kind: "door"; zone: Zone; material: FloorMaterial };
+
+export type ZoneInfo = { zone: Zone; theme: Theme; material: FloorMaterial };
 
 export type Scene = {
   width: number;
   height: number;
   cells: Cell[];
   zones: Zone[];
+  info: Map<string, ZoneInfo>;
+  /** Muebles del suelo, para el orden por Y. */
+  props: Prop[];
+  /** Planos —alfombras—: se dibujan con el suelo, antes que nada con altura. */
+  floorProps: Prop[];
+  /** Los que cuelgan de la pared: se dibujan con su muro, no delante. */
+  wallProps: Prop[];
   /** Casillas que no se pueden pisar. Índice = y * width + x. */
   blocked: boolean[];
 };
@@ -50,6 +61,10 @@ export function buildScene(room: Room, zones: Zone[]): Scene {
   const { width, height } = room;
   const cells: Cell[] = new Array(width * height).fill({ kind: "floor" as const });
   const blocked: boolean[] = new Array(width * height).fill(false);
+  const info = new Map<string, ZoneInfo>();
+  const props: Prop[] = [];
+  const floorProps: Prop[] = [];
+  const wallProps: Prop[] = [];
 
   // Muro exterior: el borde de la planta. Sin él se camina hacia el vacío.
   for (let x = 0; x < width; x += 1) {
@@ -63,6 +78,10 @@ export function buildScene(room: Room, zones: Zone[]): Scene {
   }
 
   for (const zone of zones) {
+    const theme = themeOf(zone);
+    const material = FLOOR_OF[theme];
+    info.set(zone.id, { zone, theme, material });
+
     const doorX = zone.x + Math.floor(zone.width / 2);
     const southY = zone.y + zone.height - 1;
 
@@ -76,33 +95,58 @@ export function buildScene(room: Room, zones: Zone[]): Scene {
 
         // La puerta: un hueco en la pared sur. Es suelo de la zona, no muro,
         // y por eso cruzarla ya cuenta como entrar.
-        if (perimeter && !(y === southY && x === doorX)) {
+        if (y === southY && x === doorX) {
+          cells[index] = { kind: "door", zone, material };
+          blocked[index] = false;
+          continue;
+        }
+
+        if (perimeter) {
           const face: WallFace = y === southY ? "front" : y === zone.y ? "back" : "side";
           cells[index] = { kind: "wall", palette: zone.palette, face };
           blocked[index] = true;
           continue;
         }
 
-        cells[index] = { kind: "zone-floor", zone };
+        cells[index] = { kind: "zone-floor", zone, material };
         blocked[index] = false;
       }
     }
 
-    // Un par de muebles contra la pared del fondo, para que la sala no sea una
-    // caja vacía. Se colocan de forma determinista a partir del tamaño: la
-    // misma sala amueblada igual en todos los navegadores, sin guardar nada.
-    const deskY = zone.y + 2;
-    for (let i = 1; i < zone.width - 1; i += 2) {
-      const x = zone.x + i;
-      if (x <= zone.x || x >= zone.x + zone.width - 1) continue;
-      if (deskY >= southY) continue;
-      const index = at(width, x, deskY);
-      cells[index] = { kind: "furniture", palette: zone.palette };
-      blocked[index] = true;
+    // Amueblar. Lo que bloquea marca su casilla; lo que no —alfombras, sillas,
+    // monitores sobre un escritorio— se pisa sin más.
+    for (const piece of furnish(zone)) {
+      const tx = Math.round(piece.x);
+      const ty = Math.round(piece.y);
+      if (tx < 0 || ty < 0 || tx >= width || ty >= height) continue;
+
+      if (piece.onWall) {
+        wallProps.push(piece);
+        continue;
+      }
+      if (piece.flat) {
+        floorProps.push(piece);
+        continue;
+      }
+      props.push(piece);
+      if (piece.blocks) blocked[at(width, tx, ty)] = true;
     }
   }
 
-  return { width, height, cells, zones, blocked };
+  // Una sala que se amuebló hasta dejarse sin sitio para estar de pie es un
+  // fallo de diseño, no un obstáculo: se libera la fila de la puerta hacia
+  // dentro para garantizar que siempre se puede entrar y dar media vuelta.
+  for (const zone of zones) {
+    const doorX = zone.x + Math.floor(zone.width / 2);
+    const southY = zone.y + zone.height - 1;
+    for (const y of [southY - 1, southY - 2]) {
+      if (y <= zone.y) continue;
+      const index = at(width, doorX, y);
+      if (index >= 0 && index < blocked.length) blocked[index] = false;
+    }
+  }
+
+  return { width, height, cells, zones, info, props, floorProps, wallProps, blocked };
 }
 
 /** ¿Se puede pisar esta posición? Se mira la casilla que hay debajo del pie. */
@@ -122,5 +166,3 @@ export function zoneAt(scene: Scene, x: number, y: number): Zone | null {
   }
   return null;
 }
-
-export const worldToPixels = (tiles: number): number => tiles * TILE;

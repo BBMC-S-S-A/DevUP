@@ -545,6 +545,44 @@ async function main(): Promise<void> {
       return rowCount ?? 0;
     });
     check("Bruno no puede vestir el avatar de Ana", brunoTouchedAna === 0);
+
+    // --- El interruptor de la organización ---------------------------------
+    //
+    // Una organización puede apagar la oficina entera. Lo interesante no es
+    // que el dueño pueda —eso es trivial— sino que un miembro raso no pueda
+    // volver a encenderla, y que apagarla no borre nada.
+    const worldEnabled = (user: string): Promise<boolean> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ ok: boolean }>(
+          "select public.world_enabled_for_workspace($1) as ok",
+          [acme.ws],
+        );
+        return rows[0]?.ok ?? false;
+      });
+
+    const setImmersive = (user: string, value: boolean): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rowCount } = await db.query(
+          "update organizations set immersive_enabled = $2 where id = $1",
+          [acme.org, value],
+        );
+        return rowCount ?? 0;
+      });
+
+    check("la oficina viene encendida de fábrica", await worldEnabled(ana));
+    check("Ana, que es dueña, puede apagarla", (await setImmersive(ana, false)) === 1);
+    check("apagada, lo está para todo el mundo", !(await worldEnabled(carla)));
+    check(
+      "apagarla no borra las zonas",
+      (await zonesIn(ana, sharedRoom)) === 2,
+    );
+    check(
+      "Carla, que es miembro raso, no puede volver a encenderla",
+      (await setImmersive(carla, true)) === 0,
+    );
+    check("y sigue apagada", !(await worldEnabled(ana)));
+    await setImmersive(ana, true);
+    check("al encenderla vuelve todo como estaba", await worldEnabled(carla));
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

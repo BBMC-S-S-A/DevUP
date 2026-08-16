@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
-import { parseBody, parseParams, requireUser } from "../lib/http.js";
+import { HttpError, parseBody, parseParams, requireUser } from "../lib/http.js";
 
 const uuid = z.string().uuid();
 /** Los índices de catálogo y de paleta van acotados igual que en el esquema. */
@@ -28,6 +28,16 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
 
     return withUser(userId, async (db) => {
+      // Una organización puede tener la oficina apagada. Se comprueba antes de
+      // preparar nada: si está apagada, ni siquiera se crea la planta.
+      const { rows: enabled } = await db.query<{ ok: boolean }>(
+        "select public.world_enabled_for_workspace($1) as ok",
+        [workspaceId],
+      );
+      if (!enabled[0]?.ok) {
+        throw new HttpError(403, "la vista inmersiva está desactivada en esta organización", "world_disabled");
+      }
+
       // Prepara la planta y coloca los canales que aún no tengan zona. Es
       // idempotente y barato, y evita cualquier proceso de fondo vigilando la
       // creación de canales.

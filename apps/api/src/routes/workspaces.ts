@@ -30,7 +30,8 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `select o.id, o.name, o.slug, o.created_at as "createdAt", m.role
+        `select o.id, o.name, o.slug, o.created_at as "createdAt", m.role,
+                o.immersive_enabled as "immersiveEnabled"
            from organizations o
            join organization_members m on m.organization_id = o.id
           where m.user_id = $1
@@ -38,6 +39,35 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         [userId],
       );
       return { organizations: rows };
+    });
+  });
+
+  /**
+   * Ajustes de la organización.
+   *
+   * Hoy solo apaga la vista inmersiva. No lleva comprobación de rol: la
+   * política `organizations_update` ya exige is_org_admin, así que a un
+   * miembro raso el UPDATE le afecta a cero filas y responde 404 — que es la
+   * respuesta correcta, porque decir «existe pero no puedes» ya filtra que
+   * existe.
+   */
+  app.patch("/organizations/:orgId", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const body = parseBody(
+      z.object({ immersiveEnabled: z.boolean() }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `update organizations set immersive_enabled = $2
+          where id = $1
+      returning id, name, slug, immersive_enabled as "immersiveEnabled"`,
+        [orgId, body.immersiveEnabled],
+      );
+      if (rows.length === 0) throw notFound("organización no encontrada");
+      return { organization: rows[0] };
     });
   });
 

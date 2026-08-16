@@ -89,23 +89,107 @@ export function drawFloor(
   ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
 }
 
-/** El suelo de una zona: el tinte de su paleta, con el mismo damero encima. */
+/**
+ * El suelo de una sala, según su material.
+ *
+ * El material es lo que más distingue una sala de otra de un vistazo — más que
+ * el color de la pared, más que los muebles. Un parquet dice «aquí se trabaja»
+ * y un damero dice «aquí se descansa» antes de que a nadie le dé tiempo a leer
+ * el rótulo.
+ */
 export function drawZoneFloor(
   ctx: CanvasRenderingContext2D,
   tx: number,
   ty: number,
   palette: number,
+  material: "wood" | "tile" | "checker" | "carpet" | "concrete",
 ): void {
   const tone = zoneTone(palette);
-  ctx.fillStyle = tone.floor;
-  ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+  const x = tx * TILE;
+  const y = ty * TILE;
 
-  // Junta entre baldosas, no damero. Un damero dentro de la sala compite con
-  // el mobiliario por la atención y deja la vista inquieta; una línea de junta
-  // da la misma referencia de escala sin pelearse con nada.
-  ctx.fillStyle = "rgba(0,0,0,0.16)";
-  ctx.fillRect(tx * TILE, ty * TILE + TILE - 1, TILE, 1);
-  ctx.fillRect(tx * TILE + TILE - 1, ty * TILE, 1, TILE);
+  switch (material) {
+    case "wood": {
+      // Parquet: tablas horizontales con las juntas desplazadas fila a fila,
+      // que es lo que impide que se lea como una rejilla.
+      ctx.fillStyle = "#5c4029";
+      ctx.fillRect(x, y, TILE, TILE);
+      const offset = (ty % 2) * (TILE / 2);
+      for (let i = 0; i < 4; i += 1) {
+        ctx.fillStyle = i % 2 === 0 ? "#67482f" : "#5a3e28";
+        ctx.fillRect(x, y + i * 8, TILE, 8);
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.fillRect(x, y + i * 8 + 7, TILE, 1);
+        ctx.fillRect(x + ((offset + i * 11) % TILE), y + i * 8, 1, 8);
+      }
+      break;
+    }
+
+    case "checker": {
+      // Damero fino: cuatro cuadros por casilla, no uno. Con uno por casilla
+      // el patrón compite con la rejilla del mundo y marea.
+      for (let i = 0; i < 2; i += 1) {
+        for (let j = 0; j < 2; j += 1) {
+          ctx.fillStyle = (i + j) % 2 === 0 ? "#e2e6ee" : "#1a1f27";
+          ctx.fillRect(x + i * (TILE / 2), y + j * (TILE / 2), TILE / 2, TILE / 2);
+        }
+      }
+      break;
+    }
+
+    case "carpet": {
+      ctx.fillStyle = tone.floor;
+      ctx.fillRect(x, y, TILE, TILE);
+      // Moteado de fibra, determinista a partir de la casilla.
+      ctx.fillStyle = "rgba(255,255,255,0.05)";
+      for (let i = 0; i < 8; i += 1) {
+        const px = x + ((tx * 7 + i * 13) % TILE);
+        const py = y + ((ty * 11 + i * 17) % TILE);
+        ctx.fillRect(px, py, 2, 1);
+      }
+      break;
+    }
+
+    case "concrete": {
+      ctx.fillStyle = "#20242c";
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = "rgba(255,255,255,0.028)";
+      ctx.fillRect(x, y, TILE, TILE / 2);
+      ctx.fillStyle = "rgba(0,0,0,0.30)";
+      ctx.fillRect(x, y + TILE - 1, TILE, 1);
+      ctx.fillRect(x + TILE - 1, y, 1, TILE);
+      break;
+    }
+
+    default: {
+      // Baldosa lisa del color de la sala, con junta. La referencia de escala
+      // sin ruido.
+      ctx.fillStyle = tone.floor;
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = "rgba(255,255,255,0.03)";
+      ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+      ctx.fillStyle = "rgba(0,0,0,0.20)";
+      ctx.fillRect(x, y + TILE - 1, TILE, 1);
+      ctx.fillRect(x + TILE - 1, y, 1, TILE);
+    }
+  }
+}
+
+/** El umbral de una puerta: el suelo de la sala más una marca de paso. */
+export function drawDoorway(
+  ctx: CanvasRenderingContext2D,
+  tx: number,
+  ty: number,
+  palette: number,
+  material: "wood" | "tile" | "checker" | "carpet" | "concrete",
+): void {
+  drawZoneFloor(ctx, tx, ty, palette, material);
+  const tone = zoneTone(palette);
+  // Dos jambas cortas a los lados. Marcan la entrada sin cerrarla, que es lo
+  // que le dice a alguien «por aquí se pasa» sin ningún cartel.
+  ctx.fillStyle = shade(tone.wall, 1.5);
+  ctx.fillRect(tx * TILE, ty * TILE, 3, TILE);
+  ctx.fillRect(tx * TILE + TILE - 3, ty * TILE, 3, TILE);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,61 +321,110 @@ export function drawAvatar(
   moving: boolean,
   time: number,
 ): void {
-  const step = moving && Math.floor(time / 140) % 2 === 0 ? 1 : 0;
+  // Dos fases de paso, no una: pie adelantado y pie atrasado, más el rebote
+  // del cuerpo. Con una sola fase el avatar da botes; con dos, camina.
+  const phase = moving ? Math.floor(time / 130) % 4 : 0;
+  const bob = moving && (phase === 1 || phase === 3) ? 1 : 0;
+  const swing = moving ? [0, 2.5, 0, -2.5][phase]! : 0;
+
   const skin = skinTone(look.skinTone);
   const hair = hairTone(look.hairTone);
   const top = clothTone(look.topTone);
   const bottom = clothTone(look.bottomTone);
 
-  // Ancho según la complexión elegida.
-  const w = 14 + (look.body % CATALOG.body) * 2;
+  // Complexión: cambia el ancho de hombros y la altura, no solo el ancho. Tres
+  // siluetas que se distinguen de lejos, que es donde se ve a la gente.
+  const build = look.body % CATALOG.body;
+  const w = [13, 16, 19][build]!;
+  const height = [37, 40, 39][build]!;
   const half = w / 2;
 
   // Sombra en el suelo. Es lo que ancla el avatar a la casilla; sin ella
   // flota, y con perspectiva eso se nota mucho más que en vista plana.
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
-  ctx.ellipse(x, y - 1, half - 1, 3.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y - 1, half, 3.5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const base = y - step;
+  const base = y - bob;
+  const legTop = base - 13;
+  const torsoTop = base - height + 12;
+  const headY = base - height;
 
-  // Piernas
+  // Piernas, una por lado, con el balanceo del paso.
+  ctx.fillStyle = shade(bottom, 0.85);
+  ctx.fillRect(x - half + 1 + swing * 0.4, legTop, half - 1.5, 13);
   ctx.fillStyle = bottom;
-  ctx.fillRect(x - half + 2, base - 12, w - 4, 12);
+  ctx.fillRect(x + 0.5 - swing * 0.4, legTop, half - 1.5, 13);
+  // Zapatos: dos píxeles que separan la pierna del suelo.
+  ctx.fillStyle = "rgba(10,12,16,0.65)";
+  ctx.fillRect(x - half + 1 + swing * 0.4, base - 2.5, half - 1.5, 2.5);
+  ctx.fillRect(x + 0.5 - swing * 0.4, base - 2.5, half - 1.5, 2.5);
 
-  // Torso
+  // Torso, más estrecho arriba: unos hombros rectos leen como una caja.
   ctx.fillStyle = top;
-  ctx.fillRect(x - half, base - 26, w, 15);
+  ctx.fillRect(x - half, torsoTop + 1, w, legTop - torsoTop - 1);
+  ctx.fillRect(x - half + 1, torsoTop, w - 2, 2);
 
-  // Brazos, un tono más oscuro para que se separen del torso.
-  ctx.fillStyle = shade(top, 0.78);
-  ctx.fillRect(x - half - 2, base - 25, 2.5, 11);
-  ctx.fillRect(x + half - 0.5, base - 25, 2.5, 11);
+  // Brazos, con el balanceo contrario al de las piernas — es lo que hace que
+  // el paso parezca un paso y no una figura deslizándose.
+  ctx.fillStyle = shade(top, 0.75);
+  ctx.fillRect(x - half - 2.5, torsoTop + 2 - swing * 0.5, 2.8, 12);
+  ctx.fillRect(x + half - 0.3, torsoTop + 2 + swing * 0.5, 2.8, 12);
+  // Manos
+  ctx.fillStyle = shade(skin, 0.95);
+  ctx.fillRect(x - half - 2.5, torsoTop + 13 - swing * 0.5, 2.8, 2.5);
+  ctx.fillRect(x + half - 0.3, torsoTop + 13 + swing * 0.5, 2.8, 2.5);
 
-  // Cabeza
+  // Cuello y cabeza. El cuello es un píxel y cambia por completo la silueta.
+  ctx.fillStyle = shade(skin, 0.8);
+  ctx.fillRect(x - 2.5, torsoTop - 2, 5, 3);
   ctx.fillStyle = skin;
-  ctx.fillRect(x - 6, base - 39, 12, 14);
+  ctx.fillRect(x - 6, headY, 12, 14);
+  // Esquinas superiores recortadas: redondea la cabeza sin antialias.
+  ctx.clearRect(x - 6, headY, 1.5, 1.5);
+  ctx.clearRect(x + 4.5, headY, 1.5, 1.5);
 
-  // Pelo. El índice cambia la forma: melena, corto, con flequillo, calvo…
+  // Pelo. Seis cortes que se distinguen de lejos.
   ctx.fillStyle = hair;
   const style = look.hair % CATALOG.hair;
-  if (style !== 5) ctx.fillRect(x - 6.5, base - 40, 13, 5);
-  if (style === 1 || style === 3) {
-    // Melena: baja por los lados.
-    ctx.fillRect(x - 7.5, base - 40, 2, 13);
-    ctx.fillRect(x + 5.5, base - 40, 2, 13);
+  if (style !== 5) {
+    ctx.fillRect(x - 6, headY - 1.5, 12, 5.5);
+    ctx.fillRect(x - 6.5, headY + 1, 13, 2);
   }
-  if (style === 2) ctx.fillRect(x - 6.5, base - 36, 13, 2); // flequillo
-  if (style === 4) ctx.fillRect(x - 3, base - 43, 6, 4); // moño
+  if (style === 1) {
+    // Melena hasta los hombros.
+    ctx.fillRect(x - 7.5, headY, 2, 15);
+    ctx.fillRect(x + 5.5, headY, 2, 15);
+  }
+  if (style === 3) {
+    // Media melena.
+    ctx.fillRect(x - 7.5, headY, 2, 9);
+    ctx.fillRect(x + 5.5, headY, 2, 9);
+  }
+  if (style === 2) ctx.fillRect(x - 6.5, headY + 3, 9, 2); // flequillo lateral
+  if (style === 4) {
+    // Moño
+    ctx.fillRect(x - 3, headY - 5, 6, 4);
+    ctx.fillRect(x - 4, headY - 4, 8, 2);
+  }
+  if (style === 5) {
+    // Rapado: no calvo. Una sombra de pelo, que es lo que se ve de verdad.
+    ctx.fillStyle = shade(hair, 0.75);
+    ctx.fillRect(x - 5.5, headY, 11, 2.5);
+  }
 
   // La cara solo se dibuja si mira hacia la cámara. De espaldas no hay ojos,
   // y esa ausencia es lo que hace legible hacia dónde va alguien.
   if (facing !== "n") {
-    ctx.fillStyle = "rgba(10,12,16,0.82)";
-    const shift = facing === "e" ? 1.5 : facing === "o" ? -1.5 : 0;
-    ctx.fillRect(x - 3.5 + shift, base - 33, 2, 2);
-    ctx.fillRect(x + 1.5 + shift, base - 33, 2, 2);
+    const shift = facing === "e" ? 1.8 : facing === "o" ? -1.8 : 0;
+    ctx.fillStyle = "rgba(10,12,16,0.85)";
+    ctx.fillRect(x - 3.5 + shift, headY + 6.5, 2, 2.5);
+    ctx.fillRect(x + 1.5 + shift, headY + 6.5, 2, 2.5);
+    // Boca: una línea de un píxel. Sin ella la cara queda inexpresiva de una
+    // manera que se nota aunque no se sepa por qué.
+    ctx.fillStyle = "rgba(10,12,16,0.35)";
+    ctx.fillRect(x - 1.5 + shift, headY + 10.5, 3, 1);
   }
 }
 
