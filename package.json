@@ -16,7 +16,8 @@
     "db:down": "docker compose down",
     "db:migrate": "npm run migrate --workspace apps/api",
     "db:reset": "npm run migrate:reset --workspace apps/api",
-    "test:rls": "npm run test:rls --workspace apps/api"
+    "test:rls": "npm run test:rls --workspace apps/api",
+    "test:world": "npm run test:world --workspace apps/api"
   },
   "engines": {
     "node": ">=20.11"

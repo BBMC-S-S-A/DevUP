@@ -72,6 +72,13 @@ jobs:
       - name: Aislamiento entre organizaciones
         run: npm run test:rls
 
+      - name: Sala del mundo
+        # Cuenta los mensajes que salen del reparto por tick —que funcione y
+        # que mande uno por movimiento se parecen demasiado desde fuera— y
+        # comprueba que la zona de un canal privado no viaja a quien no
+        # pertenece a ese canal.
+        run: npm run test:world
+
       - name: Migraciones idempotentes
         # Aplicarlas dos veces no debe cambiar nada ni fallar. Detecta la
         # migración que se editó después de aplicarse, que es la forma más
