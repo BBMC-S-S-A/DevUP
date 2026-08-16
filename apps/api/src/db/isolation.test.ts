@@ -421,6 +421,130 @@ async function main(): Promise<void> {
       return Number(rows[0]!.n);
     });
     check("al salir el último, la sesión se cierra", closed === 1);
+
+    // --- El mundo ----------------------------------------------------------
+    //
+    // El caso que de verdad importa es el de Carla. Ve el workspace, ve la
+    // planta, y no debe ver la zona del canal privado — ni siquiera su nombre.
+    // Es la misma trampa que ya se pisó con los workspaces personales: si la
+    // política de `world_zones` colgara de `can_access_workspace` en vez de
+    // `can_access_channel`, todo lo demás seguiría pasando y esta sola
+    // comprobación sería la que lo cazaría.
+    console.log("\nEl mundo");
+
+    const prepare = (user: string, workspace: string): Promise<string> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ ensure_world_room: string }>(
+          "select public.ensure_world_room($1)",
+          [workspace],
+        );
+        return rows[0]!.ensure_world_room;
+      });
+
+    const zonesIn = (user: string, room: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ n: string }>(
+          "select count(*)::text as n from world_zones where room_id = $1",
+          [room],
+        );
+        return Number(rows[0]!.n);
+      });
+
+    const sharedRoom = await prepare(ana, acme.ws);
+    check("Ana prepara la planta y sale una zona por canal", (await zonesIn(ana, sharedRoom)) === 2);
+
+    // Idempotencia: pedir el mapa otra vez no duplica zonas ni mueve las que
+    // ya estaban. Se llama en cada lectura, así que esto no es un detalle.
+    await prepare(ana, acme.ws);
+    check(
+      "preparar la planta dos veces no duplica zonas",
+      (await zonesIn(ana, sharedRoom)) === 2,
+    );
+
+    check(
+      "Carla no ve la zona del canal privado, solo la del público",
+      (await zonesIn(carla, sharedRoom)) === 1,
+    );
+
+    const carlaSeesPrivateZone = await withUser(carla, async (db) => {
+      const { rows } = await db.query(
+        "select id from world_zones where channel_id = $1",
+        [acme.privateChannel],
+      );
+      return rows.length;
+    });
+    check(
+      "Carla no encuentra la zona privada ni buscándola por su canal",
+      carlaSeesPrivateZone === 0,
+    );
+
+    const soloRoom = await prepare(ana, acme.soloWs);
+    check("la planta del workspace personal tiene su zona", (await zonesIn(ana, soloRoom)) === 1);
+    check("Carla no ve nada de la planta personal de Ana", (await zonesIn(carla, soloRoom)) === 0);
+
+    check("Ana ve sus dos plantas", (await count(ana, "world_rooms")) === 2);
+    check("Carla ve solo la planta compartida", (await count(carla, "world_rooms")) === 1);
+    check("Bruno no ve ninguna planta", (await count(bruno, "world_rooms")) === 0);
+    check("Bruno no ve ninguna zona", (await count(bruno, "world_zones")) === 0);
+
+    await denied("Bruno no puede preparar la planta de un workspace de Acme", () =>
+      prepare(bruno, acme.ws),
+    );
+    await denied("Carla no puede preparar la planta del workspace personal de Ana", () =>
+      prepare(carla, acme.soloWs),
+    );
+
+    // Mover una zona es editar la oficina, y pide acceso al canal que proyecta.
+    const carlaMovedPrivate = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        "update world_zones set x = x + 1 where channel_id = $1",
+        [acme.privateChannel],
+      );
+      return rowCount ?? 0;
+    });
+    check("Carla no puede mover la zona del canal privado", carlaMovedPrivate === 0);
+
+    // --- Avatares ----------------------------------------------------------
+    //
+    // La regla es la de `profiles`: si puedes ver el nombre de alguien, puedes
+    // ver su personaje. Fuera de la organización, ni una cosa ni la otra.
+    const setAvatar = (user: string, top: number): Promise<void> =>
+      withUser(user, async (db) => {
+        await db.query("select public.upsert_world_avatar($1,$2,$3,$4,$5,$6,$7,$8)", [
+          0, 1, top, 0, 2, 3, 4, 5,
+        ]);
+      });
+
+    await setAvatar(ana, 7);
+    await setAvatar(bruno, 9);
+
+    check("Ana ve su avatar", (await count(ana, "world_avatars")) >= 1);
+    check(
+      "Carla ve el avatar de Ana, que es de su organización",
+      (await withUser(carla, async (db) => {
+        const { rows } = await db.query("select user_id from world_avatars where user_id = $1", [
+          ana,
+        ]);
+        return rows.length;
+      })) === 1,
+    );
+    check(
+      "Bruno no ve el avatar de Ana",
+      (await withUser(bruno, async (db) => {
+        const { rows } = await db.query("select user_id from world_avatars where user_id = $1", [
+          ana,
+        ]);
+        return rows.length;
+      })) === 0,
+    );
+
+    const brunoTouchedAna = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("update world_avatars set top = 42 where user_id = $1", [
+        ana,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Bruno no puede vestir el avatar de Ana", brunoTouchedAna === 0);
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la
