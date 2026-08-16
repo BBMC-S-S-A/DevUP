@@ -58,7 +58,11 @@ export function AvatarEditor({
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(3 * ratio, 0, 0, 3 * ratio, 0, 0);
       ctx.imageSmoothingEnabled = false;
-      drawAvatar(ctx, 20, 46, look, "s", true, now - started);
+      // La vista previa alterna frente y perfil cada dos segundos. Un gorro
+      // con visera o unas gafas se ven distinto de lado, y elegirlos mirando
+      // solo de frente lleva a sorpresas dentro de la oficina.
+      const side = Math.floor((now - started) / 2000) % 2 === 1;
+      drawAvatar(ctx, 20, 46, look, side ? "e" : "s", true, now - started);
       frame = requestAnimationFrame(loop);
     };
 
@@ -93,8 +97,8 @@ export function AvatarEditor({
           </button>
         </header>
 
-        <div className="flex gap-5 p-5">
-          <div className="shrink-0 rounded-xl border border-line bg-canvas p-2">
+        <div className="flex max-h-[70vh] gap-5 overflow-y-auto p-5">
+          <div className="sticky top-0 shrink-0 self-start rounded-xl border border-line bg-canvas p-2">
             <canvas ref={canvasRef} style={{ width: 120, height: 150 }} />
           </div>
 
@@ -110,6 +114,30 @@ export function AvatarEditor({
               count={CATALOG.hair}
               value={look.hair}
               onChange={(v) => set("hair", v)}
+            />
+            <Choice
+              label="Barba"
+              count={CATALOG.beard}
+              value={look.beard}
+              onChange={(v) => set("beard", v)}
+            />
+            <Choice
+              label="Gafas"
+              count={CATALOG.glasses}
+              value={look.glasses}
+              onChange={(v) => set("glasses", v)}
+            />
+            <Choice
+              label="Gorro"
+              count={CATALOG.hat}
+              value={look.hat}
+              onChange={(v) => set("hat", v)}
+            />
+            <Choice
+              label="Calzado"
+              count={CATALOG.shoes}
+              value={look.shoes}
+              onChange={(v) => set("shoes", v)}
             />
             <Swatches
               label="Piel"
@@ -135,6 +163,22 @@ export function AvatarEditor({
               value={look.bottomTone}
               onChange={(v) => set("bottomTone", v)}
             />
+            {look.hat > 0 && (
+              <Swatches
+                label="Color del gorro"
+                tones={CLOTH_TONES}
+                value={look.hatTone}
+                onChange={(v) => set("hatTone", v)}
+              />
+            )}
+            {look.shoes > 0 && (
+              <Swatches
+                label="Color del calzado"
+                tones={CLOTH_TONES}
+                value={look.shoesTone}
+                onChange={(v) => set("shoesTone", v)}
+              />
+            )}
           </div>
         </div>
 

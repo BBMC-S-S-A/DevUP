@@ -243,7 +243,9 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
       const { rows } = await db.query(
         `select user_id as "userId", body, hair, top, bottom,
                 skin_tone as "skinTone", hair_tone as "hairTone",
-                top_tone  as "topTone",  bottom_tone as "bottomTone"
+                top_tone  as "topTone",  bottom_tone as "bottomTone",
+                hat, glasses, beard, shoes,
+                hat_tone as "hatTone", shoes_tone as "shoesTone"
            from world_avatars`,
       );
       return { avatars: rows };
@@ -262,21 +264,20 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
         hairTone: tone,
         topTone: tone,
         bottomTone: tone,
+        // Las capas nuevas son opcionales: un cliente que no las conozca sigue
+        // guardando su avatar en vez de recibir un 400.
+        hat: piece.default(0),
+        glasses: piece.default(0),
+        beard: piece.default(0),
+        shoes: piece.default(0),
+        hatTone: tone.default(0),
+        shoesTone: tone.default(0),
       }),
       request.body,
     );
 
     await withUser(userId, (db) =>
-      db.query("select public.upsert_world_avatar($1,$2,$3,$4,$5,$6,$7,$8)", [
-        body.body,
-        body.hair,
-        body.top,
-        body.bottom,
-        body.skinTone,
-        body.hairTone,
-        body.topTone,
-        body.bottomTone,
-      ]),
+      db.query("select public.upsert_world_avatar($1::jsonb)", [JSON.stringify(body)]),
     );
 
     return { avatar: { userId, ...body } };

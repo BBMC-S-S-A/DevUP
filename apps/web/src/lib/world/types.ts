@@ -55,6 +55,12 @@ export type Avatar = {
   hairTone: number;
   topTone: number;
   bottomTone: number;
+  hat: number;
+  glasses: number;
+  beard: number;
+  shoes: number;
+  hatTone: number;
+  shoesTone: number;
 };
 
 export const DEFAULT_AVATAR: Avatar = {
@@ -66,6 +72,12 @@ export const DEFAULT_AVATAR: Avatar = {
   hairTone: 1,
   topTone: 3,
   bottomTone: 6,
+  hat: 0,
+  glasses: 0,
+  beard: 0,
+  shoes: 0,
+  hatTone: 0,
+  shoesTone: 7,
 };
 
 /**

@@ -232,6 +232,7 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
+/** Para quien todavía no ha elegido nada: gris, sin adornos, reconocible. */
 const FALLBACK_AVATAR: Avatar = {
   body: 0,
   hair: 0,
@@ -241,4 +242,10 @@ const FALLBACK_AVATAR: Avatar = {
   hairTone: 1,
   topTone: 7,
   bottomTone: 7,
+  hat: 0,
+  glasses: 0,
+  beard: 0,
+  shoes: 0,
+  hatTone: 0,
+  shoesTone: 7,
 };

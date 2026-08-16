@@ -67,7 +67,16 @@ export const clothTone = (i: number): string => pick(CLOTH_TONES, i);
 export const zoneTone = (i: number) => pick(ZONE_PALETTE, i);
 
 /** Cuántas variantes hay de cada pieza. Lo usa el editor de avatar. */
-export const CATALOG = { body: 3, hair: 6, top: 5, bottom: 4 } as const;
+export const CATALOG = {
+  body: 3,
+  hair: 6,
+  top: 5,
+  bottom: 4,
+  hat: 4,
+  glasses: 3,
+  beard: 4,
+  shoes: 3,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Suelo
@@ -303,6 +312,17 @@ export type AvatarLook = {
   hairTone: number;
   topTone: number;
   bottomTone: number;
+  /**
+   * Capas añadidas en 0011. Opcionales aquí y no en la base: el renderizador
+   * también dibuja avatares que vienen de un cliente viejo o de una vista
+   * previa a medio construir, y no debería romperse por un gorro que falta.
+   */
+  hat?: number;
+  glasses?: number;
+  beard?: number;
+  shoes?: number;
+  hatTone?: number;
+  shoesTone?: number;
 };
 
 /**
@@ -335,6 +355,13 @@ export function drawAvatar(
   const hair = hairTone(look.hairTone);
   const top = clothTone(look.topTone);
   const bottom = clothTone(look.bottomTone);
+  const hatColor = clothTone(look.hatTone ?? 0);
+  const shoeColor = clothTone(look.shoesTone ?? 7);
+  // De perfil el cuerpo se estrecha y la cara cambia de sitio. Es lo que
+  // distingue mirar de lado de mirar de frente con los ojos corridos, que era
+  // lo que había antes y se leía como una cara bizca.
+  const profile = facing === "e" || facing === "o";
+  const dir = facing === "e" ? 1 : -1;
 
   // Complexión: cambia el ancho de hombros y la altura, no solo el ancho. Tres
   // siluetas que se distinguen de lejos, que es donde se ve a la gente.
@@ -368,9 +395,10 @@ export function drawAvatar(
   ctx.fillStyle = bottom;
   ctx.fillRect(x + 0.5 - swing * 0.4, legTop, half - 1.5, legLength);
   // Zapatos: dos píxeles que separan la pierna del suelo.
-  ctx.fillStyle = "rgba(10,12,16,0.65)";
-  ctx.fillRect(x - half + 1 + swing * 0.4, base - 2.5, half - 1.5, 2.5);
-  ctx.fillRect(x + 0.5 - swing * 0.4, base - 2.5, half - 1.5, 2.5);
+  ctx.fillStyle = (look.shoes ?? 0) % CATALOG.shoes === 0 ? "rgba(10,12,16,0.65)" : shoeColor;
+  const shoeH = (look.shoes ?? 0) % CATALOG.shoes === 2 ? 4.5 : 2.5;
+  ctx.fillRect(x - half + 1 + swing * 0.4, base - shoeH, half - 1.5, shoeH);
+  ctx.fillRect(x + 0.5 - swing * 0.4, base - shoeH, half - 1.5, shoeH);
   // Sentado, los pies quedan por delante del asiento.
   if (sitting) {
     ctx.fillStyle = "rgba(10,12,16,0.5)";
@@ -432,15 +460,80 @@ export function drawAvatar(
 
   // La cara solo se dibuja si mira hacia la cámara. De espaldas no hay ojos,
   // y esa ausencia es lo que hace legible hacia dónde va alguien.
+  // Barba, antes de los ojos: va sobre la piel y bajo las gafas.
+  const beard = (look.beard ?? 0) % CATALOG.beard;
+  if (beard > 0 && facing !== "n") {
+    ctx.fillStyle = shade(hair, 0.9);
+    if (beard === 1) ctx.fillRect(x - 2.5, headY + 10, 5, 2.5); // bigote
+    if (beard === 2) {
+      // Perilla
+      ctx.fillRect(x - 2.5, headY + 11.5, 5, 2.5);
+      ctx.fillRect(x - 1.5, headY + 10, 3, 2);
+    }
+    if (beard === 3) {
+      // Barba completa: baja por los lados de la mandíbula.
+      ctx.fillRect(x - 6, headY + 9, 12, 5);
+      ctx.fillRect(x - 6, headY + 6, 1.5, 5);
+      ctx.fillRect(x + 4.5, headY + 6, 1.5, 5);
+    }
+  }
+
   if (facing !== "n") {
-    const shift = facing === "e" ? 1.8 : facing === "o" ? -1.8 : 0;
     ctx.fillStyle = "rgba(10,12,16,0.85)";
-    ctx.fillRect(x - 3.5 + shift, headY + 6.5, 2, 2.5);
-    ctx.fillRect(x + 1.5 + shift, headY + 6.5, 2, 2.5);
-    // Boca: una línea de un píxel. Sin ella la cara queda inexpresiva de una
-    // manera que se nota aunque no se sepa por qué.
-    ctx.fillStyle = "rgba(10,12,16,0.35)";
-    ctx.fillRect(x - 1.5 + shift, headY + 10.5, 3, 1);
+    if (profile) {
+      // De perfil solo se ve un ojo, y pegado al borde de la cara.
+      ctx.fillRect(x + dir * 2.5 - 1, headY + 6.5, 2, 2.5);
+      // Nariz: un píxel que asoma. Es lo que hace que un perfil sea un perfil.
+      ctx.fillStyle = shade(skin, 0.85);
+      ctx.fillRect(x + dir * 6, headY + 7, 1.5, 2.5);
+    } else {
+      ctx.fillRect(x - 3.5, headY + 6.5, 2, 2.5);
+      ctx.fillRect(x + 1.5, headY + 6.5, 2, 2.5);
+      // Boca: una línea de un píxel. Sin ella la cara queda inexpresiva de una
+      // manera que se nota aunque no se sepa por qué.
+      ctx.fillStyle = "rgba(10,12,16,0.35)";
+      ctx.fillRect(x - 1.5, headY + 10.5, 3, 1);
+    }
+  }
+
+  // Gafas: encima de los ojos, y también de perfil.
+  const glasses = (look.glasses ?? 0) % CATALOG.glasses;
+  if (glasses > 0 && facing !== "n") {
+    ctx.fillStyle = glasses === 1 ? "#1a1f27" : "#5b8cff";
+    if (profile) {
+      ctx.fillRect(x + dir * 1.5 - 1.5, headY + 6, 4, 3);
+      ctx.fillRect(x + dir * 4, headY + 6.5, 2, 1);
+    } else {
+      ctx.fillRect(x - 4.5, headY + 6, 4, 3);
+      ctx.fillRect(x + 0.5, headY + 6, 4, 3);
+      ctx.fillRect(x - 1, headY + 7, 2, 1);
+    }
+  }
+
+  // Gorro: lo último, tapa el pelo.
+  const hat = (look.hat ?? 0) % CATALOG.hat;
+  if (hat > 0) {
+    ctx.fillStyle = hatColor;
+    if (hat === 1) {
+      // Gorra, con visera hacia donde mira.
+      ctx.fillRect(x - 6.5, headY - 3, 13, 5);
+      ctx.fillRect(profile ? x + (dir > 0 ? 5 : -12) : x - 7, headY + 1, 7, 2);
+    }
+    if (hat === 2) {
+      // Gorro de lana, con vuelta.
+      ctx.fillRect(x - 6.5, headY - 5, 13, 6);
+      ctx.fillStyle = shade(hatColor, 1.3);
+      ctx.fillRect(x - 7, headY, 14, 2.5);
+    }
+    if (hat === 3) {
+      // Auriculares: no es un gorro, pero vive en la misma capa y en una
+      // oficina de desarrollo es más común que un sombrero.
+      ctx.fillStyle = "#2b3341";
+      ctx.fillRect(x - 7.5, headY - 2, 15, 2.5);
+      ctx.fillStyle = hatColor;
+      ctx.fillRect(x - 8.5, headY + 1, 3, 6);
+      ctx.fillRect(x + 5.5, headY + 1, 3, 6);
+    }
   }
 }
 
