@@ -510,8 +510,11 @@ async function main(): Promise<void> {
     // ver su personaje. Fuera de la organización, ni una cosa ni la otra.
     const setAvatar = (user: string, top: number): Promise<void> =>
       withUser(user, async (db) => {
-        await db.query("select public.upsert_world_avatar($1,$2,$3,$4,$5,$6,$7,$8)", [
-          0, 1, top, 0, 2, 3, 4, 5,
+        await db.query("select public.upsert_world_avatar($1::jsonb)", [
+          JSON.stringify({
+            body: 0, hair: 1, top, bottom: 0,
+            skinTone: 2, hairTone: 3, topTone: 4, bottomTone: 5,
+          }),
         ]);
       });
 
