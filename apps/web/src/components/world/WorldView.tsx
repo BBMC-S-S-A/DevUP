@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Volume2, Users, Shirt, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -11,7 +12,7 @@ import { buildScene, type Scene } from "@/lib/world/scene";
 import type { Input } from "@/lib/world/useWorld";
 import { useWorld } from "@/lib/world/useWorld";
 import { useEditor } from "@/lib/world/useEditor";
-import type { Avatar, WorldMap, Zone } from "@/lib/world/types";
+import type { Avatar, LiveData, WorldMap, Zone } from "@/lib/world/types";
 import { AvatarEditor } from "./AvatarEditor";
 import { ZoneEditor } from "./ZoneEditor";
 import { ProximityAudio } from "./ProximityAudio";
@@ -35,6 +36,7 @@ const KEYS: Record<string, keyof Input> = {
 };
 
 export function WorldView({ workspaceId }: { workspaceId: string }) {
+  const router = useRouter();
   const { user } = useSession();
   const { joinChannel, leaveChannel, activeChannelId, room } = useVoiceCall();
 
@@ -55,6 +57,27 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     [workspaceId],
   );
 
+  /**
+   * Los datos que muestran los muebles.
+   *
+   * Se piden cada medio minuto, la misma cadencia que los no leídos de la
+   * barra lateral. Empujarlos por el socket exigiría que el servidor supiera,
+   * por cada persona conectada, qué canales privados ve — una consulta por
+   * miembro y por tarea movida. A este tamaño no compensa.
+   */
+  const [live, setLive] = useState<LiveData | null>(null);
+
+  useEffect(() => {
+    const load = () =>
+      api
+        .get<LiveData>(`/workspaces/${workspaceId}/world/live`)
+        .then(setLive)
+        .catch(() => {});
+    void load();
+    const timer = setInterval(() => void load(), 30_000);
+    return () => clearInterval(timer);
+  }, [workspaceId]);
+
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const editingZone = map?.zones.find((z) => z.id === editingZoneId) ?? null;
 
@@ -71,7 +94,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
    */
   const scene: Scene | null = useMemo(() => {
     if (!map?.room) return null;
-    if (!editor.active || !editingZoneId) return buildScene(map.room, map.zones);
+    if (!editor.active || !editingZoneId) return buildScene(map.room, map.zones, live);
 
     const zones = map.zones.map((zone) =>
       zone.id === editingZoneId
@@ -89,8 +112,8 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
           }
         : zone,
     );
-    return buildScene(map.room, zones);
-  }, [map, editor.active, editor.items, editingZoneId]);
+    return buildScene(map.room, zones, live);
+  }, [map, live, editor.active, editor.items, editingZoneId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +170,8 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     [workspaceId],
   );
 
+  const zoneRef = useRef<Zone | null>(null);
+
   const world = useWorld({
     workspaceId,
     scene,
@@ -181,6 +206,11 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         if (event.code === "Escape") editorRef.current.close();
         return;
       }
+      if (event.code === "KeyE" && actionRef.current) {
+        event.preventDefault();
+        router.push(actionRef.current.href);
+        return;
+      }
       const key = KEYS[event.code];
       if (!key) return;
       // Sin esto, las flechas desplazan la página por debajo del lienzo.
@@ -207,6 +237,8 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       window.removeEventListener("blur", blur);
     };
   }, []);
+
+  zoneRef.current = world.zone;
 
   // --- Bucle de animación ---------------------------------------------------
   const { step, stateRef, avatars } = world;
@@ -271,6 +303,12 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         audibleRadius: AUDIBLE_RADIUS,
       });
 
+      // Solo se toca el estado si el rótulo cambia: llamar a setAction en
+      // cada fotograma sería un renderizado de React sesenta veces por
+      // segundo para escribir el mismo texto.
+      const next = findActionRef.current();
+      if (next?.label !== actionRef.current?.label) setAction(next);
+
       frame = requestAnimationFrame(loop);
     };
 
@@ -314,6 +352,66 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     },
     [editor, editingZone],
   );
+
+  /**
+   * Qué se puede hacer aquí de pie.
+   *
+   * EL PUENTE ENTRE LAS DOS VISTAS. Pulsar E delante de la pizarra abre el
+   * tablero; delante de la estantería, la biblioteca. No una versión del mundo
+   * de esas cosas: la de la vista profesional, la misma que usa quien nunca
+   * abrió la oficina. Es lo que impide que acaben siendo dos productos, y es
+   * también lo que hace que el mueble no sea un adorno con un número encima.
+   */
+  /**
+   * Qué se puede hacer aquí de pie.
+   *
+   * EL PUENTE ENTRE LAS DOS VISTAS. Pulsar E delante de la pizarra abre el
+   * tablero; delante de la estantería, la biblioteca. No una versión del mundo
+   * de esas cosas: la de la vista profesional, la misma que usa quien nunca
+   * abrió la oficina. Es lo que impide que acaben siendo dos productos.
+   *
+   * SE CALCULA EN EL BUCLE, NO EN UN MEMO. La posición vive en una referencia
+   * mutable —cambia sin renderizar—, así que un `useMemo` sobre la sala se
+   * calculaba una vez al cruzar la puerta y no volvía a mirar: el aviso no
+   * aparecía nunca por muy pegado a la pizarra que estuvieras. Aquí se
+   * recorre por fotograma pero solo se toca el estado cuando el rótulo
+   * cambia, que es unas pocas veces por minuto.
+   */
+  const [action, setAction] = useState<{ label: string; href: string } | null>(null);
+  const actionRef = useRef(action);
+  actionRef.current = action;
+
+  const findAction = useCallback((): { label: string; href: string } | null => {
+    if (!scene || editor.active) return null;
+    const self = stateRef.current.self;
+    const zone = zoneRef.current;
+
+    let best: { label: string; href: string } | null = null;
+    let bestDistance = 2.1;
+
+    for (const piece of [...scene.props, ...scene.wallProps]) {
+      const distance = Math.hypot(piece.x + 0.5 - self.x, piece.y + 0.9 - self.y);
+      if (distance > bestDistance) continue;
+
+      if (piece.kind === "whiteboard" || piece.kind === "flipchart") {
+        best = { label: "Ver el tablero", href: `/app/w/${workspaceId}/board` };
+        bestDistance = distance;
+      } else if (piece.kind === "bookshelf") {
+        best = { label: "Abrir la biblioteca", href: `/app/w/${workspaceId}` };
+        bestDistance = distance;
+      } else if ((piece.kind === "monitor" || piece.kind === "dualMonitor") && zone) {
+        best = {
+          label: `Abrir #${zone.channelName}`,
+          href: `/app/w/${workspaceId}/c/${zone.channelId}`,
+        };
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }, [scene, editor.active, stateRef, workspaceId]);
+
+  const findActionRef = useRef(findAction);
+  findActionRef.current = findAction;
 
   // Salir de la oficina cuelga la llamada: quedarse dentro de un canal al que
   // se entró caminando, después de cerrar la vista, no lo espera nadie.
@@ -426,10 +524,16 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
       {/* --- Ayuda, solo mientras no se haya movido nadie --- */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
-        <p className="rounded-xl border border-line bg-surface/90 px-3 py-2 text-[11px] text-faint backdrop-blur">
-          Muévete con <kbd className="text-muted">WASD</kbd> o las flechas · entra en una sala para
-          unirte a su canal
-        </p>
+        {action ? (
+          <p className="rounded-xl border border-accent/40 bg-accent-soft px-3 py-2 text-[11px] text-accent backdrop-blur">
+            <kbd className="rounded bg-canvas/60 px-1.5 py-0.5 font-semibold">E</kbd> {action.label}
+          </p>
+        ) : (
+          <p className="rounded-xl border border-line bg-surface/90 px-3 py-2 text-[11px] text-faint backdrop-blur">
+            Muévete con <kbd className="text-muted">WASD</kbd> o las flechas · entra en una sala para
+            unirte a su canal
+          </p>
+        )}
       </div>
 
       {editor.active && editingZone && <ZoneEditor zone={editingZone} editor={editor} />}

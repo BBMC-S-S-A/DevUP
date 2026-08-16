@@ -115,14 +115,18 @@ const DRAW: Record<PropKind, Draw> = {
     prism(ctx, px, py - lift - 2, 5, 3, 5, lighten(shell, 0.7), lighten(shell, 0.9), { shadow: false, outline: false });
     // Pantalla
     prism(ctx, px, py - lift - 6, 22, 3, 15, lighten(shell, 0.95), lighten(shell, 1.1), { shadow: false });
-    // Lo que se ve en la pantalla. Es lo único encendido de la sala y por eso
-    // es lo que hace que una zona de desarrollo parezca en uso.
-    ctx.fillStyle = "#1b2540";
+    // La pantalla se enciende si ha habido actividad reciente en el canal.
+    // Apagada no es un fallo: es una sala en la que hoy no ha pasado nada, y
+    // verlo desde el pasillo es exactamente la gracia.
+    const on = p.data?.active !== false;
+    ctx.fillStyle = on ? "#1b2540" : "#0d1116";
     ctx.fillRect(px - 9, py - lift - 19, 18, 11);
-    ctx.fillStyle = "rgba(91,140,255,0.85)";
-    ctx.fillRect(px - 7, py - lift - 17, 9, 1.5);
-    ctx.fillRect(px - 7, py - lift - 14, 13, 1.5);
-    ctx.fillRect(px - 7, py - lift - 11, 6, 1.5);
+    if (on) {
+      ctx.fillStyle = "rgba(91,140,255,0.85)";
+      ctx.fillRect(px - 7, py - lift - 17, 9, 1.5);
+      ctx.fillRect(px - 7, py - lift - 14, 13, 1.5);
+      ctx.fillRect(px - 7, py - lift - 11, 6, 1.5);
+    }
   },
 
   /** Silla de oficina: asiento, respaldo y una pata. El respaldo va detrás. */
@@ -260,19 +264,39 @@ const DRAW: Record<PropKind, Draw> = {
     }
   },
 
-  /** Estantería con libros de colores. */
+  /**
+   * Estantería: un libro por archivo del canal, hasta llenarla.
+   *
+   * Que la cantidad se vea sin contar es el objetivo — una sala con la
+   * estantería a rebosar y otra con dos libros dicen algo verdadero sobre
+   * dónde vive la documentación, y lo dicen de un vistazo.
+   */
   bookshelf(ctx, px, py, p) {
     const wood = at(WOOD, p.tone + 2);
     prism(ctx, px, py, 30, 9, 42, lighten(wood, 0.7), lighten(wood, 1.0));
-    // Baldas y libros
+
+    const total = p.data?.count;
+    // Sin dato, la estantería llena de siempre. Vacía parecería rota.
+    const books = total === undefined ? 18 : Math.min(18, total);
+
+    let drawn = 0;
     for (let shelf = 0; shelf < 3; shelf += 1) {
       const y = py - 10 - shelf * 12;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.fillRect(px - 14, y, 28, 2);
-      for (let i = 0; i < 6; i += 1) {
+      for (let i = 0; i < 6 && drawn < books; i += 1) {
         ctx.fillStyle = at(FABRIC, shelf * 3 + i);
         ctx.fillRect(px - 13 + i * 4.5, y - 8, 3.2, 8);
+        drawn += 1;
       }
+    }
+
+    if (total !== undefined && total > 18) {
+      ctx.font = "600 5px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#8a94a6";
+      ctx.fillText(`+${total - 18}`, px, py - 47);
+      ctx.textAlign = "left";
     }
   },
 
@@ -823,11 +847,22 @@ const DRAW: Record<PropKind, Draw> = {
     prism(ctx, px, py - 14, 18, 2, 18, "#2b3341", "#3d4756", { shadow: false });
     ctx.fillStyle = "#e7ebf2";
     ctx.beginPath(); ctx.arc(px, py - 23, 7, 0, Math.PI * 2); ctx.fill();
+
+    // La hora de verdad. Un reloj parado en las 10:10 es de catálogo de
+    // muebles; uno que da la hora es información en un equipo repartido.
+    const now = new Date();
+    const hour = ((now.getHours() % 12) + now.getMinutes() / 60) * (Math.PI / 6) - Math.PI / 2;
+    const minute = now.getMinutes() * (Math.PI / 30) - Math.PI / 2;
     ctx.strokeStyle = "#12161d";
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(px, py - 23); ctx.lineTo(px, py - 28);
-    ctx.moveTo(px, py - 23); ctx.lineTo(px + 4, py - 22);
+    ctx.moveTo(px, py - 23);
+    ctx.lineTo(px + Math.cos(hour) * 3.6, py - 23 + Math.sin(hour) * 3.6);
+    ctx.stroke();
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(px, py - 23);
+    ctx.lineTo(px + Math.cos(minute) * 5.2, py - 23 + Math.sin(minute) * 5.2);
     ctx.stroke();
   },
 
@@ -860,23 +895,48 @@ const DRAW: Record<PropKind, Draw> = {
     ctx.fillRect(px - 16, py - 40, 32, 6);
   },
 
-  whiteboard(ctx, px, py) {
+  /**
+   * Pizarra: muestra el tablero del workspace, columna por columna.
+   *
+   * Es el primer mueble que deja de decorar. Si no hay datos todavía se
+   * dibujan garabatos —lo de antes—, porque una pizarra en blanco parece un
+   * fallo de carga y no una sala sin tareas.
+   */
+  whiteboard(ctx, px, py, p) {
     prism(ctx, px, py - 6, 36, 2, 26, "#8a94a6", "#a5aec0", { shadow: false });
     ctx.fillStyle = "#e7ebf2";
     ctx.fillRect(px - 16, py - 30, 32, 22);
-    ctx.strokeStyle = "#5b8cff";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(px - 11, py - 24);
-    ctx.lineTo(px - 2, py - 24);
-    ctx.moveTo(px - 11, py - 19);
-    ctx.lineTo(px + 7, py - 19);
-    ctx.stroke();
-    ctx.strokeStyle = "#f87171";
-    ctx.beginPath();
-    ctx.moveTo(px - 11, py - 14);
-    ctx.lineTo(px + 2, py - 14);
-    ctx.stroke();
+
+    const lines = p.data?.lines;
+    if (!lines || lines.length === 0) {
+      ctx.strokeStyle = "#5b8cff";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(px - 11, py - 24); ctx.lineTo(px - 2, py - 24);
+      ctx.moveTo(px - 11, py - 19); ctx.lineTo(px + 7, py - 19);
+      ctx.stroke();
+      ctx.strokeStyle = "#f87171";
+      ctx.beginPath();
+      ctx.moveTo(px - 11, py - 14); ctx.lineTo(px + 2, py - 14);
+      ctx.stroke();
+      return;
+    }
+
+    // Tres columnas como mucho: a este tamaño una cuarta es ilegible, y el
+    // tablero por defecto tiene exactamente tres.
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < Math.min(3, lines.length); i += 1) {
+      const line = lines[i]!;
+      const y = py - 25 + i * 6.5;
+      ctx.font = "600 4px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#3a4453";
+      ctx.fillText(line.label.slice(0, 12), px - 13, y);
+      ctx.textAlign = "right";
+      ctx.fillStyle = ["#5b8cff", "#f59e0b", "#34d399"][i] ?? "#5b8cff";
+      ctx.fillText(String(line.value), px + 13, y);
+    }
+    ctx.textAlign = "left";
   },
 };
 

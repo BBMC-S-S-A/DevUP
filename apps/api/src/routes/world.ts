@@ -140,6 +140,66 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  /**
+   * Lo que los muebles tienen que mostrar.
+   *
+   * Ver docs/plan-mundo-y-plataforma.md §6: un mueble no decora, proyecta algo
+   * que ya es cierto. La pizarra muestra el tablero, la estantería cuenta los
+   * archivos del canal, el monitor se enciende si hay actividad reciente.
+   *
+   * Va aparte del mapa y no dentro, y se pide cada medio minuto. El mapa
+   * cambia cuando alguien amuebla —casi nunca— y esto cambia con cada tarea
+   * que se mueve. Meterlo en la misma respuesta obligaría a rehacer la escena
+   * entera cada treinta segundos, que es reconstruir muros y colisiones para
+   * cambiar un número.
+   *
+   * Sin un solo `where` de seguridad: RLS ya filtra los canales, así que las
+   * cuentas solo incluyen lo que esta persona puede ver.
+   */
+  app.get("/workspaces/:workspaceId/world/live", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      // El tablero es del workspace, no del canal: cualquier pizarra de la
+      // oficina muestra el mismo estado del sprint. Es correcto y además es lo
+      // útil — se entra a una sala cualquiera y se ve cómo va la semana.
+      const { rows: board } = await db.query<{ name: string; count: string }>(
+        `select c.name, count(t.id)::text as count
+           from task_columns c
+           left join tasks t on t.column_id = c.id
+          where c.workspace_id = $1
+          group by c.id, c.name, c.position
+          order by c.position`,
+        [workspaceId],
+      );
+
+      const { rows: channels } = await db.query<{
+        channelId: string;
+        files: string;
+        lastMessageAt: Date | null;
+      }>(
+        `select ch.id as "channelId",
+                (select count(*) from files f
+                  where f.channel_id = ch.id and f.status = 'ready')::text as files,
+                (select max(m.created_at) from messages m
+                  where m.channel_id = ch.id and m.deleted_at is null) as "lastMessageAt"
+           from channels ch
+          where ch.workspace_id = $1`,
+        [workspaceId],
+      );
+
+      return {
+        board: board.map((c) => ({ name: c.name, count: Number(c.count) })),
+        channels: channels.map((c) => ({
+          channelId: c.channelId,
+          files: Number(c.files),
+          lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
+        })),
+      };
+    });
+  });
+
   /** Volver al amueblado deducido del nombre del canal. */
   app.post("/world/zones/:zoneId/reset", async (request) => {
     const userId = requireUser(request);

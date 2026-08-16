@@ -96,6 +96,24 @@ export type Prop = {
    * que pasó la primera vez.
    */
   flat: boolean;
+  /**
+   * Lo que este mueble tiene que mostrar, si muestra algo.
+   *
+   * Ver el plan §6: un mueble no decora, proyecta algo que ya es cierto. Va
+   * en el propio mueble y no en un mapa aparte porque el que dibuja es el que
+   * necesita el dato, y pasarlo por otro sitio obligaría a que la función de
+   * dibujo supiera de dónde viene.
+   */
+  data?: PropData;
+};
+
+export type PropData = {
+  /** Renglones cortos, como los de una pizarra: «Por hacer 4». */
+  lines?: { label: string; value: number }[];
+  /** Una cantidad: los archivos de un canal, por ejemplo. */
+  count?: number;
+  /** Si la pantalla está encendida — actividad reciente en el canal. */
+  active?: boolean;
 };
 
 export const PROP_SPECS: Record<PropKind, { blocks: boolean; onWall: boolean; flat?: boolean }> = {

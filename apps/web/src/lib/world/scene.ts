@@ -9,7 +9,7 @@
  */
 import { type FloorMaterial, FLOOR_OF, MATERIALS, furnitureOf, type Theme, themeOf } from "./rooms";
 import type { Prop } from "./props";
-import type { Room, Zone } from "./types";
+import type { LiveData, Room, Zone } from "./types";
 
 /**
  * Qué cara de la sala es un muro.
@@ -57,7 +57,7 @@ const at = (width: number, x: number, y: number): number => y * width + x;
  * cuando se añade un canal es exactamente el tipo de detalle que hace que un
  * sitio deje de sentirse como un sitio.
  */
-export function buildScene(room: Room, zones: Zone[]): Scene {
+export function buildScene(room: Room, zones: Zone[], live?: LiveData | null): Scene {
   const { width, height } = room;
   const cells: Cell[] = new Array(width * height).fill({ kind: "floor" as const });
   const blocked: boolean[] = new Array(width * height).fill(false);
@@ -114,9 +114,35 @@ export function buildScene(room: Room, zones: Zone[]): Scene {
       }
     }
 
+    // Qué tiene que mostrar cada mueble de esta sala. Se resuelve una vez por
+    // sala y no una vez por mueble: la pizarra de una sala muestra el mismo
+    // tablero que las demás, y buscarlo tres veces sería trabajo tirado.
+    const channelLive = live?.channels.find((c) => c.channelId === zone.channelId);
+    const board = live?.board.map((c) => ({ label: c.name, value: c.count }));
+    // «Reciente» son doce horas. Más corto y la oficina parece desierta cada
+    // mañana; más largo y la pantalla no se apaga nunca, que es lo mismo que
+    // no encenderla.
+    const active = channelLive?.lastMessageAt
+      ? Date.now() - new Date(channelLive.lastMessageAt).getTime() < 12 * 3600_000
+      : false;
+
+    const withData = (piece: Prop): Prop => {
+      if (piece.kind === "whiteboard" || piece.kind === "flipchart") {
+        return board ? { ...piece, data: { lines: board } } : piece;
+      }
+      if (piece.kind === "bookshelf" || piece.kind === "vinylShelf") {
+        return channelLive ? { ...piece, data: { count: channelLive.files } } : piece;
+      }
+      if (piece.kind === "monitor" || piece.kind === "dualMonitor" || piece.kind === "tv") {
+        return live ? { ...piece, data: { active } } : piece;
+      }
+      return piece;
+    };
+
     // Amueblar. Lo que bloquea marca su casilla; lo que no —alfombras, sillas,
     // monitores sobre un escritorio— se pisa sin más.
-    for (const piece of furnitureOf(zone)) {
+    for (const raw of furnitureOf(zone)) {
+      const piece = withData(raw);
       const tx = Math.round(piece.x);
       const ty = Math.round(piece.y);
       if (tx < 0 || ty < 0 || tx >= width || ty >= height) continue;

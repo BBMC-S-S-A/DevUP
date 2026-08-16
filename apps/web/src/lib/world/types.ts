@@ -88,3 +88,14 @@ export type Peer = {
   moving: boolean;
   zoneId: string | null;
 };
+
+/**
+ * Lo que cambia cada poco: el tablero y la actividad de cada canal.
+ *
+ * Viaja aparte del mapa porque el mapa casi nunca cambia y esto cambia con
+ * cada tarea que alguien mueve. Ver la ruta /world/live.
+ */
+export type LiveData = {
+  board: { name: string; count: number }[];
+  channels: { channelId: string; files: number; lastMessageAt: string | null }[];
+};
