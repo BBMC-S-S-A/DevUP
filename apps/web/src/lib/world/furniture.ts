@@ -415,6 +415,451 @@ const DRAW: Record<PropKind, Draw> = {
     ctx.fillRect(px - 12, py - 18, 24, 1.5);
   },
 
+
+  // --- Trabajo ---------------------------------------------------------------
+
+  /** Mesa elevable: como el escritorio pero alta, y con una columna central. */
+  standingDesk(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone);
+    prism(ctx, px, py, 9, 6, 24, "#3a4453", "#4a5566", { shadow: false, outline: false });
+    prism(ctx, px, py, TILE * 1.7, 12, 26, lighten(wood, 0.84), lighten(wood, 1.2));
+  },
+
+  /** Rack de servidores: la única pieza alta que parpadea sola. */
+  serverRack(ctx, px, py) {
+    prism(ctx, px, py, 26, 14, 54, "#151a21", "#232b36");
+    for (let u = 0; u < 6; u += 1) {
+      const y = py - 48 + u * 8;
+      ctx.fillStyle = "#0d1116";
+      ctx.fillRect(px - 11, y, 22, 6);
+      // Los pilotos alternan por unidad: fijos, pero distintos entre sí, que
+      // es lo que hace que se lea como equipo encendido y no como una caja.
+      ctx.fillStyle = u % 3 === 0 ? "#34d399" : u % 3 === 1 ? "#5b8cff" : "#f59e0b";
+      ctx.fillRect(px + 6, y + 2, 2, 2);
+      ctx.fillStyle = "rgba(231,235,242,0.25)";
+      ctx.fillRect(px - 9, y + 2, 10, 1);
+    }
+  },
+
+  printer(ctx, px, py) {
+    prism(ctx, px, py, 24, 14, 16, "#8a94a6", "#b3bbc9");
+    ctx.fillStyle = "#e7ebf2";
+    ctx.fillRect(px - 9, py - 20, 18, 5);
+    ctx.fillStyle = "#34d399";
+    ctx.fillRect(px + 6, py - 13, 2, 2);
+  },
+
+  /** Dos pantallas sobre un escritorio, ligeramente abiertas en ángulo. */
+  dualMonitor(ctx, px, py, p) {
+    const shell = at(METAL, p.tone);
+    const lift = 13;
+    prism(ctx, px, py - lift - 2, 6, 3, 5, lighten(shell, 0.7), lighten(shell, 0.9), { shadow: false, outline: false });
+    for (const [dx, tilt] of [[-11, -1], [11, 1]] as const) {
+      prism(ctx, px + dx, py - lift - 6 + tilt, 20, 3, 14, lighten(shell, 0.95), lighten(shell, 1.1), { shadow: false });
+      ctx.fillStyle = "#1b2540";
+      ctx.fillRect(px + dx - 8, py - lift - 18 + tilt, 16, 10);
+      ctx.fillStyle = "rgba(91,140,255,0.8)";
+      ctx.fillRect(px + dx - 6, py - lift - 16 + tilt, 8, 1.5);
+      ctx.fillRect(px + dx - 6, py - lift - 13 + tilt, 11, 1.5);
+    }
+  },
+
+  corkBoard(ctx, px, py, p) {
+    prism(ctx, px, py - 6, 34, 2, 24, "#7a5c3d", "#9a7550", { shadow: false });
+    ctx.fillStyle = "#b08a5e";
+    ctx.fillRect(px - 15, py - 28, 30, 20);
+    for (let i = 0; i < 5; i += 1) {
+      ctx.fillStyle = at(FABRIC, p.tone + i);
+      ctx.fillRect(px - 12 + (i % 3) * 9, py - 25 + Math.floor(i / 3) * 9, 7, 7);
+    }
+  },
+
+  cabinet(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone + 1);
+    prism(ctx, px, py, 26, 12, 32, lighten(wood, 0.75), lighten(wood, 1.05));
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(px - 13, py - 22, 26, 1.5);
+    ctx.fillRect(px - 13, py - 12, 26, 1.5);
+    ctx.fillStyle = "#8a94a6";
+    ctx.fillRect(px - 3, py - 27, 6, 2);
+    ctx.fillRect(px - 3, py - 17, 6, 2);
+  },
+
+  waterCooler(ctx, px, py) {
+    prism(ctx, px, py, 16, 10, 26, "#dfe4ec", "#f0f3f8");
+    ctx.fillStyle = "rgba(102,194,217,0.75)";
+    ctx.fillRect(px - 7, py - 44, 14, 18);
+    ctx.fillStyle = "#66c2d9";
+    ctx.fillRect(px - 7, py - 34, 14, 8);
+    ctx.fillStyle = "#5c6577";
+    ctx.fillRect(px - 2, py - 20, 4, 3);
+  },
+
+  // --- Salón -----------------------------------------------------------------
+
+  kitchenette(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone);
+    prism(ctx, px, py, TILE * 1.9, 14, 24, lighten(wood, 0.7), "#cfd6e4");
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fillRect(px - 4, py - 22, 1.5, 20);
+    ctx.fillRect(px + 12, py - 22, 1.5, 20);
+    // Fregadero y grifo
+    ctx.fillStyle = "#9aa4b8";
+    ctx.fillRect(px - 22, py - 40, 14, 8);
+    ctx.fillStyle = "#6b7488";
+    ctx.fillRect(px - 16, py - 46, 2, 7);
+  },
+
+  coffeeMachine(ctx, px, py) {
+    prism(ctx, px, py - 24, 14, 8, 16, "#2b3341", "#3d4756", { shadow: false });
+    ctx.fillStyle = "#f59e0b";
+    ctx.fillRect(px - 4, py - 32, 3, 3);
+    ctx.fillStyle = "#e7ebf2";
+    ctx.fillRect(px - 3, py - 26, 6, 4);
+  },
+
+  diningTable(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone);
+    prism(ctx, px, py, TILE * 1.9, 20, 15, lighten(wood, 0.8), lighten(wood, 1.16));
+    ctx.fillStyle = "#e7ebf2";
+    ctx.fillRect(px - 12, py - 32, 7, 4);
+    ctx.fillRect(px + 6, py - 31, 7, 4);
+  },
+
+  barStool(ctx, px, py, p) {
+    const fabric = at(FABRIC, p.tone);
+    ctx.fillStyle = "rgba(0,0,0,0.26)";
+    ctx.beginPath();
+    ctx.ellipse(px, py - 1, 8, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#5c6577";
+    ctx.fillRect(px - 1.5, py - 20, 3, 19);
+    prism(ctx, px, py - 18, 16, 7, 5, lighten(fabric, 0.9), lighten(fabric, 1.18), { shadow: false });
+  },
+
+  tv(ctx, px, py) {
+    prism(ctx, px, py, 20, 10, 8, "#2b3341", "#3d4756", { shadow: false });
+    prism(ctx, px, py - 8, TILE * 1.6, 3, 28, "#151a21", "#232b36", { shadow: false });
+    ctx.fillStyle = "#0d1116";
+    ctx.fillRect(px - 22, py - 34, 44, 24);
+    // Algo emitiendo. Una tele apagada es un rectángulo negro y no se lee.
+    ctx.fillStyle = "#1b2540";
+    ctx.fillRect(px - 20, py - 32, 40, 20);
+    ctx.fillStyle = "rgba(91,140,255,0.7)";
+    ctx.fillRect(px - 16, py - 28, 18, 3);
+    ctx.fillStyle = "rgba(52,211,153,0.6)";
+    ctx.fillRect(px - 16, py - 22, 26, 3);
+  },
+
+  sideboard(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone + 2);
+    prism(ctx, px, py, TILE * 1.7, 12, 18, lighten(wood, 0.78), lighten(wood, 1.1));
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(px - 1, py - 16, 1.5, 16);
+    ctx.fillStyle = "#8a94a6";
+    ctx.fillRect(px - 10, py - 10, 5, 2);
+    ctx.fillRect(px + 5, py - 10, 5, 2);
+  },
+
+  floorCushion(ctx, px, py, p) {
+    const fabric = at(FABRIC, p.tone);
+    ctx.fillStyle = "rgba(0,0,0,0.24)";
+    ctx.beginPath();
+    ctx.ellipse(px, py - 1, 11, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    prism(ctx, px, py, 20, 12, 6, lighten(fabric, 0.85), lighten(fabric, 1.15), { shadow: false });
+  },
+
+  curtains(ctx, px, py, p) {
+    const fabric = at(FABRIC, p.tone);
+    ctx.fillStyle = "#5c6577";
+    ctx.fillRect(px - 18, py - 30, 36, 2);
+    for (const dx of [-13, 13]) {
+      ctx.fillStyle = lighten(fabric, 0.7);
+      ctx.fillRect(px + dx - 5, py - 29, 10, 24);
+      ctx.fillStyle = lighten(fabric, 0.95);
+      ctx.fillRect(px + dx - 2, py - 29, 3, 24);
+    }
+  },
+
+  // --- Juegos ----------------------------------------------------------------
+
+  poolTable(ctx, px, py, p) {
+    prism(ctx, px, py, TILE * 2.2, 26, 14, "#4e3623", "#5f4429");
+    ctx.fillStyle = "#1f5f3f";
+    ctx.fillRect(px - 32, py - 38, 64, 22);
+    ctx.strokeStyle = "#3a2718";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(px - 32, py - 38, 64, 22);
+    // Bolas: blanca, y tres de color en triángulo.
+    ctx.fillStyle = "#e7ebf2";
+    ctx.beginPath(); ctx.arc(px - 20, py - 27, 2.6, 0, Math.PI * 2); ctx.fill();
+    for (const [dx, dy, c] of [[12, -30, "#f59e0b"], [16, -27, "#f87171"], [16, -33, "#5b8cff"]] as const) {
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(px + dx, py + dy, 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+    void p;
+  },
+
+  foosball(ctx, px, py, p) {
+    prism(ctx, px, py, TILE * 1.9, 22, 18, "#3a2f26", "#4d3f33");
+    ctx.fillStyle = "#1f5f3f";
+    ctx.fillRect(px - 28, py - 38, 56, 18);
+    // Barras con sus muñecos
+    for (let i = 0; i < 4; i += 1) {
+      const x = px - 21 + i * 14;
+      ctx.fillStyle = "#cfd6e4";
+      ctx.fillRect(x, py - 40, 2, 22);
+      ctx.fillStyle = at(FABRIC, p.tone + i);
+      ctx.fillRect(x - 2, py - 32, 6, 5);
+    }
+  },
+
+  pinball(ctx, px, py, p) {
+    const shell = at(FABRIC, p.tone + 2);
+    // Tablero inclinado
+    prism(ctx, px, py, 26, 16, 20, lighten(shell, 0.5), lighten(shell, 0.7));
+    ctx.fillStyle = "#0d1116";
+    ctx.fillRect(px - 12, py - 34, 24, 16);
+    ctx.fillStyle = lighten(shell, 1.2);
+    ctx.beginPath(); ctx.arc(px - 5, py - 28, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#f59e0b";
+    ctx.beginPath(); ctx.arc(px + 4, py - 24, 2.5, 0, Math.PI * 2); ctx.fill();
+    // Respaldo con marcador
+    prism(ctx, px, py - 34, 26, 3, 18, lighten(shell, 0.6), lighten(shell, 0.85), { shadow: false });
+    ctx.fillStyle = "#34d399";
+    ctx.fillRect(px - 8, py - 50, 16, 5);
+  },
+
+  retroTv(ctx, px, py, p) {
+    prism(ctx, px, py, 30, 16, 26, "#6b5a44", "#87735a");
+    ctx.fillStyle = "#0d1116";
+    ctx.fillRect(px - 11, py - 38, 22, 16);
+    ctx.fillStyle = at(FABRIC, p.tone);
+    ctx.fillRect(px - 9, py - 36, 18, 12);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(px - 9, py - 36, 18, 4);
+    ctx.fillStyle = "#3a4453";
+    ctx.beginPath(); ctx.arc(px + 12, py - 30, 2, 0, Math.PI * 2); ctx.fill();
+  },
+
+  trophyCase(ctx, px, py) {
+    prism(ctx, px, py, 28, 10, 44, "#3a2f26", "#4d3f33");
+    ctx.fillStyle = "rgba(102,194,217,0.14)";
+    ctx.fillRect(px - 12, py - 42, 24, 34);
+    for (let shelf = 0; shelf < 3; shelf += 1) {
+      const y = py - 14 - shelf * 12;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(px - 12, y, 24, 1.5);
+      ctx.fillStyle = shelf === 0 ? "#f5c542" : shelf === 1 ? "#cfd6e4" : "#c88a4a";
+      ctx.fillRect(px - 5 + shelf * 4, y - 8, 4, 8);
+      ctx.fillRect(px - 7 + shelf * 4, y - 9, 8, 2);
+    }
+  },
+
+  neonSign(ctx, px, py, p) {
+    const glow = at(FABRIC, p.tone + 4);
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    ctx.beginPath();
+    ctx.ellipse(px, py - 20, 26, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = glow;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(px - 14, py - 14);
+    ctx.lineTo(px - 14, py - 26);
+    ctx.lineTo(px - 4, py - 14);
+    ctx.lineTo(px - 4, py - 26);
+    ctx.moveTo(px + 4, py - 26);
+    ctx.lineTo(px + 4, py - 14);
+    ctx.lineTo(px + 14, py - 14);
+    ctx.stroke();
+  },
+
+  // --- Música ----------------------------------------------------------------
+
+  drums(ctx, px, py, p) {
+    const shell = at(FABRIC, p.tone + 3);
+    // Bombo
+    prism(ctx, px, py, 28, 16, 20, lighten(shell, 0.65), lighten(shell, 0.9));
+    ctx.fillStyle = "#e7ebf2";
+    ctx.beginPath(); ctx.ellipse(px, py - 12, 11, 8, 0, 0, Math.PI * 2); ctx.fill();
+    // Toms y platos
+    for (const [dx, dy, r] of [[-14, -26, 6], [12, -27, 6]] as const) {
+      ctx.fillStyle = lighten(shell, 0.8);
+      ctx.beginPath(); ctx.ellipse(px + dx, py + dy, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#dfe4ec";
+      ctx.beginPath(); ctx.ellipse(px + dx, py + dy - 1, r - 1.5, r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#d4a656";
+    ctx.beginPath(); ctx.ellipse(px + 22, py - 36, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#5c6577";
+    ctx.fillRect(px + 21, py - 36, 1.5, 26);
+  },
+
+  guitar(ctx, px, py, p) {
+    const body = at(WOOD, p.tone);
+    ctx.fillStyle = "rgba(0,0,0,0.26)";
+    ctx.beginPath(); ctx.ellipse(px, py - 1, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // Soporte
+    ctx.strokeStyle = "#3a4453";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px - 7, py); ctx.lineTo(px, py - 12); ctx.lineTo(px + 7, py);
+    ctx.stroke();
+    // Caja y mástil
+    ctx.fillStyle = lighten(body, 0.95);
+    ctx.beginPath(); ctx.ellipse(px, py - 20, 9, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1a1f27";
+    ctx.beginPath(); ctx.arc(px, py - 22, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = lighten(body, 0.6);
+    ctx.fillRect(px - 2, py - 46, 4, 26);
+    ctx.fillStyle = "#2b3341";
+    ctx.fillRect(px - 3.5, py - 50, 7, 5);
+  },
+
+  mixer(ctx, px, py, p) {
+    prism(ctx, px, py, TILE * 1.5, 16, 12, "#232b36", "#39424f");
+    // Faders y potenciómetros: lo que lo hace reconocible es la retícula.
+    for (let i = 0; i < 8; i += 1) {
+      const x = px - 20 + i * 5.6;
+      ctx.fillStyle = "#0d1116";
+      ctx.fillRect(x, py - 26, 2, 10);
+      ctx.fillStyle = at(FABRIC, p.tone + i);
+      ctx.fillRect(x - 0.5, py - 24 + (i % 3) * 2.5, 3, 2);
+    }
+  },
+
+  micStand(ctx, px, py) {
+    ctx.fillStyle = "rgba(0,0,0,0.26)";
+    ctx.beginPath(); ctx.ellipse(px, py - 1, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#3a4453";
+    ctx.fillRect(px - 1.5, py - 42, 3, 41);
+    ctx.fillRect(px - 6, py - 2, 12, 2);
+    ctx.fillStyle = "#8a94a6";
+    ctx.beginPath(); ctx.ellipse(px, py - 45, 4, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+  },
+
+  vinylShelf(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone + 1);
+    prism(ctx, px, py, 30, 12, 30, lighten(wood, 0.72), lighten(wood, 1.02));
+    for (let i = 0; i < 9; i += 1) {
+      ctx.fillStyle = at(FABRIC, p.tone + i);
+      ctx.fillRect(px - 13 + i * 3, py - 26, 2.4, 18);
+    }
+  },
+
+  acousticPanel(ctx, px, py, p) {
+    const fabric = at(FABRIC, p.tone + 6);
+    prism(ctx, px, py - 8, 28, 2, 22, lighten(fabric, 0.5), lighten(fabric, 0.68), { shadow: false });
+    // Cuñas: cuatro triángulos. Es lo que distingue el panel de un cuadro.
+    ctx.fillStyle = lighten(fabric, 0.35);
+    for (let i = 0; i < 4; i += 1) {
+      const x = px - 12 + i * 7;
+      ctx.beginPath();
+      ctx.moveTo(x, py - 10); ctx.lineTo(x + 3.5, py - 28); ctx.lineTo(x + 7, py - 10);
+      ctx.closePath(); ctx.fill();
+    }
+  },
+
+  // --- Reunión ---------------------------------------------------------------
+
+  projector(ctx, px, py) {
+    prism(ctx, px, py, 22, 12, 10, "#39424f", "#4d5766");
+    ctx.fillStyle = "#0d1116";
+    ctx.beginPath(); ctx.arc(px + 8, py - 6, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(245,158,11,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(px + 10, py - 8); ctx.lineTo(px + 30, py - 20); ctx.lineTo(px + 30, py + 2);
+    ctx.closePath(); ctx.fill();
+  },
+
+  confPuck(ctx, px, py) {
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.beginPath(); ctx.ellipse(px, py - 12, 9, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2b3341";
+    ctx.beginPath(); ctx.ellipse(px, py - 15, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#39424f";
+    ctx.beginPath(); ctx.ellipse(px, py - 17, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#34d399";
+    ctx.beginPath(); ctx.arc(px, py - 17, 2, 0, Math.PI * 2); ctx.fill();
+  },
+
+  flipchart(ctx, px, py) {
+    ctx.fillStyle = "rgba(0,0,0,0.24)";
+    ctx.beginPath(); ctx.ellipse(px, py - 1, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#5c6577";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px - 10, py); ctx.lineTo(px - 2, py - 24);
+    ctx.moveTo(px + 10, py); ctx.lineTo(px + 2, py - 24);
+    ctx.stroke();
+    ctx.fillStyle = "#f2f4f8";
+    ctx.fillRect(px - 13, py - 50, 26, 27);
+    ctx.strokeStyle = "#5b8cff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(px - 9, py - 44); ctx.lineTo(px + 2, py - 44);
+    ctx.moveTo(px - 9, py - 39); ctx.lineTo(px + 7, py - 39);
+    ctx.stroke();
+  },
+
+  planterDivider(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone);
+    prism(ctx, px, py, TILE * 1.6, 10, 12, lighten(wood, 0.72), lighten(wood, 1.0));
+    ctx.fillStyle = "#2f7a4f";
+    for (let i = 0; i < 4; i += 1) {
+      ctx.beginPath();
+      ctx.arc(px - 18 + i * 12, py - 18 - (i % 2) * 3, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#3d9a63";
+    ctx.beginPath(); ctx.arc(px - 6, py - 24, 5, 0, Math.PI * 2); ctx.fill();
+  },
+
+  // --- Decoración ------------------------------------------------------------
+
+  wallClock(ctx, px, py) {
+    prism(ctx, px, py - 14, 18, 2, 18, "#2b3341", "#3d4756", { shadow: false });
+    ctx.fillStyle = "#e7ebf2";
+    ctx.beginPath(); ctx.arc(px, py - 23, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#12161d";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(px, py - 23); ctx.lineTo(px, py - 28);
+    ctx.moveTo(px, py - 23); ctx.lineTo(px + 4, py - 22);
+    ctx.stroke();
+  },
+
+  aquarium(ctx, px, py, p) {
+    prism(ctx, px, py, TILE * 1.5, 14, 14, "#3a2f26", "#4d3f33");
+    // Cristal y agua
+    ctx.fillStyle = "rgba(102,194,217,0.30)";
+    ctx.fillRect(px - 22, py - 40, 44, 26);
+    ctx.strokeStyle = "#5c6577";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px - 22, py - 40, 44, 26);
+    // Grava, algas y dos peces
+    ctx.fillStyle = "#6b5a44";
+    ctx.fillRect(px - 22, py - 19, 44, 5);
+    ctx.fillStyle = "#2f7a4f";
+    for (const dx of [-14, -8, 12]) ctx.fillRect(px + dx, py - 30, 2, 12);
+    for (const [dx, dy, c] of [[-4, -32, "#f59e0b"], [8, -26, "#f87171"]] as const) {
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.ellipse(px + dx, py + dy, 3.5, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    void p;
+  },
+
+  /** Marco de puerta suelto, para abrir pasos en el pasillo. */
+  doorway(ctx, px, py, p) {
+    const wood = at(WOOD, p.tone + 2);
+    prism(ctx, px - 13, py, 6, 5, 34, lighten(wood, 0.7), lighten(wood, 0.95), { shadow: false });
+    prism(ctx, px + 13, py, 6, 5, 34, lighten(wood, 0.7), lighten(wood, 0.95), { shadow: false });
+    ctx.fillStyle = lighten(wood, 0.85);
+    ctx.fillRect(px - 16, py - 40, 32, 6);
+  },
+
   whiteboard(ctx, px, py) {
     prism(ctx, px, py - 6, 36, 2, 26, "#8a94a6", "#a5aec0", { shadow: false });
     ctx.fillStyle = "#e7ebf2";

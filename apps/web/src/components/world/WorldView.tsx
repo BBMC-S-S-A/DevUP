@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Volume2, Users, Shirt } from "lucide-react";
+import { Loader2, Volume2, Users, Shirt, Pencil } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -10,8 +10,10 @@ import { render, type Camera } from "@/lib/world/renderer";
 import { buildScene, type Scene } from "@/lib/world/scene";
 import type { Input } from "@/lib/world/useWorld";
 import { useWorld } from "@/lib/world/useWorld";
+import { useEditor } from "@/lib/world/useEditor";
 import type { Avatar, WorldMap, Zone } from "@/lib/world/types";
 import { AvatarEditor } from "./AvatarEditor";
+import { ZoneEditor } from "./ZoneEditor";
 import { ProximityAudio } from "./ProximityAudio";
 
 /**
@@ -44,10 +46,51 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
-  const scene: Scene | null = useMemo(
-    () => (map?.room ? buildScene(map.room, map.zones) : null),
-    [map],
+  const loadMap = useCallback(
+    () =>
+      api
+        .get<WorldMap>(`/workspaces/${workspaceId}/world`)
+        .then((data) => setMap(data))
+        .catch(() => {}),
+    [workspaceId],
   );
+
+  const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
+  const editingZone = map?.zones.find((z) => z.id === editingZoneId) ?? null;
+
+  const editor = useEditor(editingZone, loadMap);
+
+  /**
+   * La escena.
+   *
+   * Editando, se reconstruye con lo que hay en el editor en vez de con lo
+   * guardado. Así la vista previa **es** el mundo —con sus colisiones, su
+   * orden por Y y su perspectiva— y no una capa dibujada encima que se
+   * parezca. Colocar un sofá y no poder rodearlo hasta guardar sería el tipo
+   * de detalle que hace que un editor no se sienta fiable.
+   */
+  const scene: Scene | null = useMemo(() => {
+    if (!map?.room) return null;
+    if (!editor.active || !editingZoneId) return buildScene(map.room, map.zones);
+
+    const zones = map.zones.map((zone) =>
+      zone.id === editingZoneId
+        ? {
+            ...zone,
+            customized: true,
+            props: editor.items.map((item, index) => ({
+              id: `preview-${index}`,
+              kind: item.kind,
+              x: Math.round(item.x),
+              y: Math.round(item.y),
+              facing: item.facing,
+              tone: item.tone,
+            })),
+          }
+        : zone,
+    );
+    return buildScene(map.room, zones);
+  }, [map, editor.active, editor.items, editingZoneId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,9 +155,32 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     onZoneChange,
   });
 
+  // El teclado se monta una sola vez; el editor cambia en cada renderizado.
+  // Sin estas referencias, el efecto se volvería a montar constantemente — es
+  // el mismo fallo que provocó el bucle infinito con `leaveChannel`.
+  const editorRef = useRef(editor);
+  editorRef.current = editor;
+  const editorActiveRef = useRef(editor.active);
+  editorActiveRef.current = editor.active;
+
   // --- Teclado --------------------------------------------------------------
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
+      // Editando no se camina. Con las dos cosas a la vez, colocar un mueble
+      // con la W pulsada manda al avatar contra la pared del fondo.
+      if (editorActiveRef.current) {
+        if (event.code === "KeyR") editorRef.current.rotateSelected();
+        if (event.code === "Delete" || event.code === "Backspace") {
+          event.preventDefault();
+          editorRef.current.deleteSelected();
+        }
+        if (event.code === "KeyZ" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          editorRef.current.undo();
+        }
+        if (event.code === "Escape") editorRef.current.close();
+        return;
+      }
       const key = KEYS[event.code];
       if (!key) return;
       // Sin esto, las flechas desplazan la página por debajo del lienzo.
@@ -215,6 +281,40 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     };
   }, [scene, step, stateRef, avatars, selfUserId, displayName]);
 
+  /**
+   * Del clic a la casilla.
+   *
+   * Deshace exactamente la transformación del renderizador: escala, y traslada
+   * por la cámara. Tenerlo en un solo sitio importa — si la conversión y el
+   * dibujo divergen, se coloca un mueble y aparece dos casillas más allá, que
+   * es de los fallos más difíciles de diagnosticar mirando el código.
+   */
+  const onCanvasClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!editor.active || !editingZone) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      const camera = cameraRef.current;
+      const viewW = canvas.width / camera.scale;
+      const viewH = canvas.height / camera.scale;
+
+      const worldX = ((event.clientX - rect.left) * ratio) / camera.scale + camera.x - viewW / 2;
+      const worldY = ((event.clientY - rect.top) * ratio) / camera.scale + camera.y - viewH / 2;
+
+      // Relativas a la sala, que es como se guardan.
+      const rx = Math.floor(worldX / TILE) - editingZone.x;
+      const ry = Math.floor(worldY / TILE) - editingZone.y;
+
+      if (editor.brush) editor.place(rx, ry);
+      else if (editor.selected >= 0) editor.moveSelected(rx, ry);
+      else editor.selectAt(rx, ry);
+    },
+    [editor, editingZone],
+  );
+
   // Salir de la oficina cuelga la llamada: quedarse dentro de un canal al que
   // se entró caminando, después de cerrar la vista, no lo espera nadie.
   // Sin dependencias y a través de la referencia: ver el comentario de
@@ -254,7 +354,11 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-canvas">
-      <canvas ref={canvasRef} className="h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        onClick={onCanvasClick}
+        className={`h-full w-full ${editor.active ? "cursor-crosshair" : ""}`}
+      />
 
       {/* El audio de cada par, con el volumen que le toque por distancia. */}
       <ProximityAudio
@@ -293,6 +397,22 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
               )}
             </div>
           )}
+          {world.zone && !editor.active && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingZoneId(world.zone!.id);
+                // El estado del editor se siembra en el siguiente ciclo, cuando
+                // `editingZone` ya apunta a la sala elegida.
+                setTimeout(() => editorRef.current.open(), 0);
+              }}
+              title="Amueblar esta sala"
+              className="flex items-center gap-1.5 rounded-xl border border-line bg-surface/90 px-3 py-2 text-xs text-muted backdrop-blur transition hover:text-ink"
+            >
+              <Pencil size={13} />
+              Amueblar
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -311,6 +431,8 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
           unirte a su canal
         </p>
       </div>
+
+      {editor.active && editingZone && <ZoneEditor zone={editingZone} editor={editor} />}
 
       {editing && (
         <AvatarEditor

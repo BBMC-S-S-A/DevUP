@@ -546,6 +546,90 @@ async function main(): Promise<void> {
     });
     check("Bruno no puede vestir el avatar de Ana", brunoTouchedAna === 0);
 
+    // --- El editor ---------------------------------------------------------
+    //
+    // Decorar es social: quien pertenece al canal puede amueblar su sala. Lo
+    // que no puede es tocar la de un canal al que no pertenece — ni siquiera
+    // sabiendo su identificador, que es lo que se prueba aquí.
+    console.log("\nEl editor de la oficina");
+
+    const zoneOfChannel = (user: string, channel: string): Promise<string | null> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ id: string }>(
+          "select id from world_zones where channel_id = $1",
+          [channel],
+        );
+        return rows[0]?.id ?? null;
+      });
+
+    const publicZone = (await zoneOfChannel(ana, acme.publicChannel))!;
+    const privateZone2 = (await zoneOfChannel(ana, acme.privateChannel))!;
+
+    const save = (user: string, zone: string, props: unknown[]): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ save_world_props: number }>(
+          "select public.save_world_props($1, $2::jsonb)",
+          [zone, JSON.stringify(props)],
+        );
+        return rows[0]!.save_world_props;
+      });
+
+    const propsIn = (user: string, zone: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ n: string }>(
+          "select count(*)::text as n from world_props where zone_id = $1",
+          [zone],
+        );
+        return Number(rows[0]!.n);
+      });
+
+    check(
+      "Carla amuebla la sala del canal al que pertenece",
+      (await save(carla, publicZone, [
+        { kind: "sofa", x: 3, y: 2, facing: "s", tone: 1 },
+        { kind: "plant", x: 5, y: 2 },
+      ])) === 2,
+    );
+    check("y Ana ve lo que colocó", (await propsIn(ana, publicZone)) === 2);
+
+    const marked = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ customized: boolean }>(
+        "select customized from world_zones where id = $1",
+        [publicZone],
+      );
+      return rows[0]?.customized ?? false;
+    });
+    check("la sala queda marcada como editada", marked);
+
+    // La frontera. Carla tiene el identificador de la zona privada —se lo
+    // damos aquí a mano— y aun así no puede escribir en ella: RLS no le deja
+    // ver la fila, así que la función no encuentra la zona.
+    await denied("Carla no puede amueblar la sala de un canal privado ajeno", () =>
+      save(carla, privateZone2, [{ kind: "arcade", x: 2, y: 2 }]),
+    );
+    await denied("Bruno no puede amueblar nada de Acme", () =>
+      save(bruno, publicZone, [{ kind: "arcade", x: 2, y: 2 }]),
+    );
+    check("y la sala privada sigue vacía", (await propsIn(ana, privateZone2)) === 0);
+
+    // Guardar es reemplazo, no diferencia: la última en guardar gana entera.
+    check(
+      "volver a guardar reemplaza en vez de acumular",
+      (await save(ana, publicZone, [{ kind: "desk", x: 4, y: 2 }])) === 1 &&
+        (await propsIn(ana, publicZone)) === 1,
+    );
+
+    await withUser(ana, (db) => db.query("select public.reset_world_zone($1)", [publicZone]));
+    check("restaurar deja la sala sin muebles propios", (await propsIn(ana, publicZone)) === 0);
+    const unmarked = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ customized: boolean }>(
+        "select customized from world_zones where id = $1",
+        [publicZone],
+      );
+      return rows[0]?.customized ?? true;
+    });
+    check("y vuelve a amueblarse sola", !unmarked);
+
     // --- El interruptor de la organización ---------------------------------
     //
     // Una organización puede apagar la oficina entera. Lo interesante no es

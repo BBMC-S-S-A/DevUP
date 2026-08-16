@@ -7,7 +7,7 @@
  * migración, y el mobiliario es exactamente el tipo de cosa que el documento
  * 0002 permite que exista solo en el mundo.
  */
-import { type FloorMaterial, FLOOR_OF, furnish, type Theme, themeOf } from "./rooms";
+import { type FloorMaterial, FLOOR_OF, MATERIALS, furnitureOf, type Theme, themeOf } from "./rooms";
 import type { Prop } from "./props";
 import type { Room, Zone } from "./types";
 
@@ -79,7 +79,8 @@ export function buildScene(room: Room, zones: Zone[]): Scene {
 
   for (const zone of zones) {
     const theme = themeOf(zone);
-    const material = FLOOR_OF[theme];
+    // El material elegido a mano gana al del tema. Nulo = el del tema.
+    const material = zone.material !== null ? MATERIALS[zone.material % MATERIALS.length]! : FLOOR_OF[theme];
     info.set(zone.id, { zone, theme, material });
 
     const doorX = zone.x + Math.floor(zone.width / 2);
@@ -115,7 +116,7 @@ export function buildScene(room: Room, zones: Zone[]): Scene {
 
     // Amueblar. Lo que bloquea marca su casilla; lo que no —alfombras, sillas,
     // monitores sobre un escritorio— se pisa sin más.
-    for (const piece of furnish(zone)) {
+    for (const piece of furnitureOf(zone)) {
       const tx = Math.round(piece.x);
       const ty = Math.round(piece.y);
       if (tx < 0 || ty < 0 || tx >= width || ty >= height) continue;

@@ -17,6 +17,26 @@ export type Zone = {
   height: number;
   /** Índice de paleta; el tono concreto lo decide el cliente. */
   palette: number;
+  /**
+   * Si alguien ha editado esta sala. En falso, `props` se ignora y el
+   * mobiliario se deduce del nombre del canal — que es lo que hace que una
+   * sala nueva no nazca vacía.
+   */
+  customized: boolean;
+  /** Material de suelo elegido a mano, o nulo para el que le toque por tema. */
+  material: number | null;
+  /** Muebles guardados, en coordenadas relativas al origen de la sala. */
+  props: StoredProp[];
+};
+
+/** Un mueble tal como viene de la base: relativo a la sala. */
+export type StoredProp = {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  facing: "n" | "s" | "e" | "o";
+  tone: number;
 };
 
 export type Room = { id: string; width: number; height: number };

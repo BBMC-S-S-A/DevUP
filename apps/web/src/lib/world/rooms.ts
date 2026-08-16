@@ -12,7 +12,7 @@
  * sala tienen que ver la misma taza sobre la misma mesa, y guardar la posición
  * de cada planta en la base de datos para conseguirlo sería absurdo.
  */
-import { type Prop, prop } from "./props";
+import { type Prop, type PropKind, PROP_SPECS, prop } from "./props";
 import type { Zone } from "./types";
 
 export type Theme = "work" | "lounge" | "games" | "music" | "meeting";
@@ -58,6 +58,36 @@ export const FLOOR_OF: Record<Theme, FloorMaterial> = {
  * la entrada despejada es lo que evita que alguien se quede encajado nada más
  * entrar, y es el fallo más fácil de cometer amueblando por rejilla.
  */
+/**
+ * El mobiliario de una sala: el guardado si lo hay, el deducido si no.
+ *
+ * Es el único sitio que decide entre los dos, y por eso la marca `customized`
+ * y no «¿tiene filas?». Con lo segundo, vaciar una sala a propósito la haría
+ * volver al amueblado por defecto en el siguiente refresco — borrar el sofá
+ * lo devolvería, que es de las cosas más desconcertantes que puede hacer un
+ * editor.
+ *
+ * Las coordenadas guardadas son relativas a la sala; aquí se pasan a la
+ * planta. Mover una sala se lleva sus muebles dentro sin tocar ni una fila.
+ */
+export function furnitureOf(zone: Zone): Prop[] {
+  if (!zone.customized) return furnish(zone);
+
+  return zone.props.flatMap((stored) => {
+    const spec = PROP_SPECS[stored.kind as PropKind];
+    // Un `kind` que este cliente no conoce se ignora en vez de romper el
+    // dibujo entero. Es lo que permite añadir muebles sin migración: un
+    // cliente viejo simplemente no ve los nuevos.
+    if (!spec) return [];
+    return [
+      prop(stored.kind as PropKind, zone.x + stored.x, zone.y + stored.y, {
+        facing: stored.facing,
+        tone: stored.tone,
+      }),
+    ];
+  });
+}
+
 export function furnish(zone: Zone): Prop[] {
   const theme = themeOf(zone);
   const left = zone.x + 1;
@@ -159,3 +189,12 @@ export function furnish(zone: Zone): Prop[] {
   // introducir el fallo.
   return props.filter((p) => !(p.blocks && Math.round(p.x) === doorX && p.y >= bottom));
 }
+
+/**
+ * Los materiales por índice, para el selector del editor.
+ *
+ * El orden importa y no se puede reordenar: `world_zones.material` guarda la
+ * posición en esta lista. Añadir al final es seguro; insertar en medio
+ * repinta el suelo de todas las salas que ya eligieron uno.
+ */
+export const MATERIALS: FloorMaterial[] = ["wood", "tile", "checker", "carpet", "concrete"];

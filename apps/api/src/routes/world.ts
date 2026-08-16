@@ -53,10 +53,11 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
         height: number;
       }>("select id, width, height from world_rooms where id = $1", [roomId]);
 
-      const { rows: zones } = await db.query(
+      const { rows: zones } = await db.query<{ id: string }>(
         `select z.id,
                 z.channel_id as "channelId",
                 z.x, z.y, z.width, z.height, z.palette,
+                z.customized, z.material,
                 c.name       as "channelName",
                 c.kind       as "channelKind",
                 c.is_private as "channelPrivate"
@@ -67,7 +68,105 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
         [roomId],
       );
 
-      return { room: rooms[0] ?? null, zones };
+      // Los muebles de todas las salas de una vez. Una consulta por sala
+      // serían veinte consultas al abrir una oficina de veinte canales, y RLS
+      // ya filtra: solo llegan los de las salas que esta persona puede ver.
+      const { rows: props } = await db.query<{
+        zoneId: string;
+        id: string;
+        kind: string;
+        x: number;
+        y: number;
+        facing: string;
+        tone: number;
+      }>(
+        `select p.id, p.zone_id as "zoneId", p.kind, p.x, p.y, p.facing, p.tone
+           from world_props p
+           join world_zones z on z.id = p.zone_id
+          where z.room_id = $1
+          order by p.y, p.x`,
+        [roomId],
+      );
+
+      const byZone = new Map<string, unknown[]>();
+      for (const piece of props) {
+        const list = byZone.get(piece.zoneId) ?? [];
+        list.push(piece);
+        byZone.set(piece.zoneId, list);
+      }
+
+      return {
+        room: rooms[0] ?? null,
+        zones: zones.map((zone) => ({ ...zone, props: byZone.get(zone.id) ?? [] })),
+      };
+    });
+  });
+
+  /**
+   * Guardar el mobiliario de una sala.
+   *
+   * Llega la sala entera, no un mueble: arrastrar un sofá por la pantalla son
+   * decenas de posiciones intermedias y ninguna interesa. El límite de 120
+   * piezas no es arbitrario — una sala de 11×9 tiene 63 casillas de suelo, así
+   * que 120 ya deja sitio para apilar y sigue acotando lo que un cliente
+   * hablando el protocolo a mano puede meter de una vez.
+   */
+  app.put("/world/zones/:zoneId/props", async (request) => {
+    const userId = requireUser(request);
+    const { zoneId } = parseParams(z.object({ zoneId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        props: z
+          .array(
+            z.object({
+              kind: z.string().min(1).max(40),
+              x: z.number().int().min(0).max(40),
+              y: z.number().int().min(0).max(40),
+              facing: z.enum(["n", "s", "e", "o"]).default("s"),
+              tone: z.number().int().min(0).max(63).default(0),
+            }),
+          )
+          .max(120),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ save_world_props: number }>(
+        "select public.save_world_props($1, $2::jsonb)",
+        [zoneId, JSON.stringify(body.props)],
+      );
+      return { saved: rows[0]!.save_world_props };
+    });
+  });
+
+  /** Volver al amueblado deducido del nombre del canal. */
+  app.post("/world/zones/:zoneId/reset", async (request) => {
+    const userId = requireUser(request);
+    const { zoneId } = parseParams(z.object({ zoneId: uuid }), request.params);
+    await withUser(userId, (db) =>
+      db.query("select public.reset_world_zone($1)", [zoneId]),
+    );
+    return { reset: true };
+  });
+
+  /** El material del suelo de una sala. Nulo devuelve al deducido por el tema. */
+  app.patch("/world/zones/:zoneId", async (request) => {
+    const userId = requireUser(request);
+    const { zoneId } = parseParams(z.object({ zoneId: uuid }), request.params);
+    const body = parseBody(
+      z.object({ material: z.number().int().min(0).max(7).nullable() }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `update world_zones set material = $2 where id = $1
+       returning id, material, customized`,
+        [zoneId, body.material],
+      );
+      if (rows.length === 0) throw new HttpError(404, "zona no encontrada", "no_encontrado");
+      return { zone: rows[0] };
     });
   });
 

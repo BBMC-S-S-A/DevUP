@@ -36,7 +36,41 @@ export type PropKind =
   | "beanbag"
   | "frame"
   | "shelf"
-  | "window";
+  | "window"
+  | "standingDesk"
+  | "serverRack"
+  | "printer"
+  | "dualMonitor"
+  | "corkBoard"
+  | "cabinet"
+  | "waterCooler"
+  | "kitchenette"
+  | "coffeeMachine"
+  | "diningTable"
+  | "barStool"
+  | "tv"
+  | "sideboard"
+  | "floorCushion"
+  | "curtains"
+  | "poolTable"
+  | "foosball"
+  | "pinball"
+  | "retroTv"
+  | "trophyCase"
+  | "neonSign"
+  | "drums"
+  | "guitar"
+  | "mixer"
+  | "micStand"
+  | "vinylShelf"
+  | "acousticPanel"
+  | "projector"
+  | "confPuck"
+  | "flipchart"
+  | "planterDivider"
+  | "wallClock"
+  | "aquarium"
+  | "doorway";
 
 /** Un mueble colocado. `x`/`y` en casillas; el ancla es el pie del mueble. */
 export type Prop = {
@@ -86,6 +120,40 @@ export const PROP_SPECS: Record<PropKind, { blocks: boolean; onWall: boolean; fl
   frame: { blocks: false, onWall: true },
   shelf: { blocks: false, onWall: true },
   window: { blocks: false, onWall: true },
+  standingDesk: { blocks: true, onWall: false },
+  serverRack: { blocks: true, onWall: false },
+  printer: { blocks: true, onWall: false },
+  dualMonitor: { blocks: false, onWall: false },
+  corkBoard: { blocks: false, onWall: true },
+  cabinet: { blocks: true, onWall: false },
+  waterCooler: { blocks: true, onWall: false },
+  kitchenette: { blocks: true, onWall: false },
+  coffeeMachine: { blocks: false, onWall: false },
+  diningTable: { blocks: true, onWall: false },
+  barStool: { blocks: false, onWall: false },
+  tv: { blocks: true, onWall: false },
+  sideboard: { blocks: true, onWall: false },
+  floorCushion: { blocks: false, onWall: false },
+  curtains: { blocks: false, onWall: true },
+  poolTable: { blocks: true, onWall: false },
+  foosball: { blocks: true, onWall: false },
+  pinball: { blocks: true, onWall: false },
+  retroTv: { blocks: true, onWall: false },
+  trophyCase: { blocks: true, onWall: false },
+  neonSign: { blocks: false, onWall: true },
+  drums: { blocks: true, onWall: false },
+  guitar: { blocks: true, onWall: false },
+  mixer: { blocks: true, onWall: false },
+  micStand: { blocks: false, onWall: false },
+  vinylShelf: { blocks: true, onWall: false },
+  acousticPanel: { blocks: false, onWall: true },
+  projector: { blocks: true, onWall: false },
+  confPuck: { blocks: false, onWall: false },
+  flipchart: { blocks: true, onWall: false },
+  planterDivider: { blocks: true, onWall: false },
+  wallClock: { blocks: false, onWall: true },
+  aquarium: { blocks: true, onWall: false },
+  doorway: { blocks: false, onWall: false },
 };
 
 export function prop(
@@ -106,3 +174,42 @@ export function prop(
     flat: spec.flat ?? false,
   };
 }
+
+/**
+ * La paleta del editor, agrupada.
+ *
+ * El orden es el de uso, no el alfabético: dentro de cada grupo van primero
+ * las piezas que definen la sala —el escritorio antes que la papelera— porque
+ * es lo que se coloca primero al amueblar de cero.
+ */
+export const CATEGORIES: { label: string; kinds: PropKind[] }[] = [
+  {
+    label: "Trabajo",
+    kinds: ["desk", "standingDesk", "monitor", "dualMonitor", "chair", "serverRack",
+            "printer", "cabinet", "bookshelf", "whiteboard", "corkBoard", "waterCooler"],
+  },
+  {
+    label: "Salón",
+    kinds: ["sofa", "armchair", "coffeeTable", "rug", "diningTable", "barStool",
+            "kitchenette", "coffeeMachine", "tv", "sideboard", "floorCushion", "lamp", "fridge"],
+  },
+  {
+    label: "Juegos",
+    kinds: ["arcade", "poolTable", "foosball", "pinball", "retroTv", "beanbag",
+            "trophyCase", "neonSign"],
+  },
+  {
+    label: "Música",
+    kinds: ["piano", "drums", "guitar", "mixer", "micStand", "speaker",
+            "vinylShelf", "acousticPanel"],
+  },
+  {
+    label: "Reunión",
+    kinds: ["meetingTable", "projector", "confPuck", "flipchart", "planterDivider"],
+  },
+  {
+    label: "Decoración",
+    kinds: ["plant", "plantTall", "frame", "shelf", "window", "curtains",
+            "wallClock", "aquarium", "doorway"],
+  },
+];
