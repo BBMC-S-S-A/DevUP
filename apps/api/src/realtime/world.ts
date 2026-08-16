@@ -102,10 +102,17 @@ async function authorize(
     );
     const roomId = room[0]!.ensure_world_room;
 
-    const { rows: zones } = await db.query<{ id: string }>(
-      "select id from world_zones where room_id = $1",
-      [roomId],
-    );
+    // Se piden ordenadas: la primera es la que se usa para decidir dónde
+    // aparece la gente.
+    const { rows: zones } = await db.query<{
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>("select id, x, y, width, height from world_zones where room_id = $1 order by y, x", [
+      roomId,
+    ]);
 
     const { rows: size } = await db.query<{ width: number; height: number }>(
       "select width, height from world_rooms where id = $1",
@@ -117,17 +124,30 @@ async function authorize(
       [userId],
     );
 
+    const first = zones[0];
+
     return {
       userId,
       displayName: profile[0]?.display_name ?? "alguien",
       allowedZones: new Set(zones.map((z) => z.id)),
-      // Se aparece en el centro de la planta, que es pasillo por construcción
-      // —las zonas se colocan en rejilla desde la esquina— y nunca dentro de
-      // una sala a la que a lo mejor no se tiene acceso.
-      spawn: {
-        x: (size[0]?.width ?? 32) / 2,
-        y: (size[0]?.height ?? 24) - 3,
-      },
+      // Se aparece justo delante de la puerta de la primera sala que se puede
+      // ver, en el pasillo. Aparecer en el centro geométrico de la planta
+      // —lo que se hacía antes— dejaba a la gente en mitad de un descampado,
+      // sin ninguna sala a la vista y sin saber hacia dónde ir; con una
+      // oficina de pocos canales, la mitad del mapa está vacía.
+      //
+      // El pasillo, nunca dentro: la primera sala visible podría no ser la
+      // primera de la planta, y meter a alguien dentro de una sala nada más
+      // entrar decide por él a qué canal se une.
+      spawn: first
+        ? {
+            x: first.x + Math.floor(first.width / 2) + 0.5,
+            y: first.y + first.height + 0.6,
+          }
+        : {
+            x: (size[0]?.width ?? 32) / 2,
+            y: (size[0]?.height ?? 24) - 3,
+          },
     };
   });
 }

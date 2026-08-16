@@ -67,6 +67,23 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId]);
 
   /**
+   * Las funciones de la llamada, tras una referencia.
+   *
+   * `joinChannel` y `leaveChannel` se recrean en cada renderizado del
+   * proveedor de llamada — no están memoizadas—, así que usarlas como
+   * dependencia de un efecto hace que ese efecto se vuelva a montar
+   * continuamente. Con el efecto de limpieza de abajo eso era un bucle
+   * infinito: al desmontar llamaba a `leaveChannel`, que cambia el estado del
+   * proveedor, que vuelve a renderizar, que vuelve a desmontar el efecto.
+   *
+   * Lo cazó la prueba de navegador, no la de tipos ni la de la base: el
+   * síntoma era «Maximum update depth exceeded» y solo aparece ejecutando la
+   * aplicación de verdad.
+   */
+  const voiceRef = useRef({ joinChannel, leaveChannel });
+  voiceRef.current = { joinChannel, leaveChannel };
+
+  /**
    * Cruzar una puerta es entrar en el canal.
    *
    * Aquí es donde la regla del documento 0002 deja de ser prosa: una zona de
@@ -76,19 +93,15 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
    */
   const onZoneChange = useCallback(
     (zone: Zone | null) => {
-      if (!zone) {
-        leaveChannel();
-        return;
-      }
-      if (zone.channelKind !== "voice") {
+      if (!zone || zone.channelKind !== "voice") {
         // Una zona de texto no arrastra a nadie a una llamada: se entra y se
         // sale de un canal de texto leyendo, no hablando.
-        leaveChannel();
+        voiceRef.current.leaveChannel();
         return;
       }
-      joinChannel(zone.channelId, workspaceId, zone.channelName);
+      voiceRef.current.joinChannel(zone.channelId, workspaceId, zone.channelName);
     },
-    [joinChannel, leaveChannel, workspaceId],
+    [workspaceId],
   );
 
   const world = useWorld({
@@ -153,7 +166,12 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       const rect = canvas.getBoundingClientRect();
       canvas.width = Math.round(rect.width * ratio);
       canvas.height = Math.round(rect.height * ratio);
-      cameraRef.current.scale = 2 * ratio;
+      // 1,2 y no 2. Con el doble, una casilla ocupa 64 px y en pantalla caben
+      // seis: se ve el suelo y poco más, y una oficina que existe para
+      // recorrerse se convierte en un pasillo estrecho. Lo cazó la prueba de
+      // navegador — mirando el renderizador aislado no se nota, porque allí la
+      // cámara la fija la propia prueba.
+      cameraRef.current.scale = 1.2 * ratio;
     };
     resize();
     window.addEventListener("resize", resize);
@@ -199,15 +217,18 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
   // Salir de la oficina cuelga la llamada: quedarse dentro de un canal al que
   // se entró caminando, después de cerrar la vista, no lo espera nadie.
-  useEffect(() => () => leaveChannel(), [leaveChannel]);
+  // Sin dependencias y a través de la referencia: ver el comentario de
+  // `voiceRef`. Con `[leaveChannel]` esto era un bucle infinito.
+  useEffect(() => () => voiceRef.current.leaveChannel(), []);
 
+  const { refreshAvatars } = world;
   const saveAvatar = useCallback(
     async (look: Avatar) => {
       await api.put("/world/avatar", look);
-      await world.refreshAvatars();
+      await refreshAvatars();
       setEditing(false);
     },
-    [world],
+    [refreshAvatars],
   );
 
   if (loadError) {
