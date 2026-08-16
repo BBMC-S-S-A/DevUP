@@ -54,7 +54,7 @@ capacidades**.
 |---|---|
 | `npm run test:rls` | **98 comprobaciones** de aislamiento entre organizaciones |
 | `npm run test:world` | 13 del socket de la oficina (reparto por tick y zonas privadas) |
-| `e2e/` | 11 guiones de navegador y de API. Ver [`e2e/README.md`](../e2e/README.md) |
+| `e2e/` | 12 guiones de navegador y de API. Ver [`e2e/README.md`](../e2e/README.md) |
 
 Los tres tienen que estar en verde antes de empezar nada.
 
