@@ -3,101 +3,165 @@
 Informe de estado. Existe para que quien retome —persona o agente— no tenga que
 redescubrir lo que ya se decidió ni volver a discutirlo.
 
-Contexto completo, con los motivos de cada decisión:
-[`CONTEXTO-COMPLETO.md`](CONTEXTO-COMPLETO.md). Plan a 12 semanas con 94 tareas:
-`DevUP-Plan-de-Desarrollo.pdf`.
+**Empieza por aquí, y en este orden:**
+
+1. Este archivo: dónde estamos y qué toca.
+2. [`CONTEXTO-COMPLETO.md`](CONTEXTO-COMPLETO.md) — arquitectura y el porqué de
+   cada decisión de la base.
+3. [`plan-mundo-y-plataforma.md`](plan-mundo-y-plataforma.md) — el plan por
+   fases, con estimaciones y la secuencia propuesta.
+4. [`decisiones/`](decisiones/) — las dos decisiones cerradas que no se
+   reabren sin motivo nuevo.
 
 ---
 
 ## Dónde estamos
 
-La iteración en curso —**llamadas de voz y un sitio donde alojar archivos**—
-está construida y probada de punta a punta.
+De las **tres promesas** del producto:
 
-**Hecho y verificado**
+| Promesa | Estado |
+|---|---|
+| **Espacio de trabajo** | Completa. Canales, mensajería, voz, archivos, tareas, grabación, invitaciones, notificaciones — más la vista inmersiva encima |
+| **Control de ventas** | Servicios, clientes, embudo y objetivos que avanzan solos. Falta búsqueda global |
+| **Infraestructura y agentes** | Sin empezar |
 
-- Esquema en `db/migrations/`, aplicado contra un Postgres real. `npm run
-  test:rls` pasa con 45 comprobaciones de aislamiento, incluidos los workspaces
-  personales y los mensajes de canales privados.
-- API en Fastify: alta y acceso con scrypt, sesiones con token de refresco
-  rotatorio, organizaciones, workspaces, canales, archivos con URLs firmadas y
-  señalización por WebSocket.
-- Interfaz en Next.js: acceso, selector de organización, barra lateral de
-  canales, biblioteca de archivos con etiquetas, búsqueda y previsualización, y
-  sala con voz, vídeo, pantalla compartida y duración de la llamada.
-- Grabación en el navegador con consentimiento unánime, que acaba como un
-  archivo más en la biblioteca del canal.
-- Workspaces personales frente a compartidos, y tablero de tareas por workspace
-  con arrastrar y soltar.
-- Mensajería de texto en tiempo real: hilos, edición, borrado, adjuntos de la
-  biblioteca y no leídos en la barra lateral.
-- Altas solo por invitación, verificación de correo, recuperación de
-  contraseña, límite de intentos y notificaciones con campana.
-- CI que corre tipos, migraciones, aislamiento y build en cada push.
-- Imágenes de Docker para API y web, y guía de despliegue.
-- Prueba en navegador con dos pestañas y micrófono y cámara sintéticos: dos
-  pares se conectan, se oyen, se ven, negocian el permiso de grabación, graban,
-  guardan el archivo y cuelgan; el historial se cierra solo.
+En la definición de «plataforma funcional» del plan (§9), **van cinco de nueve
+capacidades**.
 
-**Lo siguiente**
+### Lo construido en el último tramo
 
-**Desplegarlo y usarlo dos semanas.** Ya no queda nada que lo bloquee: la lista
-de comprobación previa está en [`DESPLIEGUE.md`](DESPLIEGUE.md), con las cuatro
-variables sin las cuales la API se niega a arrancar en producción.
+**La vista inmersiva, fases 1 a 4** (decisión
+[`0002`](decisiones/0002-vistas-profesional-e-inmersiva.md)):
 
-El hito que decide el proyecto —que el propio equipo abandone sus herramientas
-actuales— no se alcanza con algo que solo corre en localhost. Lo que salga de
-ese uso real vale más que seguir añadiendo funcionalidades sobre unos cimientos
-que nadie ha estresado.
+- Planta por workspace, zonas ligadas a canales, presencia y movimiento
+- Renderizador Canvas 2D en ¾ con elevación · 55 muebles · 18 variantes de personaje
+- Editor de salas: paleta, colocar, girar, quitar, deshacer, materiales
+- Sentarse, avatar por capas con perfil real, hablar y gestos
+- Muebles vivos: pizarra→tablero, estantería→archivos, monitor→actividad, reloj
+- Tecla **E**: el puente a la vista profesional
+- Interruptor por organización para apagarla entera
 
-El cifrado de las salas **ya está decidido**: extremo a extremo siempre,
-grabación en el cliente con permiso de todos. El razonamiento completo, con lo
-que se descartó y por qué, está en
-[`decisiones/0001-cifrado-de-salas.md`](decisiones/0001-cifrado-de-salas.md).
+**Ventas (S4 y S5):**
+
+- Servicios con precio, clientes, oportunidades con embudo de cinco etapas
+- Cotización por líneas, con el precio congelado en el momento de ofrecerlo
+- Objetivos trimestrales cuyo avance **es una consulta**, no una columna
+- Pantalla del embudo con arrastrar y soltar, y franja de objetivos
+
+### Pruebas
+
+| Comando | Qué cubre |
+|---|---|
+| `npm run test:rls` | **98 comprobaciones** de aislamiento entre organizaciones |
+| `npm run test:world` | 13 del socket de la oficina (reparto por tick y zonas privadas) |
+| `e2e/` | 11 guiones de navegador y de API. Ver [`e2e/README.md`](../e2e/README.md) |
+
+Los tres tienen que estar en verde antes de empezar nada.
 
 ---
 
-## Cambio de arquitectura, agosto
+## Lo siguiente, y en qué orden
 
-El proyecto empezó sobre Supabase y ya no se apoya en él. Datos, autenticación,
-almacenamiento y tiempo real son ahora propios.
+### 1. S6 — Búsqueda global · ~22 puntos · **es el hito que decide el proyecto**
 
-Lo que **no** cambió: el aislamiento sigue viviendo en Postgres con RLS, que era
-la decisión que importaba. Lo que cambió: `auth.uid()` pasó a ser
-`public.current_user_id()` sobre la variable de sesión `app.user_id`, y las
-políticas de `storage.objects` se sustituyeron por comprobaciones en la API
-antes de firmar cada URL.
+El plan lo dice desde el principio y no ha cambiado:
 
-Motivo, en una línea: DevUP se vende como la capa que coordina infraestructura
-ajena, y depender de un único proveedor para su propio plano de control
-contradice el discurso justo en la parte que menos se puede mover después.
+> Si el propio equipo no quiere abandonar sus herramientas actuales para usar
+> DevUP, ningún cliente lo hará tampoco.
+
+Hoy la búsqueda es por workspace. Global significa: mensajes, archivos, tareas,
+clientes y ventas desde un solo sitio. Los índices de texto completo ya existen
+para mensajes (`spanish`) y archivos (`simple`, y el motivo de esa diferencia
+está en `0005_messages.sql`); faltan los de ventas y unificar el resultado.
+
+**Cuidado con lo de siempre:** una búsqueda que cruza cinco tablas es cinco
+sitios donde el aislamiento puede escaparse. Cada consulta va sin `where
+organization_id`, y cada tabla nueva que entre en la búsqueda necesita su caso
+en `isolation.test.ts`.
+
+### 2. S7 — Bóveda y conectores · ~22 puntos
+
+Es la tercera promesa y **desbloquea la mitad de la Fase 4 de la oficina**:
+cinco de los nueve muebles vivos no tienen nada que mostrar hasta que existan
+conectores (pantalla de despliegue, rack de servidores, tablón de ventas,
+vitrina de trofeos).
+
+La bóveda de credenciales es el activo más sensible del producto. No se empieza
+sin releer §1 de `CONTEXTO-COMPLETO.md`.
+
+### 3. S8–S12
+
+Base de datos como código, migraciones sincronizadas con el repo, agentes,
+DevUP ID y beta. Detalle en el plan de 12 semanas.
+
+### Pendientes sueltos, pequeños
+
+- **Histéresis de tres radios dentro de una sala** (~8 pts). El reparto por
+  zonas resuelve veinte personas en cuatro salas; no resuelve doce en una,
+  donde la malla vuelve a pedir once conexiones por cabeza. Está descrito en
+  §11 bis de la decisión 0002.
+- **Ficha de cliente y detalle de cotización.** Hoy las líneas se añaden al
+  crear la venta y se ven por API, pero no hay pantalla para editarlas después.
+- **Redis** para presencia y límite de peticiones, el día que haya más de una
+  instancia de API.
 
 ---
 
-## Lo que más fácil es romper sin darse cuenta
+## Decisiones cerradas que no se reabren sin motivo nuevo
 
-- **`DATABASE_URL` tiene que ser el rol `devup_app`**, que no es propietario de
-  las tablas. Postgres salta RLS para el propietario: apuntar esta variable al
-  rol de las migraciones desactiva todo el aislamiento **sin un solo error** en
-  los registros. Las consultas seguirían funcionando y devolverían de más.
-- **Toda consulta pasa por `withUser()`**, que fija `app.user_id` con alcance
-  local a la transacción. Con alcance de sesión, la conexión vuelve al pool con
-  la identidad del último usuario dentro.
-- **Las funciones de pertenencia son `SECURITY DEFINER` a propósito.** Quitarlo
-  provoca recursión infinita en las políticas.
-- **Un workspace personal no se protege con una columna.** `can_access_channel`
-  y la política de `files` miraban la organización, no el workspace: si vuelven
-  a mirar ahí, los canales y archivos de un espacio personal se ven desde todo
-  el equipo. Tienen que colgar de `can_access_workspace`.
-- **Cada tabla nueva con `organization_id` necesita su política y su caso en
-  `apps/api/src/db/isolation.test.ts`.** Es la disciplina que impone elegir RLS,
-  y el único freno automático contra una fuga entre clientes.
-- **Nunca firmar una URL de almacenamiento sin comprobar antes la pertenencia.**
-  La primera carpeta de la clave es la frontera de seguridad, y ya no hay
-  políticas en el almacén que la vigilen por nosotros.
-- **Nada secreto en una variable `NEXT_PUBLIC_*`.** Se incrusta en el bundle
-  durante el build y cualquiera puede leerla. Por eso las credenciales de TURN
-  las sirve la API y no el entorno de la web.
+- **Aislamiento por RLS**, no por esquema por organización.
+- **Sin Supabase**: el plano de control es propio.
+- **Cifrado extremo a extremo siempre**, grabación en el cliente con
+  consentimiento unánime ([`0001`](decisiones/0001-cifrado-de-salas.md)).
+- **El mundo proyecta, no origina** ([`0002`](decisiones/0002-vistas-profesional-e-inmersiva.md)
+  §5). Toda zona es un canal que ya existe; lo único que vive solo en el mundo
+  es la decoración. De ahí salen tres consecuencias que ya están en el código y
+  conviene no deshacer por descuido:
+  - No hay audio ni chat en el pasillo. Sin zona no hay canal donde escribir, y
+    una conversación invisible desde la vista profesional es exactamente el
+    fallo del que la regla protege.
+  - Lo que se dice en una sala **es un mensaje de su canal**, escrito por HTTP
+    antes de mandar la burbuja.
+  - El servidor del mundo reparte y olvida: no guarda nada de lo que se dice.
+
+## Decisiones aún abiertas
+
+- SFU autoalojado o gestionado, cuando la malla se quede corta. **Ojo:** meter
+  un SFU pierde el cifrado extremo a extremo por la puerta de atrás.
+- Grabación con vídeo, que hoy es solo audio a propósito.
+- Modelo de precios y residencia de datos.
+- Si la vista inmersiva llega a fase 5 (inventario, cosméticos, invitados
+  externos) o se queda donde está.
+
+---
+
+## Trampas conocidas, añadidas en este tramo
+
+Todas encontradas ejecutando el sistema. Las de la base y la voz siguen en §9
+de `CONTEXTO-COMPLETO.md`; estas son nuevas.
+
+| Síntoma | Causa | Salida |
+|---|---|---|
+| `Maximum update depth exceeded` al abrir la oficina | Un efecto con `leaveChannel` como dependencia, y esa función se recrea en cada renderizado del proveedor de llamada | Guardar las funciones del proveedor en una referencia y dejar el efecto sin dependencias |
+| Se ven seis casillas y la oficina parece un pasillo | La cámara a 2× la densidad del dispositivo | 1,2 × densidad. En el renderizador aislado no se nota: allí la cámara la fija la prueba |
+| Se aparece en un descampado | El punto de aparición era el centro geométrico de la planta | En el pasillo, frente a la puerta de la primera sala visible |
+| El botón de guardar del editor no responde | La barra de llamada persistente es `z-40` y tapaba el panel | El panel del editor va en `z-50` |
+| Una capa de avatar se guarda y no vuelve | La consulta de lectura seguía pidiendo solo las columnas viejas | Probar la ida **y la vuelta**, no solo el guardado |
+| «Sentarse» no aparece estando al lado de la silla | El radio era 1,4 y la distancia real 1,49 | 1,8. Cinco centésimas de más se ven desde fuera como que la función no existe |
+| Un avatar sentado parece hundido en el suelo | Solo se bajaba el cuerpo | Bajar, recoger las piernas y sacar los pies por delante |
+| La alfombra tapa el sofá | Entraba en el orden por Y, y está en la parte baja de la sala | Los objetos planos se dibujan con el suelo |
+| Un muro sale a franjas | Cada casilla pintaba su cara superior sobre el cuerpo de la de arriba | La cara superior solo donde el muro empieza |
+| Una prueba dice que un objetivo «no avanzó» y el código está bien | Reutilizaba una venta ya ganada, que el objetivo ya contaba | Crear datos nuevos en cada prueba; reutilizar estado es cómo se acaba dudando de código correcto |
+| El navegador da 404 en todos los recursos | Dos instancias de `next dev` peleándose por `.next` | Matar todas y arrancar una sola |
+
+### Y la lección de método, que vale más que la tabla
+
+**De los fallos de este tramo, ninguno lo vieron los tipos ni las 98
+comprobaciones automáticas.** Todos salieron abriendo la aplicación entera en un
+navegador — y dos de ellos ni siquiera fallaban, se veían mal. De ahí que
+`e2e/` deje capturas y que mirarlas sea parte de la prueba.
+
+Escribir mucho sin ese ciclo es entregar código que no se sabe si funciona.
 
 ---
 
@@ -107,7 +171,28 @@ contradice el discurso justo en la parte que menos se puede mover después.
 cp .env.example .env
 npm install
 npm run db:up        # Postgres 17 y MinIO
-npm run db:migrate
+npm run db:migrate   # 13 migraciones
 npm run dev          # API en :4000, web en :3000
-npm run test:rls     # que esté en verde antes de empezar nada
+
+npm run test:rls     # 98 · que esté en verde antes de empezar nada
+npm run test:world   # 13
 ```
+
+Para las pruebas de navegador, ver [`e2e/README.md`](../e2e/README.md): hacen
+falta los dos servidores levantados y `npm install --no-save playwright`.
+
+### Lo que más fácil es romper sin darse cuenta
+
+- **`DATABASE_URL` tiene que ser el rol `devup_app`**, que no es propietario de
+  las tablas. Apuntarla al rol de las migraciones desactiva todo el aislamiento
+  **sin un solo error** en los registros.
+- **Toda consulta pasa por `withUser()`**, que fija `app.user_id` con alcance
+  local a la transacción.
+- **Las funciones de pertenencia son `SECURITY DEFINER` a propósito.**
+- **Cada tabla nueva con `organization_id` necesita su política y su caso en
+  `isolation.test.ts`.** Es el único freno automático contra una fuga entre
+  clientes, y en este tramo ha crecido de 45 a 98 comprobaciones justamente por
+  respetarlo.
+- **Nada secreto en una variable `NEXT_PUBLIC_*`.**
+- **El dinero va en céntimos enteros de punta a punta.** `0,1 + 0,2` no da `0,3`
+  en coma flotante, y en una cotización eso es un céntimo que no cuadra.
