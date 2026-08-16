@@ -1,17 +1,20 @@
 "use client";
 
-import { ArrowLeft, Files, Hash, KanbanSquare, Loader2, Lock, Plus, UserRound, Volume2 } from "lucide-react";
+import { ArrowLeft, Files, Gamepad2, Hash, KanbanSquare, Loader2, Lock, Plus, UserRound, Volume2 } from "lucide-react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useSession } from "@/lib/session";
+import { useViewMode } from "@/lib/view-mode";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const pathname = usePathname();
+  const router = useRouter();
   const { user, signOut } = useSession();
+  const { mode, setMode, ready: modeReady } = useViewMode();
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -56,6 +59,19 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [loadUnread, pathname]);
 
+  const officeHref = `/app/w/${workspaceId}/oficina`;
+  const inOffice = pathname === officeHref;
+
+  // Recordar la preferencia significa esto: quien dejó la oficina abierta la
+  // encuentra abierta. Solo desde la raíz del workspace — entrar directo a un
+  // canal es una intención explícita y no se pisa.
+  useEffect(() => {
+    if (!modeReady) return;
+    if (mode !== "immersive") return;
+    if (pathname !== `/app/w/${workspaceId}`) return;
+    router.replace(officeHref);
+  }, [modeReady, mode, pathname, workspaceId, officeHref, router]);
+
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center">
@@ -79,6 +95,28 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
   const voice = channels.filter((c) => c.kind === "voice");
   const text = channels.filter((c) => c.kind === "text");
+
+  // Dentro de la oficina la barra lateral desaparece: media pantalla de lista
+  // de canales al lado de un espacio que existe para recorrerse rompe justo
+  // lo que la vista inmersiva aporta. Queda un solo botón para volver.
+  if (inOffice) {
+    return (
+      <div className="relative h-screen">
+        {children}
+        <button
+          type="button"
+          onClick={() => {
+            setMode("professional");
+            router.push(`/app/w/${workspaceId}`);
+          }}
+          className="absolute bottom-4 left-4 z-10 flex items-center gap-1.5 rounded-xl border border-line bg-surface/90 px-3 py-2 text-xs text-muted backdrop-blur transition hover:text-ink"
+        >
+          <ArrowLeft size={13} />
+          Vista profesional
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -125,6 +163,21 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           >
             <KanbanSquare size={15} />
             Tablero
+          </Link>
+
+          {/* La oficina es opcional y se entra a ella a propósito. Va la
+              última del grupo y sin resaltar: quien no la quiera no debería
+              tropezarse con ella. */}
+          <Link
+            href={officeHref}
+            onClick={() => setMode("immersive")}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted transition hover:bg-raised hover:text-ink"
+          >
+            <Gamepad2 size={15} />
+            Oficina
+            <span className="ml-auto rounded bg-raised px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-faint">
+              beta
+            </span>
           </Link>
 
           {text.length > 0 && (

@@ -9,6 +9,7 @@ import { closePool, withUser } from "./db/pool.js";
 import { env, webOrigins } from "./env.js";
 import { HttpError, translateDbError } from "./lib/http.js";
 import { signalingRoutes } from "./realtime/signaling.js";
+import { worldSocketRoutes } from "./realtime/world.js";
 import { accountRoutes } from "./routes/account.js";
 import { authRoutes } from "./routes/auth.js";
 import { fileRoutes } from "./routes/files.js";
@@ -16,7 +17,9 @@ import { iceRoutes } from "./routes/ice.js";
 import { messageRoutes } from "./routes/messages.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { recordingRoutes } from "./routes/recordings.js";
+import { salesRoutes } from "./routes/sales.js";
 import { taskRoutes } from "./routes/tasks.js";
+import { worldRoutes } from "./routes/world.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { deleteObjects, ensureBucket } from "./storage/s3.js";
 
@@ -131,7 +134,10 @@ await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(notificationRoutes);
 await app.register(recordingRoutes);
+await app.register(salesRoutes);
+await app.register(worldRoutes);
 await app.register(signalingRoutes);
+await app.register(worldSocketRoutes);
 
 /**
  * Barrendero de subidas abandonadas.

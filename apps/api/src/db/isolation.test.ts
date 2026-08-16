@@ -421,6 +421,428 @@ async function main(): Promise<void> {
       return Number(rows[0]!.n);
     });
     check("al salir el último, la sesión se cierra", closed === 1);
+
+    // --- El mundo ----------------------------------------------------------
+    //
+    // El caso que de verdad importa es el de Carla. Ve el workspace, ve la
+    // planta, y no debe ver la zona del canal privado — ni siquiera su nombre.
+    // Es la misma trampa que ya se pisó con los workspaces personales: si la
+    // política de `world_zones` colgara de `can_access_workspace` en vez de
+    // `can_access_channel`, todo lo demás seguiría pasando y esta sola
+    // comprobación sería la que lo cazaría.
+    console.log("\nEl mundo");
+
+    const prepare = (user: string, workspace: string): Promise<string> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ ensure_world_room: string }>(
+          "select public.ensure_world_room($1)",
+          [workspace],
+        );
+        return rows[0]!.ensure_world_room;
+      });
+
+    const zonesIn = (user: string, room: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ n: string }>(
+          "select count(*)::text as n from world_zones where room_id = $1",
+          [room],
+        );
+        return Number(rows[0]!.n);
+      });
+
+    const sharedRoom = await prepare(ana, acme.ws);
+    check("Ana prepara la planta y sale una zona por canal", (await zonesIn(ana, sharedRoom)) === 2);
+
+    // Idempotencia: pedir el mapa otra vez no duplica zonas ni mueve las que
+    // ya estaban. Se llama en cada lectura, así que esto no es un detalle.
+    await prepare(ana, acme.ws);
+    check(
+      "preparar la planta dos veces no duplica zonas",
+      (await zonesIn(ana, sharedRoom)) === 2,
+    );
+
+    check(
+      "Carla no ve la zona del canal privado, solo la del público",
+      (await zonesIn(carla, sharedRoom)) === 1,
+    );
+
+    const carlaSeesPrivateZone = await withUser(carla, async (db) => {
+      const { rows } = await db.query(
+        "select id from world_zones where channel_id = $1",
+        [acme.privateChannel],
+      );
+      return rows.length;
+    });
+    check(
+      "Carla no encuentra la zona privada ni buscándola por su canal",
+      carlaSeesPrivateZone === 0,
+    );
+
+    const soloRoom = await prepare(ana, acme.soloWs);
+    check("la planta del workspace personal tiene su zona", (await zonesIn(ana, soloRoom)) === 1);
+    check("Carla no ve nada de la planta personal de Ana", (await zonesIn(carla, soloRoom)) === 0);
+
+    check("Ana ve sus dos plantas", (await count(ana, "world_rooms")) === 2);
+    check("Carla ve solo la planta compartida", (await count(carla, "world_rooms")) === 1);
+    check("Bruno no ve ninguna planta", (await count(bruno, "world_rooms")) === 0);
+    check("Bruno no ve ninguna zona", (await count(bruno, "world_zones")) === 0);
+
+    await denied("Bruno no puede preparar la planta de un workspace de Acme", () =>
+      prepare(bruno, acme.ws),
+    );
+    await denied("Carla no puede preparar la planta del workspace personal de Ana", () =>
+      prepare(carla, acme.soloWs),
+    );
+
+    // Mover una zona es editar la oficina, y pide acceso al canal que proyecta.
+    const carlaMovedPrivate = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        "update world_zones set x = x + 1 where channel_id = $1",
+        [acme.privateChannel],
+      );
+      return rowCount ?? 0;
+    });
+    check("Carla no puede mover la zona del canal privado", carlaMovedPrivate === 0);
+
+    // --- Avatares ----------------------------------------------------------
+    //
+    // La regla es la de `profiles`: si puedes ver el nombre de alguien, puedes
+    // ver su personaje. Fuera de la organización, ni una cosa ni la otra.
+    const setAvatar = (user: string, top: number): Promise<void> =>
+      withUser(user, async (db) => {
+        await db.query("select public.upsert_world_avatar($1::jsonb)", [
+          JSON.stringify({
+            body: 0, hair: 1, top, bottom: 0,
+            skinTone: 2, hairTone: 3, topTone: 4, bottomTone: 5,
+          }),
+        ]);
+      });
+
+    await setAvatar(ana, 7);
+    await setAvatar(bruno, 9);
+
+    check("Ana ve su avatar", (await count(ana, "world_avatars")) >= 1);
+    check(
+      "Carla ve el avatar de Ana, que es de su organización",
+      (await withUser(carla, async (db) => {
+        const { rows } = await db.query("select user_id from world_avatars where user_id = $1", [
+          ana,
+        ]);
+        return rows.length;
+      })) === 1,
+    );
+    check(
+      "Bruno no ve el avatar de Ana",
+      (await withUser(bruno, async (db) => {
+        const { rows } = await db.query("select user_id from world_avatars where user_id = $1", [
+          ana,
+        ]);
+        return rows.length;
+      })) === 0,
+    );
+
+    const brunoTouchedAna = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("update world_avatars set top = 42 where user_id = $1", [
+        ana,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Bruno no puede vestir el avatar de Ana", brunoTouchedAna === 0);
+
+    // --- Ventas ------------------------------------------------------------
+    //
+    // Cuatro tablas nuevas con `organization_id`, así que cuatro casos nuevos.
+    // Lo que se comprueba no es que la aplicación filtre: es que Bruno no vea
+    // el embudo de Acme aunque la consulta no lleve ni un `where`.
+    console.log("\nVentas");
+
+    const acmeSales = await withUser(ana, async (db) => {
+      const service = (
+        await db.query<{ id: string }>(
+          `insert into services (organization_id, name, unit_price_cents, unit, created_by)
+           values ($1,'Auditoría de infraestructura',150000,'jornada',$2) returning id`,
+          [acme.org, ana],
+        )
+      ).rows[0]!.id;
+
+      const client = (
+        await db.query<{ id: string }>(
+          `insert into clients (organization_id, name, contact_email, created_by)
+           values ($1,'Cliente Confidencial','quien@cliente.test',$2) returning id`,
+          [acme.org, ana],
+        )
+      ).rows[0]!.id;
+
+      const deal = (
+        await db.query<{ id: string }>(
+          `insert into opportunities (organization_id, client_id, title, owner_id, created_by)
+           values ($1,$2,'Migración del backend',$3,$3) returning id`,
+          [acme.org, client, ana],
+        )
+      ).rows[0]!.id;
+
+      await db.query(
+        `insert into opportunity_items (opportunity_id, service_id, name, unit_price_cents, quantity)
+         values ($1,$2,'Auditoría de infraestructura',150000,3)`,
+        [deal, service],
+      );
+
+      return { service, client, deal };
+    });
+
+    check("Ana ve su servicio", (await count(ana, "services")) === 1);
+    check("Ana ve su cliente", (await count(ana, "clients")) === 1);
+    check("Carla, de la misma organización, ve el embudo", (await count(carla, "opportunities")) === 1);
+    check("Bruno no ve ningún servicio de Acme", (await count(bruno, "services")) === 0);
+    check("Bruno no ve ningún cliente de Acme", (await count(bruno, "clients")) === 0);
+    check("Bruno no ve ninguna oportunidad de Acme", (await count(bruno, "opportunities")) === 0);
+    check(
+      "Bruno tampoco ve las líneas de la cotización",
+      (await count(bruno, "opportunity_items")) === 0,
+    );
+
+    const brunoFindsClient = await withUser(bruno, async (db) => {
+      const { rows } = await db.query(
+        "select id from clients where name = 'Cliente Confidencial'",
+      );
+      return rows.length;
+    });
+    check("Bruno no encuentra el cliente ni buscándolo por nombre", brunoFindsClient === 0);
+
+    await denied("Bruno no puede crear un cliente en la organización de Ana", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into clients (organization_id, name) values ($1,$2)", [
+          acme.org,
+          "cliente colado",
+        ]),
+      ),
+    );
+
+    const brunoMoved = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "update opportunities set stage = 'won' where id = $1",
+        [acmeSales.deal],
+      );
+      return rowCount ?? 0;
+    });
+    check("Bruno no puede mover una venta ajena por el embudo", brunoMoved === 0);
+
+    // El importe sale de las líneas y no de una columna: tres jornadas a 1.500 €.
+    const amount = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ cents: string }>(
+        "select public.opportunity_amount_cents($1)::text as cents",
+        [acmeSales.deal],
+      );
+      return Number(rows[0]!.cents);
+    });
+    check("el importe se calcula desde el desglose", amount === 450000, `salió ${amount}`);
+
+    // La fecha de cierre la pone la base, no la aplicación. Es de lo que
+    // colgará el objetivo trimestral, y depender de que cada ruta se acuerde
+    // de escribirla deja objetivos que no avanzan sin que nada falle.
+    const dealClosed = await withUser(ana, async (db) => {
+      await db.query("update opportunities set stage = 'won' where id = $1", [acmeSales.deal]);
+      const { rows } = await db.query<{ closed_at: Date | null }>(
+        "select closed_at from opportunities where id = $1",
+        [acmeSales.deal],
+      );
+      return rows[0]?.closed_at !== null;
+    });
+    check("al ganarse una venta, la base marca la fecha de cierre", dealClosed);
+
+    const reopened = await withUser(ana, async (db) => {
+      await db.query("update opportunities set stage = 'proposal' where id = $1", [acmeSales.deal]);
+      const { rows } = await db.query<{ closed_at: Date | null }>(
+        "select closed_at from opportunities where id = $1",
+        [acmeSales.deal],
+      );
+      return rows[0]?.closed_at === null;
+    });
+    check("y al reabrirla la borra", reopened);
+
+    // --- Objetivos ---------------------------------------------------------
+    //
+    // Lo que se prueba aquí no es solo el aislamiento: es que «avanza solo»
+    // sea cierto. El objetivo no guarda su progreso, así que ganar una venta
+    // tiene que moverlo sin que nadie toque el objetivo — y reabrirla tiene
+    // que devolverlo.
+    console.log("\nObjetivos");
+
+    const goal = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into goals (organization_id, name, target_cents, starts_on, ends_on, created_by)
+         values ($1,'Trimestre en curso',1000000, current_date - 30, current_date + 30, $2)
+         returning id`,
+        [acme.org, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const progress = (user: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ cents: string }>(
+          "select public.goal_progress_cents($1)::text as cents",
+          [goal],
+        );
+        return Number(rows[0]!.cents);
+      });
+
+    // La venta de más arriba quedó reabierta en 'proposal', así que el
+    // objetivo arranca a cero aunque la venta exista y valga 4.500 €.
+    check("un objetivo nace a cero aunque haya ventas abiertas", (await progress(ana)) === 0);
+
+    await withUser(ana, (db) =>
+      db.query("update opportunities set stage = 'won' where id = $1", [acmeSales.deal]),
+    );
+    check(
+      "al ganarse la venta, el objetivo avanza sin que nadie lo toque",
+      (await progress(ana)) === 450000,
+      `salió ${await progress(ana)}`,
+    );
+
+    await withUser(ana, (db) =>
+      db.query("update opportunities set stage = 'proposal' where id = $1", [acmeSales.deal]),
+    );
+    check("y al reabrirla, vuelve atrás", (await progress(ana)) === 0);
+
+    check("Bruno no ve el objetivo de Acme", (await count(bruno, "goals")) === 0);
+    check("Carla, de la misma organización, sí lo ve", (await count(carla, "goals")) === 1);
+
+    await denied("Carla, que es miembro raso, no puede fijar objetivos", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into goals (organization_id, name, target_cents, starts_on, ends_on)
+           values ($1,'objetivo colado',100, current_date, current_date)`,
+          [acme.org],
+        ),
+      ),
+    );
+
+    // Un objetivo no puede ser una rendija para contar ventas ajenas: la
+    // función es SECURITY INVOKER, así que para Bruno la suma es cero.
+    check("para Bruno, el avance de ese objetivo es cero", (await progress(bruno)) === 0);
+
+    // --- El editor ---------------------------------------------------------
+    //
+    // Decorar es social: quien pertenece al canal puede amueblar su sala. Lo
+    // que no puede es tocar la de un canal al que no pertenece — ni siquiera
+    // sabiendo su identificador, que es lo que se prueba aquí.
+    console.log("\nEl editor de la oficina");
+
+    const zoneOfChannel = (user: string, channel: string): Promise<string | null> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ id: string }>(
+          "select id from world_zones where channel_id = $1",
+          [channel],
+        );
+        return rows[0]?.id ?? null;
+      });
+
+    const publicZone = (await zoneOfChannel(ana, acme.publicChannel))!;
+    const privateZone2 = (await zoneOfChannel(ana, acme.privateChannel))!;
+
+    const save = (user: string, zone: string, props: unknown[]): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ save_world_props: number }>(
+          "select public.save_world_props($1, $2::jsonb)",
+          [zone, JSON.stringify(props)],
+        );
+        return rows[0]!.save_world_props;
+      });
+
+    const propsIn = (user: string, zone: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ n: string }>(
+          "select count(*)::text as n from world_props where zone_id = $1",
+          [zone],
+        );
+        return Number(rows[0]!.n);
+      });
+
+    check(
+      "Carla amuebla la sala del canal al que pertenece",
+      (await save(carla, publicZone, [
+        { kind: "sofa", x: 3, y: 2, facing: "s", tone: 1 },
+        { kind: "plant", x: 5, y: 2 },
+      ])) === 2,
+    );
+    check("y Ana ve lo que colocó", (await propsIn(ana, publicZone)) === 2);
+
+    const marked = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ customized: boolean }>(
+        "select customized from world_zones where id = $1",
+        [publicZone],
+      );
+      return rows[0]?.customized ?? false;
+    });
+    check("la sala queda marcada como editada", marked);
+
+    // La frontera. Carla tiene el identificador de la zona privada —se lo
+    // damos aquí a mano— y aun así no puede escribir en ella: RLS no le deja
+    // ver la fila, así que la función no encuentra la zona.
+    await denied("Carla no puede amueblar la sala de un canal privado ajeno", () =>
+      save(carla, privateZone2, [{ kind: "arcade", x: 2, y: 2 }]),
+    );
+    await denied("Bruno no puede amueblar nada de Acme", () =>
+      save(bruno, publicZone, [{ kind: "arcade", x: 2, y: 2 }]),
+    );
+    check("y la sala privada sigue vacía", (await propsIn(ana, privateZone2)) === 0);
+
+    // Guardar es reemplazo, no diferencia: la última en guardar gana entera.
+    check(
+      "volver a guardar reemplaza en vez de acumular",
+      (await save(ana, publicZone, [{ kind: "desk", x: 4, y: 2 }])) === 1 &&
+        (await propsIn(ana, publicZone)) === 1,
+    );
+
+    await withUser(ana, (db) => db.query("select public.reset_world_zone($1)", [publicZone]));
+    check("restaurar deja la sala sin muebles propios", (await propsIn(ana, publicZone)) === 0);
+    const unmarked = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ customized: boolean }>(
+        "select customized from world_zones where id = $1",
+        [publicZone],
+      );
+      return rows[0]?.customized ?? true;
+    });
+    check("y vuelve a amueblarse sola", !unmarked);
+
+    // --- El interruptor de la organización ---------------------------------
+    //
+    // Una organización puede apagar la oficina entera. Lo interesante no es
+    // que el dueño pueda —eso es trivial— sino que un miembro raso no pueda
+    // volver a encenderla, y que apagarla no borre nada.
+    const worldEnabled = (user: string): Promise<boolean> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ ok: boolean }>(
+          "select public.world_enabled_for_workspace($1) as ok",
+          [acme.ws],
+        );
+        return rows[0]?.ok ?? false;
+      });
+
+    const setImmersive = (user: string, value: boolean): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rowCount } = await db.query(
+          "update organizations set immersive_enabled = $2 where id = $1",
+          [acme.org, value],
+        );
+        return rowCount ?? 0;
+      });
+
+    check("la oficina viene encendida de fábrica", await worldEnabled(ana));
+    check("Ana, que es dueña, puede apagarla", (await setImmersive(ana, false)) === 1);
+    check("apagada, lo está para todo el mundo", !(await worldEnabled(carla)));
+    check(
+      "apagarla no borra las zonas",
+      (await zonesIn(ana, sharedRoom)) === 2,
+    );
+    check(
+      "Carla, que es miembro raso, no puede volver a encenderla",
+      (await setImmersive(carla, true)) === 0,
+    );
+    check("y sigue apagada", !(await worldEnabled(ana)));
+    await setImmersive(ana, true);
+    check("al encenderla vuelve todo como estaba", await worldEnabled(carla));
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

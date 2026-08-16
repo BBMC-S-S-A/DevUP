@@ -9,6 +9,7 @@ import {
   Terminal,
   UserRound,
   Users,
+  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -90,6 +91,16 @@ export default function OrganizationsPage() {
                 <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-faint">
                   {org.role}
                 </span>
+                {/* Ventas es de la organización, no de un workspace: los
+                    clientes y el embudo son del equipo entero, no de un sitio
+                    concreto donde se trabaja. */}
+                <Link
+                  href={`/app/o/${org.id}/ventas`}
+                  className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
+                >
+                  <TrendingUp size={12} />
+                  Ventas
+                </Link>
               </div>
 
               <div className="space-y-2">

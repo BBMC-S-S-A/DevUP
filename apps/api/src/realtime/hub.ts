@@ -15,11 +15,21 @@ import type { WebSocket } from "ws";
  * haya dos, este archivo es el que hay que respaldar con Redis pub/sub, y solo
  * este.
  */
-export type Member = {
+/**
+ * Lo mínimo que el hub necesita saber de alguien para repartirle mensajes.
+ * Cada sala añade encima lo suyo: la de voz, el estado del micrófono; la del
+ * mundo, dónde está parado.
+ */
+export type BaseMember = {
   peerId: string;
+  socket: WebSocket;
+  /** Marca del último pong, para detectar sockets zombis. */
+  alive: boolean;
+};
+
+export type Member = BaseMember & {
   userId: string;
   displayName: string;
-  socket: WebSocket;
   muted: boolean;
   camera: boolean;
   sharing: boolean;
@@ -32,16 +42,20 @@ export type Member = {
    */
   cameraStreamId?: string | null;
   screenStreamId?: string | null;
-  /** Marca del último pong, para detectar sockets zombis. */
-  alive: boolean;
 };
 
 export type Outbound = Record<string, unknown> & { type: string };
 
-export class Hub {
-  private readonly rooms = new Map<string, Map<string, Member>>();
+/**
+ * Genérico en el tipo de miembro para que la sala del mundo no tenga que
+ * duplicar el reparto ni arrastrar campos que no usa (micrófono, cámara).
+ * El día que la presencia haya que respaldarla con Redis, sigue siendo un
+ * solo sitio que tocar.
+ */
+export class Hub<M extends BaseMember = Member> {
+  private readonly rooms = new Map<string, Map<string, M>>();
 
-  join(roomId: string, member: Member): void {
+  join(roomId: string, member: M): void {
     let room = this.rooms.get(roomId);
     if (!room) {
       room = new Map();
@@ -57,11 +71,11 @@ export class Hub {
     if (room.size === 0) this.rooms.delete(roomId);
   }
 
-  members(roomId: string): Member[] {
+  members(roomId: string): M[] {
     return [...(this.rooms.get(roomId)?.values() ?? [])];
   }
 
-  get(roomId: string, peerId: string): Member | undefined {
+  get(roomId: string, peerId: string): M | undefined {
     return this.rooms.get(roomId)?.get(peerId);
   }
 
@@ -69,6 +83,24 @@ export class Hub {
   broadcast(roomId: string, payload: Outbound, exceptPeerId?: string): void {
     for (const member of this.members(roomId)) {
       if (member.peerId === exceptPeerId) continue;
+      send(member.socket, payload);
+    }
+  }
+
+  /**
+   * Envía solo a quien cumpla la condición. Existe para el mundo: qué zona
+   * pisa alguien no se le puede contar a quien no tiene acceso a esa zona,
+   * porque el identificador de la zona lleva al canal que proyecta.
+   */
+  broadcastWhere(
+    roomId: string,
+    payload: Outbound,
+    allowed: (member: M) => boolean,
+    exceptPeerId?: string,
+  ): void {
+    for (const member of this.members(roomId)) {
+      if (member.peerId === exceptPeerId) continue;
+      if (!allowed(member)) continue;
       send(member.socket, payload);
     }
   }
@@ -91,9 +123,43 @@ export function send(socket: WebSocket, payload: Outbound): void {
   }
 }
 
+/**
+ * Alguien dentro de la oficina de un workspace.
+ *
+ * La posición vive aquí y no en Postgres, por lo mismo que el estado en vivo
+ * de una llamada: se limpia sola cuando el socket se cierra. Una tabla se
+ * quedaría con gente de pie en una oficina vacía.
+ */
+export type WorldMember = BaseMember & {
+  userId: string;
+  displayName: string;
+  /** Coordenadas en tiles, con decimales: el avatar se mueve entre casillas. */
+  x: number;
+  y: number;
+  facing: "n" | "s" | "e" | "o";
+  moving: boolean;
+  /** Sentado en un mueble: cambia la postura y bloquea el movimiento. */
+  sitting: boolean;
+  /** Zona que pisa ahora mismo, o null si está en el pasillo. */
+  zoneId: string | null;
+  /**
+   * Zonas que esta persona puede ver, resuelto al conectar. El reparto de
+   * «fulano entró en la zona X» se filtra con esto: el identificador de una
+   * zona lleva a su canal, así que contárselo a quien no tiene acceso es
+   * decirle que ese canal existe.
+   */
+  allowedZones: Set<string>;
+  /** Última vez que mandó posición, para acotar la frecuencia. */
+  lastMoveAt: number;
+  /** Se movió desde el último tick y hay que incluirlo en el siguiente. */
+  dirty: boolean;
+};
+
 export const voiceHub = new Hub();
 export const fileHub = new Hub();
 /** Una sala por canal de conversación, para repartir los mensajes nuevos. */
 export const channelHub = new Hub();
 /** Una sala por persona, para las notificaciones. */
 export const userHub = new Hub();
+/** Una sala por workspace: la oficina de la vista inmersiva. */
+export const worldHub = new Hub<WorldMember>();

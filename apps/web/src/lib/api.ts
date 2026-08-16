@@ -86,6 +86,10 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body }),
+  // PUT y no PATCH donde el cuerpo es el recurso entero: el avatar se manda
+  // completo siempre, y mandarlo completo por PATCH invita a que el día que
+  // alguien mande media pieza el servidor tenga que adivinar el resto.
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 

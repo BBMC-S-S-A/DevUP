@@ -1,0 +1,20 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { WorldView } from "@/components/world/WorldView";
+
+/**
+ * La oficina del workspace.
+ *
+ * Ocupa la altura completa y no lleva relleno: el lienzo se dimensiona solo a
+ * lo que le den, y un margen aquí saldría como una franja negra alrededor del
+ * mundo.
+ */
+export default function OfficePage() {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  return (
+    <div className="h-screen w-full">
+      <WorldView workspaceId={workspaceId} />
+    </div>
+  );
+}

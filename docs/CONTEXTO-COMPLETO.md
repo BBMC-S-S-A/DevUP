@@ -522,6 +522,12 @@ seis semanas más construyendo la capa de infraestructura encima.
 - Presencia distribuida (Redis) cuando haya más de una instancia de la API
 - Modelo de precios: por asiento, por conexión o por consumo de agentes
 - Residencia de datos: dónde viven grabaciones y archivos
+- **Vista inmersiva opcional** —una oficina 2D con avatares junto a la interfaz
+  actual—. Analizada y con plan por fases en
+  [`decisiones/0002-vistas-profesional-e-inmersiva.md`](decisiones/0002-vistas-profesional-e-inmersiva.md):
+  viable, y con un argumento arquitectónico a favor (el audio por proximidad
+  reparte la malla WebRTC en corrillos pequeños en vez de forzar un SFU). Falta
+  el visto bueno sobre alcance y calendario
 
 ### Decisiones ya cerradas
 
