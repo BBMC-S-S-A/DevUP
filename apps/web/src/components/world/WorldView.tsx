@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Volume2, Users, Shirt, Pencil } from "lucide-react";
+import { Loader2, Volume2, Users, Shirt, Pencil, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
@@ -48,6 +48,11 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const [map, setMap] = useState<WorldMap | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  /** La caja de escribir. Abierta, el teclado deja de mover al avatar. */
+  const [talking, setTalking] = useState(false);
+  const [draft, setDraft] = useState("");
+  const talkingRef = useRef(false);
+  talkingRef.current = talking;
 
   const loadMap = useCallback(
     () =>
@@ -192,6 +197,26 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   // --- Teclado --------------------------------------------------------------
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
+      // Escribiendo tampoco se camina, ni se abre nada con E: cada tecla es
+      // una letra. Sin esto, escribir «hasta luego» manda al avatar a dar una
+      // vuelta por la sala mientras se teclea.
+      if (talkingRef.current) return;
+
+      if (event.code === "KeyT" && zoneRef.current) {
+        event.preventDefault();
+        setTalking(true);
+        return;
+      }
+      if (event.code.startsWith("Digit") && !event.metaKey && !event.ctrlKey) {
+        const kinds = ["wave", "yes", "clap", "hand"] as const;
+        const index = Number(event.code.slice(5)) - 1;
+        if (index >= 0 && index < kinds.length) {
+          event.preventDefault();
+          emoteRef.current(kinds[index]!);
+          return;
+        }
+      }
+
       // Editando no se camina. Con las dos cosas a la vez, colocar un mueble
       // con la W pulsada manda al avatar contra la pared del fondo.
       if (editorActiveRef.current) {
@@ -245,7 +270,9 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   zoneRef.current = world.zone;
 
   // --- Bucle de animación ---------------------------------------------------
-  const { step, stateRef, avatars, sit } = world;
+  const { step, stateRef, avatars, sit, say, emote, selfBubbleRef, selfEmoteRef } = world;
+  const emoteRef = useRef(emote);
+  emoteRef.current = emote;
   const sitRef = useRef(sit);
   sitRef.current = sit;
   const selfUserId = user?.id ?? "";
@@ -300,7 +327,15 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
       render(ctx, {
         scene,
-        self: { ...self, displayName },
+        self: {
+          ...self,
+          displayName,
+          bubble: selfBubbleRef.current?.text,
+          emote: selfEmoteRef.current?.kind,
+          emoteProgress: selfEmoteRef.current
+            ? Math.max(0, Math.min(1, 1 - (selfEmoteRef.current.until - now) / 2200))
+            : 0,
+        },
         peers: [...stateRef.current.peers.values()],
         avatars,
         selfUserId,
@@ -323,7 +358,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", resize);
     };
-  }, [scene, step, stateRef, avatars, selfUserId, displayName]);
+  }, [scene, step, stateRef, avatars, selfUserId, displayName, selfBubbleRef, selfEmoteRef]);
 
   /**
    * Del clic a la casilla.
@@ -562,11 +597,48 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
           </p>
         ) : (
           <p className="rounded-xl border border-line bg-surface/90 px-3 py-2 text-[11px] text-faint backdrop-blur">
-            Muévete con <kbd className="text-muted">WASD</kbd> o las flechas · entra en una sala para
-            unirte a su canal
+            Muévete con <kbd className="text-muted">WASD</kbd> ·{" "}
+            <kbd className="text-muted">T</kbd> para hablar ·{" "}
+            <kbd className="text-muted">1-4</kbd> gestos
           </p>
         )}
       </div>
+
+      {talking && world.zone && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const text = draft;
+            setDraft("");
+            setTalking(false);
+            if (text.trim()) void say(text, world.zone!.channelId).catch(() => {});
+          }}
+          className="pointer-events-auto absolute inset-x-0 bottom-16 z-30 flex justify-center px-4"
+        >
+          <div className="flex w-full max-w-md items-center gap-2 rounded-xl border border-accent/40 bg-surface/95 px-3 py-2 backdrop-blur">
+            <MessageSquare size={14} className="shrink-0 text-accent" />
+            <input
+              autoFocus
+              value={draft}
+              maxLength={200}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // Escape cierra sin mandar. El evento se para aquí para que no
+                // llegue al manejador global, que lo usa para cerrar el editor.
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  setDraft("");
+                  setTalking(false);
+                }
+              }}
+              onBlur={() => setTalking(false)}
+              placeholder={`Decir algo en #${world.zone.channelName}…`}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-faint"
+            />
+            <span className="shrink-0 text-[10px] text-faint">queda en el canal</span>
+          </div>
+        </form>
+      )}
 
       {editor.active && editingZone && <ZoneEditor zone={editingZone} editor={editor} />}
 

@@ -20,6 +20,15 @@ const SEND_MS = 100;
  * última posición conocida y el movimiento se lee continuo.
  */
 const SMOOTH_TAU = 70;
+/**
+ * Cuánto dura una burbuja en pantalla.
+ *
+ * Cuatro segundos y medio: lo que se tarda en leer una frase corta sin
+ * quedarse mirando. Permanentes convertirían la oficina en un muro de
+ * bocadillos, y el mensaje no se pierde — está en el canal.
+ */
+const BUBBLE_MS = 4500;
+const EMOTE_MS = 2200;
 
 export type WorldStatus = "idle" | "connecting" | "live" | "error";
 
@@ -61,6 +70,8 @@ export function useWorld({
   });
   const lastSentRef = useRef(0);
   const lastSittingRef = useRef(false);
+  const selfBubbleRef = useRef<{ text: string; until: number } | null>(null);
+  const selfEmoteRef = useRef<{ kind: NonNullable<Peer["emote"]>; until: number } | null>(null);
   const zoneRef = useRef<string | null>(null);
   const sceneRef = useRef<Scene | null>(scene);
   const onZoneChangeRef = useRef(onZoneChange);
@@ -159,6 +170,24 @@ export function useWorld({
                 peer.facing = move.facing;
                 peer.moving = move.moving;
                 peer.sitting = move.sitting ?? false;
+              }
+              break;
+            }
+
+            case "peer-say": {
+              const peer = stateRef.current.peers.get(message.peerId as string);
+              if (peer) {
+                peer.bubble = message.text as string;
+                peer.bubbleUntil = performance.now() + BUBBLE_MS;
+              }
+              break;
+            }
+
+            case "peer-emote": {
+              const peer = stateRef.current.peers.get(message.peerId as string);
+              if (peer) {
+                peer.emote = message.emote as Peer["emote"];
+                peer.emoteUntil = performance.now() + EMOTE_MS;
               }
               break;
             }
@@ -268,6 +297,23 @@ export function useWorld({
     }
     self.moving = moving;
 
+    // Las burbujas y los gestos caducan solos. Se limpian aquí y no con un
+    // temporizador por burbuja: con veinte personas hablando serían veinte
+    // temporizadores vivos para algo que el bucle ya recorre.
+    const now2 = performance.now();
+    for (const peer of state.peers.values()) {
+      if (peer.bubbleUntil && peer.bubbleUntil < now2) {
+        peer.bubble = undefined;
+        peer.bubbleUntil = undefined;
+      }
+      if (peer.emoteUntil && peer.emoteUntil < now2) {
+        peer.emote = undefined;
+        peer.emoteUntil = undefined;
+      }
+    }
+    if (selfBubbleRef.current && selfBubbleRef.current.until < now2) selfBubbleRef.current = null;
+    if (selfEmoteRef.current && selfEmoteRef.current.until < now2) selfEmoteRef.current = null;
+
     // --- Interpolación de los demás ---------------------------------------
     const k = 1 - Math.exp(-dt / SMOOTH_TAU);
     for (const peer of state.peers.values()) {
@@ -312,6 +358,34 @@ export function useWorld({
   }, []);
 
   /**
+   * Decir algo en la sala.
+   *
+   * Primero el mensaje de verdad, al canal, por HTTP. La burbuja se manda
+   * después y solo si el mensaje se guardó: si el orden fuera al revés,
+   * bastaría con que fallara el POST para que la gente viera un bocadillo de
+   * algo que no existe en ninguna parte.
+   */
+  const say = useCallback(
+    async (text: string, channelId: string) => {
+      const trimmed = text.trim().slice(0, 200);
+      if (trimmed.length === 0) return;
+
+      await api.post(`/channels/${channelId}/messages`, { body: trimmed });
+      socketRef.current?.send(JSON.stringify({ type: "say", text: trimmed }));
+
+      // La propia burbuja no llega por el socket —el servidor no se la manda a
+      // quien la envió— así que se pone a mano.
+      selfBubbleRef.current = { text: trimmed, until: performance.now() + BUBBLE_MS };
+    },
+    [],
+  );
+
+  const emote = useCallback((kind: NonNullable<Peer["emote"]>) => {
+    socketRef.current?.send(JSON.stringify({ type: "emote", emote: kind }));
+    selfEmoteRef.current = { kind, until: performance.now() + EMOTE_MS };
+  }, []);
+
+  /**
    * Sentarse en una plaza, o levantarse.
    *
    * La posición se ajusta a la plaza exacta: sentarse «más o menos donde
@@ -343,5 +417,9 @@ export function useWorld({
     displayName,
     step,
     sit,
+    say,
+    emote,
+    selfBubbleRef,
+    selfEmoteRef,
   };
 }

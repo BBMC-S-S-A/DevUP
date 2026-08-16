@@ -26,6 +26,8 @@ import {
   drawWall,
   drawZoneFloor,
   drawZoneLabel,
+  drawBubble,
+  drawEmote,
 } from "./atlas";
 import { drawProp } from "./furniture";
 import type { Prop } from "./props";
@@ -37,7 +39,17 @@ export type Camera = { x: number; y: number; scale: number };
 export type RenderInput = {
   scene: Scene;
   /** Yo. Se dibuja como los demás, pero con el nombre resaltado. */
-  self: { x: number; y: number; facing: Facing; moving: boolean; sitting: boolean; displayName: string };
+  self: {
+    x: number;
+    y: number;
+    facing: Facing;
+    moving: boolean;
+    sitting: boolean;
+    displayName: string;
+    bubble?: string;
+    emote?: Peer["emote"];
+    emoteProgress?: number;
+  };
   peers: Peer[];
   avatars: Map<string, Avatar>;
   selfUserId: string;
@@ -159,6 +171,9 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
     facing: self.facing,
     moving: self.moving,
     sitting: self.sitting,
+    bubble: self.bubble,
+    emote: self.emote,
+    emoteUntil: self.emote ? 1 : undefined,
     zoneId: null,
   };
 
@@ -173,6 +188,8 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
   }
 
   standing.sort((a, b) => a.y - b.y);
+
+  const bubbles: { x: number; y: number; text: string }[] = [];
 
   for (const item of standing) {
     if (item.kind === "cell") {
@@ -218,7 +235,20 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
     drawAvatar(ctx, px, py, avatar, peer.facing, peer.moving, time, peer.sitting);
     ctx.globalAlpha = 1;
     drawNameplate(ctx, px, py, peer.displayName, isSelf ? "#5b8cff" : audible ? "#e7ebf2" : "#5c6577");
+
+    if (peer.emote) {
+      // Progreso de 0 a 1 a lo largo de la vida del gesto. Para uno mismo no
+      // hay marca de caducidad en el par, así que se usa la del componente.
+      const remaining = peer.emoteUntil ? peer.emoteUntil - performance.now() : 0;
+      const progress = isSelf ? (self.emoteProgress ?? 0) : Math.max(0, Math.min(1, 1 - remaining / 2200));
+      drawEmote(ctx, px, py, peer.emote, progress);
+    }
+    // La burbuja al final del todo: tiene que leerse aunque haya un muro o
+    // alguien delante.
+    if (peer.bubble) bubbles.push({ x: px, y: py, text: peer.bubble });
   }
+
+  for (const bubble of bubbles) drawBubble(ctx, bubble.x, bubble.y, bubble.text);
 
   // --- Rótulos de zona ------------------------------------------------------
   // Al final y sin ordenar: son interfaz, no parte del espacio, y tienen que

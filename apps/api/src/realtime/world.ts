@@ -50,6 +50,24 @@ const inbound = z.discriminatedUnion("type", [
     sitting: z.boolean().optional(),
   }),
   z.object({ type: z.literal("zone"), zoneId: z.string().uuid().nullable() }),
+  /**
+   * Lo que alguien acaba de decir en su sala.
+   *
+   * EL SERVIDOR NO GUARDA ESTO. El mensaje de verdad ya lo escribió el cliente
+   * en el canal por HTTP, con su fila, su historial y su búsqueda; esto es
+   * solo el aviso para que salga la burbuja sobre el avatar sin esperar al
+   * siguiente sondeo. Es el mismo papel de cartero que ya tiene con la SDP de
+   * WebRTC: reparte sin entender ni conservar.
+   *
+   * Si se guardara aquí habría dos fuentes del mismo mensaje y una de ellas
+   * invisible desde la vista profesional, que es justo lo que la regla del
+   * documento 0002 prohíbe.
+   */
+  z.object({ type: z.literal("say"), text: z.string().min(1).max(200) }),
+  z.object({
+    type: z.literal("emote"),
+    emote: z.enum(["wave", "yes", "clap", "hand"]),
+  }),
   z.object({ type: z.literal("pong") }),
 ]);
 
@@ -297,6 +315,35 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
           me.moving = message.data.moving;
           me.sitting = message.data.sitting ?? false;
           me.dirty = true;
+          return;
+        }
+
+        case "say": {
+          // Solo se habla dentro de una sala. En el pasillo no hay canal donde
+          // escribir el mensaje, así que una burbuja allí sería una
+          // conversación que la vista profesional no puede ver. Ver §11 bis
+          // del documento 0002.
+          if (!me.zoneId) return;
+          const zoneId = me.zoneId;
+          worldHub.broadcastWhere(
+            workspaceId,
+            { type: "peer-say", peerId, text: message.data.text },
+            // Y solo lo oye quien puede ver esa sala: el texto de un canal
+            // privado no puede salir de él por la puerta del mundo.
+            (other) => other.allowedZones.has(zoneId),
+            peerId,
+          );
+          return;
+        }
+
+        case "emote": {
+          // Los gestos sí van a toda la oficina: saludar desde el pasillo es
+          // media gracia de saludar, y un gesto no lleva contenido.
+          worldHub.broadcast(
+            workspaceId,
+            { type: "peer-emote", peerId, emote: message.data.emote },
+            peerId,
+          );
           return;
         }
 

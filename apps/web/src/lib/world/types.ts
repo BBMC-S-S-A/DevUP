@@ -100,6 +100,12 @@ export type Peer = {
   moving: boolean;
   /** Sentado en un mueble. Cambia la postura y bloquea el movimiento. */
   sitting: boolean;
+  /** Lo último que dijo, mientras dure la burbuja. */
+  bubble?: string;
+  bubbleUntil?: number;
+  /** Gesto en curso. */
+  emote?: "wave" | "yes" | "clap" | "hand";
+  emoteUntil?: number;
   zoneId: string | null;
 };
 

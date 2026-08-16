@@ -614,3 +614,78 @@ function shade(hex: string, factor: number): string {
   const b = clamp((n & 255) * factor);
   return `rgb(${r},${g},${b})`;
 }
+
+
+/**
+ * La burbuja de lo que alguien acaba de decir.
+ *
+ * Se parte en renglones a mano: el canvas no sabe ajustar texto, y una frase
+ * de doscientos caracteres en una sola línea se sale de la pantalla por los
+ * dos lados. Tres renglones como mucho — lo que no quepa está en el canal,
+ * que es donde vive el mensaje de verdad.
+ */
+export function drawBubble(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+): void {
+  ctx.font = "500 9px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const maxWidth = 108;
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (ctx.measureText(candidate).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+      if (lines.length === 3) break;
+    } else {
+      line = candidate;
+    }
+  }
+  if (lines.length < 3 && line) lines.push(line);
+  if (lines.length === 3 && ctx.measureText(line).width > maxWidth) lines[2] = `${lines[2]!.slice(0, 24)}…`;
+
+  const width = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width))) + 12;
+  const height = lines.length * 11 + 8;
+  const top = y - 70 - height;
+
+  ctx.fillStyle = "rgba(231,235,242,0.96)";
+  roundRect(ctx, x - width / 2, top, width, height, 5);
+  ctx.fill();
+  // Pico hacia el avatar. Sin él la burbuja flota y no se sabe de quién es
+  // cuando hay dos personas juntas.
+  ctx.beginPath();
+  ctx.moveTo(x - 4, top + height);
+  ctx.lineTo(x, top + height + 5);
+  ctx.lineTo(x + 4, top + height);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#12161d";
+  lines.forEach((l, i) => ctx.fillText(l, x, top + 8 + i * 11));
+}
+
+/** Un gesto sobre la cabeza: sube y se desvanece. */
+export function drawEmote(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  emote: "wave" | "yes" | "clap" | "hand",
+  progress: number,
+): void {
+  const glyph = { wave: "👋", yes: "👍", clap: "👏", hand: "✋" }[emote];
+  // Sube quince píxeles a lo largo de su vida y se apaga al final. Un icono
+  // que aparece y desaparece de golpe se pierde si mirabas a otro lado.
+  ctx.globalAlpha = progress > 0.75 ? (1 - progress) * 4 : 1;
+  ctx.font = "16px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(glyph, x, y - 58 - progress * 15);
+  ctx.globalAlpha = 1;
+}
