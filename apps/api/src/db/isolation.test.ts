@@ -549,6 +549,117 @@ async function main(): Promise<void> {
     });
     check("Bruno no puede vestir el avatar de Ana", brunoTouchedAna === 0);
 
+    // --- Ventas ------------------------------------------------------------
+    //
+    // Cuatro tablas nuevas con `organization_id`, así que cuatro casos nuevos.
+    // Lo que se comprueba no es que la aplicación filtre: es que Bruno no vea
+    // el embudo de Acme aunque la consulta no lleve ni un `where`.
+    console.log("\nVentas");
+
+    const acmeSales = await withUser(ana, async (db) => {
+      const service = (
+        await db.query<{ id: string }>(
+          `insert into services (organization_id, name, unit_price_cents, unit, created_by)
+           values ($1,'Auditoría de infraestructura',150000,'jornada',$2) returning id`,
+          [acme.org, ana],
+        )
+      ).rows[0]!.id;
+
+      const client = (
+        await db.query<{ id: string }>(
+          `insert into clients (organization_id, name, contact_email, created_by)
+           values ($1,'Cliente Confidencial','quien@cliente.test',$2) returning id`,
+          [acme.org, ana],
+        )
+      ).rows[0]!.id;
+
+      const deal = (
+        await db.query<{ id: string }>(
+          `insert into opportunities (organization_id, client_id, title, owner_id, created_by)
+           values ($1,$2,'Migración del backend',$3,$3) returning id`,
+          [acme.org, client, ana],
+        )
+      ).rows[0]!.id;
+
+      await db.query(
+        `insert into opportunity_items (opportunity_id, service_id, name, unit_price_cents, quantity)
+         values ($1,$2,'Auditoría de infraestructura',150000,3)`,
+        [deal, service],
+      );
+
+      return { service, client, deal };
+    });
+
+    check("Ana ve su servicio", (await count(ana, "services")) === 1);
+    check("Ana ve su cliente", (await count(ana, "clients")) === 1);
+    check("Carla, de la misma organización, ve el embudo", (await count(carla, "opportunities")) === 1);
+    check("Bruno no ve ningún servicio de Acme", (await count(bruno, "services")) === 0);
+    check("Bruno no ve ningún cliente de Acme", (await count(bruno, "clients")) === 0);
+    check("Bruno no ve ninguna oportunidad de Acme", (await count(bruno, "opportunities")) === 0);
+    check(
+      "Bruno tampoco ve las líneas de la cotización",
+      (await count(bruno, "opportunity_items")) === 0,
+    );
+
+    const brunoFindsClient = await withUser(bruno, async (db) => {
+      const { rows } = await db.query(
+        "select id from clients where name = 'Cliente Confidencial'",
+      );
+      return rows.length;
+    });
+    check("Bruno no encuentra el cliente ni buscándolo por nombre", brunoFindsClient === 0);
+
+    await denied("Bruno no puede crear un cliente en la organización de Ana", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into clients (organization_id, name) values ($1,$2)", [
+          acme.org,
+          "cliente colado",
+        ]),
+      ),
+    );
+
+    const brunoMoved = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "update opportunities set stage = 'won' where id = $1",
+        [acmeSales.deal],
+      );
+      return rowCount ?? 0;
+    });
+    check("Bruno no puede mover una venta ajena por el embudo", brunoMoved === 0);
+
+    // El importe sale de las líneas y no de una columna: tres jornadas a 1.500 €.
+    const amount = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ cents: string }>(
+        "select public.opportunity_amount_cents($1)::text as cents",
+        [acmeSales.deal],
+      );
+      return Number(rows[0]!.cents);
+    });
+    check("el importe se calcula desde el desglose", amount === 450000, `salió ${amount}`);
+
+    // La fecha de cierre la pone la base, no la aplicación. Es de lo que
+    // colgará el objetivo trimestral, y depender de que cada ruta se acuerde
+    // de escribirla deja objetivos que no avanzan sin que nada falle.
+    const dealClosed = await withUser(ana, async (db) => {
+      await db.query("update opportunities set stage = 'won' where id = $1", [acmeSales.deal]);
+      const { rows } = await db.query<{ closed_at: Date | null }>(
+        "select closed_at from opportunities where id = $1",
+        [acmeSales.deal],
+      );
+      return rows[0]?.closed_at !== null;
+    });
+    check("al ganarse una venta, la base marca la fecha de cierre", dealClosed);
+
+    const reopened = await withUser(ana, async (db) => {
+      await db.query("update opportunities set stage = 'proposal' where id = $1", [acmeSales.deal]);
+      const { rows } = await db.query<{ closed_at: Date | null }>(
+        "select closed_at from opportunities where id = $1",
+        [acmeSales.deal],
+      );
+      return rows[0]?.closed_at === null;
+    });
+    check("y al reabrirla la borra", reopened);
+
     // --- El editor ---------------------------------------------------------
     //
     // Decorar es social: quien pertenece al canal puede amueblar su sala. Lo
