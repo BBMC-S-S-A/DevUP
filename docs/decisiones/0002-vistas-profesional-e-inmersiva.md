@@ -401,6 +401,73 @@ oficina 2D, y llamarla por su nombre la vende mejor.
 
 ---
 
+## 11 bis. Lo que se aprendió construyéndolo
+
+Añadido después de implementar la Fase 1. Son las cosas que el análisis no
+podía saber.
+
+### El audio del pasillo choca con la regla de §5, y por eso no se hizo
+
+Estaba planificado: proximidad en el pasillo, con la histéresis de tres radios
+para que abrir y cerrar conexiones al caminar no costara los 1–3 s de ICE. Al
+ir a escribirlo apareció el problema, y no es de implementación.
+
+**Para hablar en el pasillo hace falta una sala de audio que no es un canal.**
+En el pasillo nadie está en ninguna zona, así que no hay `join_call` ni
+historial ni consentimiento de grabación: sería una conversación que existe
+solo dentro del mundo. Es exactamente lo que la regla de §5 prohíbe, y el
+fallo que describe —quien usa la vista profesional no encuentra esa
+conversación— se cumple al pie de la letra.
+
+Las salidas eran tres y ninguna sale gratis:
+
+| Salida | Qué cuesta |
+|---|---|
+| Sala de audio efímera por workspace, sin historial | Rompe la regla. Se puede defender diciendo «el pasillo no se graba», pero es una conversación que la vista profesional no puede tener |
+| Un canal de verdad para el pasillo | Absurdo: un canal «pasillo» en la barra lateral que nadie abrió y del que nadie se puede salir |
+| No hay audio en el pasillo | Se pierde el encuentro casual, que es medio argumento de la funcionalidad |
+
+**Se eligió la tercera, y conviene decir por qué no es una renuncia.** El
+modelo queda coherente: en las salas se habla y queda registrado en su canal;
+el pasillo es tránsito. Coincide con cómo funciona una oficina de verdad y, lo
+que importa más, mantiene cierta la promesa de que la vista inmersiva es
+opcional.
+
+**Dónde sí hace falta la histéresis de tres radios, y sigue pendiente:** dentro
+de una sala grande. Si doce personas entran a «desarrollo», la malla vuelve a
+pedir once conexiones por cabeza y se rompe igual. El reparto por zonas resuelve
+el caso de veinte personas en cuatro salas; no resuelve el de doce en una.
+Aplicar el radio a *con quién se conecta uno dentro del canal* es lo que lo
+cierra, cabe entero dentro de la regla, y es trabajo real sobre
+`useVoiceRoom.ts` — hay que decidir quién inicia la oferta al acercarse dos
+personas, y la simetría de la distancia es lo que lo hace posible sin
+coordinación extra.
+
+### El renderizador aislado no basta
+
+Tres fallos de la Fase 1 no los vio nada salvo abrir la aplicación entera en un
+navegador: un bucle infinito de renderizado por un efecto con una dependencia
+que se recreaba sola, un zoom que dejaba seis casillas en pantalla, y un punto
+de aparición en mitad de un descampado. Los tipos, las 69 comprobaciones de
+aislamiento y las 13 del socket estaban todas en verde.
+
+Los dos últimos ni siquiera son fallos que una aserción pueda cazar: no
+fallaban, se veían mal. De ahí que `e2e/` deje capturas y que mirarlas sea
+parte de la prueba.
+
+### La geometría del mobiliario manda sobre el tamaño de las salas
+
+Las salas se dimensionaron a 8×7 en el análisis. Al amueblarlas resultó que
+dejan 6×5 de suelo útil y que un escritorio ocupa dos casillas: una sala de
+trabajo con tres puestos se quedaba sin sitio para pasar por detrás de las
+sillas. Es un número que no se acierta sobre el papel, porque depende de un
+mobiliario que todavía no existía. Ahora son 11×9.
+
+Es también el argumento para dibujar geometría antes de comprar arte: si el
+pack hubiera llegado primero, el error habría sido al revés y más caro.
+
+---
+
 ## 12. Preguntas abiertas
 
 1. ¿Se acepta la secuencia —semilla durante las dos semanas de uso real, Fase 1
