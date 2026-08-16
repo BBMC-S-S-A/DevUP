@@ -660,6 +660,68 @@ async function main(): Promise<void> {
     });
     check("y al reabrirla la borra", reopened);
 
+    // --- Objetivos ---------------------------------------------------------
+    //
+    // Lo que se prueba aquí no es solo el aislamiento: es que «avanza solo»
+    // sea cierto. El objetivo no guarda su progreso, así que ganar una venta
+    // tiene que moverlo sin que nadie toque el objetivo — y reabrirla tiene
+    // que devolverlo.
+    console.log("\nObjetivos");
+
+    const goal = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into goals (organization_id, name, target_cents, starts_on, ends_on, created_by)
+         values ($1,'Trimestre en curso',1000000, current_date - 30, current_date + 30, $2)
+         returning id`,
+        [acme.org, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const progress = (user: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ cents: string }>(
+          "select public.goal_progress_cents($1)::text as cents",
+          [goal],
+        );
+        return Number(rows[0]!.cents);
+      });
+
+    // La venta de más arriba quedó reabierta en 'proposal', así que el
+    // objetivo arranca a cero aunque la venta exista y valga 4.500 €.
+    check("un objetivo nace a cero aunque haya ventas abiertas", (await progress(ana)) === 0);
+
+    await withUser(ana, (db) =>
+      db.query("update opportunities set stage = 'won' where id = $1", [acmeSales.deal]),
+    );
+    check(
+      "al ganarse la venta, el objetivo avanza sin que nadie lo toque",
+      (await progress(ana)) === 450000,
+      `salió ${await progress(ana)}`,
+    );
+
+    await withUser(ana, (db) =>
+      db.query("update opportunities set stage = 'proposal' where id = $1", [acmeSales.deal]),
+    );
+    check("y al reabrirla, vuelve atrás", (await progress(ana)) === 0);
+
+    check("Bruno no ve el objetivo de Acme", (await count(bruno, "goals")) === 0);
+    check("Carla, de la misma organización, sí lo ve", (await count(carla, "goals")) === 1);
+
+    await denied("Carla, que es miembro raso, no puede fijar objetivos", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into goals (organization_id, name, target_cents, starts_on, ends_on)
+           values ($1,'objetivo colado',100, current_date, current_date)`,
+          [acme.org],
+        ),
+      ),
+    );
+
+    // Un objetivo no puede ser una rendija para contar ventas ajenas: la
+    // función es SECURITY INVOKER, así que para Bruno la suma es cero.
+    check("para Bruno, el avance de ese objetivo es cero", (await progress(bruno)) === 0);
+
     // --- El editor ---------------------------------------------------------
     //
     // Decorar es social: quien pertenece al canal puede amueblar su sala. Lo

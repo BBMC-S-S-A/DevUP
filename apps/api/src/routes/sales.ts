@@ -203,6 +203,73 @@ export async function salesRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // --- Objetivos --------------------------------------------------------------
+  /**
+   * Los objetivos con su avance.
+   *
+   * El avance no es una columna: se calcula sumando las ventas ganadas cuya
+   * fecha de cierre cae en el periodo. Por eso un objetivo «avanza solo» —
+   * nadie lo toca al cerrarse una venta, y reabrirla lo devuelve sin ningún
+   * trabajo de compensación.
+   */
+  app.get("/organizations/:orgId/goals", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select g.id, g.name, g.target_cents::text as "targetCents",
+                g.starts_on as "startsOn", g.ends_on as "endsOn",
+                public.goal_progress_cents(g.id)::text as "progressCents",
+                public.goal_deal_count(g.id) as "dealCount"
+           from goals g
+          where g.organization_id = $1
+          order by g.starts_on desc`,
+        [orgId],
+      );
+      return {
+        goals: rows.map((row) => {
+          const goal = row as Record<string, unknown> & {
+            targetCents: string;
+            progressCents: string;
+          };
+          return {
+            ...goal,
+            targetCents: Number(goal.targetCents),
+            progressCents: Number(goal.progressCents),
+          };
+        }),
+      };
+    });
+  });
+
+  app.post("/organizations/:orgId/goals", async (request, reply) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        name: z.string().trim().min(1).max(120),
+        targetCents: z.number().int().positive().max(1_000_000_000_000),
+        startsOn: z.string().date(),
+        endsOn: z.string().date(),
+      }),
+      request.body,
+    );
+
+    const goal = await withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `insert into goals (organization_id, name, target_cents, starts_on, ends_on, created_by)
+         values ($1,$2,$3,$4,$5,$6)
+         returning id, name, target_cents::text as "targetCents",
+                   starts_on as "startsOn", ends_on as "endsOn"`,
+        [orgId, body.name, body.targetCents, body.startsOn, body.endsOn, userId],
+      );
+      // Sin filas es que RLS lo denegó: fijar objetivos es de quien administra.
+      if (rows.length === 0) throw notFound("no se pudo crear el objetivo");
+      return rows[0];
+    });
+    return reply.status(201).send({ goal });
+  });
+
   // --- Líneas de la cotización ------------------------------------------------
   app.get("/opportunities/:dealId/items", async (request) => {
     const userId = requireUser(request);

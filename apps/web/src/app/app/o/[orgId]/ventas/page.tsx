@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, Plus, Users, Wrench } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Target, Users, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -35,6 +35,15 @@ type Opportunity = {
 };
 
 type Client = { id: string; name: string; contactEmail: string };
+type Goal = {
+  id: string;
+  name: string;
+  targetCents: number;
+  progressCents: number;
+  dealCount: number;
+  startsOn: string;
+  endsOn: string;
+};
 type Service = { id: string; name: string; unitPriceCents: number; unit: string; active: boolean };
 
 const STAGES: { id: Stage; label: string; accent: string }[] = [
@@ -59,21 +68,24 @@ export default function SalesPage() {
   const [deals, setDeals] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
-  const [panel, setPanel] = useState<"deal" | "client" | "service" | null>(null);
+  const [panel, setPanel] = useState<"deal" | "client" | "service" | "goal" | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [pipeline, clientList, serviceList] = await Promise.all([
+      const [pipeline, clientList, serviceList, goalList] = await Promise.all([
         api.get<{ opportunities: Opportunity[] }>(`/organizations/${orgId}/pipeline`),
         api.get<{ clients: Client[] }>(`/organizations/${orgId}/clients`),
         api.get<{ services: Service[] }>(`/organizations/${orgId}/services`),
+        api.get<{ goals: Goal[] }>(`/organizations/${orgId}/goals`),
       ]);
       setDeals(pipeline.opportunities);
       setClients(clientList.clients);
       setServices(serviceList.services);
+      setGoals(goalList.goals);
     } catch {
       setError("no se pudo cargar el embudo");
     } finally {
@@ -155,6 +167,7 @@ export default function SalesPage() {
             </p>
           </div>
           <div className="flex gap-1.5">
+            <Toolbar icon={<Target size={13} />} label="Objetivo" onClick={() => setPanel("goal")} />
             <Toolbar icon={<Users size={13} />} label="Clientes" onClick={() => setPanel("client")} />
             <Toolbar icon={<Wrench size={13} />} label="Servicios" onClick={() => setPanel("service")} />
             <button
@@ -171,6 +184,49 @@ export default function SalesPage() {
         </div>
         {error && <p className="mt-2 text-xs text-danger">{error}</p>}
       </header>
+
+      {goals.length > 0 && (
+        <div className="flex gap-3 overflow-x-auto border-b border-line px-6 py-4">
+          {goals.map((goal) => {
+            // Se acota al 100 % para pintar, pero el número de arriba no: pasar
+            // del objetivo es una noticia y esconderla sería raro.
+            const ratio = goal.targetCents > 0 ? goal.progressCents / goal.targetCents : 0;
+            const done = ratio >= 1;
+            return (
+              <article
+                key={goal.id}
+                className="w-72 shrink-0 rounded-xl border border-line bg-surface p-3.5"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="truncate text-xs font-semibold">{goal.name}</h3>
+                  <span
+                    className={`shrink-0 font-mono text-[11px] tabular-nums ${done ? "text-live" : "text-muted"}`}
+                  >
+                    {Math.round(ratio * 100)}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
+                  <div
+                    className={`h-full rounded-full transition-[width] duration-500 ${done ? "bg-live" : "bg-accent"}`}
+                    style={{ width: `${Math.min(100, ratio * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-2 font-mono text-[11px] tabular-nums text-ink">
+                  {money(goal.progressCents)}{" "}
+                  <span className="text-faint">de {money(goal.targetCents)}</span>
+                </p>
+                <p className="mt-0.5 text-[10px] text-faint">
+                  {goal.dealCount === 0
+                    ? "sin ventas cerradas todavía"
+                    : `${goal.dealCount} venta${goal.dealCount === 1 ? "" : "s"} cerrada${goal.dealCount === 1 ? "" : "s"}`}
+                  {" · hasta "}
+                  {new Date(goal.endsOn).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex gap-3 overflow-x-auto p-6">
         {STAGES.map((stage) => {
@@ -295,7 +351,7 @@ function NewThing({
   onClose,
   onDone,
 }: {
-  kind: "deal" | "client" | "service";
+  kind: "deal" | "client" | "service" | "goal";
   orgId: string;
   clients: Client[];
   services: Service[];
@@ -314,6 +370,7 @@ function NewThing({
     deal: "Nueva venta",
     client: "Nuevo cliente",
     service: "Nuevo servicio",
+    goal: "Nuevo objetivo",
   } as const;
 
   const submit = async () => {
@@ -322,6 +379,20 @@ function NewThing({
     try {
       if (kind === "client") {
         await api.post(`/organizations/${orgId}/clients`, { name, contactEmail: extra });
+      } else if (kind === "goal") {
+        const cents = Math.round(Number(price.replace(",", ".")) * 100) || 0;
+        // Por defecto, el trimestre natural en curso. Es el caso común y evita
+        // dos selectores de fecha en el camino más habitual.
+        const now = new Date();
+        const quarter = Math.floor(now.getMonth() / 3);
+        const startsOn = new Date(Date.UTC(now.getFullYear(), quarter * 3, 1));
+        const endsOn = new Date(Date.UTC(now.getFullYear(), quarter * 3 + 3, 0));
+        await api.post(`/organizations/${orgId}/goals`, {
+          name,
+          targetCents: cents,
+          startsOn: startsOn.toISOString().slice(0, 10),
+          endsOn: endsOn.toISOString().slice(0, 10),
+        });
       } else if (kind === "service") {
         // El precio se escribe en euros y se manda en céntimos. Redondear aquí
         // y una sola vez evita que un 1500,005 llegue a la base.
@@ -383,7 +454,9 @@ function NewThing({
                   ? "Migración del backend"
                   : kind === "client"
                     ? "Nébula Studio"
-                    : "Auditoría de infraestructura"
+                    : kind === "goal"
+                      ? "Trimestre en curso"
+                      : "Auditoría de infraestructura"
               }
               className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
             />
@@ -395,6 +468,18 @@ function NewThing({
                 value={extra}
                 onChange={(event) => setExtra(event.target.value)}
                 placeholder="hola@cliente.com"
+                className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+              />
+            </Field>
+          )}
+
+          {kind === "goal" && (
+            <Field label="Objetivo del trimestre (€)">
+              <input
+                value={price}
+                onChange={(event) => setPrice(event.target.value)}
+                inputMode="decimal"
+                placeholder="50000"
                 className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
               />
             </Field>
