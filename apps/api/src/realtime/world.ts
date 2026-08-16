@@ -44,6 +44,10 @@ const inbound = z.discriminatedUnion("type", [
     y: z.number().finite(),
     facing: z.enum(["n", "s", "e", "o"]),
     moving: z.boolean(),
+    // Sentarse viaja con la posición y no en un mensaje propio: cambia a la
+    // vez que las coordenadas —uno se sienta *en* un sitio— y separarlo
+    // dejaría un instante en que el avatar está sentado en el suelo.
+    sitting: z.boolean().optional(),
   }),
   z.object({ type: z.literal("zone"), zoneId: z.string().uuid().nullable() }),
   z.object({ type: z.literal("pong") }),
@@ -57,6 +61,7 @@ const publicMember = (m: WorldMember) => ({
   y: m.y,
   facing: m.facing,
   moving: m.moving,
+  sitting: m.sitting,
 });
 
 /**
@@ -223,6 +228,7 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
       y: identity.spawn.y,
       facing: "s",
       moving: false,
+      sitting: false,
       zoneId: null,
       allowedZones: identity.allowedZones,
       lastMoveAt: 0,
@@ -289,6 +295,7 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
           me.y = clamp(message.data.y, 0, 200);
           me.facing = message.data.facing;
           me.moving = message.data.moving;
+          me.sitting = message.data.sitting ?? false;
           me.dirty = true;
           return;
         }

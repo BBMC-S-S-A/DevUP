@@ -8,6 +8,7 @@ import { useSession } from "@/lib/session";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { TILE } from "@/lib/world/atlas";
 import { render, type Camera } from "@/lib/world/renderer";
+import { seatsOf } from "@/lib/world/props";
 import { buildScene, type Scene } from "@/lib/world/scene";
 import type { Input } from "@/lib/world/useWorld";
 import { useWorld } from "@/lib/world/useWorld";
@@ -208,7 +209,10 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       }
       if (event.code === "KeyE" && actionRef.current) {
         event.preventDefault();
-        router.push(actionRef.current.href);
+        const current = actionRef.current;
+        if (current.kind === "sit") sitRef.current(current.seat);
+        else if (current.kind === "stand") sitRef.current(null);
+        else router.push(current.href);
         return;
       }
       const key = KEYS[event.code];
@@ -241,7 +245,9 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   zoneRef.current = world.zone;
 
   // --- Bucle de animación ---------------------------------------------------
-  const { step, stateRef, avatars } = world;
+  const { step, stateRef, avatars, sit } = world;
+  const sitRef = useRef(sit);
+  sitRef.current = sit;
   const selfUserId = user?.id ?? "";
   const displayName = user?.displayName ?? "tú";
 
@@ -377,30 +383,56 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
    * recorre por fotograma pero solo se toca el estado cuando el rótulo
    * cambia, que es unas pocas veces por minuto.
    */
-  const [action, setAction] = useState<{ label: string; href: string } | null>(null);
+  type Action =
+    | { kind: "link"; label: string; href: string }
+    | { kind: "sit"; label: string; seat: { x: number; y: number; facing: "n" | "s" | "e" | "o" } }
+    | { kind: "stand"; label: string };
+
+  const [action, setAction] = useState<Action | null>(null);
   const actionRef = useRef(action);
   actionRef.current = action;
 
-  const findAction = useCallback((): { label: string; href: string } | null => {
+  const findAction = useCallback((): Action | null => {
     if (!scene || editor.active) return null;
     const self = stateRef.current.self;
     const zone = zoneRef.current;
 
-    let best: { label: string; href: string } | null = null;
+    // Sentado, la única acción es levantarse. Ofrecer «ver el tablero» a quien
+    // está en una silla obligaría a decidir si levantarse primero, y no hay
+    // respuesta buena.
+    if (self.sitting) return { kind: "stand", label: "Levantarse" };
+
+    let best: Action | null = null;
     let bestDistance = 2.1;
+
+    // Las plazas primero: si hay una silla al lado, sentarse gana sobre abrir
+    // un panel. Es la acción más inmediata y la que menos cuesta deshacer.
+    for (const piece of scene.props) {
+      for (const seat of seatsOf(piece)) {
+        const distance = Math.hypot(seat.x + 0.5 - self.x, seat.y + 0.9 - self.y);
+        // 1,8 y no 1,4. Con 1,4, estar de pie en la fila del escritorio y la
+        // silla justo debajo daba 1,49 — fuera por cinco centésimas, y desde
+        // fuera parece que sentarse no funciona. Una casilla y media es lo que
+        // se lee como «estoy al lado de esta silla».
+        if (distance > 1.8 || distance > bestDistance) continue;
+        best = { kind: "sit", label: "Sentarse", seat };
+        bestDistance = distance;
+      }
+    }
 
     for (const piece of [...scene.props, ...scene.wallProps]) {
       const distance = Math.hypot(piece.x + 0.5 - self.x, piece.y + 0.9 - self.y);
       if (distance > bestDistance) continue;
 
       if (piece.kind === "whiteboard" || piece.kind === "flipchart") {
-        best = { label: "Ver el tablero", href: `/app/w/${workspaceId}/board` };
+        best = { kind: "link", label: "Ver el tablero", href: `/app/w/${workspaceId}/board` };
         bestDistance = distance;
       } else if (piece.kind === "bookshelf") {
-        best = { label: "Abrir la biblioteca", href: `/app/w/${workspaceId}` };
+        best = { kind: "link", label: "Abrir la biblioteca", href: `/app/w/${workspaceId}` };
         bestDistance = distance;
       } else if ((piece.kind === "monitor" || piece.kind === "dualMonitor") && zone) {
         best = {
+          kind: "link",
           label: `Abrir #${zone.channelName}`,
           href: `/app/w/${workspaceId}/c/${zone.channelId}`,
         };

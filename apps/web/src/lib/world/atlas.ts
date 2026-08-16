@@ -320,10 +320,14 @@ export function drawAvatar(
   facing: "n" | "s" | "e" | "o",
   moving: boolean,
   time: number,
+  sitting = false,
 ): void {
   // Dos fases de paso, no una: pie adelantado y pie atrasado, más el rebote
   // del cuerpo. Con una sola fase el avatar da botes; con dos, camina.
-  const phase = moving ? Math.floor(time / 130) % 4 : 0;
+  // Sentado no se camina: ni rebote ni balanceo, pase lo que pase con las
+  // teclas. Sin este corte, un avatar sentado con la W pulsada mueve las
+  // piernas en el sitio.
+  const phase = moving && !sitting ? Math.floor(time / 130) % 4 : 0;
   const bob = moving && (phase === 1 || phase === 3) ? 1 : 0;
   const swing = moving ? [0, 2.5, 0, -2.5][phase]! : 0;
 
@@ -345,21 +349,33 @@ export function drawAvatar(
   ctx.beginPath();
   ctx.ellipse(x, y - 1, half, 3.5, 0, 0, Math.PI * 2);
   ctx.fill();
+  void sitting;
 
-  const base = y - bob;
-  const legTop = base - 13;
-  const torsoTop = base - height + 12;
-  const headY = base - height;
+  // Sentarse baja el cuerpo entero y recoge las piernas: el asiento de una
+  // silla queda a unos ocho píxeles del suelo, y las rodillas se doblan hacia
+  // delante en vez de colgar. Con solo bajar el avatar parecía hundido en el
+  // suelo, no sentado.
+  const sit = sitting ? 7 : 0;
+  const legLength = sitting ? 6 : 13;
+  const base = y - bob - sit;
+  const legTop = base - legLength;
+  const torsoTop = base - (height - sit) + 12 + (sitting ? 4 : 0);
+  const headY = base - (height - sit) + (sitting ? 4 : 0);
 
   // Piernas, una por lado, con el balanceo del paso.
   ctx.fillStyle = shade(bottom, 0.85);
-  ctx.fillRect(x - half + 1 + swing * 0.4, legTop, half - 1.5, 13);
+  ctx.fillRect(x - half + 1 + swing * 0.4, legTop, half - 1.5, legLength);
   ctx.fillStyle = bottom;
-  ctx.fillRect(x + 0.5 - swing * 0.4, legTop, half - 1.5, 13);
+  ctx.fillRect(x + 0.5 - swing * 0.4, legTop, half - 1.5, legLength);
   // Zapatos: dos píxeles que separan la pierna del suelo.
   ctx.fillStyle = "rgba(10,12,16,0.65)";
   ctx.fillRect(x - half + 1 + swing * 0.4, base - 2.5, half - 1.5, 2.5);
   ctx.fillRect(x + 0.5 - swing * 0.4, base - 2.5, half - 1.5, 2.5);
+  // Sentado, los pies quedan por delante del asiento.
+  if (sitting) {
+    ctx.fillStyle = "rgba(10,12,16,0.5)";
+    ctx.fillRect(x - half + 1, y - 3, w - 2, 3);
+  }
 
   // Torso, más estrecho arriba: unos hombros rectos leen como una caja.
   ctx.fillStyle = top;

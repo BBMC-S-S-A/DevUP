@@ -37,7 +37,7 @@ export type Camera = { x: number; y: number; scale: number };
 export type RenderInput = {
   scene: Scene;
   /** Yo. Se dibuja como los demás, pero con el nombre resaltado. */
-  self: { x: number; y: number; facing: Facing; moving: boolean; displayName: string };
+  self: { x: number; y: number; facing: Facing; moving: boolean; sitting: boolean; displayName: string };
   peers: Peer[];
   avatars: Map<string, Avatar>;
   selfUserId: string;
@@ -158,12 +158,13 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
     ty: self.y,
     facing: self.facing,
     moving: self.moving,
+    sitting: self.sitting,
     zoneId: null,
   };
 
   for (const peer of [...peers, selfPeer]) {
     standing.push({
-      y: peer.y * TILE,
+      y: peer.y * TILE + (peer.sitting ? 6 : 0),
       kind: "peer",
       peer,
       avatar: avatars.get(peer.userId) ?? FALLBACK_AVATAR,
@@ -212,7 +213,9 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
     const audible = isSelf || distance <= input.audibleRadius;
     ctx.globalAlpha = audible ? 1 : 0.45;
 
-    drawAvatar(ctx, px, py, avatar, peer.facing, peer.moving, time);
+    // Sentado se dibuja un pelín más abajo en el orden por Y para quedar por
+    // delante del asiento: si no, la silla tapa a quien está sentado en ella.
+    drawAvatar(ctx, px, py, avatar, peer.facing, peer.moving, time, peer.sitting);
     ctx.globalAlpha = 1;
     drawNameplate(ctx, px, py, peer.displayName, isSelf ? "#5b8cff" : audible ? "#e7ebf2" : "#5c6577");
   }

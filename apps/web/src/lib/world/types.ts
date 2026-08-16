@@ -86,6 +86,8 @@ export type Peer = {
   ty: number;
   facing: Facing;
   moving: boolean;
+  /** Sentado en un mueble. Cambia la postura y bloquea el movimiento. */
+  sitting: boolean;
   zoneId: string | null;
 };
 

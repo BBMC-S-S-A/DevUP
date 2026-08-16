@@ -26,7 +26,7 @@ export type WorldStatus = "idle" | "connecting" | "live" | "error";
 export type Input = { up: boolean; down: boolean; left: boolean; right: boolean };
 
 export type WorldState = {
-  self: { x: number; y: number; facing: Facing; moving: boolean };
+  self: { x: number; y: number; facing: Facing; moving: boolean; sitting: boolean };
   peers: Map<string, Peer>;
 };
 
@@ -56,10 +56,11 @@ export function useWorld({
 
   const socketRef = useRef<WebSocket | null>(null);
   const stateRef = useRef<WorldState>({
-    self: { x: 4, y: 4, facing: "s", moving: false },
+    self: { x: 4, y: 4, facing: "s", moving: false, sitting: false },
     peers: new Map(),
   });
   const lastSentRef = useRef(0);
+  const lastSittingRef = useRef(false);
   const zoneRef = useRef<string | null>(null);
   const sceneRef = useRef<Scene | null>(scene);
   const onZoneChangeRef = useRef(onZoneChange);
@@ -157,6 +158,7 @@ export function useWorld({
                 peer.ty = move.y;
                 peer.facing = move.facing;
                 peer.moving = move.moving;
+                peer.sitting = move.sitting ?? false;
               }
               break;
             }
@@ -227,8 +229,16 @@ export function useWorld({
     const self = state.self;
 
     // --- Movimiento propio -------------------------------------------------
+    // Sentado no se camina. Pulsar una dirección levanta: es lo que espera
+    // cualquiera, y ahorra tener que acordarse de una tecla para ponerse de
+    // pie.
     let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+    if (self.sitting && (dx !== 0 || dy !== 0)) self.sitting = false;
+    if (self.sitting) {
+      dx = 0;
+      dy = 0;
+    }
 
     if (dx !== 0 && dy !== 0) {
       // En diagonal se recorrería 1,41 veces más rápido. Normalizar es la
@@ -283,7 +293,9 @@ export function useWorld({
       // último envío, quien deja de andar se queda para los demás con el
       // último paso a medias y `moving` encendido para siempre.
       const wasMoving = lastSentRef.current !== 0;
-      if (moving || wasMoving) {
+      const postureChanged = self.sitting !== lastSittingRef.current;
+      if (postureChanged) lastSittingRef.current = self.sitting;
+      if (moving || wasMoving || postureChanged) {
         lastSentRef.current = moving ? now : 0;
         socket.send(
           JSON.stringify({
@@ -292,10 +304,31 @@ export function useWorld({
             y: Number(self.y.toFixed(2)),
             facing: self.facing,
             moving,
+            sitting: self.sitting,
           }),
         );
       }
     }
+  }, []);
+
+  /**
+   * Sentarse en una plaza, o levantarse.
+   *
+   * La posición se ajusta a la plaza exacta: sentarse «más o menos donde
+   * estaba» deja al avatar medio dentro del sofá, y con perspectiva eso se ve
+   * enseguida.
+   */
+  const sit = useCallback((seat: { x: number; y: number; facing: Facing } | null) => {
+    const self = stateRef.current.self;
+    if (!seat) {
+      self.sitting = false;
+      return;
+    }
+    self.x = seat.x + 0.5;
+    self.y = seat.y + 0.9;
+    self.facing = seat.facing;
+    self.sitting = true;
+    self.moving = false;
   }, []);
 
   return {
@@ -309,5 +342,6 @@ export function useWorld({
     selfUserId,
     displayName,
     step,
+    sit,
   };
 }

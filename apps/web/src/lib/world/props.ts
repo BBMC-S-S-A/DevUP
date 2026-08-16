@@ -231,3 +231,45 @@ export const CATEGORIES: { label: string; kinds: PropKind[] }[] = [
             "wallClock", "aquarium", "doorway"],
   },
 ];
+
+/**
+ * Dónde se sienta uno en cada mueble.
+ *
+ * Desplazamientos en casillas respecto al ancla del mueble, y hacia dónde
+ * queda mirando quien se sienta. Un sofá tiene dos plazas porque dibuja casi
+ * dos casillas de ancho; una butaca, una.
+ *
+ * Va aquí y no en el archivo de dibujo a propósito: la posición de una plaza
+ * es geometría del mundo —afecta a colisiones, a la cámara y a la red—, no
+ * una decisión de cómo se pinta. Cuando un pack de sprites sustituya al
+ * dibujo, esto tiene que seguir igual.
+ */
+export type Seat = { dx: number; dy: number; facing: Prop["facing"] };
+
+export const SEATS: Partial<Record<PropKind, Seat[]>> = {
+  // La silla mira a donde la giraron, y quien se sienta mira igual.
+  chair: [{ dx: 0, dy: 0, facing: "s" }],
+  barStool: [{ dx: 0, dy: 0, facing: "s" }],
+  beanbag: [{ dx: 0, dy: 0, facing: "s" }],
+  floorCushion: [{ dx: 0, dy: 0, facing: "s" }],
+  armchair: [{ dx: 0, dy: 0, facing: "s" }],
+  // Dos plazas, una a cada lado del centro del sofá.
+  sofa: [
+    { dx: -0.5, dy: 0, facing: "s" },
+    { dx: 0.5, dy: 0, facing: "s" },
+  ],
+};
+
+/** Las plazas de un mueble ya colocado, en coordenadas de planta. */
+export function seatsOf(piece: Prop): { x: number; y: number; facing: Prop["facing"] }[] {
+  const seats = SEATS[piece.kind];
+  if (!seats) return [];
+  return seats.map((seat) => ({
+    x: piece.x + seat.dx,
+    y: piece.y + seat.dy,
+    // Quien se sienta mira hacia donde mira el mueble. Sentarse en una silla
+    // girada al norte y quedar mirando al sur es de las cosas que más delatan
+    // que un sitio está hecho a medias.
+    facing: piece.facing,
+  }));
+}

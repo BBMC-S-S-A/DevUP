@@ -138,6 +138,8 @@ export type WorldMember = BaseMember & {
   y: number;
   facing: "n" | "s" | "e" | "o";
   moving: boolean;
+  /** Sentado en un mueble: cambia la postura y bloquea el movimiento. */
+  sitting: boolean;
   /** Zona que pisa ahora mismo, o null si está en el pasillo. */
   zoneId: string | null;
   /**
