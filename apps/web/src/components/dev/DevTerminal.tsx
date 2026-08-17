@@ -29,9 +29,17 @@ export function DevTerminal({ webcontainer }: { webcontainer: WebContainer | nul
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(contenedorRef.current);
-    fit.fit();
 
     let cancelado = false;
+
+    // `fit()` lee las dimensiones que calculó el primer render interno de
+    // xterm.js (`_renderService.dimensions`), que todavía no existen en el
+    // mismo tick que `open()` — llamarlo aquí mismo revienta con
+    // "Cannot read properties of undefined (reading 'dimensions')". Un
+    // fotograma de margen basta para que el render inicial haya terminado.
+    requestAnimationFrame(() => {
+      if (!cancelado) fit.fit();
+    });
 
     void (async () => {
       const proceso = await webcontainer.spawn("jsh", {
