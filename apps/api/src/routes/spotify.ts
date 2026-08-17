@@ -68,35 +68,54 @@ export async function spotifyRoutes(app: FastifyInstance): Promise<void> {
       return reply.redirect(`${env.APP_BASE_URL}/app?spotify=estado-invalido`);
     }
 
-    const tokens = await exchangeCode(query.code);
-    await withUser(userId, async (db) => {
-      const existing = await db.query<{ id: string }>(
-        "select id from connections where provider = 'spotify' and user_id = $1",
-        [userId],
-      );
-      const connectionId =
-        existing.rows[0]?.id ??
-        (
-          await db.query<{ id: string }>(
-            `insert into connections (provider, user_id, display_name, created_by)
-             values ('spotify', $1, 'Spotify', $1) returning id`,
-            [userId],
-          )
-        ).rows[0]!.id;
+    /**
+     * De aquí en adelante, cualquier fallo tiene que volver a la aplicación.
+     *
+     * Sin este `try`, un canje de código fallido subía como excepción y el
+     * manejador global respondía un 500 en JSON — y esto es un callback de
+     * OAuth, así que ese JSON se lo come el navegador de la persona a pantalla
+     * completa en una URL de la API. Peor todavía: el motivo real quedaba solo
+     * en los registros del servidor, que es justo donde nadie lo va a buscar
+     * cuando lo que ve es «algo ha ido mal».
+     *
+     * El código de autorización es de UN SOLO USO: recargar esta página o
+     * llegar aquí dos veces falla siempre, y por eso el mensaje que se manda de
+     * vuelta sugiere reintentar la conexión desde el principio.
+     */
+    try {
+      const tokens = await exchangeCode(query.code);
+      await withUser(userId, async (db) => {
+        const existing = await db.query<{ id: string }>(
+          "select id from connections where provider = 'spotify' and user_id = $1",
+          [userId],
+        );
+        const connectionId =
+          existing.rows[0]?.id ??
+          (
+            await db.query<{ id: string }>(
+              `insert into connections (provider, user_id, display_name, created_by)
+               values ('spotify', $1, 'Spotify', $1) returning id`,
+              [userId],
+            )
+          ).rows[0]!.id;
 
-      const packed: StoredTokens = {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token ?? "",
-      };
-      const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
-      await db.query(
-        `insert into connection_secrets (connection_id, encrypted_secret, expires_at)
-         values ($1,$2,$3)
-         on conflict (connection_id) do update
-           set encrypted_secret = excluded.encrypted_secret, expires_at = excluded.expires_at`,
-        [connectionId, encryptSecret(JSON.stringify(packed)), expiresAt],
-      );
-    });
+        const packed: StoredTokens = {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token ?? "",
+        };
+        const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+        await db.query(
+          `insert into connection_secrets (connection_id, encrypted_secret, expires_at)
+           values ($1,$2,$3)
+           on conflict (connection_id) do update
+             set encrypted_secret = excluded.encrypted_secret, expires_at = excluded.expires_at`,
+          [connectionId, encryptSecret(JSON.stringify(packed)), expiresAt],
+        );
+      });
+    } catch (fallo) {
+      request.log.error({ err: fallo }, "el canje del código de Spotify falló");
+      return reply.redirect(`${env.APP_BASE_URL}/app?spotify=fallo-canje`);
+    }
 
     return reply.redirect(`${env.APP_BASE_URL}/app?spotify=conectado`);
   });

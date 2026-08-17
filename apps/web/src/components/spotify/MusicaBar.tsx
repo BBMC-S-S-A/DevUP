@@ -27,7 +27,7 @@ import { SpotifyWidget } from "./SpotifyWidget";
  *    puede pausar la música sin salir.
  */
 export function MusicaBar() {
-  const { canalMusica, sesion, player } = useSpotify();
+  const { canal, sesion, player } = useSpotify();
   const { activeChannelId, room } = useVoiceCall();
   const pathname = usePathname();
 
@@ -39,7 +39,7 @@ export function MusicaBar() {
   // no eres quien pincha.
   const pista = player.estado.pista;
   const enSala = sesion?.trackName ? sesion : null;
-  if (enOficina || !canalMusica || (!pista && !enSala)) return null;
+  if (enOficina || !canal || (!pista && !enSala)) return null;
 
   const puedeControlar = player.estado.listo && !player.estado.sinPremium && pista !== null;
   const titulo = pista?.nombre ?? enSala?.trackName ?? "";
@@ -87,7 +87,7 @@ export function MusicaBar() {
         )}
 
         <span className="mx-0.5 h-5 w-px shrink-0 bg-line-strong" aria-hidden />
-        <SpotifyWidget channelId={canalMusica} panelDirection="up" />
+        <SpotifyWidget channelId={canal} panelDirection="up" />
       </div>
     </div>
   );

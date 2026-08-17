@@ -33,8 +33,22 @@ function SpotifyRedirectToast() {
   useEffect(() => {
     const spotify = params.get("spotify");
     if (!spotify) return;
-    if (spotify === "conectado") toast.success("Spotify conectado");
-    else toast.error("No se pudo conectar Spotify");
+
+    // Cada motivo pide una reacción distinta, así que se dicen por separado:
+    // un «no se pudo conectar» a secas deja a quien lo lee sin nada que hacer.
+    if (spotify === "conectado") {
+      toast.success("Spotify conectado");
+    } else if (spotify === "denegado") {
+      toast.error("No diste permiso a Spotify");
+    } else if (spotify === "fallo-canje") {
+      toast.error("Spotify rechazó la conexión. Vuelve a intentarlo desde el reproductor.", {
+        // El código de autorización es de un solo uso: recargar la página del
+        // callback falla siempre, y hay que empezar la conexión otra vez.
+        description: "Si acabas de recargar la página, empieza el proceso de nuevo.",
+      });
+    } else {
+      toast.error("No se pudo conectar Spotify");
+    }
     router.replace("/app");
   }, [params, router]);
 
