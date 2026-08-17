@@ -148,9 +148,41 @@ async function llamarSpotify(
   return texto ? JSON.parse(texto) : null;
 }
 
-export function useSpotifyPlayer(activo: boolean) {
+export type Playlist = {
+  id: string;
+  uri: string;
+  nombre: string;
+  caratula: string | null;
+  pistas: number;
+  de: string;
+};
+
+/**
+ * @param activo Monta el SDK solo si la cuenta está conectada.
+ * @param onTerminada Se llama cuando la canción llega al final por sí sola.
+ *   Lo usa el widget para encadenar la siguiente de la cola compartida — sin
+ *   esto, cada canción acaba en silencio y hay que darle a play a mano.
+ */
+export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
   const [estado, setEstado] = useState<EstadoReproductor>(ESTADO_INICIAL);
   const reproductor = useRef<SdkPlayer | null>(null);
+
+  // La referencia evita que cambiar el callback vuelva a montar el SDK: si
+  // fuera dependencia del efecto, cada renderizado del widget reconectaría el
+  // reproductor y cortaría la música.
+  const terminada = useRef(onTerminada);
+  terminada.current = onTerminada;
+
+  /**
+   * Que la canción estaba a punto de acabar.
+   *
+   * Hace falta porque «terminó» y «le dieron a pausa» llegan igual desde el
+   * SDK: los dos son `paused: true`. Lo que los distingue es que al terminar,
+   * la posición vuelve a 0 — pero eso también pasa al rebobinar. Así que se
+   * marca cuando la reproducción pasa del 95 % y solo entonces un
+   * `paused + position 0` se interpreta como final.
+   */
+  const casiFinal = useRef(false);
 
   // Ancla para el contador local: en qué posición estábamos y cuándo. La
   // posición mostrada se calcula desde aquí, no se acumula — acumular deriva.
@@ -220,6 +252,19 @@ export function useSpotifyPlayer(activo: boolean) {
         }
 
         const pista = s.track_window.current_track;
+
+        // El final de la canción. Ver `casiFinal` arriba: la marca la pone el
+        // contador local, porque el SDK no emite nada mientras la canción
+        // avanza sin novedades y aquí nunca veríamos el tramo final.
+        if (s.paused && s.position === 0 && casiFinal.current) {
+          casiFinal.current = false;
+          terminada.current?.();
+        } else if (s.position > 0) {
+          // Empezar otra canción o rebobinar borra la marca: si no, el
+          // siguiente pausado en el minuto uno se leería como un final.
+          casiFinal.current = false;
+        }
+
         ancla.current = { posicionMs: s.position, en: performance.now(), corriendo: !s.paused };
 
         setEstado((e) => ({
@@ -303,6 +348,9 @@ export function useSpotifyPlayer(activo: boolean) {
       const transcurrido = performance.now() - ancla.current.en;
       setEstado((e) => {
         const siguiente = ancla.current.posicionMs + transcurrido;
+        // Segundo y medio antes del final se arma la marca que deja distinguir
+        // «terminó» de «le dieron a pausa» cuando llegue el evento del SDK.
+        if (e.duracionMs > 0 && siguiente > e.duracionMs - 1500) casiFinal.current = true;
         if (e.duracionMs > 0 && siguiente >= e.duracionMs) return { ...e, posicionMs: e.duracionMs };
         return { ...e, posicionMs: siguiente };
       });
@@ -326,6 +374,28 @@ export function useSpotifyPlayer(activo: boolean) {
       await llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
         method: "PUT",
         body: JSON.stringify({ uris: [uri] }),
+      });
+    },
+    [estado.dispositivoId],
+  );
+
+  /**
+   * Reproduce un CONTEXTO: una playlist, un álbum, tus canciones guardadas.
+   *
+   * La diferencia con `reproducirUri` no es cosmética. Con `uris` se manda una
+   * lista cerrada de pistas y al acabar la última se hace el silencio; con
+   * `context_uri` es Spotify quien sostiene la cola, así que el aleatorio, la
+   * repetición y el «siguiente» funcionan sobre la playlist entera, como en su
+   * propia aplicación. Poner una playlist mandando sus cien URIs sería
+   * técnicamente posible y perdería todo eso.
+   */
+  const reproducirContexto = useCallback(
+    async (contextoUri: string, desdePista = 0) => {
+      if (!estado.dispositivoId) throw new Error("el reproductor todavía no está listo");
+      await reproductor.current?.activateElement().catch(() => {});
+      await llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
+        method: "PUT",
+        body: JSON.stringify({ context_uri: contextoUri, offset: { position: desdePista } }),
       });
     },
     [estado.dispositivoId],
@@ -391,6 +461,89 @@ export function useSpotifyPlayer(activo: boolean) {
     }).catch(() => setEstado((e) => ({ ...e, repeticion: estado.repeticion })));
   }, [estado.repeticion]);
 
+  /**
+   * Tus playlists, con «Canciones que te gustan» al principio.
+   *
+   * Los guardados no son una playlist para Spotify —tienen su propio endpoint y
+   * su propio URI de contexto— pero para quien mira son lo mismo: una lista
+   * suya que quiere poner. Se disfrazan de playlist aquí para no obligar a la
+   * interfaz a tratar dos cosas distintas que se usan igual.
+   *
+   * Lanza `sin_permiso` si el token es de antes de que se pidieran los permisos
+   * de biblioteca; quien llama lo traduce a «vuelve a conectar tu cuenta».
+   */
+  const listarPlaylists = useCallback(async (): Promise<Playlist[]> => {
+    const guardadas = await llamarSpotify("/me/tracks?limit=1").catch((fallo: Error) => {
+      if (fallo.message.includes("403")) throw new Error("sin_permiso");
+      return null;
+    });
+
+    const propias = (await llamarSpotify("/me/playlists?limit=50")) as {
+      items: {
+        id: string;
+        uri: string;
+        name: string;
+        images: { url: string }[] | null;
+        tracks: { total: number };
+        owner: { display_name: string };
+      }[];
+    } | null;
+
+    const lista: Playlist[] = (propias?.items ?? []).map((p) => ({
+      id: p.id,
+      uri: p.uri,
+      nombre: p.name,
+      caratula: p.images?.[0]?.url ?? null,
+      pistas: p.tracks.total,
+      de: p.owner.display_name,
+    }));
+
+    const total = (guardadas as { total?: number } | null)?.total;
+    if (typeof total === "number") {
+      lista.unshift({
+        id: "guardadas",
+        uri: "spotify:collection:tracks",
+        nombre: "Canciones que te gustan",
+        caratula: null,
+        pistas: total,
+        de: "Tu biblioteca",
+      });
+    }
+
+    return lista;
+  }, []);
+
+  /** Las pistas de una playlist, o las guardadas si es la lista disfrazada. */
+  const listarPistas = useCallback(async (playlistId: string) => {
+    const ruta =
+      playlistId === "guardadas"
+        ? "/me/tracks?limit=50"
+        : `/playlists/${playlistId}/tracks?limit=50`;
+    const carga = (await llamarSpotify(ruta)) as {
+      items: {
+        track: {
+          uri: string;
+          name: string;
+          duration_ms: number;
+          artists: { name: string }[];
+          album: { images: { url: string }[] };
+        } | null;
+      }[];
+    } | null;
+
+    return (carga?.items ?? [])
+      // Una pista puede llegar en null: se retiró del catálogo de tu país o era
+      // un episodio de podcast en una playlist mixta.
+      .filter((i) => i.track !== null)
+      .map((i) => ({
+        uri: i.track!.uri,
+        name: i.track!.name,
+        artist: i.track!.artists.map((a) => a.name).join(", "),
+        imageUrl: i.track!.album.images[0]?.url ?? null,
+        durationMs: i.track!.duration_ms,
+      }));
+  }, []);
+
   /** Los dispositivos donde esta cuenta puede sonar (móvil, escritorio, altavoz). */
   const listarDispositivos = useCallback(async () => {
     const carga = (await llamarSpotify("/me/player/devices")) as {
@@ -410,6 +563,9 @@ export function useSpotifyPlayer(activo: boolean) {
   return {
     estado,
     reproducirUri,
+    reproducirContexto,
+    listarPlaylists,
+    listarPistas,
     alternarPausa,
     siguiente,
     anterior,

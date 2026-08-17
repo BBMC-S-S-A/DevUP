@@ -30,12 +30,25 @@ async function tokenRequest(body: URLSearchParams): Promise<{
 }
 
 export function authorizeUrl(state: string): string {
+  /**
+   * Los permisos que se piden.
+   *
+   * Los tres últimos —playlists y canciones guardadas— se añadieron después de
+   * la primera versión, y eso tiene una consecuencia que hay que contar: los
+   * permisos se conceden al autorizar, no al llamar. Quien conectó su cuenta
+   * antes tiene un token sin ellos y sus playlists devolverán 403 hasta que
+   * vuelva a conectar. La interfaz lo detecta y lo dice en vez de enseñar una
+   * lista vacía, que parecería que no tiene playlists.
+   */
   const scopes = [
     "streaming",
     "user-read-email",
     "user-read-private",
     "user-read-playback-state",
     "user-modify-playback-state",
+    "playlist-read-private",
+    "playlist-read-collaborative",
+    "user-library-read",
   ];
   const params = new URLSearchParams({
     response_type: "code",

@@ -1,7 +1,10 @@
 "use client";
 
 import {
+  ChevronLeft,
+  Heart,
   Laptop2,
+  Library,
   ListMusic,
   Loader2,
   Music,
@@ -31,8 +34,9 @@ import {
   type SpotifySession,
   type SpotifyTrack,
 } from "@/lib/api";
+import { useSpotify } from "@/lib/spotify/SpotifyProvider";
 import { useSpotifyChannelFeed } from "@/lib/spotify/useSpotifyChannelFeed";
-import { reloj, useSpotifyPlayer } from "@/lib/spotify/useSpotifyPlayer";
+import { reloj, type Playlist, type useSpotifyPlayer } from "@/lib/spotify/useSpotifyPlayer";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Rotulo } from "@/components/ui/Superficies";
 
@@ -55,7 +59,7 @@ import { Rotulo } from "@/components/ui/Superficies";
  * segundo—, no el sonido.
  */
 type Estado = { connected: boolean; premium: boolean };
-type Pestana = "cola" | "buscar" | "dispositivos";
+type Pestana = "cola" | "buscar" | "biblioteca" | "dispositivos";
 
 export function SpotifyWidget({
   channelId,
@@ -66,78 +70,56 @@ export function SpotifyWidget({
   panelDirection?: "up" | "down";
 }) {
   const [abierto, setAbierto] = useState(false);
-  const [estadoCuenta, setEstadoCuenta] = useState<Estado | null>(null);
-  const [cola, setCola] = useState<SpotifyQueueTrack[]>([]);
-  const [sesion, setSesion] = useState<SpotifySession>(null);
   const [pestana, setPestana] = useState<Pestana>("cola");
   const contenedor = useRef<HTMLDivElement>(null);
 
-  const conectado = estadoCuenta?.connected ?? false;
-  const player = useSpotifyPlayer(conectado);
+  // El reproductor ya no vive aquí: vive en SpotifyProvider, montado en el
+  // layout de /app. Por eso la música sobrevive a irse al tablero o a la
+  // biblioteca — este componente es solo el mando.
+  const { player, cuenta, canalMusica, cola, sesion, tomarCanal, refrescarCola, refrescarSesion, setCola } =
+    useSpotify();
   const { estado: repro } = player;
 
-  // Solo quien tiene el SDK sonando es «el que pincha»: es quien publica el
-  // estado al resto y el único con transporte.
-  const pinchando = repro.pista !== null;
+  const conectado = cuenta?.connected ?? false;
   const puedeControlar = repro.listo && !repro.sinPremium;
 
-  const cargarCuenta = useCallback(async () => {
-    const s = await api
-      .get<Estado>("/me/spotify/status")
-      .catch(() => ({ connected: false, premium: false }));
-    setEstadoCuenta(s);
-  }, []);
+  /**
+   * Este canal es el que gobierna la música, o no.
+   *
+   * Mientras no lo sea, la cola y la sesión del proveedor son de OTRA sala y no
+   * se pueden pintar aquí. Se piden entonces las de este canal por separado,
+   * solo para mirar; en cuanto alguien pone algo, `tomarCanal` traslada el mando
+   * y se deja de mantener este estado aparte.
+   */
+  const gobierna = canalMusica === channelId;
+  const [colaLocal, setColaLocal] = useState<SpotifyQueueTrack[]>([]);
+  const [sesionLocal, setSesionLocal] = useState<SpotifySession>(null);
 
-  const cargarCola = useCallback(async () => {
-    const { queue } = await api.get<{ queue: SpotifyQueueTrack[] }>(
-      `/channels/${channelId}/spotify/queue`,
-    );
-    setCola(queue);
-  }, [channelId]);
+  const colaVista = gobierna ? cola : colaLocal;
+  const sesionVista = gobierna ? sesion : sesionLocal;
 
-  const cargarSesion = useCallback(async () => {
-    const { session } = await api.get<{ session: SpotifySession }>(
-      `/channels/${channelId}/spotify/session`,
-    );
-    setSesion(session);
+  const cargarLocal = useCallback(async () => {
+    const [{ queue }, { session }] = await Promise.all([
+      api.get<{ queue: SpotifyQueueTrack[] }>(`/channels/${channelId}/spotify/queue`),
+      api.get<{ session: SpotifySession }>(`/channels/${channelId}/spotify/session`),
+    ]);
+    setColaLocal(queue);
+    setSesionLocal(session);
   }, [channelId]);
 
   useEffect(() => {
-    void cargarCuenta();
-    void cargarCola();
-    void cargarSesion();
-  }, [cargarCuenta, cargarCola, cargarSesion]);
+    if (gobierna) return;
+    void cargarLocal();
+  }, [gobierna, cargarLocal]);
 
   useSpotifyChannelFeed(channelId, (tipo) => {
-    if (tipo === "queue-changed") void cargarCola();
-    if (tipo === "session-changed") void cargarSesion();
+    if (gobierna) {
+      if (tipo === "queue-changed") void refrescarCola(channelId);
+      if (tipo === "session-changed") void refrescarSesion(channelId);
+    } else {
+      void cargarLocal();
+    }
   });
-
-  // Publicar al resto de la sala. Solo cuando cambia la canción o el play/pausa
-  // — no en cada tic del contador, que serían cuatro escrituras por segundo por
-  // persona y ni la base ni el socket lo agradecerían.
-  const ultimoPublicado = useRef("");
-  useEffect(() => {
-    if (!pinchando || !repro.pista) return;
-    const firma = `${repro.pista.uri}:${repro.reproduciendo}`;
-    if (firma === ultimoPublicado.current) return;
-    ultimoPublicado.current = firma;
-
-    void api
-      .post(`/channels/${channelId}/spotify/session`, {
-        trackUri: repro.pista.uri,
-        trackName: repro.pista.nombre,
-        trackArtist: repro.pista.artista,
-        trackImageUrl: repro.pista.caratula,
-        durationMs: repro.pista.duracionMs,
-        positionMs: Math.round(repro.posicionMs),
-        isPlaying: repro.reproduciendo,
-      })
-      .catch(() => {});
-    // `posicionMs` queda fuera a propósito: entra en el cuerpo como
-    // instantánea, pero no debe disparar el efecto o publicaríamos sin parar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, pinchando, repro.pista, repro.reproduciendo]);
 
   // Cerrar al pulsar fuera, como la campana de notificaciones.
   useEffect(() => {
@@ -149,25 +131,71 @@ export function SpotifyWidget({
     return () => document.removeEventListener("mousedown", fuera);
   }, [abierto]);
 
+  /** Quita una pista de la cola, del sitio donde esté viviendo esa cola. */
+  const quitarDeCola = useCallback(
+    (id: string) => {
+      if (gobierna) setCola((previa) => previa.filter((t) => t.id !== id));
+      else setColaLocal((previa) => previa.filter((t) => t.id !== id));
+    },
+    [gobierna, setCola],
+  );
+
   const reproducir = useCallback(
     async (
       pista: Pick<SpotifyQueueTrack, "trackUri" | "trackName" | "trackArtist">,
       idEnCola?: string,
     ) => {
       try {
+        // Poner algo es lo que traslada el mando de la música a este canal.
+        tomarCanal(channelId);
         await player.reproducirUri(pista.trackUri);
         if (idEnCola) {
           await api.delete(`/spotify/queue/${idEnCola}`);
-          setCola((previa) => previa.filter((t) => t.id !== idEnCola));
+          quitarDeCola(idEnCola);
         }
       } catch {
         toast.error("No se pudo reproducir");
       }
     },
-    [player],
+    [player, channelId, tomarCanal, quitarDeCola],
   );
 
-  if (estadoCuenta === null) return null;
+  /** Poner una playlist entera. Ver `reproducirContexto` para por qué no son URIs. */
+  const reproducirLista = useCallback(
+    async (contextoUri: string) => {
+      try {
+        tomarCanal(channelId);
+        await player.reproducirContexto(contextoUri);
+      } catch {
+        toast.error("No se pudo poner la lista");
+      }
+    },
+    [player, channelId, tomarCanal],
+  );
+
+  /**
+   * Añadir a la cola. Si no suena nada, empieza a sonar en el momento — que es
+   * lo que espera quien acaba de añadir la primera canción: una cola que se
+   * queda quieta con algo dentro parece que no funciona.
+   */
+  const encolar = useCallback(
+    async (pista: SpotifyQueueTrack) => {
+      if (gobierna) setCola((previa) => [...previa, pista]);
+      else setColaLocal((previa) => [...previa, pista]);
+
+      const nadaSonando = !repro.pista || !repro.reproduciendo;
+      if (puedeControlar && nadaSonando) {
+        await reproducir(pista, pista.id);
+      }
+    },
+    [gobierna, setCola, puedeControlar, repro.pista, repro.reproduciendo, reproducir],
+  );
+
+  if (cuenta === null) return null;
+
+  // Solo quien tiene el SDK sonando es «el que pincha»: es quien publica el
+  // estado al resto y el único con transporte.
+  const pinchando = repro.pista !== null && gobierna;
 
   // Lo que se pinta arriba: el SDK si estamos pinchando, la sesión compartida
   // si no. Ver la cabecera del archivo.
@@ -180,14 +208,14 @@ export function SpotifyWidget({
         duracionMs: repro.duracionMs || repro.pista!.duracionMs,
         sonando: repro.reproduciendo,
       }
-    : sesion?.trackName
+    : sesionVista?.trackName
       ? {
-          nombre: sesion.trackName,
-          artista: sesion.trackArtist ?? "",
-          caratula: sesion.trackImageUrl,
-          posicionMs: sesion.positionMs,
-          duracionMs: sesion.durationMs ?? 0,
-          sonando: sesion.isPlaying,
+          nombre: sesionVista.trackName,
+          artista: sesionVista.trackArtist ?? "",
+          caratula: sesionVista.trackImageUrl,
+          posicionMs: sesionVista.positionMs,
+          duracionMs: sesionVista.durationMs ?? 0,
+          sonando: sesionVista.isPlaying,
         }
       : null;
 
@@ -223,7 +251,7 @@ export function SpotifyWidget({
           <Portada
             pista={enPortada}
             pinchando={pinchando}
-            sinPremium={conectado && (repro.sinPremium || !estadoCuenta.premium)}
+            sinPremium={conectado && (repro.sinPremium || !cuenta.premium)}
           />
 
           {/* Por qué no hay botones de reproducción. Sin esta línea, un
@@ -231,7 +259,7 @@ export function SpotifyWidget({
               tres razones piden reacciones distintas de quien mira. */}
           {conectado && !puedeControlar && (
             <PorQueNoSuena
-              sinPremium={repro.sinPremium || !estadoCuenta.premium}
+              sinPremium={repro.sinPremium || !cuenta.premium}
               fallo={repro.fallo}
             />
           )}
@@ -249,23 +277,33 @@ export function SpotifyWidget({
             </>
           )}
 
+          {/* Si la música la gobierna otra sala, decirlo: la cola de aquí no
+              es la que suena, y una lista que no manda tiene que verse como
+              lo que es. */}
+          {canalMusica && !gobierna && (
+            <p className="border-y border-line bg-canvas/40 px-4 py-2 text-[11px] text-faint">
+              Ahora mismo la música la lleva otra sala. Si pones algo desde aquí, pasa a este canal.
+            </p>
+          )}
+
           <Pestanas
             actual={pestana}
             onCambiar={setPestana}
-            conteoCola={cola.length}
+            conteoCola={colaVista.length}
+            conBiblioteca={puedeControlar}
             conDispositivos={puedeControlar}
           />
 
           <div className="max-h-64 overflow-y-auto px-3 pb-3">
             {pestana === "cola" && (
               <Cola
-                cola={cola}
+                cola={colaVista}
                 puedeReproducir={puedeControlar}
                 onReproducir={reproducir}
                 onQuitar={async (id) => {
                   try {
                     await api.delete(`/spotify/queue/${id}`);
-                    setCola((previa) => previa.filter((t) => t.id !== id));
+                    quitarDeCola(id);
                   } catch {
                     toast.error("No se pudo quitar de la cola");
                   }
@@ -276,8 +314,17 @@ export function SpotifyWidget({
               <Buscador
                 channelId={channelId}
                 puedeReproducir={puedeControlar}
-                onEncolada={(pista) => setCola((previa) => [...previa, pista])}
+                onEncolada={encolar}
                 onReproducir={reproducir}
+              />
+            )}
+            {pestana === "biblioteca" && puedeControlar && (
+              <Biblioteca
+                listar={player.listarPlaylists}
+                listarPistas={player.listarPistas}
+                onPonerLista={reproducirLista}
+                channelId={channelId}
+                onEncolada={encolar}
               />
             )}
             {pestana === "dispositivos" && puedeControlar && (
@@ -626,17 +673,23 @@ function Pestanas({
   actual,
   onCambiar,
   conteoCola,
+  conBiblioteca,
   conDispositivos,
 }: {
   actual: Pestana;
   onCambiar: (p: Pestana) => void;
   conteoCola: number;
+  /** Sin reproductor propio no se puede poner una playlist, así que la pestaña sobra. */
+  conBiblioteca: boolean;
   /** Sin Premium no hay reproductor propio, así que la lista de equipos sobra. */
   conDispositivos: boolean;
 }) {
   const pestanas = [
     { id: "cola" as const, etiqueta: "Cola", icono: ListMusic, insignia: conteoCola },
     { id: "buscar" as const, etiqueta: "Buscar", icono: Search, insignia: 0 },
+    ...(conBiblioteca
+      ? [{ id: "biblioteca" as const, etiqueta: "Tu música", icono: Library, insignia: 0 }]
+      : []),
     ...(conDispositivos
       ? [{ id: "dispositivos" as const, etiqueta: "Equipos", icono: Speaker, insignia: 0 }]
       : []),
@@ -866,6 +919,204 @@ function Buscador({
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Tus playlists y tus canciones guardadas.
+ *
+ * Poner una lista NO pasa por nuestra cola: se le entrega a Spotify como
+ * contexto (`reproducirContexto`) y es él quien la sostiene, así que el
+ * aleatorio, la repetición y el «siguiente» funcionan sobre la lista entera
+ * como en su propia aplicación. Nuestra cola sigue siendo para lo que propone
+ * la sala — las dos cosas conviven porque responden a preguntas distintas:
+ * «pon este disco» y «pon esto después».
+ */
+function Biblioteca({
+  listar,
+  listarPistas,
+  onPonerLista,
+  channelId,
+  onEncolada,
+}: {
+  listar: () => Promise<Playlist[]>;
+  listarPistas: (id: string) => Promise<SpotifyTrack[]>;
+  onPonerLista: (uri: string) => Promise<void>;
+  channelId: string;
+  onEncolada: (pista: SpotifyQueueTrack) => Promise<void>;
+}) {
+  const [listas, setListas] = useState<Playlist[] | null>(null);
+  const [sinPermiso, setSinPermiso] = useState(false);
+  const [abierta, setAbierta] = useState<Playlist | null>(null);
+  const [pistas, setPistas] = useState<SpotifyTrack[] | null>(null);
+
+  useEffect(() => {
+    void listar()
+      .then(setListas)
+      .catch((fallo: Error) => {
+        // El token de quien conectó antes de que se pidieran estos permisos no
+        // los tiene. Enseñar una lista vacía haría pensar que no hay playlists.
+        if (fallo.message === "sin_permiso") setSinPermiso(true);
+        setListas([]);
+      });
+  }, [listar]);
+
+  useEffect(() => {
+    if (!abierta) return;
+    setPistas(null);
+    void listarPistas(abierta.id)
+      .then(setPistas)
+      .catch(() => setPistas([]));
+  }, [abierta, listarPistas]);
+
+  if (sinPermiso) {
+    return (
+      <div className="px-1 py-5 text-center">
+        <p className="text-[11px] leading-relaxed text-warn">
+          Tu cuenta se conectó antes de que pidiéramos acceso a tus playlists.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = `${API_URL}/integrations/spotify/authorize`;
+          }}
+          className="presionable mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#1db954]
+            px-3 text-[11px] font-semibold text-black hover:brightness-110"
+        >
+          <Music size={12} />
+          Volver a conectar
+        </button>
+      </div>
+    );
+  }
+
+  if (listas === null) {
+    return (
+      <div className="grid place-items-center py-6">
+        <Loader2 size={14} className="animate-spin text-faint" />
+      </div>
+    );
+  }
+
+  // Dentro de una lista concreta.
+  if (abierta) {
+    return (
+      <div className="pt-2">
+        <div className="mb-2 flex items-center gap-1.5">
+          <BotonIcono etiqueta="Volver a tus listas" onClick={() => setAbierta(null)} className="!size-7">
+            <ChevronLeft size={14} />
+          </BotonIcono>
+          <span className="min-w-0 flex-1 truncate font-display text-xs font-semibold">
+            {abierta.nombre}
+          </span>
+          <BotonIcono
+            etiqueta={`Poner ${abierta.nombre}`}
+            onClick={() => void onPonerLista(abierta.uri)}
+            className="!size-7 !text-accent"
+          >
+            <Play size={13} />
+          </BotonIcono>
+        </div>
+
+        {pistas === null ? (
+          <div className="grid place-items-center py-5">
+            <Loader2 size={13} className="animate-spin text-faint" />
+          </div>
+        ) : pistas.length === 0 ? (
+          <p className="px-1 py-4 text-center text-xs text-faint">Esta lista está vacía.</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {pistas.map((pista, indice) => (
+              <li
+                key={`${pista.uri}-${indice}`}
+                className="group flex items-center gap-2 rounded-lg px-1.5 py-1.5 hover:bg-raised/60"
+              >
+                <span className="w-4 shrink-0 text-center font-mono text-[10px] tabular-nums text-faint">
+                  {indice + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs">{pista.name}</span>
+                  <span className="block truncate text-[10px] text-faint">{pista.artist}</span>
+                </span>
+                <BotonIcono
+                  etiqueta={`Añadir ${pista.name} a la cola`}
+                  onClick={async () => {
+                    try {
+                      const { track } = await api.post<{ track: SpotifyQueueTrack }>(
+                        `/channels/${channelId}/spotify/queue`,
+                        {
+                          trackUri: pista.uri,
+                          trackName: pista.name,
+                          trackArtist: pista.artist,
+                          trackImageUrl: pista.imageUrl,
+                          durationMs: pista.durationMs,
+                        },
+                      );
+                      await onEncolada(track);
+                      toast.success(`«${pista.name}» añadida a la cola`);
+                    } catch (fallo) {
+                      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo añadir");
+                    }
+                  }}
+                  className="!size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <Plus size={13} />
+                </BotonIcono>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  if (listas.length === 0) {
+    return (
+      <p className="px-1 py-6 text-center text-xs text-faint">
+        No hay playlists en esta cuenta.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-0.5 pt-2">
+      {listas.map((lista, indice) => (
+        <li
+          key={lista.id}
+          className="devup-entrada group flex items-center gap-2 rounded-lg px-1.5 py-1.5 hover:bg-raised/60"
+          style={{ "--retraso": `${Math.min(indice, 8) * 25}ms` } as React.CSSProperties}
+        >
+          <button
+            type="button"
+            onClick={() => setAbierta(lista)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            {lista.caratula ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lista.caratula} alt="" className="size-9 shrink-0 rounded object-cover" />
+            ) : (
+              <span className="grid size-9 shrink-0 place-items-center rounded bg-accent-soft text-accent">
+                <Heart size={13} />
+              </span>
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs">{lista.nombre}</span>
+              <span className="block truncate text-[10px] text-faint">
+                <span className="font-mono tabular-nums">{lista.pistas}</span> · {lista.de}
+              </span>
+            </span>
+          </button>
+
+          <BotonIcono
+            etiqueta={`Poner ${lista.nombre}`}
+            onClick={() => void onPonerLista(lista.uri)}
+            className="!size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <Play size={13} />
+          </BotonIcono>
+        </li>
+      ))}
+    </ul>
   );
 }
 

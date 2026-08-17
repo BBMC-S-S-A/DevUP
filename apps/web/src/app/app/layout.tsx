@@ -3,10 +3,12 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import { MusicaBar } from "@/components/spotify/MusicaBar";
 import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
 import { Logo } from "@/components/ui/Logo";
 import { Rotulo } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
+import { SpotifyProvider } from "@/lib/spotify/SpotifyProvider";
 import { VoiceCallProvider } from "@/lib/voice/VoiceCallProvider";
 
 /**
@@ -44,10 +46,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // Los dos proveedores viven aquí y no en ninguna página: son lo que hace que
+  // la llamada y la música sobrevivan a navegar por la aplicación. La música va
+  // por dentro porque su barra se apoya en si hay llamada abierta para saber
+  // dónde colocarse y no taparla.
   return (
     <VoiceCallProvider>
-      {children}
-      <ActiveCallBar />
+      <SpotifyProvider>
+        {children}
+        <ActiveCallBar />
+        <MusicaBar />
+      </SpotifyProvider>
     </VoiceCallProvider>
   );
 }
