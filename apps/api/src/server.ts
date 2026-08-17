@@ -12,19 +12,25 @@ import { signalingRoutes } from "./realtime/signaling.js";
 import { worldSocketRoutes } from "./realtime/world.js";
 import { accountRoutes } from "./routes/account.js";
 import { authRoutes } from "./routes/auth.js";
+import { connectionRoutes } from "./routes/connections.js";
 import { fileRoutes } from "./routes/files.js";
+import { githubRoutes, refreshRepo } from "./routes/github.js";
 import { iceRoutes } from "./routes/ice.js";
 import { messageRoutes } from "./routes/messages.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { recordingRoutes } from "./routes/recordings.js";
 import { salesRoutes } from "./routes/sales.js";
+import { searchRoutes } from "./routes/search.js";
+import { spotifyRoutes } from "./routes/spotify.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { worldRoutes } from "./routes/world.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
+import { decryptSecret } from "./security/vault.js";
 import { deleteObjects, ensureBucket } from "./storage/s3.js";
 
 const SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 const SWEEP_AGE = "2 hours";
+const GITHUB_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 const app = Fastify({
   logger: {
@@ -127,14 +133,18 @@ app.get("/health", async () => ({ status: "ok", now: new Date().toISOString() })
 
 await app.register(authRoutes);
 await app.register(accountRoutes);
+await app.register(connectionRoutes);
 await app.register(workspaceRoutes);
 await app.register(fileRoutes);
+await app.register(githubRoutes);
 await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(notificationRoutes);
 await app.register(recordingRoutes);
 await app.register(salesRoutes);
+await app.register(searchRoutes);
+await app.register(spotifyRoutes);
 await app.register(worldRoutes);
 await app.register(signalingRoutes);
 await app.register(worldSocketRoutes);
@@ -166,13 +176,59 @@ async function sweep(): Promise<void> {
   }
 }
 
+/**
+ * Refresco periódico de los repositorios de GitHub conectados.
+ *
+ * No en cada carga de pantalla: un token normal tiene 5000 peticiones por
+ * hora, y una organización con varios repos abiertos a la vez los agota
+ * rápido si cada visita dispara una llamada nueva.
+ *
+ * `withUser(null, ...)` corre sin identidad, así que las dos consultas que
+ * leen a través de organizaciones ajenas tienen que ser `security definer`
+ * (`list_github_repos_for_refresh`, `get_connection_secret_for_refresh`) —
+ * ver la cabecera de 0016_github.sql. Un repo que falle (token revocado,
+ * repo borrado) no debe frenar el resto.
+ */
+async function refreshGithubRepos(): Promise<void> {
+  try {
+    const repos = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ repo_id: string; connection_id: string; full_name: string }>(
+        "select repo_id, connection_id, full_name from public.list_github_repos_for_refresh()",
+      );
+      return rows;
+    });
+
+    for (const repo of repos) {
+      try {
+        await withUser(null, async (db) => {
+          const { rows } = await db.query<{ get_connection_secret_for_refresh: Buffer | null }>(
+            "select public.get_connection_secret_for_refresh($1)",
+            [repo.connection_id],
+          );
+          const packed = rows[0]?.get_connection_secret_for_refresh;
+          if (!packed) return;
+          const token = decryptSecret(packed);
+          await refreshRepo(db, repo.repo_id, token, repo.full_name);
+        });
+      } catch (error) {
+        app.log.warn({ error, repo: repo.full_name }, "[github] no se pudo refrescar un repositorio");
+      }
+    }
+  } catch (error) {
+    app.log.warn({ error }, "[github] pasada de refresco fallida");
+  }
+}
+
 await ensureBucket();
 const sweeper = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
 void sweep();
+const githubSweeper = setInterval(() => void refreshGithubRepos(), GITHUB_REFRESH_INTERVAL_MS);
+void refreshGithubRepos();
 
 async function shutdown(signal: string): Promise<void> {
   app.log.info(`${signal} recibido, cerrando`);
   clearInterval(sweeper);
+  clearInterval(githubSweeper);
   await app.close();
   await closePool();
   process.exit(0);

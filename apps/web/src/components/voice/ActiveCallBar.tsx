@@ -3,6 +3,7 @@
 import { Circle, Mic, MicOff, PhoneOff, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { useElapsed } from "@/lib/voice/useElapsed";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 
@@ -52,6 +53,8 @@ export function ActiveCallBar() {
           {activeChannelName}
         </Link>
         {elapsed && <span className="font-mono text-xs tabular-nums text-muted">{elapsed}</span>}
+
+        <SpotifyWidget channelId={activeChannelId} panelDirection="up" />
 
         <button
           type="button"

@@ -111,6 +111,48 @@ export async function salesRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send({ client });
   });
 
+  /** Renombrar y actualizar datos de contacto, lo puede hacer cualquier miembro. */
+  app.patch("/clients/:clientId", async (request) => {
+    const userId = requireUser(request);
+    const { clientId } = parseParams(z.object({ clientId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        name: z.string().trim().min(1).max(160).optional(),
+        contactName: z.string().max(160).optional(),
+        contactEmail: z.string().max(200).optional(),
+        notes: z.string().max(4000).optional(),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `update clients
+            set name          = coalesce($2, name),
+                contact_name  = coalesce($3, contact_name),
+                contact_email = coalesce($4, contact_email),
+                notes         = coalesce($5, notes)
+          where id = $1
+      returning id, name, contact_name as "contactName", contact_email as "contactEmail",
+                notes, created_at as "createdAt"`,
+        [clientId, body.name ?? null, body.contactName ?? null, body.contactEmail ?? null, body.notes ?? null],
+      );
+      if (rows.length === 0) throw notFound("cliente no encontrado");
+      return { client: rows[0] };
+    });
+  });
+
+  /** Borrar, solo quien administra — igual que el resto del catálogo de ventas. */
+  app.delete("/clients/:clientId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { clientId } = parseParams(z.object({ clientId: uuid }), request.params);
+    const { rowCount } = await withUser(userId, (db) =>
+      db.query("delete from clients where id = $1", [clientId]),
+    );
+    if (!rowCount) throw notFound("cliente no encontrado");
+    return reply.status(204).send();
+  });
+
   // --- Embudo ----------------------------------------------------------------
   /**
    * El embudo entero, con el importe de cada oportunidad.
@@ -271,19 +313,32 @@ export async function salesRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // --- Líneas de la cotización ------------------------------------------------
+  //
+  // `quantity` es `numeric` y `unit_price_cents` es `bigint`: `pg` devuelve
+  // los dos como cadena, igual que ya pasa con los importes de `pipeline` y
+  // `goals` más arriba. Convertir aquí, una vez por fila, es mejor que
+  // confiar en que cada consumidor se acuerde.
+  const mapItem = (row: {
+    id: string;
+    serviceId: string | null;
+    name: string;
+    quantity: string;
+    unitPriceCents: string;
+  }) => ({ ...row, quantity: Number(row.quantity), unitPriceCents: Number(row.unitPriceCents) });
+
   app.get("/opportunities/:dealId/items", async (request) => {
     const userId = requireUser(request);
     const { dealId } = parseParams(z.object({ dealId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `select id, service_id as "serviceId", name, quantity,
-                unit_price_cents as "unitPriceCents"
+        `select id, service_id as "serviceId", name, quantity::text,
+                unit_price_cents::text as "unitPriceCents"
            from opportunity_items
           where opportunity_id = $1
           order by created_at`,
         [dealId],
       );
-      return { items: rows };
+      return { items: rows.map(mapItem) };
     });
   });
 
@@ -331,13 +386,47 @@ export async function salesRoutes(app: FastifyInstance): Promise<void> {
       const { rows } = await db.query(
         `insert into opportunity_items (opportunity_id, service_id, name, unit_price_cents, quantity)
          values ($1,$2,$3,$4,$5)
-         returning id, service_id as "serviceId", name, quantity,
-                   unit_price_cents as "unitPriceCents"`,
+         returning id, service_id as "serviceId", name, quantity::text,
+                   unit_price_cents::text as "unitPriceCents"`,
         [dealId, body.serviceId, name, price, body.quantity],
       );
-      return rows[0];
+      return mapItem(rows[0]!);
     });
     return reply.status(201).send({ item });
+  });
+
+  /**
+   * Corregir una línea ya añadida: la cantidad que se escribió mal, o el
+   * precio pactado con un descuento puntual. Antes de esto, la única forma de
+   * cambiar una línea era borrarla y añadir otra — lo que además perdía el
+   * orden en que se habían elegido los servicios.
+   */
+  app.patch("/opportunity-items/:itemId", async (request) => {
+    const userId = requireUser(request);
+    const { itemId } = parseParams(z.object({ itemId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        quantity: z.number().positive().max(100_000).optional(),
+        unitPriceCents: cents.optional(),
+        name: z.string().trim().min(1).max(120).optional(),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `update opportunity_items
+            set quantity         = coalesce($2, quantity),
+                unit_price_cents = coalesce($3, unit_price_cents),
+                name             = coalesce($4, name)
+          where id = $1
+      returning id, service_id as "serviceId", name, quantity::text,
+                unit_price_cents::text as "unitPriceCents"`,
+        [itemId, body.quantity ?? null, body.unitPriceCents ?? null, body.name ?? null],
+      );
+      if (rows.length === 0) throw notFound("línea no encontrada");
+      return { item: mapItem(rows[0]!) };
+    });
   });
 
   app.delete("/opportunity-items/:itemId", async (request, reply) => {

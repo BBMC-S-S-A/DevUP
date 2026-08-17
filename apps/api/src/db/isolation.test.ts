@@ -15,6 +15,7 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { env } from "../env.js";
+import { decryptSecret, encryptSecret } from "../security/vault.js";
 import { closePool, withUser } from "./pool.js";
 
 let passed = 0;
@@ -618,6 +619,78 @@ async function main(): Promise<void> {
       ),
     );
 
+    // Ficha de cliente y detalle de cotización: datos propios, nuevos, para
+    // no tocar acmeSales — de ahí cuelgan comprobaciones de más abajo (el
+    // importe, el objetivo) que darían un resultado distinto si esto les
+    // moviera la cantidad o el nombre por debajo. Ese fue justo el error de
+    // la primera versión de este bloque: reutilizar es cómo se acaba
+    // dudando de código correcto (ver la tabla de trampas de este archivo).
+    const edicion = await withUser(ana, async (db) => {
+      const client = (
+        await db.query<{ id: string }>(
+          `insert into clients (organization_id, name, created_by)
+           values ($1,'Cliente para Editar',$2) returning id`,
+          [acme.org, ana],
+        )
+      ).rows[0]!.id;
+      const deal = (
+        await db.query<{ id: string }>(
+          `insert into opportunities (organization_id, client_id, title, created_by)
+           values ($1,$2,'Venta de prueba para editar',$3) returning id`,
+          [acme.org, client, ana],
+        )
+      ).rows[0]!.id;
+      const item = (
+        await db.query<{ id: string }>(
+          `insert into opportunity_items (opportunity_id, name, unit_price_cents, quantity)
+           values ($1,'Línea de prueba',10000,1) returning id`,
+          [deal],
+        )
+      ).rows[0]!.id;
+      return { client, deal, item };
+    });
+
+    // Renombrar es de cualquier miembro, borrar es solo de quien administra —
+    // el mismo reparto que ya usan archivos y etiquetas.
+    const clientRenamedByCarla = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("update clients set name = 'Renombrado por Carla' where id = $1", [
+        edicion.client,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Carla, miembro raso, puede renombrar un cliente de su organización", clientRenamedByCarla === 1);
+
+    const clientTouchedByBruno = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("update clients set name = 'Robado' where id = $1", [
+        edicion.client,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("un UPDATE de Bruno sobre el cliente de Acme afecta a cero filas", clientTouchedByBruno === 0);
+
+    const clientDeletedByBruno = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("delete from clients where id = $1", [edicion.client]);
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Bruno sobre el cliente de Acme afecta a cero filas", clientDeletedByBruno === 0);
+
+    // Corregir una línea de la cotización: mismo aislamiento que crearla.
+    const itemEditedByCarla = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("update opportunity_items set quantity = 5 where id = $1", [
+        edicion.item,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Carla puede corregir la cantidad de una línea de su organización", itemEditedByCarla === 1);
+
+    const itemEditedByBruno = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("update opportunity_items set quantity = 999 where id = $1", [
+        edicion.item,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("un UPDATE de Bruno sobre una línea de Acme afecta a cero filas", itemEditedByBruno === 0);
+
     const brunoMoved = await withUser(bruno, async (db) => {
       const { rowCount } = await db.query(
         "update opportunities set stage = 'won' where id = $1",
@@ -721,6 +794,306 @@ async function main(): Promise<void> {
     // Un objetivo no puede ser una rendija para contar ventas ajenas: la
     // función es SECURITY INVOKER, así que para Bruno la suma es cero.
     check("para Bruno, el avance de ese objetivo es cero", (await progress(bruno)) === 0);
+
+    // --- Búsqueda global -----------------------------------------------------
+    //
+    // Seis tablas en un único `union all`, sin `security definer`: lo que
+    // protege cada rama es la política de su propia tabla de siempre, no la
+    // función. La comprobación que de verdad importa no es que Bruno no
+    // encuentre nada de Acme —eso ya lo prueban las secciones de arriba, tabla
+    // por tabla— es que pasarle el id de la organización de Acme como
+    // parámetro no le sirve de nada: quien decide es su membresía, nunca lo
+    // que pida. Y que un miembro raso de la propia Acme tampoco encuentre por
+    // búsqueda lo que no vería entrando por la puerta normal.
+    console.log("\nBúsqueda global");
+
+    const acmeColumn = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.ws],
+      );
+      return rows[0]!.id;
+    });
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into tasks (workspace_id, column_id, title, position, created_by)
+         values ($1,$2,'Enviar el segundo recordatorio de pago',1000,$3)`,
+        [acme.ws, acmeColumn, ana],
+      ),
+    );
+
+    const search = (user: string, term: string): Promise<string[]> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ entity: string }>(
+          "select entity from public.global_search($1, $2, 50)",
+          [acme.org, term],
+        );
+        return rows.map((r) => r.entity);
+      });
+
+    check("Carla encuentra el mensaje público por «equipo»", (await search(carla, "equipo")).includes("message"));
+    check(
+      "Carla no encuentra el mensaje de un canal privado ajeno por «dirección»",
+      !(await search(carla, "dirección")).includes("message"),
+    );
+    check("Carla encuentra el archivo por «secreto»", (await search(carla, "secreto")).includes("file"));
+    check("Carla encuentra la tarea por «recordatorio»", (await search(carla, "recordatorio")).includes("task"));
+    check("Carla encuentra el cliente por «Confidencial»", (await search(carla, "Confidencial")).includes("client"));
+    check("Carla encuentra el servicio por «Auditoría»", (await search(carla, "Auditoría")).includes("service"));
+    check("Carla encuentra la oportunidad por «backend»", (await search(carla, "backend")).includes("opportunity"));
+
+    check(
+      "Bruno no encuentra el mensaje aunque pida el id de la organización de Acme",
+      (await search(bruno, "equipo")).length === 0,
+    );
+    check("Bruno no encuentra el archivo por búsqueda", (await search(bruno, "secreto")).length === 0);
+    check("Bruno no encuentra la tarea por búsqueda", (await search(bruno, "recordatorio")).length === 0);
+    check("Bruno no encuentra el cliente por búsqueda", (await search(bruno, "Confidencial")).length === 0);
+    check("Bruno no encuentra el servicio por búsqueda", (await search(bruno, "Auditoría")).length === 0);
+    check("Bruno no encuentra la oportunidad por búsqueda", (await search(bruno, "backend")).length === 0);
+
+    // --- Bóveda de credenciales ------------------------------------------------
+    //
+    // Dos tablas: connections (metadata) y connection_secrets (el token
+    // cifrado). connection_secrets sí tiene política de SELECT —ver la
+    // cabecera de 0015_vault.sql sobre por qué no puede no tenerla, o ni el
+    // propio conector podría leer el token para llamar a su proveedor— así
+    // que lo que hay que probar no es "nadie lo lee": es que solo lo lee
+    // quien ya podría ver que la conexión existe, ni una fila más.
+    console.log("\nBóveda de credenciales");
+
+    const acmeConnection = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into connections (provider, organization_id, display_name, created_by)
+         values ('github', $1, 'Repo de producto', $2) returning id`,
+        [acme.org, ana],
+      );
+      const id = rows[0]!.id;
+      await db.query(
+        "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
+        [id, encryptSecret("ghp_secreto-de-prueba")],
+      );
+      return id;
+    });
+
+    check("Ana ve la conexión que creó", (await count(ana, "connections")) === 1);
+    check("Carla, de la misma organización, también la ve", (await count(carla, "connections")) === 1);
+    check("Bruno no ve ninguna conexión de Acme", (await count(bruno, "connections")) === 0);
+
+    const secretRowsVisibleTo = (user: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query(
+          "select connection_id from connection_secrets where connection_id = $1",
+          [acmeConnection],
+        );
+        return rows.length;
+      });
+    check(
+      "Carla puede leer la fila del secreto cifrado — lo necesita el conector para llamar a GitHub",
+      (await secretRowsVisibleTo(carla)) === 1,
+    );
+    check(
+      "Bruno no puede leer el secreto ni sabiendo el id de la conexión",
+      (await secretRowsVisibleTo(bruno)) === 0,
+    );
+
+    check(
+      "cifrar y descifrar con la bóveda devuelve el mismo texto",
+      decryptSecret(encryptSecret("un secreto cualquiera")) === "un secreto cualquiera",
+    );
+
+    await denied("Carla, que es miembro raso, no puede conectar una cuenta a nombre de la organización", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into connections (provider, organization_id, display_name, created_by)
+           values ('github', $1, 'colada', $2)`,
+          [acme.org, carla],
+        ),
+      ),
+    );
+
+    await denied("Bruno no puede añadir un secreto a una conexión de Acme", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)", [
+          acmeConnection,
+          encryptSecret("robado"),
+        ]),
+      ),
+    );
+
+    const brunoDeletedConnection = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("delete from connections where id = $1", [acmeConnection]);
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Bruno sobre la conexión de Acme afecta a cero filas", brunoDeletedConnection === 0);
+
+    // Personal: Ana conecta su propia cuenta. Ni Carla ni Bruno la ven — ni
+    // siquiera Carla, que es de la misma organización: no es de la
+    // organización, es suya.
+    const anaPersonalConnection = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into connections (provider, user_id, display_name, created_by)
+         values ('spotify', $1, 'Cuenta personal', $1) returning id`,
+        [ana],
+      );
+      return rows[0]!.id;
+    });
+    const carlaSeesPersonal = await withUser(carla, async (db) => {
+      const { rows } = await db.query("select 1 from connections where id = $1", [
+        anaPersonalConnection,
+      ]);
+      return rows.length;
+    });
+    check(
+      "Carla no ve la conexión personal de Ana aunque sean de la misma organización",
+      carlaSeesPersonal === 0,
+    );
+
+    await denied("Carla no puede conectar una cuenta personal en nombre de Ana", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into connections (provider, user_id, display_name, created_by)
+           values ('spotify', $1, 'suplantación', $2)`,
+          [ana, carla],
+        ),
+      ),
+    );
+
+    // --- Conector de GitHub --------------------------------------------------
+    //
+    // github_repo_stats no tiene ninguna política de escritura: solo
+    // `upsert_github_repo_stats` (security definer) puede escribir en ella.
+    // Lo que se prueba aquí es lectura —hereda de la visibilidad del repo,
+    // que a su vez hereda de la conexión— y que solo un admin de la
+    // organización puede añadir o quitar un repositorio.
+    console.log("\nConector de GitHub");
+
+    const acmeRepo = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into github_repos (connection_id, full_name, added_by)
+         values ($1,'acme/producto',$2) returning id`,
+        [acmeConnection, ana],
+      );
+      const id = rows[0]!.id;
+      await db.query("select public.upsert_github_repo_stats($1, $2::jsonb, null)", [
+        id,
+        JSON.stringify({ openPullRequests: 2 }),
+      ]);
+      return id;
+    });
+
+    check("Ana ve el repositorio que conectó", (await count(ana, "github_repos")) === 1);
+    check("Carla, de la misma organización, también lo ve", (await count(carla, "github_repos")) === 1);
+    check("Bruno no ve ningún repositorio de Acme", (await count(bruno, "github_repos")) === 0);
+
+    check("Carla ve las estadísticas del repositorio", (await count(carla, "github_repo_stats")) === 1);
+    check("Bruno no ve las estadísticas de un repositorio ajeno", (await count(bruno, "github_repo_stats")) === 0);
+
+    await denied("Carla, que es miembro raso, no puede conectar un repositorio", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into github_repos (connection_id, full_name, added_by)
+           values ($1,'acme/colado',$2)`,
+          [acmeConnection, carla],
+        ),
+      ),
+    );
+
+    await denied("Bruno no puede conectar un repositorio contra la conexión de Acme", () =>
+      withUser(bruno, (db) =>
+        db.query(
+          `insert into github_repos (connection_id, full_name, added_by)
+           values ($1,'bruno/intruso',$2)`,
+          [acmeConnection, bruno],
+        ),
+      ),
+    );
+
+    const brunoDeletedRepo = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("delete from github_repos where id = $1", [acmeRepo]);
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Bruno sobre el repositorio de Acme afecta a cero filas", brunoDeletedRepo === 0);
+
+    // --- Música compartida (Spotify) -------------------------------------------
+    //
+    // Las dos tablas cuelgan de can_access_channel, igual que los mensajes:
+    // lo que importa no es solo que Bruno no vea nada de Acme, es que Carla
+    // —de la misma organización— tampoco vea la cola de un canal privado al
+    // que no pertenece.
+    console.log("\nMúsica compartida");
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into channel_queue_tracks
+           (channel_id, track_uri, track_name, track_artist, added_by, position)
+         values ($1,'spotify:track:abc','Una canción','Un artista',$2,1000)`,
+        [acme.publicChannel, ana],
+      ),
+    );
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into channel_listening_sessions
+           (channel_id, track_uri, track_name, track_artist, is_playing, updated_by)
+         values ($1,'spotify:track:abc','Una canción','Un artista',true,$2)`,
+        [acme.publicChannel, ana],
+      ),
+    );
+
+    check(
+      "Carla ve la cola del canal público al que pertenece",
+      (await count(carla, "channel_queue_tracks")) === 1,
+    );
+    check(
+      "Carla ve qué suena en el canal público",
+      (await count(carla, "channel_listening_sessions")) === 1,
+    );
+    check("Bruno no ve la cola de Acme", (await count(bruno, "channel_queue_tracks")) === 0);
+    check("Bruno no ve qué suena en Acme", (await count(bruno, "channel_listening_sessions")) === 0);
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into channel_queue_tracks
+           (channel_id, track_uri, track_name, track_artist, added_by, position)
+         values ($1,'spotify:track:secreto','Secreta','Dirección',$2,1000)`,
+        [acme.privateChannel, ana],
+      ),
+    );
+    check(
+      "Carla no ve la cola del canal privado al que no pertenece",
+      (await count(carla, "channel_queue_tracks")) === 1,
+    );
+
+    await denied("Carla no puede añadir a la cola de un canal privado ajeno", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into channel_queue_tracks
+             (channel_id, track_uri, track_name, track_artist, added_by, position)
+           values ($1,'spotify:track:colada','Colada','Nadie',$2,2000)`,
+          [acme.privateChannel, carla],
+        ),
+      ),
+    );
+
+    await denied("Bruno no puede añadir a la cola de un canal de Acme", () =>
+      withUser(bruno, (db) =>
+        db.query(
+          `insert into channel_queue_tracks
+             (channel_id, track_uri, track_name, track_artist, added_by, position)
+           values ($1,'spotify:track:intruso','Intrusa','Nadie',$2,3000)`,
+          [acme.publicChannel, bruno],
+        ),
+      ),
+    );
+
+    const brunoDeletedTrack = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "delete from channel_queue_tracks where channel_id = $1",
+        [acme.publicChannel],
+      );
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Bruno sobre la cola de Acme afecta a cero filas", brunoDeletedTrack === 0);
 
     // --- El editor ---------------------------------------------------------
     //

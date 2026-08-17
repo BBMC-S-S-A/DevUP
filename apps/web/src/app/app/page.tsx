@@ -3,19 +3,39 @@
 import {
   Building2,
   ChevronRight,
+  Github,
   LogOut,
   Mail,
   Plus,
-  Terminal,
+  Search,
   UserRound,
   Users,
   TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ApiError, type Organization, type PendingInvitation, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { Logo } from "@/components/ui/Logo";
 import { useSession } from "@/lib/session";
+
+/** El callback de Spotify vuelve aquí con `?spotify=...`; esto lo avisa y lo limpia de la URL. */
+function SpotifyRedirectToast() {
+  const params = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const spotify = params.get("spotify");
+    if (!spotify) return;
+    if (spotify === "conectado") toast.success("Spotify conectado");
+    else toast.error("No se pudo conectar Spotify");
+    router.replace("/app");
+  }, [params, router]);
+
+  return null;
+}
 
 export default function OrganizationsPage() {
   const { user, signOut } = useSession();
@@ -54,11 +74,12 @@ export default function OrganizationsPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
+      <Suspense fallback={null}>
+        <SpotifyRedirectToast />
+      </Suspense>
       <header className="mb-10 flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-accent-soft text-accent">
-            <Terminal size={20} />
-          </span>
+          <Logo size={40} />
           <div>
             <h1 className="text-lg font-semibold tracking-tight">DevUP</h1>
             <p className="text-xs text-faint">{user?.email}</p>
@@ -83,23 +104,41 @@ export default function OrganizationsPage() {
         <p className="text-sm text-faint">Cargando…</p>
       ) : (
         <div className="space-y-8">
-          {organizations.map((org) => (
-            <section key={org.id}>
+          {organizations.map((org, index) => (
+            <section
+              key={org.id}
+              className="devup-entrada"
+              style={{ "--retraso": `${Math.min(index, 6) * 60}ms` } as React.CSSProperties}
+            >
               <div className="mb-3 flex items-center gap-2">
                 <Building2 size={15} className="text-faint" />
                 <h2 className="text-sm font-medium">{org.name}</h2>
                 <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-faint">
                   {org.role}
                 </span>
-                {/* Ventas es de la organización, no de un workspace: los
-                    clientes y el embudo son del equipo entero, no de un sitio
-                    concreto donde se trabaja. */}
+                {/* Ventas y búsqueda son de la organización, no de un
+                    workspace: el embudo y buscar en todo lo del equipo no son
+                    de un sitio de trabajo concreto. */}
+                <Link
+                  href={`/app/o/${org.id}/buscar`}
+                  className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
+                >
+                  <Search size={12} />
+                  Buscar
+                </Link>
                 <Link
                   href={`/app/o/${org.id}/ventas`}
-                  className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
                 >
                   <TrendingUp size={12} />
                   Ventas
+                </Link>
+                <Link
+                  href={`/app/o/${org.id}/github`}
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
+                >
+                  <Github size={12} />
+                  GitHub
                 </Link>
               </div>
 
@@ -152,7 +191,6 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
   const [pendientes, setPendientes] = useState<PendingInvitation[]>([]);
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<"member" | "admin">("member");
-  const [aviso, setAviso] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -184,15 +222,14 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
       <form
         onSubmit={async (event) => {
           event.preventDefault();
-          setAviso(null);
           setBusy(true);
           try {
             await api.post(`/organizations/${organizationId}/invitations`, { email, role: rol });
-            setAviso(`Invitación enviada a ${email}.`);
+            toast.success(`Invitación enviada a ${email}`);
             setEmail("");
             await cargar();
           } catch (caught) {
-            setAviso(caught instanceof ApiError ? caught.message : "no se pudo invitar");
+            toast.error(caught instanceof ApiError ? caught.message : "no se pudo invitar");
           } finally {
             setBusy(false);
           }
@@ -232,8 +269,6 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
         </button>
       </form>
 
-      {aviso && <p className="mt-2 text-xs text-muted">{aviso}</p>}
-
       {pendientes.length > 0 && (
         <ul className="mt-3 space-y-1">
           {pendientes.map((invitacion) => (
@@ -247,8 +282,13 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
               <button
                 type="button"
                 onClick={async () => {
-                  await api.delete(`/invitations/${invitacion.id}`);
-                  await cargar();
+                  try {
+                    await api.delete(`/invitations/${invitacion.id}`);
+                    toast.success("Invitación revocada");
+                    await cargar();
+                  } catch (caught) {
+                    toast.error(caught instanceof ApiError ? caught.message : "no se pudo revocar");
+                  }
                 }}
                 className="shrink-0 transition hover:text-danger"
               >
@@ -294,10 +334,13 @@ function NewWorkspace({
         setBusy(true);
         try {
           await api.post(`/organizations/${organizationId}/workspaces`, { name, visibility });
+          toast.success(`Workspace «${name}» creado`);
           setName("");
           setVisibility("shared");
           setOpen(false);
           await onCreated();
+        } catch (caught) {
+          toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear el workspace");
         } finally {
           setBusy(false);
         }
@@ -394,6 +437,7 @@ function NewOrganization({
           setBusy(true);
           try {
             await api.post("/organizations", { name, slug });
+            toast.success(`Organización «${name}» creada`);
             setName("");
             setSlug("");
             setOpen(false);

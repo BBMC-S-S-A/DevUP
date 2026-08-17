@@ -580,3 +580,12 @@ export function announceFileChange(
 ): void {
   fileHub.broadcast(workspaceId, { type: "file-change", action, fileId });
 }
+
+/**
+ * Reparte un cambio en la música compartida del canal: la cola cambió, o
+ * cambió qué suena ahora. Mismo socket que ya reparte los mensajes — no hace
+ * falta una conexión aparte para algo tan ligero.
+ */
+export function announceSpotifySession(channelId: string, payload: Record<string, unknown>): void {
+  channelHub.broadcast(channelId, { type: "spotify", ...payload });
+}

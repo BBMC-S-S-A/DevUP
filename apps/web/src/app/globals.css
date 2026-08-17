@@ -55,3 +55,62 @@ body {
 .animate-pulse-slow {
   animation: devup-pulse 2s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------------------
+ * Acceso: entrada escalonada, cursor de terminal y el trazo del logo.
+ *
+ * Todo respeta prefers-reduced-motion: quien lo pidió no debería ver nada
+ * moviéndose por decoración, solo lo que aporta información (el spinner de
+ * envío, por ejemplo, se queda igual).
+ * ------------------------------------------------------------------------- */
+@keyframes devup-entrada {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes devup-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes devup-logo-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes devup-deriva {
+  from { background-position: 0 0; }
+  to   { background-position: 64px 64px; }
+}
+
+.devup-entrada {
+  opacity: 0;
+  animation: devup-entrada 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--retraso, 0ms);
+}
+
+.devup-cursor {
+  animation: devup-cursor 1s step-end infinite;
+}
+
+.devup-logo-pop {
+  animation: devup-logo-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s backwards;
+}
+
+.devup-rejilla {
+  background-image:
+    linear-gradient(var(--color-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  animation: devup-deriva 12s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .devup-entrada,
+  .devup-cursor,
+  .devup-logo-pop,
+  .devup-rejilla {
+    animation: none;
+    opacity: 1;
+  }
+}

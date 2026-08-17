@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeft, Loader2, Plus, Target, Users, Wrench } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Target, Trash2, Users, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { ApiError, api } from "@/lib/api";
 
 /**
  * El embudo de ventas.
@@ -34,7 +35,20 @@ type Opportunity = {
   closedAt: string | null;
 };
 
-type Client = { id: string; name: string; contactEmail: string };
+type Client = {
+  id: string;
+  name: string;
+  contactName: string;
+  contactEmail: string;
+  notes: string;
+};
+type OpportunityItem = {
+  id: string;
+  serviceId: string | null;
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+};
 type Goal = {
   id: string;
   name: string;
@@ -72,7 +86,9 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
-  const [panel, setPanel] = useState<"deal" | "client" | "service" | "goal" | null>(null);
+  const [panel, setPanel] = useState<"deal" | "service" | "goal" | null>(null);
+  const [clientsOpen, setClientsOpen] = useState(false);
+  const [selectedDeal, setSelectedDeal] = useState<Opportunity | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -168,7 +184,7 @@ export default function SalesPage() {
           </div>
           <div className="flex gap-1.5">
             <Toolbar icon={<Target size={13} />} label="Objetivo" onClick={() => setPanel("goal")} />
-            <Toolbar icon={<Users size={13} />} label="Clientes" onClick={() => setPanel("client")} />
+            <Toolbar icon={<Users size={13} />} label="Clientes" onClick={() => setClientsOpen(true)} />
             <Toolbar icon={<Wrench size={13} />} label="Servicios" onClick={() => setPanel("service")} />
             <button
               type="button"
@@ -270,8 +286,9 @@ export default function SalesPage() {
                         setDragging(deal.id);
                       }}
                       onDragEnd={() => setDragging(null)}
+                      onClick={() => setSelectedDeal(deal)}
                       className={`cursor-grab rounded-lg border border-line bg-raised p-2.5 transition active:cursor-grabbing ${
-                        dragging === deal.id ? "opacity-40" : "hover:border-line-strong"
+                        dragging === deal.id ? "opacity-40" : "hover:border-line-strong hover:bg-surface"
                       }`}
                     >
                       <p className="text-xs font-medium leading-snug">{deal.title}</p>
@@ -311,6 +328,373 @@ export default function SalesPage() {
           }}
         />
       )}
+
+      {clientsOpen && (
+        <ClientsPanel orgId={orgId} clients={clients} onClose={() => setClientsOpen(false)} onChanged={load} />
+      )}
+
+      {selectedDeal && (
+        <DealDetail
+          deal={selectedDeal}
+          services={services}
+          onClose={() => setSelectedDeal(null)}
+          onChanged={load}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Clientes: listar, renombrar sus datos de contacto, borrar, o dar de alta
+ * uno nuevo. Antes de esto, el botón «Clientes» solo abría el alta — no
+ * había forma de ver ni de corregir uno que ya existiera.
+ */
+function ClientsPanel({
+  orgId,
+  clients,
+  onClose,
+  onChanged,
+}: {
+  orgId: string;
+  clients: Client[];
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-canvas/80 p-4 backdrop-blur-sm">
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Clientes</h2>
+          <button type="button" onClick={onClose} className="text-faint transition hover:text-ink">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {clients.map((client) =>
+            editing === client.id ? (
+              <ClientForm
+                key={client.id}
+                initial={client}
+                onCancel={() => setEditing(null)}
+                onSave={async (values) => {
+                  try {
+                    await api.patch(`/clients/${client.id}`, values);
+                    toast.success("Cliente actualizado");
+                    setEditing(null);
+                    await onChanged();
+                  } catch (caught) {
+                    toast.error(caught instanceof ApiError ? caught.message : "no se pudo guardar");
+                  }
+                }}
+              />
+            ) : (
+              <div
+                key={client.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-line bg-canvas px-3.5 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{client.name}</p>
+                  {(client.contactName || client.contactEmail) && (
+                    <p className="truncate text-xs text-faint">
+                      {[client.contactName, client.contactEmail].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(client.id)}
+                    className="rounded-lg p-1.5 text-faint transition hover:bg-raised hover:text-ink"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`¿Borrar «${client.name}»?`)) return;
+                      try {
+                        await api.delete(`/clients/${client.id}`);
+                        toast.success("Cliente borrado");
+                        await onChanged();
+                      } catch (caught) {
+                        toast.error(
+                          caught instanceof ApiError
+                            ? caught.message
+                            : "no se pudo borrar — hace falta administrar la organización",
+                        );
+                      }
+                    }}
+                    className="rounded-lg p-1.5 text-faint transition hover:bg-raised hover:text-danger"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ),
+          )}
+
+          {adding ? (
+            <ClientForm
+              onCancel={() => setAdding(false)}
+              onSave={async (values) => {
+                try {
+                  await api.post(`/organizations/${orgId}/clients`, values);
+                  toast.success(`Cliente «${values.name}» creado`);
+                  setAdding(false);
+                  await onChanged();
+                } catch (caught) {
+                  toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear");
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-3.5 py-2.5 text-xs text-faint transition hover:border-line-strong hover:text-muted"
+            >
+              <Plus size={13} />
+              Nuevo cliente
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClientForm({
+  initial,
+  onCancel,
+  onSave,
+}: {
+  initial?: Client;
+  onCancel: () => void;
+  onSave: (values: {
+    name: string;
+    contactName: string;
+    contactEmail: string;
+    notes: string;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [contactName, setContactName] = useState(initial?.contactName ?? "");
+  const [contactEmail, setContactEmail] = useState(initial?.contactEmail ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="space-y-2 rounded-xl border border-accent/30 bg-canvas p-3">
+      <input
+        autoFocus
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        placeholder="Nombre del cliente"
+        className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+      />
+      <div className="flex gap-2">
+        <input
+          value={contactName}
+          onChange={(event) => setContactName(event.target.value)}
+          placeholder="Persona de contacto"
+          className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+        />
+        <input
+          value={contactEmail}
+          onChange={(event) => setContactEmail(event.target.value)}
+          placeholder="Correo"
+          className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+        />
+      </div>
+      <textarea
+        value={notes}
+        onChange={(event) => setNotes(event.target.value)}
+        placeholder="Notas"
+        rows={2}
+        className="w-full resize-none rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+      />
+      <div className="flex justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition hover:text-ink"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={busy || name.trim().length === 0}
+          onClick={async () => {
+            setBusy(true);
+            await onSave({ name, contactName, contactEmail, notes });
+            setBusy(false);
+          }}
+          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-canvas disabled:opacity-40"
+        >
+          {busy && <Loader2 size={12} className="animate-spin" />}
+          Guardar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Detalle de una venta: su desglose, editable. Antes de esto las líneas se
+ * añadían solo al crear la venta y no se podían corregir después — había que
+ * borrar la línea entera y añadir otra, perdiendo el orden.
+ */
+function DealDetail({
+  deal,
+  services,
+  onClose,
+  onChanged,
+}: {
+  deal: Opportunity;
+  services: Service[];
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+}) {
+  const [items, setItems] = useState<OpportunityItem[] | null>(null);
+  const [addingService, setAddingService] = useState(false);
+
+  const load = useCallback(async () => {
+    const { items } = await api.get<{ items: OpportunityItem[] }>(`/opportunities/${deal.id}/items`);
+    setItems(items);
+  }, [deal.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const total = (items ?? []).reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
+
+  const patchItem = async (itemId: string, values: Partial<Pick<OpportunityItem, "quantity" | "unitPriceCents">>) => {
+    try {
+      await api.patch(`/opportunity-items/${itemId}`, values);
+      await load();
+      await onChanged();
+    } catch (caught) {
+      toast.error(caught instanceof ApiError ? caught.message : "no se pudo guardar la línea");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-canvas/80 p-4 backdrop-blur-sm">
+      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-2xl">
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold">{deal.title}</h2>
+            <p className="text-xs text-faint">{deal.clientName}</p>
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 text-faint transition hover:text-ink">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {items === null && <Loader2 className="animate-spin text-faint" size={16} />}
+
+          {items?.length === 0 && (
+            <p className="text-xs text-faint">Sin líneas todavía.</p>
+          )}
+
+          {items?.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-2 rounded-xl border border-line bg-canvas px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm">{item.name}</span>
+              <input
+                type="number"
+                min={0.01}
+                step="any"
+                defaultValue={item.quantity}
+                onBlur={(event) => {
+                  const value = Number(event.target.value);
+                  if (value > 0 && value !== item.quantity) void patchItem(item.id, { quantity: value });
+                }}
+                className="w-16 shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-right text-xs outline-none focus:border-accent/60"
+              />
+              <span className="shrink-0 text-xs text-faint">×</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                defaultValue={(item.unitPriceCents / 100).toFixed(2)}
+                onBlur={(event) => {
+                  const cents = Math.round(Number(event.target.value) * 100);
+                  if (cents >= 0 && cents !== item.unitPriceCents) void patchItem(item.id, { unitPriceCents: cents });
+                }}
+                className="w-20 shrink-0 rounded-lg border border-line bg-surface px-2 py-1 text-right text-xs outline-none focus:border-accent/60"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await api.delete(`/opportunity-items/${item.id}`);
+                    await load();
+                    await onChanged();
+                  } catch (caught) {
+                    toast.error(caught instanceof ApiError ? caught.message : "no se pudo quitar la línea");
+                  }
+                }}
+                className="shrink-0 rounded-lg p-1 text-faint transition hover:text-danger"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+
+          {addingService ? (
+            <div className="flex flex-wrap gap-1.5 rounded-xl border border-line bg-canvas p-2.5">
+              {services
+                .filter((service) => service.active)
+                .map((service) => (
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await api.post(`/opportunities/${deal.id}/items`, { serviceId: service.id, quantity: 1 });
+                        setAddingService(false);
+                        await load();
+                        await onChanged();
+                      } catch (caught) {
+                        toast.error(caught instanceof ApiError ? caught.message : "no se pudo añadir la línea");
+                      }
+                    }}
+                    className="rounded-lg border border-line px-2 py-1 text-[11px] text-muted transition hover:border-accent/40 hover:text-ink"
+                  >
+                    {service.name} · {money(service.unitPriceCents)}
+                  </button>
+                ))}
+              {services.length === 0 && (
+                <p className="text-[11px] text-faint">No hay servicios en el catálogo todavía.</p>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingService(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-3 py-2 text-xs text-faint transition hover:border-line-strong hover:text-muted"
+            >
+              <Plus size={13} />
+              Añadir línea
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
+          <span className="text-xs text-faint">Total</span>
+          <span className="font-mono text-sm font-medium tabular-nums">{money(total)}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -351,7 +735,7 @@ function NewThing({
   onClose,
   onDone,
 }: {
-  kind: "deal" | "client" | "service" | "goal";
+  kind: "deal" | "service" | "goal";
   orgId: string;
   clients: Client[];
   services: Service[];
@@ -368,7 +752,6 @@ function NewThing({
 
   const titles = {
     deal: "Nueva venta",
-    client: "Nuevo cliente",
     service: "Nuevo servicio",
     goal: "Nuevo objetivo",
   } as const;
@@ -377,9 +760,7 @@ function NewThing({
     setBusy(true);
     setFailed(null);
     try {
-      if (kind === "client") {
-        await api.post(`/organizations/${orgId}/clients`, { name, contactEmail: extra });
-      } else if (kind === "goal") {
+      if (kind === "goal") {
         const cents = Math.round(Number(price.replace(",", ".")) * 100) || 0;
         // Por defecto, el trimestre natural en curso. Es el caso común y evita
         // dos selectores de fecha en el camino más habitual.
@@ -414,6 +795,7 @@ function NewThing({
           await api.post(`/opportunities/${opportunity.id}/items`, { serviceId, quantity: 1 });
         }
       }
+      toast.success(`${titles[kind]} — hecho`);
       await onDone();
     } catch {
       setFailed("no se pudo guardar");
@@ -452,26 +834,13 @@ function NewThing({
               placeholder={
                 kind === "deal"
                   ? "Migración del backend"
-                  : kind === "client"
-                    ? "Nébula Studio"
-                    : kind === "goal"
-                      ? "Trimestre en curso"
-                      : "Auditoría de infraestructura"
+                  : kind === "goal"
+                    ? "Trimestre en curso"
+                    : "Auditoría de infraestructura"
               }
               className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
             />
           </Field>
-
-          {kind === "client" && (
-            <Field label="Correo de contacto">
-              <input
-                value={extra}
-                onChange={(event) => setExtra(event.target.value)}
-                placeholder="hola@cliente.com"
-                className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
-              />
-            </Field>
-          )}
 
           {kind === "goal" && (
             <Field label="Objetivo del trimestre (€)">

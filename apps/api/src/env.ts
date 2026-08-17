@@ -10,6 +10,8 @@ loadEnv({ path: join(repoRoot, ".env") });
 
 /** El valor que trae `.env.example`. Sirve para detectar que nadie lo cambió. */
 const SECRETO_DE_EJEMPLO = "cambiame-en-produccion-por-32-bytes-aleatorios";
+/** Igual, pero para VAULT_MASTER_KEY: tiene que decodificar a 32 bytes de verdad. */
+const VAULT_DE_EJEMPLO = "ISL/c4r0CmSwLDWakAZYc5Hda7maptiLU0F+gHAqh+0=";
 
 const bool = (fallback: "true" | "false") =>
   z
@@ -29,6 +31,21 @@ const schema = z.object({
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL: z.string().default("30d"),
   COOKIE_SECURE: bool("false"),
+
+  // Cifra lo que guarda la bóveda de credenciales (connection_secrets): el
+  // token de GitHub de una organización, el de Spotify de una persona. AES-256
+  // exige exactamente 32 bytes, así que el valor tiene que ser ese en base64,
+  // no cualquier cadena como AUTH_SECRET.
+  VAULT_MASTER_KEY: z
+    .string()
+    .default(VAULT_DE_EJEMPLO)
+    .refine((v) => {
+      try {
+        return Buffer.from(v, "base64").length === 32;
+      } catch {
+        return false;
+      }
+    }, "VAULT_MASTER_KEY debe ser 32 bytes codificados en base64"),
 
   API_PORT: z.coerce.number().int().positive().default(4000),
   API_HOST: z.string().default("0.0.0.0"),
@@ -83,6 +100,14 @@ const schema = z.object({
    */
   METERED_APP_NAME: z.string().default(""),
   METERED_API_KEY: z.string().default(""),
+
+  // --- Música compartida (Spotify) --------------------------------------------
+  // Vacíos por defecto: sin ellos, la ruta de conectar Spotify avisa de que
+  // la instancia no lo tiene configurado en vez de fallar a medias.
+  SPOTIFY_CLIENT_ID: z.string().default(""),
+  SPOTIFY_CLIENT_SECRET: z.string().default(""),
+  /** Tiene que coincidir carácter a carácter con lo registrado en el panel de Spotify. */
+  SPOTIFY_REDIRECT_URI: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -124,6 +149,14 @@ if (env.NODE_ENV === "production") {
       "AUTH_SECRET sigue teniendo el valor de .env.example. Cualquiera que haya " +
         "leído el repositorio puede firmar sesiones válidas.\n" +
         '    Genera uno: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64url\'))"',
+    );
+  }
+
+  if (env.VAULT_MASTER_KEY === VAULT_DE_EJEMPLO) {
+    fatales.push(
+      "VAULT_MASTER_KEY sigue teniendo el valor de .env.example. Cualquiera que haya " +
+        "leído el repositorio podría descifrar cualquier credencial guardada en la bóveda.\n" +
+        '    Genera uno: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"',
     );
   }
 

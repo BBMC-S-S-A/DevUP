@@ -327,7 +327,13 @@ export function useWorld({
     if (insideId !== zoneRef.current) {
       zoneRef.current = insideId;
       setZone(inside);
-      socketRef.current?.send(JSON.stringify({ type: "zone", zoneId: insideId }));
+      // El socket puede seguir en CONNECTING si el cambio de zona ocurre en
+      // el primer fotograma (apareces ya dentro de una sala): sin este
+      // guardián, send() lanza InvalidStateError igual que ya se evita más
+      // abajo para el envío de movimiento.
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: "zone", zoneId: insideId }));
+      }
       onZoneChangeRef.current?.(inside);
     }
 

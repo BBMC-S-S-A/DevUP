@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Files, Gamepad2, Hash, KanbanSquare, Loader2, Lock, Plus, UserRound, Volume2 } from "lucide-react";
+import { ArrowLeft, Files, Gamepad2, Hash, KanbanSquare, Loader2, Lock, Plus, Search, UserRound, Volume2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -141,6 +141,14 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-6 overflow-y-auto px-2 py-4">
+          <Link
+            href={`/app/o/${workspace.organizationId}/buscar`}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted transition hover:bg-raised hover:text-ink"
+          >
+            <Search size={15} />
+            Buscar
+          </Link>
+
           <Link
             href={`/app/w/${workspaceId}`}
             className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${

@@ -230,6 +230,71 @@ export type Recording = {
   consents: { displayName: string; granted: boolean }[];
 };
 
+export type Connection = {
+  id: string;
+  provider: "github" | "spotify";
+  displayName: string;
+  createdAt: string;
+};
+
+export type GithubStats = {
+  defaultBranch: string;
+  openPullRequests: number;
+  openIssues: number;
+  recentCommits: { sha: string; message: string; author: string; date: string }[];
+  latestRun: { status: string; conclusion: string | null; url: string } | null;
+};
+
+export type GithubRepo = {
+  id: string;
+  connectionId: string;
+  fullName: string;
+  createdAt: string;
+  data: GithubStats | null;
+  refreshedAt: string | null;
+  lastError: string | null;
+};
+
+export type SpotifyTrack = {
+  uri: string;
+  name: string;
+  artist: string;
+  imageUrl: string | null;
+  durationMs: number;
+};
+
+export type SpotifyQueueTrack = {
+  id: string;
+  trackUri: string;
+  trackName: string;
+  trackArtist: string;
+  trackImageUrl: string | null;
+  durationMs: number | null;
+  addedBy: string | null;
+};
+
+export type SpotifySession = {
+  trackUri: string | null;
+  trackName: string | null;
+  trackArtist: string | null;
+  trackImageUrl: string | null;
+  durationMs: number | null;
+  positionMs: number;
+  isPlaying: boolean;
+  updatedAt: string;
+} | null;
+
+export type SearchResult = {
+  entity: "message" | "file" | "task" | "client" | "service" | "opportunity";
+  id: string;
+  title: string;
+  snippet: string;
+  workspaceId: string | null;
+  channelId: string | null;
+  rank: number;
+  createdAt: string;
+};
+
 export type Message = {
   id: string;
   channelId: string;

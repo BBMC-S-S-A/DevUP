@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FileLibrary } from "@/components/files/FileLibrary";
 import { ChannelChat } from "@/components/chat/ChannelChat";
+import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { VoiceRoom } from "@/components/voice/VoiceRoom";
 import { ApiError, type Channel, api } from "@/lib/api";
 
@@ -53,6 +54,11 @@ export default function ChannelPage() {
           <span className="flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[10px] text-faint">
             <Lock size={9} />
             privado
+          </span>
+        )}
+        {channel.kind === "voice" && (
+          <span className="ml-auto">
+            <SpotifyWidget channelId={channelId} />
           </span>
         )}
       </header>
