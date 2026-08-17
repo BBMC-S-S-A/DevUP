@@ -71,6 +71,8 @@ type SdkPlayer = {
   seek: (ms: number) => Promise<void>;
   setVolume: (v: number) => Promise<void>;
   activateElement: () => Promise<void>;
+  /** El estado real de ESTE reproductor. Es la única fuente que no miente. */
+  getCurrentState: () => Promise<SdkEstado | null>;
 };
 
 type SdkEstado = {
@@ -388,21 +390,72 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
    * sonar audio sin un gesto del usuario, y sin esta llamada el primer play de
    * la sesión falla en silencio.
    */
-  const reproducirUri = useCallback(
-    async (uri: string) => {
-      if (!estado.dispositivoId) throw new Error("el reproductor todavía no está listo");
+  /**
+   * Espera a que este reproductor esté sonando de verdad.
+   *
+   * Existe porque el código HTTP no sirve para saberlo: Spotify responde
+   * `202 Accepted` cuando acepta la orden pero el dispositivo todavía no está
+   * activo, y eso cae dentro del rango de éxito. La orden se daba por buena, no
+   * sonaba nada, y desde fuera se veía como «hay que darle al play varias
+   * veces». Preguntarle al SDK por su estado es la única comprobación que no
+   * miente.
+   */
+  const esperarQueSuene = useCallback(async (limiteMs = 1600): Promise<boolean> => {
+    const hasta = performance.now() + limiteMs;
+    while (performance.now() < hasta) {
+      const s = await reproductor.current?.getCurrentState().catch(() => null);
+      if (s && !s.paused && s.track_window?.current_track) return true;
+      await new Promise((listo) => setTimeout(listo, 150));
+    }
+    return false;
+  }, []);
+
+  /**
+   * Da la orden y comprueba que surtió efecto; si no, la repite.
+   *
+   * Tres intentos, y entre ellos se traslada la reproducción a este equipo
+   * (`PUT /me/player`) — que es lo que de verdad lo convierte en el dispositivo
+   * activo cuando la cuenta tenía la música en el móvil o en la aplicación de
+   * escritorio, el caso en el que el `play` a secas se queda en 202.
+   */
+  const ordenarYComprobar = useCallback(
+    async (cuerpo: Record<string, unknown>) => {
+      const dispositivo = estado.dispositivoId;
+      if (!dispositivo) throw new Error("el reproductor todavía no está listo");
+
       // Antes de cualquier espera: los navegadores exigen un gesto del usuario
       // para dejar que empiece a sonar audio, y ese gesto se «gasta» si primero
       // se hace una petición.
       await reproductor.current?.activateElement().catch(() => {});
-      await conReintento(() =>
-        llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
-          method: "PUT",
-          body: JSON.stringify({ uris: [uri] }),
-        }),
-      );
+
+      for (let intento = 0; intento < 3; intento += 1) {
+        if (intento > 0) {
+          await conReintento(() =>
+            llamarSpotify("/me/player", {
+              method: "PUT",
+              body: JSON.stringify({ device_ids: [dispositivo], play: false }),
+            }),
+          ).catch(() => {});
+        }
+
+        await conReintento(() =>
+          llamarSpotify(`/me/player/play?device_id=${dispositivo}`, {
+            method: "PUT",
+            body: JSON.stringify(cuerpo),
+          }),
+        );
+
+        if (await esperarQueSuene()) return;
+      }
+
+      throw new Error("Spotify aceptó la orden pero no llegó a sonar en este equipo");
     },
-    [estado.dispositivoId],
+    [estado.dispositivoId, esperarQueSuene],
+  );
+
+  const reproducirUri = useCallback(
+    (uri: string) => ordenarYComprobar({ uris: [uri] }),
+    [ordenarYComprobar],
   );
 
   /**
@@ -416,17 +469,9 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
    * técnicamente posible y perdería todo eso.
    */
   const reproducirContexto = useCallback(
-    async (contextoUri: string, desdePista = 0) => {
-      if (!estado.dispositivoId) throw new Error("el reproductor todavía no está listo");
-      await reproductor.current?.activateElement().catch(() => {});
-      await conReintento(() =>
-        llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
-          method: "PUT",
-          body: JSON.stringify({ context_uri: contextoUri, offset: { position: desdePista } }),
-        }),
-      );
-    },
-    [estado.dispositivoId],
+    (contextoUri: string, desdePista = 0) =>
+      ordenarYComprobar({ context_uri: contextoUri, offset: { position: desdePista } }),
+    [ordenarYComprobar],
   );
 
   const alternarPausa = useCallback(async () => {

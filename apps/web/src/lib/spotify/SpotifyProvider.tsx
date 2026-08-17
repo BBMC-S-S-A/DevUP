@@ -61,6 +61,8 @@ type Valor = {
   refrescar: (channelId: string) => Promise<void>;
   /** Pone una pista y, si venía de la cola, la saca. */
   poner: (pista: Ponible) => Promise<void>;
+  /** Hay una orden de reproducción en curso: la interfaz debe decirlo. */
+  poniendo: boolean;
   /** Añade a la cola. Si no suena nada, arranca en el momento. */
   encolar: (pista: SpotifyQueueTrack) => Promise<void>;
   quitar: (id: string) => Promise<void>;
@@ -178,15 +180,37 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     void sincronizarConSpotify();
   }, [firmaCola, sincronizarConSpotify]);
 
+  /**
+   * Una orden de reproducción a la vez.
+   *
+   * Poner algo tarda un momento en confirmarse, y sin señal en pantalla lo
+   * natural es volver a pulsar. Dos órdenes solapadas se estorban —la segunda
+   * llega mientras la primera aún está trasladando el dispositivo— y el
+   * resultado es que no suena ninguna, que es justo el «hay que darle varias
+   * veces» que esto viene a arreglar. El cerrojo va en una referencia y no en
+   * el estado porque tiene que ser cierto en el instante, sin esperar a un
+   * renderizado.
+   */
+  const enCurso = useRef(false);
+  const [poniendo, setPoniendo] = useState(false);
+
   const poner = useCallback(
     async (pista: Ponible) => {
-      await player.reproducirUri(pista.trackUri);
-      // Al poner algo se rompe la cola que Spotify tenía montada, así que lo
-      // despachado deja de ser válido y hay que volver a entregarlo.
-      despachadas.current.clear();
-      despachadas.current.add(pista.trackUri);
-      if (pista.id) await quitar(pista.id);
-      await sincronizarConSpotify();
+      if (enCurso.current) return;
+      enCurso.current = true;
+      setPoniendo(true);
+      try {
+        await player.reproducirUri(pista.trackUri);
+        // Al poner algo se rompe la cola que Spotify tenía montada, así que lo
+        // despachado deja de ser válido y hay que volver a entregarlo.
+        despachadas.current.clear();
+        despachadas.current.add(pista.trackUri);
+        if (pista.id) await quitar(pista.id);
+        await sincronizarConSpotify();
+      } finally {
+        enCurso.current = false;
+        setPoniendo(false);
+      }
     },
     [player, quitar, sincronizarConSpotify],
   );
@@ -271,6 +295,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     verCanal,
     refrescar,
     poner,
+    poniendo,
     encolar,
     quitar,
   };

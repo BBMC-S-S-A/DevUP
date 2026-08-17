@@ -77,7 +77,8 @@ export function SpotifyWidget({
   // montado en el layout de /app. Por eso la música sobrevive a irse al tablero
   // o a la biblioteca — este componente es solo el mando, y no guarda copia de
   // nada (tener dos copias de la cola era lo que rompía el encadenado).
-  const { player, cuenta, cola, sesion, verCanal, refrescar, poner, encolar, quitar } = useSpotify();
+  const { player, cuenta, cola, sesion, verCanal, refrescar, poner, poniendo, encolar, quitar } =
+    useSpotify();
   const { estado: repro } = player;
 
   const conectado = cuenta?.connected ?? false;
@@ -208,6 +209,16 @@ export function SpotifyWidget({
               sinPremium={repro.sinPremium || !cuenta.premium}
               fallo={repro.fallo}
             />
+          )}
+
+          {/* La orden tarda un momento en confirmarse contra Spotify. Decirlo
+              es lo que evita que se vuelva a pulsar, y dos órdenes solapadas se
+              estorban hasta que no suena ninguna. */}
+          {poniendo && (
+            <p className="flex items-center gap-2 border-y border-line bg-canvas/40 px-4 py-2 text-[11px] text-faint">
+              <Loader2 size={11} className="animate-spin" />
+              Poniendo…
+            </p>
           )}
 
           {puedeControlar && enPortada && (
