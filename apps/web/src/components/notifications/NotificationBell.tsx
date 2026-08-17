@@ -1,9 +1,11 @@
 "use client";
 
-import { AtSign, Bell, CheckCheck, Mail, Radio, SquareCheck } from "lucide-react";
+import { AtSign, Bell, BellOff, CheckCheck, Mail, Radio, SquareCheck } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Notification, api } from "@/lib/api";
+import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { buildWsUrl, requestTicket } from "@/lib/ws";
 
 const ICONOS = {
@@ -12,6 +14,39 @@ const ICONOS = {
   invitation: Mail,
   recording: Radio,
 } as const;
+
+/**
+ * Las cuatro esquinas desde las que puede colgar el panel, con su
+ * `transform-origin` a juego: sin él el panel crece desde su propio centro y se
+ * despega visualmente de la campana que lo abrió.
+ */
+const ANCLAJES = {
+  "arriba-izquierda": "bottom-full left-0 mb-2 origin-bottom-left",
+  "arriba-derecha": "bottom-full right-0 mb-2 origin-bottom-right",
+  "abajo-izquierda": "top-full left-0 mt-2 origin-top-left",
+  "abajo-derecha": "top-full right-0 mt-2 origin-top-right",
+} as const;
+
+/** Medidas aproximadas del panel, solo para decidir hacia dónde abrirlo. */
+const ALTO_PANEL = 416;
+const ANCHO_PANEL = 320;
+
+/**
+ * Tiempo relativo corto. Un «12 min» dice más de un aviso que una fecha
+ * completa, y cabe en la esquina de la fila sin robarle sitio al texto.
+ */
+function hace(iso: string): string {
+  const marca = new Date(iso).getTime();
+  if (Number.isNaN(marca)) return "";
+  const segundos = Math.max(0, (Date.now() - marca) / 1000);
+  if (segundos < 60) return "ahora";
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `${horas} h`;
+  const dias = Math.floor(horas / 24);
+  return dias < 7 ? `${dias} d` : `${Math.floor(dias / 7)} sem`;
+}
 
 /**
  * Campana de notificaciones.
@@ -24,6 +59,7 @@ export function NotificationBell() {
   const [abierta, setAbierta] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [pendientes, setPendientes] = useState(0);
+  const [anclaje, setAnclaje] = useState<keyof typeof ANCLAJES>("arriba-izquierda");
   const contenedor = useRef<HTMLDivElement>(null);
 
   const cargar = useCallback(async () => {
@@ -91,47 +127,94 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", fuera);
   }, [abierta]);
 
+  /**
+   * La campana vive en dos sitios muy distintos —arriba a la derecha del
+   * vestíbulo y abajo a la izquierda de la barra lateral—, así que el lado se
+   * mide al abrir en vez de fijarse: clavado a uno, en el otro el panel se sale
+   * de la pantalla. Se calcula antes de abrir para que no se vea saltar.
+   */
+  const alternar = () => {
+    if (abierta) {
+      setAbierta(false);
+      return;
+    }
+    const caja = contenedor.current?.getBoundingClientRect();
+    if (caja) {
+      const vertical = caja.bottom + ALTO_PANEL > window.innerHeight ? "arriba" : "abajo";
+      const horizontal = caja.left + ANCHO_PANEL > window.innerWidth ? "derecha" : "izquierda";
+      setAnclaje(`${vertical}-${horizontal}` as keyof typeof ANCLAJES);
+    }
+    setAbierta(true);
+  };
+
   return (
     <div ref={contenedor} className="relative">
-      <button
-        type="button"
-        onClick={() => setAbierta((v) => !v)}
-        aria-label={`Notificaciones${pendientes > 0 ? ` (${pendientes} sin leer)` : ""}`}
-        className="relative rounded-lg p-1.5 text-muted transition hover:bg-raised hover:text-ink"
+      <BotonIcono
+        etiqueta={`Notificaciones${pendientes > 0 ? ` (${pendientes} sin leer)` : ""}`}
+        aria-expanded={abierta}
+        aria-haspopup="dialog"
+        onClick={alternar}
+        className={`relative ${abierta ? "bg-raised" : ""}`}
       >
-        <Bell size={16} />
+        {/* El icono lleva su propio color para que la campana encendida siga
+            encendida al pasar el puntero: un instrumento con aviso no se apaga. */}
+        <Bell size={16} className={pendientes > 0 ? "text-accent" : undefined} />
+
         {pendientes > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[9px] font-medium text-canvas">
-            {pendientes > 9 ? "9+" : pendientes}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center
+              rounded-full border border-canvas bg-accent px-1 font-mono text-[9px] font-bold leading-none
+              tabular-nums text-canvas shadow-[0_0_12px_-2px_rgb(91_140_255/0.9)]"
+          >
+            {/* Late el halo, no la cifra: un número que parpadea no se lee. */}
+            <span className="absolute -inset-1 animate-pulse-slow rounded-full bg-accent/25 blur-[2px]" />
+            <span className="relative">{pendientes > 9 ? "9+" : pendientes}</span>
           </span>
         )}
-      </button>
+      </BotonIcono>
 
       {abierta && (
-        <div className="absolute bottom-full left-0 z-40 mb-2 max-h-96 w-80 overflow-y-auto rounded-xl border border-line bg-surface shadow-xl">
-          <header className="flex items-center justify-between border-b border-line px-3 py-2">
-            <span className="text-xs font-medium">Notificaciones</span>
+        <div
+          role="dialog"
+          aria-label="Notificaciones"
+          className={`devup-emerge cristal absolute z-40 flex max-h-[26rem] w-80 flex-col
+            overflow-hidden rounded-2xl ${ANCLAJES[anclaje]}`}
+        >
+          <header className="filo-luz flex shrink-0 items-center gap-2 px-3.5 py-2.5">
+            <Rotulo>Notificaciones</Rotulo>
             {pendientes > 0 && (
-              <button
-                type="button"
+              <span className="font-mono text-[10px] font-semibold tabular-nums text-accent">
+                {pendientes}
+              </span>
+            )}
+            <span className="h-px flex-1 bg-line/70" aria-hidden />
+            {pendientes > 0 && (
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                icono={<CheckCheck size={12} />}
                 onClick={async () => {
                   await api.post("/notifications/read-all").catch(() => {});
                   await cargar();
                 }}
-                className="flex items-center gap-1 text-[11px] text-faint transition hover:text-ink"
               >
-                <CheckCheck size={12} />
                 Marcar todas
-              </button>
+              </Boton>
             )}
           </header>
 
           {items.length === 0 ? (
-            <p className="px-3 py-8 text-center text-xs text-faint">Nada por ahora.</p>
+            <EstadoVacio
+              icono={<BellOff size={18} />}
+              titulo="Nada por ahora"
+              pista="Aquí aterrizan las menciones, las tareas que te asignen y las invitaciones."
+            />
           ) : (
-            <ul className="divide-y divide-line">
+            <ul className="min-h-0 flex-1 divide-y divide-line/50 overflow-y-auto">
               {items.map((item) => {
                 const Icono = ICONOS[item.kind] ?? Bell;
+                const leida = Boolean(item.readAt);
                 return (
                   <li key={item.id}>
                     <Link
@@ -143,22 +226,42 @@ export function NotificationBell() {
                           await cargar();
                         }
                       }}
-                      className={`flex gap-2.5 px-3 py-2.5 transition hover:bg-raised ${
-                        item.readAt ? "opacity-60" : ""
+                      className={`presionable relative flex gap-2.5 px-3.5 py-2.5 hover:bg-raised/70 ${
+                        leida ? "opacity-60" : "bg-accent/5"
                       }`}
                     >
-                      <Icono size={14} className="mt-0.5 shrink-0 text-accent" />
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-medium">{item.title}</span>
+                      {/* Rail encendido en el canto en vez de un punto de 6 px:
+                          cuáles quedan por leer se ve recorriendo el borde, sin
+                          tener que buscar nada dentro de cada fila. */}
+                      {!leida && (
+                        <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden />
+                      )}
+
+                      <span
+                        className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border ${
+                          leida
+                            ? "border-line bg-canvas/50 text-faint"
+                            : "border-accent/30 bg-accent-soft/60 text-accent"
+                        }`}
+                      >
+                        <Icono size={13} />
+                      </span>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                            {item.title}
+                          </span>
+                          <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
+                            {hace(item.createdAt)}
+                          </span>
+                        </span>
                         {item.body && (
-                          <span className="mt-0.5 block truncate text-[11px] text-faint">
+                          <span className="mt-0.5 block truncate text-[11px] text-muted">
                             {item.body}
                           </span>
                         )}
                       </span>
-                      {!item.readAt && (
-                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent" />
-                      )}
                     </Link>
                   </li>
                 );
