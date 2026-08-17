@@ -212,6 +212,16 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
   /** La última URI que sonó, para avisar solo de los cambios de verdad. */
   const ultimaUri = useRef<string | null>(null);
 
+  /**
+   * Quien esté esperando a que el SDK anuncie un dispositivo nuevo.
+   *
+   * Hace falta porque el identificador de dispositivo CADUCA: Spotify lo retira
+   * tras un rato de inactividad y entonces toda orden contra él responde 404
+   * para siempre. Reintentar no arregla eso — hay que crear uno nuevo y esperar
+   * su `ready`, que es un evento y no una promesa.
+   */
+  const esperandoDispositivo = useRef<((id: string | null) => void) | null>(null);
+
   // Ancla para el contador local: en qué posición estábamos y cuándo. La
   // posición mostrada se calcula desde aquí, no se acumula — acumular deriva.
   const ancla = useRef({ posicionMs: 0, en: 0, corriendo: false });
@@ -257,10 +267,13 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
 
       p.addListener("ready", (carga) => {
         const { device_id } = carga as { device_id: string };
-        if (!cancelado) {
-          clearTimeout(paciencia);
-          setEstado((e) => ({ ...e, listo: true, fallo: null, dispositivoId: device_id }));
-        }
+        if (cancelado) return;
+        clearTimeout(paciencia);
+        setEstado((e) => ({ ...e, listo: true, fallo: null, dispositivoId: device_id }));
+        // Despertar a quien estuviera esperando un dispositivo nuevo.
+        const esperando = esperandoDispositivo.current;
+        esperandoDispositivo.current = null;
+        esperando?.(device_id);
       });
 
       p.addListener("not_ready", () => {
@@ -411,16 +424,50 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
   }, []);
 
   /**
+   * Levanta un dispositivo nuevo y devuelve su identificador.
+   *
+   * `disconnect()` + `connect()` obliga al SDK a registrarse otra vez, y el
+   * `ready` que llega después trae un identificador válido. Sin esto, un
+   * identificador caducado condena todas las órdenes a un 404 eterno por muchas
+   * veces que se reintenten — que es exactamente lo que pasaba.
+   */
+  const renovarDispositivo = useCallback(async (): Promise<string | null> => {
+    const p = reproductor.current;
+    if (!p) return null;
+
+    const nuevo = new Promise<string | null>((resolver) => {
+      esperandoDispositivo.current = resolver;
+      // Sin plazo, una reconexión que nunca completa dejaría la promesa —y con
+      // ella el botón de reproducir— colgada para siempre.
+      setTimeout(() => {
+        if (esperandoDispositivo.current === resolver) {
+          esperandoDispositivo.current = null;
+          resolver(null);
+        }
+      }, 8000);
+    });
+
+    p.disconnect();
+    await p.connect().catch(() => false);
+    return nuevo;
+  }, []);
+
+  /**
    * Da la orden y comprueba que surtió efecto; si no, la repite.
    *
-   * Tres intentos, y entre ellos se traslada la reproducción a este equipo
-   * (`PUT /me/player`) — que es lo que de verdad lo convierte en el dispositivo
-   * activo cuando la cuenta tenía la música en el móvil o en la aplicación de
-   * escritorio, el caso en el que el `play` a secas se queda en 202.
+   * Los dos motivos por los que una orden no llega a sonar piden respuestas
+   * distintas, y por eso se distinguen aquí:
+   *
+   *  · 404 — el dispositivo ya no existe para Spotify. Caduca tras un rato de
+   *    inactividad, y contra un identificador muerto no hay reintento que valga:
+   *    hay que levantar uno nuevo.
+   *  · 202 y silencio — el dispositivo existe pero no está activo, porque la
+   *    cuenta tenía la música en el móvil o en la aplicación de escritorio. Se
+   *    arregla trasladando la reproducción aquí.
    */
   const ordenarYComprobar = useCallback(
     async (cuerpo: Record<string, unknown>) => {
-      const dispositivo = estado.dispositivoId;
+      let dispositivo = estado.dispositivoId;
       if (!dispositivo) throw new Error("el reproductor todavía no está listo");
 
       // Antes de cualquier espera: los navegadores exigen un gesto del usuario
@@ -428,29 +475,45 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
       // se hace una petición.
       await reproductor.current?.activateElement().catch(() => {});
 
+      let ultimoFallo: unknown = null;
+
       for (let intento = 0; intento < 3; intento += 1) {
-        if (intento > 0) {
-          await conReintento(() =>
-            llamarSpotify("/me/player", {
+        try {
+          if (intento > 0) {
+            await llamarSpotify("/me/player", {
               method: "PUT",
               body: JSON.stringify({ device_ids: [dispositivo], play: false }),
-            }),
-          ).catch(() => {});
-        }
+            }).catch(() => {});
+          }
 
-        await conReintento(() =>
-          llamarSpotify(`/me/player/play?device_id=${dispositivo}`, {
+          await llamarSpotify(`/me/player/play?device_id=${dispositivo}`, {
             method: "PUT",
             body: JSON.stringify(cuerpo),
-          }),
-        );
+          });
 
-        if (await esperarQueSuene()) return;
+          if (await esperarQueSuene()) return;
+          ultimoFallo = new Error("Spotify aceptó la orden pero no llegó a sonar");
+        } catch (fallo) {
+          ultimoFallo = fallo;
+          const mensaje = fallo instanceof Error ? fallo.message : String(fallo);
+
+          if (/respondió 404/.test(mensaje)) {
+            const renovado = await renovarDispositivo();
+            if (!renovado) break;
+            dispositivo = renovado;
+            continue;
+          }
+          // 403 (la cuenta no puede) y 401 (token malo) no mejoran repitiendo.
+          if (!/respondió (502|503)/.test(mensaje)) throw fallo;
+          await new Promise((listo) => setTimeout(listo, 300));
+        }
       }
 
-      throw new Error("Spotify aceptó la orden pero no llegó a sonar en este equipo");
+      throw ultimoFallo instanceof Error
+        ? ultimoFallo
+        : new Error("no se pudo empezar la reproducción en este equipo");
     },
-    [estado.dispositivoId, esperarQueSuene],
+    [estado.dispositivoId, esperarQueSuene, renovarDispositivo],
   );
 
   const reproducirUri = useCallback(
