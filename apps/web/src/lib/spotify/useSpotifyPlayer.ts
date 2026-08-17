@@ -167,6 +167,36 @@ export type Playlist = {
  *   «terminó la canción», que el SDK no manda: había que inferirlo de un
  *   `paused` con la posición a 0, y eso es indistinguible de rebobinar.
  */
+/**
+ * Reintenta lo que se arregla esperando, y solo eso.
+ *
+ * El dispositivo que crea el Web Playback SDK no existe para el backend de
+ * Spotify en el mismo instante en que el SDK dice `ready`: tarda un momento en
+ * registrarse. Si la primera orden de reproducir llega en ese hueco, responde
+ * 404 «Device not found» — y desde fuera eso se ve como «hay que darle al play
+ * dos o tres veces para que suene».
+ *
+ * Se reintenta 404 (aún no registrado) y 502/503 (su servicio, de paso). Un 403
+ * es «esta cuenta no puede», y un 401 es un token malo: reintentar esos solo
+ * gasta llamadas y retrasa el mensaje de error de verdad.
+ */
+async function conReintento<T>(fn: () => Promise<T>, intentos = 3): Promise<T> {
+  let ultimo: unknown;
+  for (let intento = 0; intento < intentos; intento += 1) {
+    try {
+      return await fn();
+    } catch (fallo) {
+      ultimo = fallo;
+      const mensaje = fallo instanceof Error ? fallo.message : String(fallo);
+      if (!/respondió (404|502|503)/.test(mensaje)) throw fallo;
+      // Espera creciente y corta: 250, 500, 750 ms. Más que suficiente para que
+      // el dispositivo aparezca, y poco para que no se note como lentitud.
+      await new Promise((listo) => setTimeout(listo, 250 * (intento + 1)));
+    }
+  }
+  throw ultimo;
+}
+
 export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string) => void) {
   const [estado, setEstado] = useState<EstadoReproductor>(ESTADO_INICIAL);
   const reproductor = useRef<SdkPlayer | null>(null);
@@ -361,11 +391,16 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
   const reproducirUri = useCallback(
     async (uri: string) => {
       if (!estado.dispositivoId) throw new Error("el reproductor todavía no está listo");
+      // Antes de cualquier espera: los navegadores exigen un gesto del usuario
+      // para dejar que empiece a sonar audio, y ese gesto se «gasta» si primero
+      // se hace una petición.
       await reproductor.current?.activateElement().catch(() => {});
-      await llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
-        method: "PUT",
-        body: JSON.stringify({ uris: [uri] }),
-      });
+      await conReintento(() =>
+        llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
+          method: "PUT",
+          body: JSON.stringify({ uris: [uri] }),
+        }),
+      );
     },
     [estado.dispositivoId],
   );
@@ -384,10 +419,12 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
     async (contextoUri: string, desdePista = 0) => {
       if (!estado.dispositivoId) throw new Error("el reproductor todavía no está listo");
       await reproductor.current?.activateElement().catch(() => {});
-      await llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
-        method: "PUT",
-        body: JSON.stringify({ context_uri: contextoUri, offset: { position: desdePista } }),
-      });
+      await conReintento(() =>
+        llamarSpotify(`/me/player/play?device_id=${estado.dispositivoId}`, {
+          method: "PUT",
+          body: JSON.stringify({ context_uri: contextoUri, offset: { position: desdePista } }),
+        }),
+      );
     },
     [estado.dispositivoId],
   );
@@ -415,9 +452,11 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
   const encolarEnSpotify = useCallback(
     async (uri: string) => {
       if (!estado.dispositivoId) return;
-      await llamarSpotify(
-        `/me/player/queue?uri=${encodeURIComponent(uri)}&device_id=${estado.dispositivoId}`,
-        { method: "POST" },
+      await conReintento(() =>
+        llamarSpotify(
+          `/me/player/queue?uri=${encodeURIComponent(uri)}&device_id=${estado.dispositivoId}`,
+          { method: "POST" },
+        ),
       );
     },
     [estado.dispositivoId],

@@ -102,12 +102,20 @@ export function SpotifyWidget({
     return () => document.removeEventListener("mousedown", fuera);
   }, [abierto]);
 
+  /**
+   * Los errores se cuentan con su motivo, no con un «no se pudo».
+   *
+   * Dos bugs de esta misma integración se tardaron en encontrar justamente
+   * porque el fallo real quedaba tapado por un mensaje genérico.
+   */
   const reproducir = useCallback(
     async (pista: Ponible) => {
       try {
         await poner(pista);
-      } catch {
-        toast.error("No se pudo reproducir");
+      } catch (fallo) {
+        toast.error("No se pudo reproducir", {
+          description: fallo instanceof Error ? fallo.message : undefined,
+        });
       }
     },
     [poner],
@@ -118,8 +126,10 @@ export function SpotifyWidget({
     async (contextoUri: string) => {
       try {
         await player.reproducirContexto(contextoUri);
-      } catch {
-        toast.error("No se pudo poner la lista");
+      } catch (fallo) {
+        toast.error("No se pudo poner la lista", {
+          description: fallo instanceof Error ? fallo.message : undefined,
+        });
       }
     },
     [player],
