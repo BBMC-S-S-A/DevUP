@@ -1,11 +1,13 @@
 "use client";
 
-import { AlertCircle, Loader2, MailCheck } from "lucide-react";
+import { AlertCircle, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ApiError, type SignupPolicy, type User, api } from "@/lib/api";
+import { Boton } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
+import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
 
 type Mode = "login" | "register";
@@ -16,6 +18,27 @@ const FRASES = [
   "cifrado extremo a extremo, siempre.",
   "todo tu equipo, un solo sitio.",
 ];
+
+/**
+ * Los subsistemas que promete la marca, pintados como lecturas de un panel:
+ * rótulo a la izquierda, nota técnica a la derecha. Es texto fijo, no telemetría
+ * — el punto encendido dice «esto existe», no «esto está pasando ahora».
+ */
+const MODULOS = [
+  { nombre: "Canales", nota: "texto e hilos" },
+  { nombre: "Voz", nota: "cifrada" },
+  { nombre: "Archivos", nota: "biblioteca" },
+  { nombre: "Ventas", nota: "embudo" },
+];
+
+/* La luz de la cabina: el foco azul arriba a la izquierda repite el de
+   `body::before`, para que el acceso y la aplicación estén iluminados igual. */
+const LUZ_MARCA =
+  "radial-gradient(38rem 30rem at 10% 4%, rgb(91 140 255 / 0.16), transparent 62%)," +
+  "radial-gradient(30rem 24rem at 92% 98%, rgb(62 224 245 / 0.09), transparent 60%)";
+
+/** El escalonado vive en CSS (`--retraso` de globals.css); esto solo lo escribe. */
+const retraso = (ms: number) => ({ "--retraso": `${ms}ms` }) as React.CSSProperties;
 
 export default function LoginPage() {
   return (
@@ -131,98 +154,154 @@ function LoginForm() {
     <main className="grid min-h-screen lg:grid-cols-2">
       {/* Panel de marca. Oculto en móvil: en una pantalla pequeña es la
           mitad del sitio gastada en algo que no ayuda a entrar. */}
-      <div className="relative hidden overflow-hidden border-r border-line bg-surface lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="devup-rejilla pointer-events-none absolute inset-0 opacity-[0.35]" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-surface via-surface/60 to-surface" />
+      <aside className="relative hidden overflow-hidden border-r border-line bg-surface lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div className="rejilla pointer-events-none absolute inset-0" />
+        <div className="pointer-events-none absolute inset-0" style={{ background: LUZ_MARCA }} />
+        {/* El panel se apaga contra su canto derecho para que el formulario no
+            tenga que competir con la marca por la atención. */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-40 bg-gradient-to-r from-transparent to-canvas/70" />
 
-        <div className="relative devup-entrada" style={{ "--retraso": "0ms" } as React.CSSProperties}>
+        <div className="filo-luz relative pb-6 devup-entrada" style={retraso(0)}>
           <div className="flex items-center gap-3">
-            <Logo size={36} animated />
-            <span className="text-base font-semibold tracking-tight">DevUP</span>
+            <Logo size={38} animated />
+            <div>
+              <p className="font-display text-base font-semibold tracking-tight">DevUP</p>
+              <Rotulo>Centro de mando</Rotulo>
+            </div>
           </div>
         </div>
 
-        <div className="relative devup-entrada max-w-md" style={{ "--retraso": "120ms" } as React.CSSProperties}>
-          <h2 className="mb-3 text-2xl font-semibold tracking-tight text-ink">
-            Centro de mando para tu equipo
+        <div className="relative max-w-md">
+          <h2
+            className="devup-entrada text-[2rem] leading-[1.08] text-ink"
+            style={retraso(80)}
+          >
+            Todo el equipo <span className="texto-plasma">en un solo panel</span>
           </h2>
-          <p className="mb-6 text-sm leading-relaxed text-muted">
+          <p
+            className="devup-entrada mt-4 text-sm leading-relaxed text-muted"
+            style={retraso(140)}
+          >
             Workspaces, voz cifrada, biblioteca de archivos y control de ventas
             en un solo sitio, sin repartir el trabajo entre media docena de
             herramientas que no se hablan entre ellas.
           </p>
-          <MaquinaDeEscribir />
+
+          <div
+            className="devup-entrada relative mt-7 overflow-hidden rounded-xl border border-line bg-canvas/70 py-2.5 pl-4 pr-3.5"
+            style={retraso(200)}
+          >
+            {/* Filamento del acento en el canto: convierte la línea de consola
+                en un instrumento encendido y no en una cita suelta. */}
+            <span className="absolute inset-y-2 left-0 w-px bg-gradient-to-b from-transparent via-accent to-transparent" />
+            <MaquinaDeEscribir />
+          </div>
         </div>
-      </div>
+
+        <div className="relative max-w-md">
+          <ul
+            className="devup-entrada grid grid-cols-2 gap-x-8 gap-y-2.5"
+            style={retraso(260)}
+          >
+            {MODULOS.map((modulo) => (
+              <li key={modulo.nombre} className="flex items-center gap-2">
+                <span className="size-1.5 shrink-0 rounded-full bg-accent/70" />
+                <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                  {modulo.nombre}
+                </span>
+                <span className="ml-auto font-mono text-[10px] text-faint">{modulo.nota}</span>
+              </li>
+            ))}
+          </ul>
+          <p
+            className="devup-entrada mt-6 flex items-center gap-1.5 font-mono text-[10px] text-faint"
+            style={retraso(300)}
+          >
+            <ShieldCheck size={12} />
+            cifrado extremo a extremo
+          </p>
+        </div>
+      </aside>
 
       {/* Panel de formulario */}
-      <div className="grid place-items-center px-6 py-12">
-        <div className="w-full max-w-sm">
+      <div className="relative grid place-items-center overflow-hidden px-6 py-12">
+        {/* Sin panel de marca al lado, el móvil se quedaba con un formulario
+            flotando en negro; la rejilla le devuelve el suelo. */}
+        <div className="rejilla pointer-events-none absolute inset-0 lg:hidden" />
+
+        <div className="relative w-full max-w-sm">
           <div
-            className="devup-entrada mb-8 flex items-center gap-3 lg:hidden"
-            style={{ "--retraso": "0ms" } as React.CSSProperties}
+            className="devup-entrada mb-6 flex items-center gap-3 lg:hidden"
+            style={retraso(0)}
           >
             <Logo size={40} animated />
             <div>
-              <h1 className="text-lg font-semibold tracking-tight">DevUP</h1>
-              <p className="text-xs text-faint">Centro de mando del equipo</p>
+              <p className="font-display text-lg font-semibold tracking-tight">DevUP</p>
+              <Rotulo>Centro de mando</Rotulo>
             </div>
           </div>
 
-          <div
-            className="devup-entrada mb-8 hidden lg:block"
-            style={{ "--retraso": "60ms" } as React.CSSProperties}
-          >
-            <h1 className="text-xl font-semibold tracking-tight">
-              {mode === "login" ? "Entrar" : "Crear cuenta"}
-            </h1>
-            <p className="mt-1 text-sm text-faint">
-              {mode === "login"
-                ? "Con el correo y la contraseña de tu cuenta."
-                : "Toma menos de un minuto."}
-            </p>
-          </div>
+          {/* El formulario llega después de la marca: primero se enciende la
+              pantalla, luego aparece lo que hay que rellenar. */}
+          <Tarjeta className="devup-entrada p-6" style={retraso(340)}>
+            <div className="mb-5">
+              <Rotulo>{inviteToken ? "Invitación" : "Acceso"}</Rotulo>
+              <h1 className="mt-1.5 text-xl font-semibold tracking-tight">
+                {mode === "login" ? "Entrar" : "Crear cuenta"}
+              </h1>
+              <p className="mt-1 text-sm text-muted">
+                {mode === "login"
+                  ? "Con el correo y la contraseña de tu cuenta."
+                  : "Toma menos de un minuto."}
+              </p>
+            </div>
 
-          {policy?.bootstrap && (
-            <p
-              className="devup-entrada mb-5 rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-xs text-accent"
-              style={{ "--retraso": "80ms" } as React.CSSProperties}
-            >
-              Esta instancia está vacía. La primera cuenta que se cree será la
-              administradora; a partir de ahí solo se entra por invitación.
-            </p>
-          )}
+            {policy?.bootstrap && (
+              <div className="mb-5 rounded-xl border border-accent/30 bg-accent-soft/40 p-3">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <ShieldCheck size={13} className="text-accent" />
+                  <Rotulo className="text-accent">Instancia vacía</Rotulo>
+                </div>
+                <p className="text-xs leading-relaxed text-muted">
+                  La primera cuenta que se cree será la administradora; a partir
+                  de ahí solo se entra por invitación.
+                </p>
+              </div>
+            )}
 
-          {puedeRegistrarse && (
-            <div
-              className="devup-entrada relative mb-6 flex gap-1 rounded-lg border border-line bg-surface p-1"
-              style={{ "--retraso": "100ms" } as React.CSSProperties}
-            >
-              <div
-                className="absolute inset-y-1 w-[calc(50%-4px)] rounded-md bg-raised shadow-sm transition-transform duration-300 ease-out"
-                style={{ transform: mode === "register" ? "translateX(calc(100% + 4px))" : "translateX(0)" }}
-              />
-              {(["login", "register"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    setMode(option);
-                    setError(null);
+            {puedeRegistrarse && (
+              <div className="relative mb-5 grid grid-cols-2 rounded-xl border border-line bg-canvas/60 p-1">
+                {/* Un solo pulgar que se desplaza, en vez de dos fondos que se
+                    encienden y apagan: así el conmutador tiene continuidad. Sin
+                    hueco entre columnas, el ancho del pulgar y el de la celda
+                    coinciden exactamente y `translateX(100%)` cae en su sitio. */}
+                <div
+                  className="pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg bg-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_1px_2px_rgb(0_0_0/0.4)] transition-transform duration-200"
+                  style={{
+                    transform: mode === "register" ? "translateX(100%)" : "translateX(0)",
+                    transitionTimingFunction: "var(--ease-out)",
                   }}
-                  className={`relative flex-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    mode === option ? "text-ink" : "text-muted hover:text-ink"
-                  }`}
-                >
-                  {option === "login" ? "Entrar" : "Crear cuenta"}
-                </button>
-              ))}
-            </div>
-          )}
+                />
+                {(["login", "register"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setMode(option);
+                      setError(null);
+                    }}
+                    className={`presionable relative rounded-lg px-3 py-1.5 font-display text-[11px] font-semibold uppercase tracking-[0.12em] ${
+                      mode === option ? "text-ink" : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    {option === "login" ? "Entrar" : "Crear cuenta"}
+                  </button>
+                ))}
+              </div>
+            )}
 
-          <form onSubmit={submit} className="space-y-4">
-            {mode === "register" && (
-              <div className="devup-entrada" style={{ "--retraso": "140ms" } as React.CSSProperties}>
+            <form onSubmit={submit} className="space-y-4">
+              {mode === "register" && (
                 <Field
                   label="Nombre"
                   value={displayName}
@@ -230,10 +309,8 @@ function LoginForm() {
                   placeholder="Ana Martín"
                   autoComplete="name"
                 />
-              </div>
-            )}
+              )}
 
-            <div className="devup-entrada" style={{ "--retraso": "160ms" } as React.CSSProperties}>
               <Field
                 label="Correo"
                 type="email"
@@ -243,9 +320,7 @@ function LoginForm() {
                 autoComplete="email"
                 required
               />
-            </div>
 
-            <div className="devup-entrada" style={{ "--retraso": "200ms" } as React.CSSProperties}>
               <Field
                 label="Contraseña"
                 type="password"
@@ -256,46 +331,53 @@ function LoginForm() {
                 required
                 hint={mode === "register" ? "Diez caracteres o más." : undefined}
               />
-            </div>
 
-            {error && (
-              <p className="devup-entrada flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                {error}
-              </p>
-            )}
+              {error && (
+                <p
+                  role="alert"
+                  className="devup-entrada flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger"
+                >
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  {error}
+                </p>
+              )}
 
-            {forgotSent && (
-              <p className="devup-entrada flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-sm text-muted">
-                <MailCheck size={16} className="mt-0.5 shrink-0" />
-                Si esa dirección tiene cuenta, le llegará un enlace para cambiar la contraseña.
-              </p>
-            )}
+              {forgotSent && (
+                <p className="devup-entrada flex items-start gap-2 rounded-xl border border-line bg-raised/60 px-3 py-2 text-sm text-muted">
+                  <MailCheck size={16} className="mt-0.5 shrink-0 text-live" />
+                  Si esa dirección tiene cuenta, le llegará un enlace para cambiar la contraseña.
+                </p>
+              )}
 
-            <div className="devup-entrada" style={{ "--retraso": "240ms" } as React.CSSProperties}>
-              <button
+              <Boton
                 type="submit"
-                disabled={busy}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-canvas transition duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                variante="primario"
+                cargando={busy}
+                className="w-full"
+                icono={mode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
               >
-                {busy && <Loader2 size={16} className="animate-spin" />}
                 {mode === "login" ? "Entrar" : "Crear cuenta"}
-              </button>
+              </Boton>
 
               {mode === "login" && !forgotSent && (
-                <button
+                <Boton
                   type="button"
+                  variante="fantasma"
+                  tamano="sm"
+                  className="w-full"
                   onClick={() => void forgot()}
-                  className="mt-3 w-full text-center text-xs text-faint transition hover:text-muted"
                 >
                   He olvidado mi contraseña
-                </button>
+                </Boton>
               )}
-            </div>
-          </form>
+            </form>
+          </Tarjeta>
 
           {!puedeRegistrarse && (
-            <p className="devup-entrada mt-6 text-center text-xs text-faint">
+            <p
+              className="devup-entrada mt-5 text-center text-xs leading-relaxed text-faint"
+              style={retraso(420)}
+            >
               Esta instancia solo admite altas por invitación. Pídele a alguien del equipo que te
               invite desde su organización.
             </p>

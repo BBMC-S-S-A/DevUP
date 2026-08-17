@@ -18,6 +18,16 @@ const STYLES: Record<string, string> = {
   teal: "bg-teal-500/15 text-teal-300 border-teal-500/25",
 };
 
+/**
+ * Misma geometría y tipografía que el `Chip` de Superficies: en una rejilla de
+ * archivos conviven etiquetas del usuario y chips del sistema, y si cada una
+ * tiene su forma la tarjeta parece un collage. Lo único que cambia es de dónde
+ * sale el color.
+ */
+const FORMA =
+  "inline-flex shrink-0 items-center gap-1 rounded-full border font-display " +
+  "text-[10px] font-semibold uppercase tracking-wider";
+
 export function TagBadge({
   tag,
   onClick,
@@ -27,17 +37,26 @@ export function TagBadge({
   onClick?: () => void;
   active?: boolean;
 }) {
-  const className = `inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition ${
-    STYLES[tag.color] ?? STYLES.slate
-  } ${active ? "ring-1 ring-current" : ""} ${onClick ? "cursor-pointer hover:brightness-125" : ""}`;
+  const color = STYLES[tag.color] ?? STYLES.slate;
 
-  if (!onClick) return <span className={className}>{tag.name}</span>;
+  // Sin `onClick` es un rótulo dentro de una tarjeta: se lee, no se toca.
+  if (!onClick) {
+    return <span className={`${FORMA} ${color} px-2 py-0.5`}>{tag.name}</span>;
+  }
 
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`presionable ${FORMA} ${color} px-2.5 py-1
+        ${active ? "brightness-125 ring-1 ring-current" : "hover:brightness-125"}`}
+    >
       {tag.name}
       {typeof tag.fileCount === "number" && (
-        <span className="opacity-60">{tag.fileCount}</span>
+        // La cifra en mono para que las etiquetas de una fila no bailen de
+        // ancho al cambiar de 9 a 10 archivos.
+        <span className="font-mono text-[10px] tabular-nums opacity-60">{tag.fileCount}</span>
       )}
     </button>
   );

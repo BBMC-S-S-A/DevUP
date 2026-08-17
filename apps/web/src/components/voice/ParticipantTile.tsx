@@ -1,12 +1,29 @@
 "use client";
 
-import { Loader2, Mic, MicOff, MonitorUp } from "lucide-react";
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { AudioLines, Loader2, Mic, MicOff, MonitorUp } from "lucide-react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { Rotulo } from "@/components/ui/Superficies";
 import type { Participant } from "@/lib/voice/useVoiceRoom";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
+
+/**
+ * El halo de «está hablando». Es el mismo valor que usa `.panel-vivo` para el
+ * acento, pero en verde: en toda la aplicación el verde significa «esto está
+ * pasando ahora mismo», y hablar es exactamente eso.
+ *
+ * Va en `style` y no en una utilidad de Tailwind porque `.panel` declara su
+ * propia `box-shadow` sin capa, y una regla sin capa gana a cualquier utilidad.
+ */
+const HALO_HABLANDO: CSSProperties = { boxShadow: "var(--halo-live)" };
 
 /**
  * Reproduce el audio de un participante remoto — una sola vez por persona,
@@ -42,6 +59,7 @@ export function ParticipantVideos({
   participant,
   isSelf = false,
   spotlightScreen = false,
+  indice = 0,
 }: {
   participant: Pick<
     Participant,
@@ -57,6 +75,8 @@ export function ParticipantVideos({
   isSelf?: boolean;
   /** Con alguien compartiendo pantalla en la sala, ese recuadro se agranda. */
   spotlightScreen?: boolean;
+  /** Posición en la rejilla. Solo sirve para escalonar la entrada. */
+  indice?: number;
 }) {
   const speaking = useSpeaking(participant.audioStream, !participant.muted);
 
@@ -73,7 +93,7 @@ export function ParticipantVideos({
   return (
     <>
       {!isSelf && <HiddenAudio stream={participant.audioStream} />}
-      {tiles.map((tile) => (
+      {tiles.map((tile, posicion) => (
         <ParticipantTile
           key={tile.key}
           kind={tile.kind}
@@ -84,6 +104,9 @@ export function ParticipantVideos({
           speaking={speaking}
           videoStream={tile.videoStream}
           spotlight={tile.kind === "screen" && spotlightScreen}
+          // El índice se topa: en una sala de diez, el último recuadro no debe
+          // entrar medio segundo después que el primero.
+          retraso={(Math.min(indice, 8) + posicion) * 45}
         />
       ))}
     </>
@@ -99,6 +122,7 @@ function ParticipantTile({
   speaking,
   videoStream,
   spotlight = false,
+  retraso = 0,
 }: {
   kind: "camera" | "screen" | "voice";
   displayName: string;
@@ -108,6 +132,7 @@ function ParticipantTile({
   speaking: boolean;
   videoStream: MediaStream | null;
   spotlight?: boolean;
+  retraso?: number;
 }) {
   const media = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -143,6 +168,7 @@ function ParticipantTile({
     .join("");
 
   const connecting = !isSelf && connectionState !== "connected";
+  const failed = connectionState === "failed";
 
   // React 19 registra el listener nativo de `wheel` que hay detrás de
   // `onWheel` como pasivo — `preventDefault()` ahí es un no-op silencioso, y
@@ -197,16 +223,36 @@ function ParticipantTile({
   const resetZoom = () => setZoom({ scale: MIN_ZOOM, x: 0, y: 0 });
 
   return (
+    // Sin `overflow-hidden` aquí a propósito: el halo de hablar se dibuja por
+    // fuera del canto y un recorte lo dejaría en nada. Quien recorta el vídeo
+    // es el marco de abajo, que ya lleva su propio radio.
     <li
-      className={`relative flex flex-col overflow-hidden rounded-2xl border bg-surface transition ${
-        speaking ? "border-live/60 shadow-[0_0_0_3px_rgba(52,211,153,0.12)]" : "border-line"
-      } ${spotlight ? "col-span-full row-span-2 sm:col-span-2 lg:col-span-3" : ""}`}
+      className={`panel devup-entrada relative flex flex-col rounded-2xl ${
+        spotlight ? "col-span-full row-span-2 sm:col-span-2 lg:col-span-3" : ""
+      }`}
+      style={{ "--retraso": `${retraso}ms` } as CSSProperties}
     >
+      {/*
+        El halo se enciende cambiando solo la opacidad de esta capa. Interpolar
+        una `box-shadow` entre «ninguna» y «halo» no da transición ninguna, y
+        además la opacidad no obliga al navegador a rehacer el vídeo que hay
+        debajo — con seis recuadros reproduciendo a la vez eso importa.
+        El indicador ya viene con histéresis del hook: aquí no hace falta más
+        amortiguación que los 260 ms de la propia transición.
+      */}
+      <span
+        aria-hidden
+        style={HALO_HABLANDO}
+        className={`pointer-events-none absolute inset-0 z-10 rounded-2xl
+          transition-opacity duration-[260ms] ease-[var(--ease-out)]
+          ${speaking ? "opacity-100" : "opacity-0"}`}
+      />
+
       <div
         ref={frame}
-        className={`relative grid aspect-video place-items-center overflow-hidden bg-canvas ${
-          !hasVideo ? "" : zoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
-        }`}
+        className={`relative grid aspect-video place-items-center overflow-hidden rounded-t-2xl bg-canvas ${
+          kind === "voice" ? "rejilla" : ""
+        } ${!hasVideo ? "" : zoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={stopDragging}
@@ -218,58 +264,100 @@ function ParticipantTile({
             ref={media}
             autoPlay
             playsInline
-            // El vídeo propio se refleja como un espejo: es lo que espera
-            // cualquiera que se vea a sí mismo. El de los demás, y la
-            // pantalla compartida (aunque sea la propia), no.
+            // Sin esto, la propia voz vuelve por el altavoz con retardo y
+            // hablar se vuelve imposible.
             muted={isSelf}
             style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})` }}
+            // El vídeo propio se refleja como un espejo: es lo que espera
+            // cualquiera que se vea a sí mismo. El de los demás, y la pantalla
+            // compartida (aunque sea la propia), no.
             className={`size-full select-none ${kind === "screen" ? "object-contain" : "object-cover"} ${
               isSelf && kind === "camera" ? "-scale-x-100" : ""
             }`}
           />
         ) : (
           <div
-            className={`grid size-14 place-items-center rounded-full text-base font-medium transition ${
-              speaking ? "bg-live/20 text-live" : "bg-raised text-muted"
-            }`}
+            className={`relative transition-transform duration-[260ms] ease-[var(--ease-out)]
+              motion-reduce:transform-none ${speaking ? "scale-105" : ""}`}
           >
-            {initials || "?"}
+            <span
+              aria-hidden
+              style={HALO_HABLANDO}
+              className={`pointer-events-none absolute inset-0 rounded-full
+                transition-opacity duration-[260ms] ease-[var(--ease-out)]
+                ${speaking ? "opacity-100" : "opacity-0"}`}
+            />
+            <div
+              className={`grid size-16 place-items-center rounded-full border font-display text-lg font-semibold
+                transition-colors duration-[260ms] ease-[var(--ease-out)] ${
+                  speaking
+                    ? "border-live/50 bg-live/15 text-live"
+                    : "border-line-strong bg-raised text-muted"
+                }`}
+            >
+              {initials || "?"}
+            </div>
           </div>
         )}
 
         {kind === "screen" && (
-          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-canvas/80 px-1.5 py-0.5 text-[10px] text-accent">
+          <span
+            className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-lg border border-white/10
+              bg-canvas/75 px-1.5 py-0.5 font-display text-[10px] font-semibold uppercase tracking-wider
+              text-accent-bright backdrop-blur-sm"
+          >
             <MonitorUp size={10} />
             pantalla
           </span>
         )}
 
         {hasVideo && zoomed && (
-          <span className="absolute bottom-2 right-2 rounded-md bg-canvas/80 px-1.5 py-0.5 text-[10px] text-faint">
-            {Math.round(zoom.scale * 100)}% · doble clic para restablecer
+          <span
+            className="absolute bottom-2 right-2 inline-flex items-center gap-1.5 rounded-lg border border-white/10
+              bg-canvas/75 px-1.5 py-0.5 text-[10px] text-muted backdrop-blur-sm"
+          >
+            <span className="font-mono tabular-nums text-ink">{Math.round(zoom.scale * 100)}%</span>
+            doble clic para restablecer
           </span>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="min-w-0 truncate text-xs">
-          {displayName}
-          {isSelf && <span className="ml-1 text-faint">(tú)</span>}
-          {kind === "camera" && <span className="ml-1 text-faint">· cámara</span>}
+      <div className="flex items-center justify-between gap-2 rounded-b-2xl bg-canvas/40 px-3 py-2">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-xs font-medium">{displayName}</span>
+          {isSelf && <Rotulo>tú</Rotulo>}
+          {kind === "camera" && <Rotulo>cámara</Rotulo>}
         </span>
 
-        <span className="flex shrink-0 items-center gap-1 text-[11px] text-faint">
-          {connecting ? (
-            <>
+        {connecting ? (
+          <span
+            className={`flex shrink-0 items-center gap-1 font-display text-[10px] font-semibold uppercase
+              tracking-wider ${failed ? "text-danger" : "text-faint"}`}
+          >
+            {failed ? (
+              <span aria-hidden className="size-1.5 rounded-full bg-danger" />
+            ) : (
               <Loader2 size={11} className="animate-spin" />
-              {connectionState === "failed" ? "sin conexión" : "conectando"}
-            </>
-          ) : muted ? (
-            <MicOff size={12} className="text-warn" />
-          ) : (
-            <Mic size={12} className={speaking ? "text-live" : ""} />
-          )}
-        </span>
+            )}
+            {failed ? "sin conexión" : "conectando"}
+          </span>
+        ) : muted ? (
+          <span className="flex shrink-0 items-center text-warn">
+            <MicOff size={13} />
+            <span className="sr-only">Micrófono silenciado</span>
+          </span>
+        ) : (
+          // La onda solo aparece mientras suena la voz: un icono que cambia
+          // dice «está hablando» mucho antes que un color que cambia.
+          <span
+            className={`flex shrink-0 items-center transition-colors duration-[200ms] ease-[var(--ease-out)] ${
+              speaking ? "text-live" : "text-faint"
+            }`}
+          >
+            {speaking ? <AudioLines size={13} /> : <Mic size={13} />}
+            <span className="sr-only">{speaking ? "Hablando" : "Micrófono abierto"}</span>
+          </span>
+        )}
       </div>
     </li>
   );

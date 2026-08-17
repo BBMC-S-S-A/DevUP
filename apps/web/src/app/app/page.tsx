@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   Building2,
   ChevronRight,
   Github,
@@ -18,7 +19,10 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, type Organization, type PendingInvitation, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { Boton } from "@/components/ui/Boton";
+import { Entrada } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
+import { Chip, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
 
 /** El callback de Spotify vuelve aquí con `?spotify=...`; esto lo avisa y lo limpia de la URL. */
@@ -36,6 +40,27 @@ function SpotifyRedirectToast() {
 
   return null;
 }
+
+/**
+ * Ventas, búsqueda y GitHub son de la organización, no de un workspace: el
+ * embudo y buscar en todo lo del equipo no son de un sitio de trabajo concreto.
+ *
+ * Están declarados aquí fuera y no incrustados en el JSX porque así los tres
+ * son obligatoriamente el mismo control: tres enlaces escritos a mano uno
+ * debajo de otro es como uno acaba con tres tamaños distintos.
+ */
+const ACCESOS = [
+  { ruta: "buscar", icono: Search, titulo: "Buscar", pista: "En todo el equipo" },
+  { ruta: "ventas", icono: TrendingUp, titulo: "Ventas", pista: "Embudo y clientes" },
+  { ruta: "github", icono: Github, titulo: "GitHub", pista: "Repos y actividad" },
+] as const;
+
+/** El rol viene en inglés de la API; aquí solo se traduce para leerlo. */
+const ROLES: Record<Organization["role"], string> = {
+  owner: "Propietario",
+  admin: "Admin",
+  member: "Miembro",
+};
 
 export default function OrganizationsPage() {
   const { user, signOut } = useSession();
@@ -72,111 +97,195 @@ export default function OrganizationsPage() {
     void load();
   }, [load]);
 
+  const totalWorkspaces = Object.values(workspaces).reduce((suma, lista) => suma + lista.length, 0);
+
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
+    <main className="mx-auto max-w-4xl px-5 py-10 sm:px-6">
       <Suspense fallback={null}>
         <SpotifyRedirectToast />
       </Suspense>
-      <header className="mb-10 flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <Logo size={40} />
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">DevUP</h1>
-            <p className="text-xs text-faint">{user?.email}</p>
+
+      {/* Cabecera de cabina: identidad a la izquierda, mandos a la derecha y una
+          fila de cifras debajo. La rejilla va en una capa aparte para que su
+          máscara radial no recorte también el texto. */}
+      <Tarjeta className="relative mb-8 overflow-hidden px-5 py-5">
+        <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
+
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Logo size={44} animated />
+            <div className="min-w-0">
+              <Rotulo className="block">Centro de mando</Rotulo>
+              <h1 className="mt-0.5 text-xl font-semibold">DevUP</h1>
+              <p className="mt-1 truncate font-mono text-[11px] text-muted">{user?.email}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <Boton
+              variante="secundario"
+              tamano="sm"
+              icono={<LogOut size={14} />}
+              onClick={() => void signOut()}
+            >
+              Salir
+            </Boton>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <NotificationBell />
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition hover:border-line-strong hover:text-ink"
-          >
-            <LogOut size={14} />
-            Salir
-          </button>
-        </div>
-      </header>
 
-      {error && <p className="mb-6 text-sm text-danger">{error}</p>}
+        {!loading && (
+          <div className="relative mt-5 flex items-end gap-8 border-t border-line/70 pt-4">
+            <Cifra etiqueta="Organizaciones" valor={organizations.length} />
+            <Cifra etiqueta="Workspaces" valor={totalWorkspaces} />
+          </div>
+        )}
+      </Tarjeta>
+
+      {error && (
+        <div className="mb-6 flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
 
       {loading ? (
-        <p className="text-sm text-faint">Cargando…</p>
+        <div className="space-y-4" role="status" aria-label="Cargando organizaciones">
+          <EsqueletoOrganizacion />
+          <EsqueletoOrganizacion />
+        </div>
       ) : (
-        <div className="space-y-8">
-          {organizations.map((org, index) => (
-            <section
-              key={org.id}
-              className="devup-entrada"
-              style={{ "--retraso": `${Math.min(index, 6) * 60}ms` } as React.CSSProperties}
-            >
-              <div className="mb-3 flex items-center gap-2">
-                <Building2 size={15} className="text-faint" />
-                <h2 className="text-sm font-medium">{org.name}</h2>
-                <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-faint">
-                  {org.role}
-                </span>
-                {/* Ventas y búsqueda son de la organización, no de un
-                    workspace: el embudo y buscar en todo lo del equipo no son
-                    de un sitio de trabajo concreto. */}
-                <Link
-                  href={`/app/o/${org.id}/buscar`}
-                  className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
-                >
-                  <Search size={12} />
-                  Buscar
-                </Link>
-                <Link
-                  href={`/app/o/${org.id}/ventas`}
-                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
-                >
-                  <TrendingUp size={12} />
-                  Ventas
-                </Link>
-                <Link
-                  href={`/app/o/${org.id}/github`}
-                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[11px] text-muted transition hover:text-ink"
-                >
-                  <Github size={12} />
-                  GitHub
-                </Link>
-              </div>
+        <div className="space-y-4">
+          {organizations.map((org, index) => {
+            const lista = workspaces[org.id] ?? [];
+            return (
+              <Tarjeta
+                key={org.id}
+                className="devup-entrada overflow-hidden"
+                // El índice va topado: sin esto la organización número veinte
+                // entraría más de un segundo tarde y parecería que falla.
+                style={{ "--retraso": `${Math.min(index, 8) * 60}ms` } as React.CSSProperties}
+              >
+                {/* Cabecera de instrumento */}
+                <header className="filo-luz flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised/30 px-4 py-3.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong bg-canvas/60 text-accent">
+                    <Building2 size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <Rotulo className="block">Organización</Rotulo>
+                    <h2 className="mt-0.5 truncate text-base font-semibold">{org.name}</h2>
+                  </div>
+                  <span className="font-mono text-[11px] text-faint">/{org.slug}</span>
+                  <Chip tono={org.role === "member" ? "neutro" : "accent"}>{ROLES[org.role]}</Chip>
+                </header>
 
-              <div className="space-y-2">
-                {(workspaces[org.id] ?? []).map((workspace) => (
-                  <Link
-                    key={workspace.id}
-                    href={`/app/w/${workspace.id}`}
-                    className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 transition hover:border-line-strong hover:bg-raised"
-                  >
-                    <span className="flex items-center gap-2 text-sm">
-                      {workspace.visibility === "personal" ? (
-                        <UserRound size={14} className="text-faint" />
-                      ) : (
-                        <Users size={14} className="text-faint" />
-                      )}
-                      {workspace.name}
-                      {workspace.visibility === "personal" && (
-                        <span className="rounded-full border border-line px-1.5 py-0.5 text-[10px] text-faint">
-                          personal
+                <div className="grid gap-2 border-b border-line/60 p-3 sm:grid-cols-3">
+                  {ACCESOS.map(({ ruta, icono: Icono, titulo, pista }) => (
+                    <Link
+                      key={ruta}
+                      href={`/app/o/${org.id}/${ruta}`}
+                      className="presionable group flex items-center gap-2.5 rounded-xl border border-line bg-raised/40 px-3 py-2.5 hover:border-accent/40 hover:bg-accent-soft/40"
+                    >
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-canvas/70 text-muted transition-colors duration-[160ms] group-hover:border-accent/40 group-hover:text-accent">
+                        <Icono size={15} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-display text-xs font-semibold tracking-wide text-ink">
+                          {titulo}
                         </span>
-                      )}
+                        <span className="block truncate text-[11px] text-faint">{pista}</span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+
+                <div className="p-3">
+                  <div className="mb-2 flex items-center gap-2 px-1">
+                    <Rotulo>Workspaces</Rotulo>
+                    <span className="font-mono text-[10px] tabular-nums text-faint">
+                      {lista.length}
                     </span>
-                    <ChevronRight size={16} className="text-faint" />
-                  </Link>
-                ))}
+                    <span className="h-px flex-1 bg-line/70" aria-hidden />
+                  </div>
 
-                <NewWorkspace organizationId={org.id} onCreated={load} />
-              </div>
+                  <div className="space-y-1.5">
+                    {lista.map((workspace) => (
+                      <Link
+                        key={workspace.id}
+                        href={`/app/w/${workspace.id}`}
+                        className="presionable group flex items-center gap-3 rounded-xl border border-line/70 bg-surface/60 px-3 py-2.5 hover:border-line-strong hover:bg-raised"
+                      >
+                        <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-line bg-canvas/60 text-faint transition-colors duration-[160ms] group-hover:text-accent">
+                          {workspace.visibility === "personal" ? (
+                            <UserRound size={14} />
+                          ) : (
+                            <Users size={14} />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm">{workspace.name}</span>
+                        {workspace.visibility === "personal" && <Chip>Personal</Chip>}
+                        <ChevronRight
+                          size={15}
+                          className="shrink-0 text-faint transition-transform duration-[160ms] group-hover:translate-x-0.5"
+                        />
+                      </Link>
+                    ))}
 
-              {org.role !== "member" && <Invitaciones organizationId={org.id} />}
-            </section>
-          ))}
+                    <NewWorkspace organizationId={org.id} onCreated={load} />
+                  </div>
+                </div>
+
+                {org.role !== "member" && (
+                  <div className="border-t border-line/60 px-3 py-3">
+                    <Invitaciones organizationId={org.id} />
+                  </div>
+                )}
+              </Tarjeta>
+            );
+          })}
 
           <NewOrganization onCreated={load} hasAny={organizations.length > 0} />
         </div>
       )}
     </main>
+  );
+}
+
+/** Cifra de instrumento. Va con cero delante para que no baile de ancho al
+ *  pasar de 9 a 10, que es lo que hace que un contador parezca un aguja suelta. */
+function Cifra({ etiqueta, valor }: { etiqueta: string; valor: number }) {
+  return (
+    <div>
+      <Rotulo className="block">{etiqueta}</Rotulo>
+      <p className="texto-plasma mt-1 font-mono text-2xl font-semibold tabular-nums">
+        {String(valor).padStart(2, "0")}
+      </p>
+    </div>
+  );
+}
+
+/** El hueco de una tarjeta mientras carga, con su forma real: un esqueleto que
+ *  no se parece a lo que va a llegar solo consigue que la página dé un salto. */
+function EsqueletoOrganizacion() {
+  return (
+    <Tarjeta className="overflow-hidden" aria-hidden>
+      <div className="flex items-center gap-3 bg-raised/30 px-4 py-3.5">
+        <div className="devup-esqueleto size-9 rounded-xl" />
+        <div className="space-y-2">
+          <div className="devup-esqueleto h-2.5 w-32 rounded-full" />
+          <div className="devup-esqueleto h-2 w-20 rounded-full" />
+        </div>
+      </div>
+      <div className="grid gap-2 border-t border-line/60 p-3 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="devup-esqueleto h-[52px] rounded-xl" />
+        ))}
+      </div>
+      <div className="space-y-1.5 p-3">
+        <div className="devup-esqueleto h-11 rounded-xl" />
+        <div className="devup-esqueleto h-11 rounded-xl" />
+      </div>
+    </Tarjeta>
   );
 }
 
@@ -206,19 +315,24 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
 
   if (!abierto) {
     return (
-      <button
-        type="button"
+      <Boton
+        variante="fantasma"
+        tamano="sm"
+        icono={<Mail size={13} />}
         onClick={() => setAbierto(true)}
-        className="mt-3 flex items-center gap-1.5 text-xs text-faint transition hover:text-muted"
       >
-        <Mail size={13} />
         Invitar a alguien
-      </button>
+      </Boton>
     );
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-line bg-surface p-4">
+    <div className="devup-entrada rounded-xl border border-line bg-canvas/40 p-3">
+      <div className="mb-2.5 flex items-center gap-2">
+        <Rotulo>Invitaciones</Rotulo>
+        <span className="h-px flex-1 bg-line/70" aria-hidden />
+      </div>
+
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -236,37 +350,39 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
         }}
         className="flex flex-wrap gap-2"
       >
-        <input
+        <Entrada
           autoFocus
           type="email"
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           placeholder="correo@empresa.com"
-          className="min-w-48 flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+          className="min-w-48 flex-1"
         />
         <select
           value={rol}
           onChange={(event) => setRol(event.target.value as "member" | "admin")}
-          className="rounded-lg border border-line bg-canvas px-2 py-2 text-sm outline-none"
+          aria-label="Rol de la invitación"
+          className="h-10 rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none
+            transition-[border-color,box-shadow] duration-200
+            hover:border-line-strong
+            focus:border-accent/60 focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
         >
-          <option value="member">Miembro</option>
-          <option value="admin">Administrador</option>
+          {/* El fondo va en cada opción: el desplegable nativo de Windows lo
+              pinta blanco si no se le dice otra cosa. */}
+          <option className="bg-surface" value="member">
+            Miembro
+          </option>
+          <option className="bg-surface" value="admin">
+            Administrador
+          </option>
         </select>
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-canvas disabled:opacity-40"
-        >
+        <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
-        </button>
-        <button
-          type="button"
-          onClick={() => setAbierto(false)}
-          className="rounded-lg border border-line px-3 py-2 text-sm text-muted"
-        >
+        </Boton>
+        <Boton type="button" variante="fantasma" onClick={() => setAbierto(false)}>
           Cerrar
-        </button>
+        </Boton>
       </form>
 
       {pendientes.length > 0 && (
@@ -274,11 +390,13 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
           {pendientes.map((invitacion) => (
             <li
               key={invitacion.id}
-              className="flex items-center justify-between gap-2 text-xs text-faint"
+              className="flex items-center gap-2 rounded-lg border border-line/60 bg-surface/60 px-2.5 py-1.5"
             >
-              <span className="min-w-0 truncate">
-                {invitacion.email} · {invitacion.role}
+              <Mail size={12} className="shrink-0 text-faint" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
+                {invitacion.email}
               </span>
+              <Chip>{invitacion.role}</Chip>
               <button
                 type="button"
                 onClick={async () => {
@@ -290,9 +408,9 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
                     toast.error(caught instanceof ApiError ? caught.message : "no se pudo revocar");
                   }
                 }}
-                className="shrink-0 transition hover:text-danger"
+                className="presionable shrink-0 rounded-lg px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-faint hover:bg-danger/10 hover:text-danger"
               >
-                revocar
+                Revocar
               </button>
             </li>
           ))}
@@ -319,9 +437,11 @@ function NewWorkspace({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-xl border border-dashed border-line px-4 py-3 text-sm text-faint transition hover:border-line-strong hover:text-muted"
+        className="presionable flex w-full items-center gap-2 rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-faint hover:border-accent/40 hover:bg-accent-soft/20 hover:text-muted"
       >
-        <Plus size={15} />
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-dashed border-line">
+          <Plus size={14} />
+        </span>
         Nuevo workspace
       </button>
     );
@@ -345,26 +465,27 @@ function NewWorkspace({
           setBusy(false);
         }
       }}
-      className="space-y-2 rounded-xl border border-line bg-surface p-3"
+      className="devup-entrada space-y-2 rounded-xl border border-accent/25 bg-canvas/40 p-3"
     >
       <div className="flex gap-2">
-        <input
+        <Entrada
           autoFocus
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Nombre del workspace"
-          className="flex-1 rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-accent/60"
+          className="flex-1"
         />
-        <button
+        <Boton
           type="submit"
-          disabled={busy || name.trim().length === 0}
-          className="rounded-lg bg-accent px-4 text-sm font-medium text-canvas disabled:opacity-40"
+          variante="primario"
+          cargando={busy}
+          disabled={name.trim().length === 0}
         >
           Crear
-        </button>
+        </Boton>
       </div>
 
-      <div className="flex gap-1">
+      <div className="flex gap-1.5">
         {(
           [
             ["shared", <Users key="s" size={13} />, "De equipo", "Lo ve toda la organización"],
@@ -376,10 +497,11 @@ function NewWorkspace({
             type="button"
             onClick={() => setVisibility(value)}
             title={hint}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition ${
+            aria-pressed={visibility === value}
+            className={`presionable flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 font-display text-xs font-medium ${
               visibility === value
-                ? "border-accent/40 bg-accent-soft text-accent"
-                : "border-line text-muted hover:text-ink"
+                ? "border-accent/40 bg-accent-soft text-accent shadow-[0_0_16px_-6px_rgb(91_140_255/0.8)]"
+                : "border-line text-muted hover:border-line-strong hover:text-ink"
             }`}
           >
             {icon}
@@ -388,7 +510,7 @@ function NewWorkspace({
         ))}
       </div>
 
-      <p className="text-[11px] text-faint">
+      <p className="text-[11px] leading-relaxed text-muted">
         {visibility === "personal"
           ? "Un espacio para trabajar solo: sus archivos, canales y tareas no los ve nadie más, ni siquiera quien administra la organización."
           : "Todo el equipo verá sus archivos, canales y tareas."}
@@ -415,87 +537,104 @@ function NewOrganization({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 text-xs text-faint transition hover:text-muted"
+        className="presionable flex w-full items-center gap-2.5 rounded-2xl border border-dashed border-line px-4 py-4 text-sm text-faint hover:border-accent/40 hover:bg-accent-soft/20 hover:text-muted"
       >
-        <Plus size={14} />
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-dashed border-line">
+          <Plus size={16} />
+        </span>
         Nueva organización
       </button>
     );
   }
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
-      <h2 className="mb-1 text-sm font-medium">Nueva organización</h2>
-      <p className="mb-4 text-xs text-faint">
-        Es la frontera de aislamiento: nada de una organización es visible desde otra.
-      </p>
+    <Tarjeta className="relative overflow-hidden p-5">
+      <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setError(null);
-          setBusy(true);
-          try {
-            await api.post("/organizations", { name, slug });
-            toast.success(`Organización «${name}» creada`);
-            setName("");
-            setSlug("");
-            setOpen(false);
-            await onCreated();
-          } catch (caught) {
-            setError(caught instanceof ApiError ? caught.message : "no se pudo crear");
-          } finally {
-            setBusy(false);
-          }
-        }}
-        className="space-y-3"
-      >
-        <input
-          autoFocus
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-            // El identificador se propone a partir del nombre, pero se puede
-            // editar: es lo que aparece en las URL y no debería cambiar luego.
-            setSlug(
-              event.target.value
-                .toLowerCase()
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .replace(/[^a-z0-9]+/g, "-")
-                .replace(/^-+|-+$/g, "")
-                .slice(0, 40),
-            );
+      <div className="relative">
+        <Rotulo className="block">Nueva</Rotulo>
+        <h2 className="mt-0.5 text-base font-semibold">Organización</h2>
+        <p className="mb-4 mt-1.5 max-w-md text-xs leading-relaxed text-muted">
+          Es la frontera de aislamiento: nada de una organización es visible desde otra.
+        </p>
+
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setError(null);
+            setBusy(true);
+            try {
+              await api.post("/organizations", { name, slug });
+              toast.success(`Organización «${name}» creada`);
+              setName("");
+              setSlug("");
+              setOpen(false);
+              await onCreated();
+            } catch (caught) {
+              setError(caught instanceof ApiError ? caught.message : "no se pudo crear");
+            } finally {
+              setBusy(false);
+            }
           }}
-          placeholder="Nombre"
-          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-accent/60"
-        />
-        <input
-          value={slug}
-          onChange={(event) => setSlug(event.target.value)}
-          placeholder="identificador"
-          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-sm outline-none placeholder:text-faint focus:border-accent/60"
-        />
-        {error && <p className="text-xs text-danger">{error}</p>}
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={busy || name.trim().length === 0}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-canvas disabled:opacity-40"
-          >
-            Crear
-          </button>
-          {hasAny && (
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-lg border border-line px-4 py-2 text-sm text-muted"
-            >
-              Cancelar
-            </button>
+          className="max-w-md space-y-3"
+        >
+          <label className="block">
+            <Rotulo className="mb-1.5 block">Nombre</Rotulo>
+            <Entrada
+              autoFocus
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                // El identificador se propone a partir del nombre, pero se puede
+                // editar: es lo que aparece en las URL y no debería cambiar luego.
+                setSlug(
+                  event.target.value
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/^-+|-+$/g, "")
+                    .slice(0, 40),
+                );
+              }}
+              placeholder="Equipo de producto"
+            />
+          </label>
+
+          <label className="block">
+            <Rotulo className="mb-1.5 block">Identificador</Rotulo>
+            <Entrada
+              value={slug}
+              onChange={(event) => setSlug(event.target.value)}
+              placeholder="equipo-de-producto"
+              className="font-mono"
+            />
+          </label>
+
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs text-danger">
+              <AlertTriangle size={12} className="shrink-0" />
+              {error}
+            </p>
           )}
-        </div>
-      </form>
-    </section>
+
+          <div className="flex gap-2 pt-1">
+            <Boton
+              type="submit"
+              variante="primario"
+              cargando={busy}
+              disabled={name.trim().length === 0}
+            >
+              Crear organización
+            </Boton>
+            {hasAny && (
+              <Boton type="button" variante="fantasma" onClick={() => setOpen(false)}>
+                Cancelar
+              </Boton>
+            )}
+          </div>
+        </form>
+      </div>
+    </Tarjeta>
   );
 }

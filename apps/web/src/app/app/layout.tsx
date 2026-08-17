@@ -3,8 +3,12 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import { MusicaBar } from "@/components/spotify/MusicaBar";
 import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
+import { Logo } from "@/components/ui/Logo";
+import { Rotulo } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
+import { SpotifyProvider } from "@/lib/spotify/SpotifyProvider";
 import { VoiceCallProvider } from "@/lib/voice/VoiceCallProvider";
 
 /**
@@ -24,17 +28,35 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [user, loading, router]);
 
   if (loading || !user) {
+    // Esta pantalla es también la que ve quien no ha entrado, justo antes de
+    // que el efecto de arriba lo mande al acceso. Por eso dice qué está
+    // pasando en vez de girar en silencio: un giro eterno y un redirección
+    // instantánea se ven igual durante el primer segundo, y solo uno de los
+    // dos merece que se espere.
     return (
-      <div className="grid min-h-screen place-items-center">
-        <Loader2 className="animate-spin text-faint" size={20} />
+      <div className="grid min-h-screen place-items-center px-6">
+        <div className="flex flex-col items-center gap-3.5">
+          <Logo size={44} animated />
+          <Rotulo className="flex items-center gap-2">
+            <Loader2 size={11} className="animate-spin" />
+            Comprobando sesión
+          </Rotulo>
+        </div>
       </div>
     );
   }
 
+  // Los dos proveedores viven aquí y no en ninguna página: son lo que hace que
+  // la llamada y la música sobrevivan a navegar por la aplicación. La música va
+  // por dentro porque su barra se apoya en si hay llamada abierta para saber
+  // dónde colocarse y no taparla.
   return (
     <VoiceCallProvider>
-      {children}
-      <ActiveCallBar />
+      <SpotifyProvider>
+        {children}
+        <ActiveCallBar />
+        <MusicaBar />
+      </SpotifyProvider>
     </VoiceCallProvider>
   );
 }

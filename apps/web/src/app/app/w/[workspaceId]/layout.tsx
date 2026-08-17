@@ -1,13 +1,41 @@
 "use client";
 
-import { ArrowLeft, Files, Gamepad2, Hash, KanbanSquare, Loader2, Lock, Plus, Search, UserRound, Volume2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Files,
+  Gamepad2,
+  Hash,
+  KanbanSquare,
+  Loader2,
+  Lock,
+  LogOut,
+  Plus,
+  Search,
+  TriangleAlert,
+  UserRound,
+  Volume2,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { Entrada } from "@/components/ui/Field";
+import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
+
+/**
+ * Retraso del escalonado de entrada.
+ *
+ * El índice se topa a propósito: sin tope, en un workspace con cuarenta canales
+ * el último entraría segundo y medio después del primero y la barra parecería
+ * rota, no coreografiada.
+ */
+function retraso(indice: number): CSSProperties {
+  return { "--retraso": `${Math.min(indice, 8) * 35}ms` } as CSSProperties;
+}
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -73,22 +101,36 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   }, [modeReady, mode, pathname, workspaceId, officeHref, router]);
 
   if (loading) {
-    return (
+    // Camino a la oficina no se pinta el esqueleto de la barra: sería el
+    // destello de una barra que en ese destino no va a existir, y un elemento
+    // que aparece para desaparecer se lee como un fallo.
+    return inOffice ? (
       <div className="grid min-h-screen place-items-center">
         <Loader2 className="animate-spin text-faint" size={20} />
       </div>
+    ) : (
+      <EsqueletoBarra />
     );
   }
 
   if (error || !workspace) {
     return (
-      <div className="grid min-h-screen place-items-center px-6 text-center">
-        <div>
-          <p className="mb-2 text-sm text-danger">{error ?? "workspace no encontrado"}</p>
-          <Link href="/app" className="text-xs text-muted underline">
-            Volver
-          </Link>
-        </div>
+      <div className="grid min-h-screen place-items-center px-6">
+        <EstadoVacio
+          icono={<TriangleAlert size={20} className="text-danger" />}
+          titulo={error ?? "workspace no encontrado"}
+          pista="Puede que ya no exista, o que esta cuenta no tenga acceso."
+          accion={
+            <Link
+              href="/app"
+              className="presionable inline-flex h-8 items-center gap-1.5 rounded-lg border border-line
+                bg-raised/60 px-3 text-xs text-ink hover:border-line-strong hover:bg-raised"
+            >
+              <ArrowLeft size={13} />
+              Volver a los workspaces
+            </Link>
+          }
+        />
       </div>
     );
   }
@@ -109,7 +151,8 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             setMode("professional");
             router.push(`/app/w/${workspaceId}`);
           }}
-          className="absolute bottom-4 left-4 z-10 flex items-center gap-1.5 rounded-xl border border-line bg-surface/90 px-3 py-2 text-xs text-muted backdrop-blur transition hover:text-ink"
+          className="presionable cristal absolute bottom-4 left-4 z-10 flex items-center gap-2
+            rounded-xl px-3 py-2 text-xs text-muted hover:text-ink"
         >
           <ArrowLeft size={13} />
           Vista profesional
@@ -118,75 +161,115 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  const inicial = workspace.name.trim().charAt(0).toUpperCase();
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-surface">
-        <div className="border-b border-line px-4 py-4">
+    <div className="min-h-screen">
+      {/* La barra va fija y pegada al canto izquierdo, y el contenido reserva su
+          ancho con relleno en vez de con margen: así los fondos de cada página
+          siguen corriendo por debajo del cristal, que es lo único que hace que
+          un cristal parezca cristal y no un rectángulo gris translúcido. */}
+      <aside className="cristal fixed inset-y-0 left-0 z-30 flex w-64 flex-col rounded-none">
+        {/* Canto de luz vertical: el equivalente lateral de .filo-luz. Separa la
+            barra del contenido sin el borde duro de toda la vida. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-px
+            bg-gradient-to-b from-transparent via-accent/25 to-transparent"
+        />
+
+        <header className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           <Link
             href="/app"
-            className="mb-3 flex items-center gap-1.5 text-xs text-faint transition hover:text-muted"
+            className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
+              text-[11px] text-muted hover:text-accent-bright"
           >
-            <ArrowLeft size={13} />
+            <ArrowLeft size={12} />
             Workspaces
           </Link>
-          <h1 className="flex items-center gap-1.5 truncate text-sm font-semibold">
-            {workspace.visibility === "personal" && (
-              <UserRound size={13} className="shrink-0 text-faint" />
-            )}
-            <span className="truncate">{workspace.name}</span>
-          </h1>
-          {workspace.visibility === "personal" && (
-            <p className="mt-0.5 text-[10px] text-faint">Solo tú ves este workspace</p>
-          )}
-        </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-2 py-4">
+          <div className="flex items-center gap-2.5">
+            {/* La inicial en una chapa hace que dos workspaces con nombres
+                parecidos se distingan por la forma antes que por la lectura. */}
+            <span
+              aria-hidden
+              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong
+                bg-accent-soft/70 font-display text-sm font-semibold text-accent-bright"
+            >
+              {inicial}
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold" title={workspace.name}>
+                {workspace.name}
+              </h1>
+              {workspace.visibility === "personal" && (
+                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-faint">
+                  <UserRound size={9} className="shrink-0" />
+                  Solo tú ves este workspace
+                </p>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* min-h-0 es lo que permite que el desplazamiento viva aquí dentro: sin
+            él, un flex en columna crece con su contenido y el pie con la sesión
+            se va por debajo del borde de la pantalla. */}
+        <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
+          {/* Buscar es de la organización entera, no de este workspace, así que
+              va fuera del grupo y con forma de campo: la caja dice «aquí se
+              busca» antes de leer la palabra. */}
           <Link
             href={`/app/o/${workspace.organizationId}/buscar`}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted transition hover:bg-raised hover:text-ink"
+            style={retraso(0)}
+            className="devup-entrada presionable flex h-9 items-center gap-2 rounded-xl border border-line
+              bg-canvas/50 px-2.5 text-[13px] text-muted
+              hover:border-line-strong hover:bg-canvas hover:text-ink"
           >
-            <Search size={15} />
+            <Search size={13} className="shrink-0 text-faint" />
             Buscar
           </Link>
 
-          <Link
-            href={`/app/w/${workspaceId}`}
-            className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${
-              pathname === `/app/w/${workspaceId}`
-                ? "bg-accent-soft text-accent"
-                : "text-muted hover:bg-raised hover:text-ink"
-            }`}
-          >
-            <Files size={15} />
-            Biblioteca
-          </Link>
-
-          <Link
-            href={`/app/w/${workspaceId}/board`}
-            className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${
-              pathname === `/app/w/${workspaceId}/board`
-                ? "bg-accent-soft text-accent"
-                : "text-muted hover:bg-raised hover:text-ink"
-            }`}
-          >
-            <KanbanSquare size={15} />
-            Tablero
-          </Link>
-
-          {/* La oficina es opcional y se entra a ella a propósito. Va la
-              última del grupo y sin resaltar: quien no la quiera no debería
-              tropezarse con ella. */}
-          <Link
-            href={officeHref}
-            onClick={() => setMode("immersive")}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted transition hover:bg-raised hover:text-ink"
-          >
-            <Gamepad2 size={15} />
-            Oficina
-            <span className="ml-auto rounded bg-raised px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-faint">
-              beta
-            </span>
-          </Link>
+          <div>
+            <GrupoRotulo titulo="Espacio" />
+            <ul className="space-y-0.5">
+              <li>
+                <ItemNav
+                  href={`/app/w/${workspaceId}`}
+                  icono={<Files size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}`}
+                  indice={1}
+                >
+                  Biblioteca
+                </ItemNav>
+              </li>
+              <li>
+                <ItemNav
+                  href={`/app/w/${workspaceId}/board`}
+                  icono={<KanbanSquare size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/board`}
+                  indice={2}
+                >
+                  Tablero
+                </ItemNav>
+              </li>
+              <li>
+                {/* La oficina es opcional y se entra a ella a propósito. Va la
+                    última del grupo y sin resaltar: quien no la quiera no debería
+                    tropezarse con ella. */}
+                <ItemNav
+                  href={officeHref}
+                  icono={<Gamepad2 size={15} />}
+                  activo={false}
+                  indice={3}
+                  onClick={() => setMode("immersive")}
+                  sufijo={<Chip>beta</Chip>}
+                >
+                  Oficina
+                </ItemNav>
+              </li>
+            </ul>
+          </div>
 
           {text.length > 0 && (
             <ChannelGroup
@@ -208,23 +291,149 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           <NewChannel workspaceId={workspaceId} onCreated={load} />
         </nav>
 
-        <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-xs text-muted">{user?.displayName}</p>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="mt-1 text-xs text-faint transition hover:text-danger"
+        <footer className="relative shrink-0 px-3 py-3">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-px
+              bg-gradient-to-r from-transparent via-line-strong to-transparent"
+          />
+          <div className="flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong
+                bg-raised font-display text-[11px] font-semibold text-muted"
             >
-              Cerrar sesión
-            </button>
+              {(user?.displayName ?? "?").trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-ink" title={user?.displayName}>
+                {user?.displayName}
+              </p>
+              <p className="truncate text-[10px] text-faint" title={user?.email}>
+                {user?.email}
+              </p>
+            </div>
+            <NotificationBell />
+            {/* El tinte de peligro se pinta sobre el icono y no sobre el botón
+                porque BotonIcono ya declara su propio color al pasar por encima
+                y dos utilidades de la misma propiedad se pisan sin aviso. */}
+            <BotonIcono etiqueta="Cerrar sesión" onClick={() => void signOut()} className="group">
+              <LogOut size={15} className="transition-colors group-hover:text-danger" />
+            </BotonIcono>
           </div>
-          <NotificationBell />
-        </div>
+        </footer>
       </aside>
 
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-h-screen pl-64">{children}</main>
     </div>
+  );
+}
+
+/**
+ * Esqueleto de la barra mientras llegan workspace y canales.
+ *
+ * Pinta la silueta real —chapa, nombre, filas— en vez de un giro centrado: el
+ * hueco ya está donde va a estar el contenido, así que al llegar los datos nada
+ * salta de sitio.
+ */
+function EsqueletoBarra() {
+  return (
+    <div className="min-h-screen">
+      <aside className="cristal fixed inset-y-0 left-0 z-30 flex w-64 flex-col rounded-none">
+        <div className="filo-luz px-4 pb-3.5 pt-4">
+          <div className="devup-esqueleto h-2.5 w-20 rounded" />
+          <div className="mt-3.5 flex items-center gap-2.5">
+            <div className="devup-esqueleto size-9 rounded-xl" />
+            <div className="devup-esqueleto h-3 flex-1 rounded" />
+          </div>
+        </div>
+        <div className="flex-1 space-y-1.5 px-2.5 py-4">
+          {Array.from({ length: 8 }, (_, i) => (
+            // El desvanecido hacia abajo evita que ocho barras idénticas lean
+            // como una tabla de datos vacía.
+            <div
+              key={i}
+              className="devup-esqueleto h-7 rounded-lg"
+              style={{ opacity: 1 - i * 0.11 }}
+            />
+          ))}
+        </div>
+      </aside>
+      <main className="grid min-h-screen place-items-center pl-64">
+        <Loader2 className="animate-spin text-faint" size={20} />
+      </main>
+    </div>
+  );
+}
+
+/** Cabecera de grupo: rótulo, filete y, si se pasa, el recuento en cifra mono. */
+function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }) {
+  return (
+    <div className="mb-1.5 flex items-center gap-2 px-3">
+      <Rotulo>{titulo}</Rotulo>
+      <span aria-hidden className="h-px flex-1 bg-line" />
+      {contador !== undefined && (
+        <span className="font-mono text-[10px] tabular-nums text-faint">{contador}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Una fila de la barra.
+ *
+ * Los tres estados son los que ya distinguía la barra anterior y siguen
+ * significando lo mismo: activo, con algo pendiente, y en reposo. El activo se
+ * marca con un listón de acento a la izquierda en vez de con más brillo —el
+ * halo está reservado a lo que está pasando ahora mismo (regla 2 del sistema),
+ * y «estoy aquí» no es un evento, es una posición.
+ */
+function ItemNav({
+  href,
+  icono,
+  activo,
+  indice,
+  resaltado = false,
+  onClick,
+  sufijo,
+  children,
+}: {
+  href: string;
+  icono: ReactNode;
+  activo: boolean;
+  indice: number;
+  /** Tiene pendientes: se lee más fuerte sin llegar a marcarse como activo. */
+  resaltado?: boolean;
+  onClick?: () => void;
+  sufijo?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      aria-current={activo ? "page" : undefined}
+      style={retraso(indice)}
+      className={`devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5 pl-3 pr-2 text-[13px] ${
+        activo
+          ? "bg-accent-soft/70 text-ink"
+          : resaltado
+            ? "font-medium text-ink hover:bg-raised/70"
+            : "text-muted hover:bg-raised/70 hover:text-ink"
+      }`}
+    >
+      {activo && (
+        <span
+          aria-hidden
+          className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-accent"
+        />
+      )}
+      <span className={`shrink-0 ${activo ? "text-accent" : resaltado ? "text-muted" : "text-faint"}`}>
+        {icono}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {sufijo}
+    </Link>
   );
 }
 
@@ -243,40 +452,53 @@ function ChannelGroup({
 }) {
   return (
     <div>
-      <h2 className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-faint">
-        {title}
-      </h2>
-      <ul className="space-y-0.5">
-        {channels.map((channel) => {
-          const href = `/app/w/${workspaceId}/c/${channel.id}`;
-          const active = pathname === href;
-          const pending = unread[channel.id] ?? 0;
+      <GrupoRotulo titulo={title} contador={channels.length} />
+      {channels.length === 0 ? (
+        <p className="px-3 text-[11px] text-faint">Ninguno todavía.</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {channels.map((channel, indice) => {
+            const href = `/app/w/${workspaceId}/c/${channel.id}`;
+            const active = pathname === href;
+            const pending = unread[channel.id] ?? 0;
 
-          return (
-            <li key={channel.id}>
-              <Link
-                href={href}
-                className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition ${
-                  active
-                    ? "bg-accent-soft text-accent"
-                    : pending > 0
-                      ? "font-medium text-ink hover:bg-raised"
-                      : "text-muted hover:bg-raised hover:text-ink"
-                }`}
-              >
-                {channel.kind === "voice" ? <Volume2 size={15} /> : <Hash size={15} />}
-                <span className="min-w-0 flex-1 truncate">{channel.name}</span>
-                {channel.isPrivate && <Lock size={11} className="shrink-0 text-faint" />}
-                {pending > 0 && !active && (
-                  <span className="shrink-0 rounded-full bg-accent px-1.5 text-[10px] font-medium text-canvas">
-                    {pending > 99 ? "99+" : pending}
-                  </span>
-                )}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+            return (
+              <li key={channel.id}>
+                <ItemNav
+                  href={href}
+                  icono={channel.kind === "voice" ? <Volume2 size={15} /> : <Hash size={15} />}
+                  activo={active}
+                  resaltado={pending > 0}
+                  indice={indice}
+                  sufijo={
+                    <>
+                      {channel.isPrivate && (
+                        <Lock size={11} className="shrink-0 text-faint" aria-label="Canal privado" />
+                      )}
+                      {pending > 0 && !active && (
+                        // Cifra, no mancha: el contorno y el relleno al 15 % la
+                        // dejan legible de un vistazo sin que la barra entera
+                        // parezca una alarma. Mono y tabular porque el ancho no
+                        // debe bailar cuando pasa de 9 a 10.
+                        <span
+                          title={`${pending} sin leer`}
+                          className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center
+                            rounded-full border border-accent/30 bg-accent/15 px-1
+                            font-mono text-[10px] font-medium tabular-nums text-accent-bright"
+                        >
+                          {pending > 99 ? "99+" : pending}
+                        </span>
+                      )}
+                    </>
+                  }
+                >
+                  {channel.name}
+                </ItemNav>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -299,85 +521,103 @@ function NewChannel({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-faint transition hover:bg-raised hover:text-muted"
+        className="presionable flex w-full items-center gap-2 rounded-xl border border-dashed border-line
+          px-3 py-2 text-[13px] text-faint
+          hover:border-line-strong hover:bg-raised/40 hover:text-muted"
       >
-        <Plus size={15} />
+        <Plus size={14} className="shrink-0" />
         Nuevo canal
       </button>
     );
   }
 
   return (
-    <form
-      onSubmit={async (event) => {
-        event.preventDefault();
-        setBusy(true);
-        try {
-          await api.post(`/workspaces/${workspaceId}/channels`, {
-            name,
-            kind,
-            isPrivate,
-          });
-          setName("");
-          setKind("text");
-          setIsPrivate(false);
-          setOpen(false);
-          await onCreated();
-        } finally {
-          setBusy(false);
-        }
-      }}
-      className="space-y-2 px-2.5"
-    >
-      <input
-        autoFocus
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        placeholder="nombre-del-canal"
-        className="w-full rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent/60"
-      />
-      <div className="flex gap-1">
-        {(["text", "voice"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setKind(option)}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition ${
-              kind === option
-                ? "border-accent/40 bg-accent-soft text-accent"
-                : "border-line text-muted hover:text-ink"
-            }`}
-          >
-            {option === "text" ? <Hash size={11} /> : <Volume2 size={11} />}
-            {option === "text" ? "Texto" : "Voz"}
-          </button>
-        ))}
-      </div>
-      <label className="flex items-center gap-2 text-xs text-muted">
-        <input
-          type="checkbox"
-          checked={isPrivate}
-          onChange={(event) => setIsPrivate(event.target.checked)}
-          className="accent-[var(--color-accent)]"
+    // Crece desde el borde de arriba, que es donde estaba el botón que lo abrió:
+    // un panel que nace de su propio centro se despega de lo que lo invocó.
+    <Tarjeta className="devup-emerge origin-top p-2.5">
+      <Rotulo className="mb-2 block">Nuevo canal</Rotulo>
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          try {
+            await api.post(`/workspaces/${workspaceId}/channels`, {
+              name,
+              kind,
+              isPrivate,
+            });
+            setName("");
+            setKind("text");
+            setIsPrivate(false);
+            setOpen(false);
+            await onCreated();
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="space-y-2.5"
+      >
+        {/* Mono porque el nombre de canal es un identificador, no una frase: se
+            escribe en minúsculas y con guiones y así se ve mientras se teclea. */}
+        <Entrada
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="nombre-del-canal"
+          className="font-mono"
         />
-        Privado
-      </label>
-      <div className="flex gap-1.5">
-        <button
-          type="submit"
-          disabled={busy || name.trim().length === 0}
-          className="flex-1 rounded-lg bg-accent px-2 py-1.5 text-xs font-medium text-canvas disabled:opacity-40"
-        >
-          Crear
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="rounded-lg border border-line px-2 py-1.5 text-xs text-muted"
-        >
-          Cancelar
-        </button>
-      </div>
-    </form>
+
+        <div className="flex gap-1.5">
+          {(["text", "voice"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setKind(option)}
+              aria-pressed={kind === option}
+              className={`presionable flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-1.5
+                font-display text-[10px] font-semibold uppercase tracking-wider ${
+                  kind === option
+                    ? "border-accent/40 bg-accent-soft text-accent"
+                    : "border-line text-faint hover:border-line-strong hover:text-muted"
+                }`}
+            >
+              {option === "text" ? <Hash size={11} /> : <Volume2 size={11} />}
+              {option === "text" ? "Texto" : "Voz"}
+            </button>
+          ))}
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted hover:text-ink">
+          <input
+            type="checkbox"
+            checked={isPrivate}
+            onChange={(event) => setIsPrivate(event.target.checked)}
+            className="size-3.5 accent-[var(--color-accent)]"
+          />
+          <Lock size={11} className="text-faint" />
+          Privado
+        </label>
+
+        <div className="flex items-center gap-1.5 pt-0.5">
+          {/* El ancho lo pone el envoltorio: Boton trae `shrink-0` de fábrica y
+              un `flex-1` encima sería una carrera de utilidades. */}
+          <div className="flex-1">
+            <Boton
+              type="submit"
+              variante="primario"
+              tamano="sm"
+              cargando={busy}
+              disabled={busy || name.trim().length === 0}
+              className="w-full"
+            >
+              Crear
+            </Boton>
+          </div>
+          <Boton type="button" variante="fantasma" tamano="sm" onClick={() => setOpen(false)}>
+            Cancelar
+          </Boton>
+        </div>
+      </form>
+    </Tarjeta>
   );
 }
