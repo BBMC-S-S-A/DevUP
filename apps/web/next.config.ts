@@ -24,15 +24,25 @@ const nextConfig: NextConfig = {
   },
   // El entorno de desarrollo embebido (editor + terminal, apps/web/src/app/app/o/[orgId]/dev)
   // arranca un WebContainer, que exige SharedArrayBuffer y por tanto que el
-  // documento esté cross-origin-aislado. Acotado a esa ruta y no global:
-  // `credentialless` (no `require-corp`) porque el widget de Spotify y la
-  // barra de llamada persistente viven en el layout raíz de /app y cargan
-  // recursos cross-origin (portadas de álbum) que no llevan cabecera CORP —
-  // `require-corp` los rompería.
+  // documento esté cross-origin-aislado.
+  //
+  // Van en TODAS las rutas y no solo en /dev: COOP/COEP son propiedades del
+  // contexto de navegación que solo se fijan en una carga completa del
+  // documento. Next.js navega entre páginas del lado del cliente sin
+  // recargar — quien llega a /dev por un clic desde /app conserva las
+  // cabeceras (o la ausencia de ellas) de la página por la que entró
+  // primero a la pestaña, nunca las de /dev. Puestas aquí, cualquier punto
+  // de entrada (login, /app, lo que sea) ya nace cross-origin-aislado y esa
+  // condición sobrevive a la navegación interna.
+  //
+  // `credentialless` (no `require-corp`) porque el widget de Spotify, la
+  // barra de llamada persistente y el iframe de previsualización de PDF
+  // cargan recursos cross-origin (portadas de álbum, el propio PDF firmado
+  // de S3/MinIO) que no llevan cabecera CORP — `require-corp` los rompería.
   async headers() {
     return [
       {
-        source: "/app/o/:orgId/dev/:path*",
+        source: "/(.*)",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },

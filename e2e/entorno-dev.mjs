@@ -28,9 +28,16 @@ console.log("url actual:", page.url());
 await page.waitForURL("**/app", { timeout: 15000 });
 console.log("✓ sesión iniciada");
 
-await page.goto(`http://localhost:3000/app/o/${orgId}/dev`);
+// A propósito NO se usa page.goto() directo a /dev: eso es una navegación
+// dura y siempre lleva las cabeceras correctas, aunque solo estuvieran
+// puestas en esa ruta — que es exactamente el falso positivo que dejó pasar
+// la primera versión de esta prueba. Un usuario real entra por un clic
+// desde /app, que en Next.js es una navegación del lado del cliente sin
+// recargar el documento: si las cabeceras COOP/COEP no están también en la
+// página de origen, el navegador nunca queda cross-origin-aislado.
+await page.click(`a[href="/app/o/${orgId}/dev"]`);
 await page.waitForSelector("text=Entorno de desarrollo", { timeout: 15000 });
-console.log("✓ pestaña /dev cargó");
+console.log("✓ pestaña /dev cargó (navegación por clic, no goto directo)");
 
 // Cross-origin isolation: si falta, WebContainer.boot() falla y el panel
 // de "El entorno no pudo arrancar" aparece en vez del selector.
