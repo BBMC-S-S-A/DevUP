@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Building2,
   ChevronRight,
+  Code2,
   Github,
   LogOut,
   Mail,
@@ -67,6 +68,7 @@ const ACCESOS = [
   { ruta: "buscar", icono: Search, titulo: "Buscar", pista: "En todo el equipo" },
   { ruta: "ventas", icono: TrendingUp, titulo: "Ventas", pista: "Embudo y clientes" },
   { ruta: "github", icono: Github, titulo: "GitHub", pista: "Repos y actividad" },
+  { ruta: "dev", icono: Code2, titulo: "Entorno de dev", pista: "Editor y terminal real" },
 ] as const;
 
 /** El rol viene en inglés de la API; aquí solo se traduce para leerlo. */

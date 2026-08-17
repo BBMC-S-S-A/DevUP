@@ -27,6 +27,12 @@ export type GithubStats = {
   latestRun: { status: string; conclusion: string | null; url: string } | null;
 };
 
+export type GithubTreeEntry = {
+  path: string;
+  type: "blob" | "tree";
+  size?: number;
+};
+
 async function get(url: string, token: string): Promise<unknown> {
   const response = await fetch(url, { headers: headers(token) });
   if (!response.ok) throw new Error(`GitHub respondió ${response.status} para ${url}`);
@@ -74,4 +80,65 @@ export async function fetchGithubStats(token: string, fullName: string): Promise
       ? { status: latestRun.status, conclusion: latestRun.conclusion, url: latestRun.html_url }
       : null,
   };
+}
+
+/**
+ * Árbol completo de un repositorio, para el entorno de desarrollo embebido.
+ *
+ * La API de árboles de Git (`git/trees`, no `contents/`) trae la jerarquía
+ * entera en una sola llamada con `recursive=1` — recorrer `contents/`
+ * directorio por directorio sería una llamada por carpeta, y un repo mediano
+ * tarda segundos en cargar en vez de uno.
+ *
+ * Sin rama, se resuelve primero la rama por defecto: el árbol de Git exige
+ * un `sha` o una rama, y quien llama a esto normalmente solo tiene el nombre
+ * del repositorio, no su rama.
+ */
+export async function fetchGithubTree(token: string, fullName: string, ref?: string): Promise<GithubTreeEntry[]> {
+  const branch =
+    ref ?? ((await get(`${API}/repos/${fullName}`, token)) as { default_branch: string }).default_branch;
+
+  const result = (await get(
+    `${API}/repos/${fullName}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    token,
+  )) as { tree: { path: string; type: string; size?: number }[]; truncated: boolean };
+
+  // GitHub trunca árboles enormes en vez de fallar. Un aviso en el log basta
+  // por ahora — nada en el editor distingue hoy un árbol completo de uno
+  // recortado, y es mejor decirlo aquí que fingir que se vio todo.
+  if (result.truncated) {
+    console.warn(`[github] árbol de ${fullName}@${branch} truncado por GitHub (repositorio muy grande)`);
+  }
+
+  return result.tree
+    .filter((entry) => entry.type === "blob" || entry.type === "tree")
+    .map((entry) => ({ path: entry.path, type: entry.type as "blob" | "tree", size: entry.size }));
+}
+
+/**
+ * Contenido de un único archivo de texto. GitHub lo devuelve en base64 salvo
+ * que el archivo pese más de 1 MB, caso en el que `content` viene vacío y
+ * hay que ir por `download_url` — no lo cubrimos todavía porque un archivo
+ * de más de 1 MB no es el caso común de "abrir para editar" de esta semilla.
+ */
+export async function fetchGithubFileContent(
+  token: string,
+  fullName: string,
+  path: string,
+  ref?: string,
+): Promise<string> {
+  const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+  const file = (await get(`${API}/repos/${fullName}/contents/${path}${query}`, token)) as {
+    content?: string;
+    encoding?: string;
+    size: number;
+  };
+
+  if (!file.content || file.encoding !== "base64") {
+    throw new Error(
+      `«${path}» no se pudo leer como texto (${file.size} bytes) — probablemente pesa más de 1 MB`,
+    );
+  }
+
+  return Buffer.from(file.content, "base64").toString("utf8");
 }

@@ -13,7 +13,13 @@ redescubrir lo que ya se decidió ni volver a discutirlo.
 4. [`plan-mundo-y-plataforma.md`](plan-mundo-y-plataforma.md) — el plan de la
    vista inmersiva y la plataforma, de un tramo anterior.
 5. [`decisiones/`](decisiones/) — las decisiones cerradas que no se reabren sin
-   motivo nuevo.
+   motivo nuevo. Dos propuestas nuevas, aún sin aprobar:
+   [`0003-arquitectura-de-despliegue.md`](decisiones/0003-arquitectura-de-despliegue.md)
+   (monolito vs. microservicios, VPS con y sin coste, huecos de
+   `DESPLIEGUE.md`) y
+   [`0004-conector-github-embebido-y-agente-ia.md`](decisiones/0004-conector-github-embebido-y-agente-ia.md)
+   (por qué GitHub no se puede embeber en un iframe, y una semilla de
+   asistente de IA como adelanto de S10).
 
 ---
 
