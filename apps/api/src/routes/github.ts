@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
-import { fetchGithubStats } from "../connectors/github.js";
+import { fetchGithubFileContent, fetchGithubStats, fetchGithubTree } from "../connectors/github.js";
 import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
@@ -118,6 +118,47 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
         [repoId],
       );
       return { repo: rows[0] };
+    });
+  });
+
+  /**
+   * Árbol completo del repositorio, para el entorno de desarrollo embebido
+   * (Fase 0, ver docs/decisiones/0004-conector-github-embebido-y-agente-ia.md).
+   * Mismo lookup que `refresh`: se busca la conexión del repo y se descifra
+   * su token en la misma petición — no se cachea el árbol en ningún lado
+   * todavía, siempre se pide fresco a GitHub.
+   */
+  app.get("/github/repos/:repoId/tree", async (request) => {
+    const userId = requireUser(request);
+    const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
+        "select connection_id, full_name from github_repos where id = $1",
+        [repoId],
+      );
+      if (!rows[0]) throw notFound("repositorio no encontrado");
+      const token = await getDecryptedSecret(db, rows[0].connection_id);
+      const tree = await fetchGithubTree(token, rows[0].full_name);
+      return { tree };
+    });
+  });
+
+  /** Contenido de un archivo del repositorio, para abrirlo en el editor. */
+  app.get("/github/repos/:repoId/file", async (request) => {
+    const userId = requireUser(request);
+    const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
+    const { path } = parseBody(z.object({ path: z.string().min(1) }), request.query);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
+        "select connection_id, full_name from github_repos where id = $1",
+        [repoId],
+      );
+      if (!rows[0]) throw notFound("repositorio no encontrado");
+      const token = await getDecryptedSecret(db, rows[0].connection_id);
+      const content = await fetchGithubFileContent(token, rows[0].full_name, path);
+      return { path, content };
     });
   });
 

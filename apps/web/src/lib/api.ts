@@ -255,6 +255,12 @@ export type GithubRepo = {
   lastError: string | null;
 };
 
+export type GithubTreeEntry = {
+  path: string;
+  type: "blob" | "tree";
+  size?: number;
+};
+
 export type SpotifyTrack = {
   uri: string;
   name: string;
