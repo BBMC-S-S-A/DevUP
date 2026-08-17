@@ -20,6 +20,17 @@ import { useSpotifyPlayer } from "./useSpotifyPlayer";
  * seguía con la suya, así que al acabar la canción el encadenado leía una cola
  * vieja y volvía a poner lo mismo. Ahora la cola de la sala que se está mirando
  * vive solo en este proveedor, y el widget únicamente la pinta.
+ *
+ * EL ENCADENADO LO HACE SPOTIFY, NO NOSOTROS. Los dos primeros intentos fueron
+ * detectar el final de la canción para poner la siguiente, y los dos fallaron
+ * por lo mismo: el SDK no manda «terminó». Hay que deducirlo de un `paused` con
+ * la posición a 0, que es idéntico a rebobinar — y aun acertando, entre canción
+ * y canción quedaba el silencio de nuestra llamada de reproducción.
+ *
+ * Así que la cola compartida se le ENTREGA a Spotify (`/me/player/queue`) y es
+ * él quien enlaza, sin huecos y sin adivinar nada. Nuestra lista sigue siendo
+ * la que ve la sala, y se mantiene al día por el otro lado: cada vez que
+ * empieza a sonar una pista se saca de la lista, la haya puesto quien sea.
  */
 type Cuenta = { connected: boolean; premium: boolean };
 
@@ -72,8 +83,16 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const canalRef = useRef<string | null>(null);
   canalRef.current = canal;
 
-  const encadenar = useRef<() => void>(() => {});
-  const player = useSpotifyPlayer(cuenta?.connected ?? false, () => encadenar.current());
+  /**
+   * Las pistas que ya se le entregaron a la cola de Spotify.
+   *
+   * Sin esto, cada vez que la cola compartida cambia volveríamos a mandar todo
+   * y la misma canción se apilaría varias veces en la cola de Spotify.
+   */
+  const despachadas = useRef<Set<string>>(new Set());
+
+  const alCambiarPista = useRef<(uri: string) => void>(() => {});
+  const player = useSpotifyPlayer(cuenta?.connected ?? false, (uri) => alCambiarPista.current(uri));
 
   useEffect(() => {
     void api
@@ -107,41 +126,109 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     await api.delete(`/spotify/queue/${id}`).catch(() => {});
   }, []);
 
+  const puedeSonar = player.estado.listo && !player.estado.sinPremium;
+
+  /*
+   * Lo que sigue depende de VALORES y no del objeto `player`.
+   *
+   * El hook devuelve un objeto nuevo en cada renderizado, así que meterlo en las
+   * dependencias de un `useCallback` lo recrea siempre — y un efecto que dependa
+   * de ese callback se dispara en cada renderizado. La primera versión hacía
+   * justo eso y acabó pidiendo tokens en bucle hasta comerse el límite de
+   * peticiones de la API (429). Extraer las piezas estables lo corta de raíz.
+   */
+  const encolarEnSpotify = player.encolarEnSpotify;
+  const uriSonando = player.estado.pista?.uri ?? null;
+
+  /**
+   * Entrega a Spotify todo lo que está en la cola compartida y aún no le hemos
+   * pasado. Spotify se encarga del encadenado, sin huecos entre canciones.
+   *
+   * En serie y no en paralelo: la cola de Spotify respeta el orden en que
+   * llegan las peticiones, y con `Promise.all` el orden lo decide la red.
+   */
+  const sincronizarConSpotify = useCallback(async () => {
+    // Sin nada sonando no hay cola donde encolar: Spotify necesita una
+    // reproducción activa para aceptar `/me/player/queue`.
+    if (!puedeSonar || !uriSonando) return;
+    for (const pista of colaRef.current) {
+      if (despachadas.current.has(pista.trackUri)) continue;
+      try {
+        await encolarEnSpotify(pista.trackUri);
+        despachadas.current.add(pista.trackUri);
+      } catch {
+        // Si una falla, se deja sin marcar para reintentarla en la próxima
+        // sincronización en vez de perderla en silencio.
+        break;
+      }
+    }
+  }, [puedeSonar, uriSonando, encolarEnSpotify]);
+
+  /**
+   * Si otra persona de la sala añade algo mientras suena la música, quien
+   * pincha tiene que entregárselo a Spotify — el que añadió puede no tener ni
+   * Premium ni reproductor, así que no puede hacerlo él.
+   *
+   * La dependencia es la FIRMA de la cola, no el array: un `useState` devuelve
+   * un array nuevo en cada carga aunque el contenido sea idéntico, y con eso el
+   * efecto volvería a dispararse sin que haya nada nuevo que entregar.
+   */
+  const firmaCola = cola.map((t) => t.id).join(",");
+  useEffect(() => {
+    void sincronizarConSpotify();
+  }, [firmaCola, sincronizarConSpotify]);
+
   const poner = useCallback(
     async (pista: Ponible) => {
       await player.reproducirUri(pista.trackUri);
-      // Se quita al EMPEZAR a sonar, no al acabar: lo que queda en la lista es
-      // lo que queda por sonar, que es lo que la palabra «cola» promete.
+      // Al poner algo se rompe la cola que Spotify tenía montada, así que lo
+      // despachado deja de ser válido y hay que volver a entregarlo.
+      despachadas.current.clear();
+      despachadas.current.add(pista.trackUri);
       if (pista.id) await quitar(pista.id);
+      await sincronizarConSpotify();
     },
-    [player, quitar],
+    [player, quitar, sincronizarConSpotify],
   );
 
   const encolar = useCallback(
     async (pista: SpotifyQueueTrack) => {
       setCola((previa) => (previa.some((t) => t.id === pista.id) ? previa : [...previa, pista]));
+      colaRef.current = colaRef.current.some((t) => t.id === pista.id)
+        ? colaRef.current
+        : [...colaRef.current, pista];
 
-      // Si no hay nada sonando, esto es además la orden de empezar: una cola con
-      // cosas dentro que no se mueve parece estropeada.
+      // Si no suena nada, esto es además la orden de empezar: una cola con cosas
+      // dentro que no se mueve parece estropeada.
       const nadaSonando = !player.estado.pista || !player.estado.reproduciendo;
-      if (player.estado.listo && !player.estado.sinPremium && nadaSonando) {
+      if (puedeSonar && nadaSonando) {
         await poner(pista).catch(() => {});
+        return;
       }
+      // Y si ya suena algo, va detrás en la cola de Spotify para que enlace.
+      await sincronizarConSpotify();
     },
-    [player.estado.pista, player.estado.reproduciendo, player.estado.listo, player.estado.sinPremium, poner],
+    [player.estado.pista, player.estado.reproduciendo, puedeSonar, poner, sincronizarConSpotify],
   );
 
   /**
-   * Al acabar una canción, la siguiente de la cola.
+   * Cuando empieza a sonar una pista, sacarla de la cola compartida.
    *
-   * Es lo que convierte la cola en una cola de verdad: antes cada canción
-   * terminaba en silencio. Si la cola está vacía no hace nada — y eso es
-   * correcto: no inventamos qué poner.
+   * Da igual quién la haya puesto: si la encadenó Spotify, este es el único
+   * momento en que nos enteramos. Así lo que se ve en la lista es siempre lo
+   * que queda por sonar, que es lo que la palabra «cola» promete.
    */
-  encadenar.current = () => {
-    const siguiente = colaRef.current[0];
-    if (!canalRef.current || !siguiente) return;
-    void poner(siguiente).catch(() => {});
+  alCambiarPista.current = (uri: string) => {
+    setCola((previa) => {
+      const siguiente = previa.filter((t) => t.trackUri !== uri);
+      if (siguiente.length === previa.length) return previa;
+      colaRef.current = siguiente;
+      // Y se limpia de la base, que es la lista que ve el resto de la sala.
+      for (const ida of previa.filter((t) => t.trackUri === uri)) {
+        void api.delete(`/spotify/queue/${ida.id}`).catch(() => {});
+      }
+      return siguiente;
+    });
   };
 
   /**

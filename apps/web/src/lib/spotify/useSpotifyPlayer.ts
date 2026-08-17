@@ -159,30 +159,26 @@ export type Playlist = {
 
 /**
  * @param activo Monta el SDK solo si la cuenta está conectada.
- * @param onTerminada Se llama cuando la canción llega al final por sí sola.
- *   Lo usa el widget para encadenar la siguiente de la cola compartida — sin
- *   esto, cada canción acaba en silencio y hay que darle a play a mano.
+ * @param onPistaCambiada Se llama con la URI cada vez que empieza a sonar una
+ *   pista distinta — la haya puesto quien sea, incluida la cola de Spotify. El
+ *   proveedor lo usa para sacar de la cola compartida lo que ya está sonando.
+ *
+ *   Es un HECHO observable, no una deducción. La versión anterior avisaba de
+ *   «terminó la canción», que el SDK no manda: había que inferirlo de un
+ *   `paused` con la posición a 0, y eso es indistinguible de rebobinar.
  */
-export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
+export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string) => void) {
   const [estado, setEstado] = useState<EstadoReproductor>(ESTADO_INICIAL);
   const reproductor = useRef<SdkPlayer | null>(null);
 
   // La referencia evita que cambiar el callback vuelva a montar el SDK: si
   // fuera dependencia del efecto, cada renderizado del widget reconectaría el
   // reproductor y cortaría la música.
-  const terminada = useRef(onTerminada);
-  terminada.current = onTerminada;
+  const cambiada = useRef(onPistaCambiada);
+  cambiada.current = onPistaCambiada;
 
-  /**
-   * Que la canción estaba a punto de acabar.
-   *
-   * Hace falta porque «terminó» y «le dieron a pausa» llegan igual desde el
-   * SDK: los dos son `paused: true`. Lo que los distingue es que al terminar,
-   * la posición vuelve a 0 — pero eso también pasa al rebobinar. Así que se
-   * marca cuando la reproducción pasa del 95 % y solo entonces un
-   * `paused + position 0` se interpreta como final.
-   */
-  const casiFinal = useRef(false);
+  /** La última URI que sonó, para avisar solo de los cambios de verdad. */
+  const ultimaUri = useRef<string | null>(null);
 
   // Ancla para el contador local: en qué posición estábamos y cuándo. La
   // posición mostrada se calcula desde aquí, no se acumula — acumular deriva.
@@ -253,16 +249,12 @@ export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
 
         const pista = s.track_window.current_track;
 
-        // El final de la canción. Ver `casiFinal` arriba: la marca la pone el
-        // contador local, porque el SDK no emite nada mientras la canción
-        // avanza sin novedades y aquí nunca veríamos el tramo final.
-        if (s.paused && s.position === 0 && casiFinal.current) {
-          casiFinal.current = false;
-          terminada.current?.();
-        } else if (s.position > 0) {
-          // Empezar otra canción o rebobinar borra la marca: si no, el
-          // siguiente pausado en el minuto uno se leería como un final.
-          casiFinal.current = false;
+        // Cambió la pista: avisar una sola vez por canción. Cubre tanto lo que
+        // ponemos nosotros como lo que encadena la cola de Spotify, que es
+        // justo lo que hay que saber para mantener la cola compartida al día.
+        if (pista?.uri && pista.uri !== ultimaUri.current) {
+          ultimaUri.current = pista.uri;
+          cambiada.current?.(pista.uri);
         }
 
         ancla.current = { posicionMs: s.position, en: performance.now(), corriendo: !s.paused };
@@ -350,7 +342,6 @@ export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
         const siguiente = ancla.current.posicionMs + transcurrido;
         // Segundo y medio antes del final se arma la marca que deja distinguir
         // «terminó» de «le dieron a pausa» cuando llegue el evento del SDK.
-        if (e.duracionMs > 0 && siguiente > e.duracionMs - 1500) casiFinal.current = true;
         if (e.duracionMs > 0 && siguiente >= e.duracionMs) return { ...e, posicionMs: e.duracionMs };
         return { ...e, posicionMs: siguiente };
       });
@@ -407,6 +398,30 @@ export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
   }, []);
 
   const siguiente = useCallback(() => reproductor.current?.nextTrack(), []);
+
+  /**
+   * Mete una pista en la cola NATIVA de Spotify.
+   *
+   * Este es el mecanismo que hace que la música no se corte entre canciones, y
+   * sustituye a detectar el final por nuestra cuenta. El motivo es que «terminó»
+   * no es un evento que el SDK mande: hay que deducirlo de un `paused` con la
+   * posición a 0, que es exactamente lo que también llega al rebobinar. Toda
+   * heurística ahí es frágil, y encima deja un silencio entre temas mientras
+   * viaja nuestra llamada de reproducción.
+   *
+   * Delegándolo en Spotify, el encadenado es el suyo: sin huecos y sin que
+   * tengamos que adivinar nada.
+   */
+  const encolarEnSpotify = useCallback(
+    async (uri: string) => {
+      if (!estado.dispositivoId) return;
+      await llamarSpotify(
+        `/me/player/queue?uri=${encodeURIComponent(uri)}&device_id=${estado.dispositivoId}`,
+        { method: "POST" },
+      );
+    },
+    [estado.dispositivoId],
+  );
 
   /**
    * Anterior, con el comportamiento que todo el mundo espera de un reproductor:
@@ -579,6 +594,7 @@ export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
     estado,
     reproducirUri,
     reproducirContexto,
+    encolarEnSpotify,
     listarPlaylists,
     listarPistas,
     alternarPausa,
