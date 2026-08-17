@@ -14,48 +14,63 @@ import { useSpotifyPlayer } from "./useSpotifyPlayer";
  * `disconnect()`, así que la música se cortaba. No era un fallo del
  * reproductor: era que el reproductor dejaba de existir.
  *
- * Montado una sola vez en el layout de `/app`, el SDK sobrevive a cualquier
- * navegación dentro de la aplicación. Lo que se monta y desmonta al navegar es
- * el panel que lo controla, que es otra cosa.
- *
- * UNA SALA A LA VEZ. La cola y lo que suena cuelgan de un canal, y aquí se
- * gobierna solo el canal donde se puso música. Si alguien abre el widget en
- * otro canal, se le dice dónde está sonando en vez de fingir que la cola de
- * este es la que manda — dos colas compitiendo por un solo reproductor es cómo
- * se acaba con una canción que nadie entiende de dónde salió.
+ * UNA SOLA COLA, Y AQUÍ. La primera versión guardaba la cola en dos sitios —
+ * aquí y en el widget— y eso rompía el encadenado de una forma difícil de ver:
+ * al poner una canción, el widget la quitaba de SU copia mientras el proveedor
+ * seguía con la suya, así que al acabar la canción el encadenado leía una cola
+ * vieja y volvía a poner lo mismo. Ahora la cola de la sala que se está mirando
+ * vive solo en este proveedor, y el widget únicamente la pinta.
  */
 type Cuenta = { connected: boolean; premium: boolean };
+
+/**
+ * Algo que se puede poner a sonar.
+ *
+ * `id` es opcional a propósito: una pista de la cola lo tiene y hay que sacarla
+ * al ponerla, pero un resultado de búsqueda que se pone directamente no está en
+ * ninguna cola y no hay nada que sacar. Un solo tipo para las dos cosas evita
+ * dos caminos de reproducción que se desincronizan.
+ */
+export type Ponible = {
+  trackUri: string;
+  trackName: string;
+  trackArtist: string;
+  id?: string;
+};
 
 type Valor = {
   player: ReturnType<typeof useSpotifyPlayer>;
   cuenta: Cuenta | null;
-  /** El canal cuya música gobierna este reproductor, o null si no hay ninguna. */
-  canalMusica: string | null;
+  /** La sala cuya música se gobierna y cuya cola se muestra. */
+  canal: string | null;
   cola: SpotifyQueueTrack[];
   sesion: SpotifySession;
-  /** Toma el mando de la música de este canal. La llama cualquier acción de poner algo. */
-  tomarCanal: (channelId: string) => void;
-  refrescarCola: (channelId: string) => Promise<void>;
-  refrescarSesion: (channelId: string) => Promise<void>;
-  setCola: React.Dispatch<React.SetStateAction<SpotifyQueueTrack[]>>;
+  /** Declara qué sala se está mirando. La llama el widget al montarse. */
+  verCanal: (channelId: string) => void;
+  refrescar: (channelId: string) => Promise<void>;
+  /** Pone una pista y, si venía de la cola, la saca. */
+  poner: (pista: Ponible) => Promise<void>;
+  /** Añade a la cola. Si no suena nada, arranca en el momento. */
+  encolar: (pista: SpotifyQueueTrack) => Promise<void>;
+  quitar: (id: string) => Promise<void>;
 };
 
 const Contexto = createContext<Valor | null>(null);
 
 export function SpotifyProvider({ children }: { children: ReactNode }) {
   const [cuenta, setCuenta] = useState<Cuenta | null>(null);
-  const [canalMusica, setCanalMusica] = useState<string | null>(null);
+  const [canal, setCanal] = useState<string | null>(null);
   const [cola, setCola] = useState<SpotifyQueueTrack[]>([]);
   const [sesion, setSesion] = useState<SpotifySession>(null);
 
-  // La cola en una referencia además del estado: el encadenado se dispara desde
-  // un evento del SDK, y una función creada en un renderizado anterior vería la
-  // cola de aquel momento — justo el caso que importa, alguien añadiendo una
-  // canción mientras suena otra.
+  // Referencias además del estado: el encadenado se dispara desde un evento del
+  // SDK, y una función creada en un renderizado anterior vería la cola de aquel
+  // momento — justo el caso que importa, alguien añadiendo una canción mientras
+  // suena otra.
   const colaRef = useRef<SpotifyQueueTrack[]>([]);
   colaRef.current = cola;
   const canalRef = useRef<string | null>(null);
-  canalRef.current = canalMusica;
+  canalRef.current = canal;
 
   const encadenar = useRef<() => void>(() => {});
   const player = useSpotifyPlayer(cuenta?.connected ?? false, () => encadenar.current());
@@ -67,50 +82,66 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       .catch(() => setCuenta({ connected: false, premium: false }));
   }, []);
 
-  const refrescarCola = useCallback(async (channelId: string) => {
-    const { queue } = await api.get<{ queue: SpotifyQueueTrack[] }>(
-      `/channels/${channelId}/spotify/queue`,
-    );
+  const refrescar = useCallback(async (channelId: string) => {
+    const [{ queue }, { session }] = await Promise.all([
+      api.get<{ queue: SpotifyQueueTrack[] }>(`/channels/${channelId}/spotify/queue`),
+      api.get<{ session: SpotifySession }>(`/channels/${channelId}/spotify/session`),
+    ]);
     setCola(queue);
-  }, []);
-
-  const refrescarSesion = useCallback(async (channelId: string) => {
-    const { session } = await api.get<{ session: SpotifySession }>(
-      `/channels/${channelId}/spotify/session`,
-    );
     setSesion(session);
   }, []);
 
-  const tomarCanal = useCallback(
+  const verCanal = useCallback(
     (channelId: string) => {
       if (canalRef.current === channelId) return;
-      setCanalMusica(channelId);
-      void refrescarCola(channelId);
-      void refrescarSesion(channelId);
+      canalRef.current = channelId;
+      setCanal(channelId);
+      void refrescar(channelId);
     },
-    [refrescarCola, refrescarSesion],
+    [refrescar],
+  );
+
+  /** Saca una pista de la cola, en la base y en pantalla. */
+  const quitar = useCallback(async (id: string) => {
+    setCola((previa) => previa.filter((t) => t.id !== id));
+    await api.delete(`/spotify/queue/${id}`).catch(() => {});
+  }, []);
+
+  const poner = useCallback(
+    async (pista: Ponible) => {
+      await player.reproducirUri(pista.trackUri);
+      // Se quita al EMPEZAR a sonar, no al acabar: lo que queda en la lista es
+      // lo que queda por sonar, que es lo que la palabra «cola» promete.
+      if (pista.id) await quitar(pista.id);
+    },
+    [player, quitar],
+  );
+
+  const encolar = useCallback(
+    async (pista: SpotifyQueueTrack) => {
+      setCola((previa) => (previa.some((t) => t.id === pista.id) ? previa : [...previa, pista]));
+
+      // Si no hay nada sonando, esto es además la orden de empezar: una cola con
+      // cosas dentro que no se mueve parece estropeada.
+      const nadaSonando = !player.estado.pista || !player.estado.reproduciendo;
+      if (player.estado.listo && !player.estado.sinPremium && nadaSonando) {
+        await poner(pista).catch(() => {});
+      }
+    },
+    [player.estado.pista, player.estado.reproduciendo, player.estado.listo, player.estado.sinPremium, poner],
   );
 
   /**
    * Al acabar una canción, la siguiente de la cola.
    *
-   * Es lo que convierte la cola en una cola de verdad: antes, cada canción
-   * terminaba en silencio y había que volver a darle a play. La pista se quita
-   * de la cola al empezar a sonar, no al terminar — así lo que se ve en la
-   * lista es lo que queda por sonar, que es lo que la palabra «cola» promete.
+   * Es lo que convierte la cola en una cola de verdad: antes cada canción
+   * terminaba en silencio. Si la cola está vacía no hace nada — y eso es
+   * correcto: no inventamos qué poner.
    */
   encadenar.current = () => {
-    const canal = canalRef.current;
     const siguiente = colaRef.current[0];
-    if (!canal || !siguiente) return;
-
-    void player
-      .reproducirUri(siguiente.trackUri)
-      .then(async () => {
-        await api.delete(`/spotify/queue/${siguiente.id}`).catch(() => {});
-        setCola((previa) => previa.filter((t) => t.id !== siguiente.id));
-      })
-      .catch(() => {});
+    if (!canalRef.current || !siguiente) return;
+    void poner(siguiente).catch(() => {});
   };
 
   /**
@@ -120,16 +151,16 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
    */
   const ultimoPublicado = useRef("");
   useEffect(() => {
-    const canal = canalRef.current;
+    const sala = canalRef.current;
     const pista = player.estado.pista;
-    if (!canal || !pista) return;
+    if (!sala || !pista) return;
 
-    const firma = `${canal}:${pista.uri}:${player.estado.reproduciendo}`;
+    const firma = `${sala}:${pista.uri}:${player.estado.reproduciendo}`;
     if (firma === ultimoPublicado.current) return;
     ultimoPublicado.current = firma;
 
     void api
-      .post(`/channels/${canal}/spotify/session`, {
+      .post(`/channels/${sala}/spotify/session`, {
         trackUri: pista.uri,
         trackName: pista.nombre,
         trackArtist: pista.artista,
@@ -147,13 +178,14 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const valor: Valor = {
     player,
     cuenta,
-    canalMusica,
+    canal,
     cola,
     sesion,
-    tomarCanal,
-    refrescarCola,
-    refrescarSesion,
-    setCola,
+    verCanal,
+    refrescar,
+    poner,
+    encolar,
+    quitar,
   };
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

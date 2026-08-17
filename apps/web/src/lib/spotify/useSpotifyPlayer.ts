@@ -479,24 +479,35 @@ export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
     });
 
     const propias = (await llamarSpotify("/me/playlists?limit=50")) as {
-      items: {
+      items: ({
         id: string;
         uri: string;
         name: string;
-        images: { url: string }[] | null;
-        tracks: { total: number };
-        owner: { display_name: string };
-      }[];
+        images?: { url: string }[] | null;
+        tracks?: { total: number } | null;
+        owner?: { display_name?: string | null } | null;
+      } | null)[];
     } | null;
 
-    const lista: Playlist[] = (propias?.items ?? []).map((p) => ({
-      id: p.id,
-      uri: p.uri,
-      nombre: p.name,
-      caratula: p.images?.[0]?.url ?? null,
-      pistas: p.tracks.total,
-      de: p.owner.display_name,
-    }));
+    /**
+     * Todo se lee a la defensiva, y no por costumbre: `/me/playlists` devuelve
+     * entradas con huecos de verdad. Hay `items` a null —una playlist que se
+     * borró o dejó de estar disponible en tu país sigue ocupando su sitio en la
+     * página— y objetos sin `tracks` ni `owner.display_name`. Dar esos campos
+     * por seguros costó que la pestaña entera reventara con un
+     * «Cannot read properties of undefined» y no enseñara ni una sola lista de
+     * las cuarenta y cinco que sí venían bien.
+     */
+    const lista: Playlist[] = (propias?.items ?? [])
+      .filter((p): p is NonNullable<typeof p> => Boolean(p?.id && p?.uri))
+      .map((p) => ({
+        id: p.id,
+        uri: p.uri,
+        nombre: p.name || "Lista sin nombre",
+        caratula: p.images?.[0]?.url ?? null,
+        pistas: p.tracks?.total ?? 0,
+        de: p.owner?.display_name || "—",
+      }));
 
     const total = (guardadas as { total?: number } | null)?.total;
     if (typeof total === "number") {
@@ -520,27 +531,31 @@ export function useSpotifyPlayer(activo: boolean, onTerminada?: () => void) {
         ? "/me/tracks?limit=50"
         : `/playlists/${playlistId}/tracks?limit=50`;
     const carga = (await llamarSpotify(ruta)) as {
-      items: {
-        track: {
-          uri: string;
-          name: string;
-          duration_ms: number;
-          artists: { name: string }[];
-          album: { images: { url: string }[] };
+      items: ({
+        track?: {
+          uri?: string;
+          name?: string;
+          duration_ms?: number;
+          artists?: { name?: string | null }[] | null;
+          album?: { images?: { url: string }[] | null } | null;
         } | null;
-      }[];
+      } | null)[];
     } | null;
 
     return (carga?.items ?? [])
-      // Una pista puede llegar en null: se retiró del catálogo de tu país o era
-      // un episodio de podcast en una playlist mixta.
-      .filter((i) => i.track !== null)
+      // Una pista puede llegar en null, o sin `uri`: se retiró del catálogo de
+      // tu país, o era un episodio de podcast en una playlist mixta. Y como en
+      // `listarPlaylists`, el resto de campos tampoco están garantizados.
+      .filter((i) => Boolean(i?.track?.uri))
       .map((i) => ({
-        uri: i.track!.uri,
-        name: i.track!.name,
-        artist: i.track!.artists.map((a) => a.name).join(", "),
-        imageUrl: i.track!.album.images[0]?.url ?? null,
-        durationMs: i.track!.duration_ms,
+        uri: i!.track!.uri!,
+        name: i!.track!.name || "Sin título",
+        artist: (i!.track!.artists ?? [])
+          .map((a) => a?.name)
+          .filter(Boolean)
+          .join(", "),
+        imageUrl: i!.track!.album?.images?.[0]?.url ?? null,
+        durationMs: i!.track!.duration_ms ?? 0,
       }));
   }, []);
 

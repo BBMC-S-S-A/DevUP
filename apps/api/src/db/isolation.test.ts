@@ -902,6 +902,39 @@ async function main(): Promise<void> {
       decryptSecret(encryptSecret("un secreto cualquiera")) === "un secreto cualquiera",
     );
 
+    /**
+     * Poder ACTUALIZAR el secreto, no solo leerlo.
+     *
+     * Este caso existe porque su ausencia costó una tarde: 0015 puso políticas
+     * de select, insert y delete y se olvidó la de update, y con RLS activo eso
+     * no da error — afecta a cero filas. El token de Spotify caduca cada hora y
+     * su refresco se estaba tirando a la basura en silencio.
+     *
+     * Cuenta las filas afectadas y no si la consulta lanzó: una política que
+     * falta se ve exactamente así, como un UPDATE que «funciona» sin cambiar
+     * nada.
+     */
+    const secretoActualizado = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "update connection_secrets set encrypted_secret = $2 where connection_id = $1",
+        [acmeConnection, encryptSecret("token-refrescado")],
+      );
+      return rowCount ?? 0;
+    });
+    check("Ana puede refrescar el secreto de su conexión", secretoActualizado === 1);
+
+    const brunoActualizoSecreto = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "update connection_secrets set encrypted_secret = $2 where connection_id = $1",
+        [acmeConnection, encryptSecret("robado")],
+      );
+      return rowCount ?? 0;
+    });
+    check(
+      "un UPDATE de Bruno sobre el secreto de Acme afecta a cero filas",
+      brunoActualizoSecreto === 0,
+    );
+
     await denied("Carla, que es miembro raso, no puede conectar una cuenta a nombre de la organización", () =>
       withUser(carla, (db) =>
         db.query(
