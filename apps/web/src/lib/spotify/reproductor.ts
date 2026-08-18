@@ -596,42 +596,6 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
       }));
   }, []);
 
-  /**
-   * Lo que Spotify tiene encolado ahora mismo: lo que suena y lo que viene.
-   *
-   * Es la vuelta a la restricción de `listarPistas`. Spotify no deja leer las
-   * canciones de una lista (`/playlists/{id}/tracks` responde 403 para esta
-   * aplicación), pero **sí** deja leer la cola del reproductor. Así que, en
-   * cuanto la lista se pone a sonar, esto enseña lo que viene detrás.
-   *
-   * Es media respuesta y conviene decirlo donde se pinte: son las ~20 pistas
-   * siguientes, no la lista entera, y no existe hasta que algo suene.
-   */
-  const listarColaDeSpotify = useCallback(async (): Promise<SpotifyTrack[]> => {
-    const carga = (await llamarSpotify("/me/player/queue").catch(() => null)) as {
-      queue?: ({
-        uri?: string;
-        name?: string;
-        duration_ms?: number;
-        artists?: { name?: string | null }[] | null;
-        album?: { images?: { url: string }[] | null } | null;
-      } | null)[];
-    } | null;
-
-    return (carga?.queue ?? [])
-      .filter((t): t is NonNullable<typeof t> => Boolean(t && t.uri))
-      .map((t) => ({
-        uri: t.uri as string,
-        name: t.name || "Sin título",
-        artist: (t.artists ?? [])
-          .map((a) => a?.name)
-          .filter(Boolean)
-          .join(", "),
-        imageUrl: t.album?.images?.[0]?.url ?? null,
-        durationMs: t.duration_ms ?? 0,
-      }));
-  }, []);
-
   /** Los dispositivos donde esta cuenta puede sonar (móvil, escritorio, altavoz). */
   const listarDispositivos = useCallback(async () => {
     const carga = (await llamarSpotify("/me/player/devices")) as {
@@ -655,7 +619,6 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
     encolarEnSpotify,
     listarPlaylists,
     listarPistas,
-    listarColaDeSpotify,
     alternarPausa,
     siguiente,
     anterior,

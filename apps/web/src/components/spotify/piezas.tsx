@@ -676,7 +676,6 @@ export function Buscador({
 export function Biblioteca({
   listar,
   listarPistas,
-  listarColaDeSpotify,
   onPonerLista,
   puedeReproducir,
   channelId,
@@ -684,8 +683,6 @@ export function Biblioteca({
 }: {
   listar: () => Promise<Playlist[]>;
   listarPistas: (id: string) => Promise<SpotifyTrack[]>;
-  /** La cola del reproductor: lo único que Spotify sí deja leer de una lista. */
-  listarColaDeSpotify: () => Promise<SpotifyTrack[]>;
   onPonerLista: (uri: string) => Promise<void>;
   /** Ojear las listas no lo exige; poner una, sí. */
   puedeReproducir: boolean;
@@ -697,8 +694,6 @@ export function Biblioteca({
   const [fallo, setFallo] = useState<string | null>(null);
   const [abierta, setAbierta] = useState<Playlist | null>(null);
   const [pistas, setPistas] = useState<SpotifyTrack[] | null>(null);
-  const [pistasSinPermiso, setPistasSinPermiso] = useState(false);
-  const [cola, setCola] = useState<SpotifyTrack[] | null>(null);
 
   useEffect(() => {
     void listar()
@@ -718,19 +713,27 @@ export function Biblioteca({
       });
   }, [listar]);
 
+  /**
+   * Las canciones solo se piden donde Spotify las da.
+   *
+   * `/playlists/{id}/tracks` responde 403 SIEMPRE con la app en modo desarrollo
+   * —comprobado también con `fields`, con `market`, y pidiendo la lista entera,
+   * que llega sin las pistas dentro—. Pedirlas era garantizar un error rojo en
+   * consola y una explicación en pantalla para algo que no iba a llegar nunca,
+   * así que se dejó de intentar.
+   *
+   * «Canciones que te gustan» es otra cosa y sí funciona: va por `/me/tracks`,
+   * que no está vetado. Por eso se distinguen en vez de quitar las dos.
+   */
+  const esGuardadas = abierta?.id === "guardadas";
+
   useEffect(() => {
     if (!abierta) return;
     setPistas(null);
-    setPistasSinPermiso(false);
+    if (abierta.id !== "guardadas") return;
     void listarPistas(abierta.id)
       .then(setPistas)
-      .catch((caido: Error) => {
-        // Igual que arriba: un permiso que falta no es una lista vacía, y
-        // decir lo primero como si fuera lo segundo manda a quien lo lee a
-        // sospechar de la playlist en vez de la conexión.
-        if (caido.message === "sin_permiso") setPistasSinPermiso(true);
-        setPistas([]);
-      });
+      .catch(() => setPistas([]));
   }, [abierta, listarPistas]);
 
   if (sinPermiso) {
@@ -795,93 +798,20 @@ export function Biblioteca({
           )}
         </div>
 
-        {pistas === null ? (
+        {/* Una lista que Spotify no deja leer no tiene nada que enseñar aquí:
+            ni un cargador que no va a terminar, ni un aviso explicando una
+            limitación que no se puede levantar desde la aplicación. Lo único
+            que se puede hacer con ella es ponerla, y para eso está el ▶ de
+            arriba. Las canciones guardadas sí se listan: ese camino funciona. */}
+        {!esGuardadas ? (
+          <p className="px-1 py-4 text-center text-[11px] leading-relaxed text-faint">
+            {puedeReproducir
+              ? "Usa ▶ para poner esta lista."
+              : "Podrás ponerla cuando conecte el reproductor."}
+          </p>
+        ) : pistas === null ? (
           <div className="grid place-items-center py-5">
             <Loader2 size={13} className="animate-spin text-faint" />
-          </div>
-        ) : pistasSinPermiso ? (
-          // OJO: esto NO es un permiso que falte, aunque Spotify conteste 403.
-          // Comprobado contra la API con un token recién emitido y con todos los
-          // permisos concedidos: /playlists/{id}/tracks responde 403 para TODAS
-          // las listas, incluidas las que la propia cuenta creó, mientras que
-          // /me/playlists y /me/tracks responden 200. Es una restricción de la
-          // aplicación en Spotify, no de la cuenta, así que ofrecer «volver a
-          // conectar» aquí manda a repetir un trámite que no cambia nada. Poner
-          // la lista entera sí funciona: eso va por context_uri y no necesita
-          // leer las pistas.
-          <div className="px-1 py-5 text-center">
-            <p className="text-[11px] leading-relaxed text-warn">
-              Spotify no deja ver las canciones de una lista desde esta aplicación.
-            </p>
-            {/* La promesa solo se hace si se puede cumplir: el botón de abajo
-                necesita reproductor, y sin él «ponerla entera sí funciona» es
-                otra mentira más de las que llevamos toda la noche quitando. */}
-            <p className="mt-1 text-[10px] leading-relaxed text-faint">
-              {puedeReproducir
-                ? "Ponerla entera sí funciona."
-                : "Podrás ponerla entera cuando conecte el reproductor."}
-            </p>
-            {puedeReproducir && (
-              <button
-                type="button"
-                onClick={async () => {
-                  await onPonerLista(abierta.uri);
-                  // La cola tarda un momento en existir: Spotify la monta al
-                  // aceptar el contexto, no al recibir la orden.
-                  await new Promise((r) => setTimeout(r, 1200));
-                  setCola(await listarColaDeSpotify().catch(() => []));
-                }}
-                className="presionable mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#1db954]
-                  px-3 text-[11px] font-semibold text-black hover:brightness-110"
-              >
-                <Play size={12} />
-                Poner esta lista
-              </button>
-            )}
-
-            {/* La vuelta a la restricción: Spotify no deja leer las canciones de
-                una lista, pero sí la cola del reproductor. En cuanto suena, se
-                puede enseñar lo que viene detrás. Es media respuesta y se dice
-                cuál media es — son las siguientes, no la lista entera. */}
-            {cola !== null && cola.length > 0 && (
-              <div className="mt-4 text-left">
-                <Rotulo className="block px-1">A continuación</Rotulo>
-                <p className="mb-1.5 px-1 text-[10px] leading-snug text-faint">
-                  Lo que Spotify tiene encolado de esta lista, no la lista completa.
-                </p>
-                <ul className="space-y-0.5">
-                  {cola.map((pista, i) => (
-                    <li
-                      key={`${pista.uri}-${i}`}
-                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-raised"
-                    >
-                      <span className="w-4 shrink-0 text-right font-mono text-[10px] tabular-nums text-faint">
-                        {i + 1}
-                      </span>
-                      {pista.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={pista.imageUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
-                      ) : (
-                        <span className="grid size-7 shrink-0 place-items-center rounded bg-raised text-faint">
-                          <Music size={11} />
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[11px] font-medium leading-tight">
-                          {pista.name}
-                        </span>
-                        <span className="block truncate text-[10px] leading-tight text-faint">
-                          {pista.artist}
-                        </span>
-                      </span>
-                      <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
-                        {reloj(pista.durationMs)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         ) : pistas.length === 0 ? (
           <p className="px-1 py-4 text-center text-xs text-faint">Esta lista está vacía.</p>

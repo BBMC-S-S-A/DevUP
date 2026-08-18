@@ -252,7 +252,6 @@ export function SpotifyWidget({
           <Biblioteca
             listar={player.listarPlaylists}
             listarPistas={player.listarPistas}
-            listarColaDeSpotify={player.listarColaDeSpotify}
             onPonerLista={reproducirLista}
             puedeReproducir={puedeControlar}
             channelId={channelId}
