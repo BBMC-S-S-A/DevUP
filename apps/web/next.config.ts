@@ -26,28 +26,33 @@ const nextConfig: NextConfig = {
   // arranca un WebContainer, que exige SharedArrayBuffer y por tanto que el
   // documento esté cross-origin-aislado.
   //
-  // Van en TODAS las rutas y no solo en /dev: COOP/COEP son propiedades del
-  // contexto de navegación que solo se fijan en una carga completa del
-  // documento. Next.js navega entre páginas del lado del cliente sin
-  // recargar — quien llega a /dev por un clic desde /app conserva las
-  // cabeceras (o la ausencia de ellas) de la página por la que entró
-  // primero a la pestaña, nunca las de /dev. Puestas aquí, cualquier punto
-  // de entrada (login, /app, lo que sea) ya nace cross-origin-aislado y esa
-  // condición sobrevive a la navegación interna.
+  // SOLO en /dev, y por un motivo caro de aprender: aisladas en todo el sitio
+  // rompen la reproducción de Spotify. Comprobado en el navegador del usuario —
+  // con estas cabeceras el Web Playback SDK se construye, acepta el token y no
+  // llega a estar listo NUNCA, sin emitir un solo error; quitándolas, reproduce
+  // a la primera. El módulo de contenido protegido (Widevine) no se puede
+  // instanciar en un contexto cross-origin aislado.
   //
-  // `credentialless` (no `require-corp`) porque el widget de Spotify, la
-  // barra de llamada persistente y el iframe de previsualización de PDF
-  // cargan recursos cross-origin (portadas de álbum, el propio PDF firmado
-  // de S3/MinIO) que no llevan cabecera CORP — `require-corp` los rompería.
+  // El motivo original de ponerlas globales era real y sigue en pie: COOP/COEP
+  // solo se fijan en una carga completa del documento, y Next navega entre
+  // páginas sin recargar, así que quien llega a /dev por un clic se traería las
+  // cabeceras de la página por la que entró. La salida no es aislar el sitio
+  // entero: es entrar a /dev con navegación dura. Eso se hace en
+  // `app/app/page.tsx`, donde ese acceso es un <a> y no un <Link> — si alguien
+  // lo vuelve a convertir en <Link>, el entorno de desarrollo dejará de tener
+  // SharedArrayBuffer y WebContainer no arrancará.
+  //
+  // `credentialless` (no `require-corp`) porque el iframe de previsualización de
+  // PDF carga recursos cross-origin (el PDF firmado de S3/MinIO) que no llevan
+  // cabecera CORP — `require-corp` los rompería.
   async headers() {
+    const aislamiento = [
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+      { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+    ];
     return [
-      {
-        source: "/(.*)",
-        headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
-        ],
-      },
+      { source: "/app/o/:orgId/dev", headers: aislamiento },
+      { source: "/app/o/:orgId/dev/:ruta*", headers: aislamiento },
     ];
   },
 };

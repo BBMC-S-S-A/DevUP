@@ -198,8 +198,24 @@ export default function OrganizationsPage() {
                 </header>
 
                 <div className="grid gap-2 border-b border-line/60 p-3 sm:grid-cols-3">
-                  {ACCESOS.map(({ ruta, icono: Icono, titulo, pista }) => (
-                    <Link
+                  {ACCESOS.map(({ ruta, icono: Icono, titulo, pista }) => {
+                    /**
+                     * El entorno de dev se entra con navegación DURA, no con
+                     * <Link>.
+                     *
+                     * WebContainer necesita que el documento esté cross-origin
+                     * aislado, y COOP/COEP solo se fijan en una carga completa:
+                     * llegar por una navegación de cliente traería las cabeceras
+                     * de la página de origen, que no las tiene. Antes esto se
+                     * resolvía aislando el sitio entero, pero eso impedía que el
+                     * reproductor de Spotify llegara a estar listo — el módulo de
+                     * DRM no se puede instanciar bajo aislamiento.
+                     *
+                     * Así cada uno tiene lo suyo: /dev aislado, el resto no.
+                     */
+                    const Enlace = ruta === "dev" ? "a" : Link;
+                    return (
+                    <Enlace
                       key={ruta}
                       href={`/app/o/${org.id}/${ruta}`}
                       className="presionable group flex items-center gap-2.5 rounded-xl border border-line bg-raised/40 px-3 py-2.5 hover:border-accent/40 hover:bg-accent-soft/40"
@@ -213,8 +229,9 @@ export default function OrganizationsPage() {
                         </span>
                         <span className="block truncate text-[11px] text-faint">{pista}</span>
                       </span>
-                    </Link>
-                  ))}
+                    </Enlace>
+                    );
+                  })}
                 </div>
 
                 <div className="p-3">

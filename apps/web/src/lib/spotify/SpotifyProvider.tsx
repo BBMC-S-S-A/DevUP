@@ -1,37 +1,49 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { api, type SpotifyQueueTrack, type SpotifySession } from "../api";
-import { useSpotifyPlayer } from "./useSpotifyPlayer";
+import { useSpotifyPlayer } from "./reproductor";
 
 /**
  * La música vive aquí, no en la página del canal.
  *
- * Es exactamente la misma corrección que ya hizo falta para las llamadas (ver
- * VoiceCallProvider): mientras `useSpotifyPlayer` se llamaba dentro del widget,
- * y el widget solo estaba montado en la cabecera de un canal de voz, irse al
- * tablero o a la biblioteca lo desmontaba — y su limpieza llama a
- * `disconnect()`, así que la música se cortaba. No era un fallo del
- * reproductor: era que el reproductor dejaba de existir.
+ * Es la misma corrección que ya hizo falta para las llamadas (ver
+ * `VoiceCallProvider`): mientras el reproductor se montaba dentro del widget, y
+ * el widget solo existía en la cabecera de un canal de voz, irse al tablero lo
+ * desmontaba — y su limpieza llama a `disconnect()`, así que la música se
+ * cortaba. No era un fallo del reproductor: era que el reproductor dejaba de
+ * existir.
  *
- * UNA SOLA COLA, Y AQUÍ. La primera versión guardaba la cola en dos sitios —
- * aquí y en el widget— y eso rompía el encadenado de una forma difícil de ver:
- * al poner una canción, el widget la quitaba de SU copia mientras el proveedor
- * seguía con la suya, así que al acabar la canción el encadenado leía una cola
- * vieja y volvía a poner lo mismo. Ahora la cola de la sala que se está mirando
- * vive solo en este proveedor, y el widget únicamente la pinta.
+ * Tres decisiones que parecen rodeos y no lo son:
  *
- * EL ENCADENADO LO HACE SPOTIFY, NO NOSOTROS. Los dos primeros intentos fueron
- * detectar el final de la canción para poner la siguiente, y los dos fallaron
- * por lo mismo: el SDK no manda «terminó». Hay que deducirlo de un `paused` con
- * la posición a 0, que es idéntico a rebobinar — y aun acertando, entre canción
- * y canción quedaba el silencio de nuestra llamada de reproducción.
+ * **Una sola cola, y aquí.** La primera versión la guardaba en dos sitios —este
+ * proveedor y el widget— y eso rompía el encadenado de forma difícil de ver: al
+ * poner una canción el widget la quitaba de SU copia mientras el proveedor
+ * seguía con la suya, así que al terminar se leía una cola vieja y volvía a
+ * sonar lo mismo. Ahora el widget solo pinta.
  *
- * Así que la cola compartida se le ENTREGA a Spotify (`/me/player/queue`) y es
- * él quien enlaza, sin huecos y sin adivinar nada. Nuestra lista sigue siendo
- * la que ve la sala, y se mantiene al día por el otro lado: cada vez que
- * empieza a sonar una pista se saca de la lista, la haya puesto quien sea.
+ * **El encadenado lo hace Spotify.** Los dos primeros intentos detectaban el
+ * final de la canción para poner la siguiente, y fallaron por lo mismo: el SDK
+ * no manda «terminó». Hay que deducirlo de un `paused` con la posición a cero,
+ * que es idéntico a rebobinar — y aun acertando quedaba un silencio entre
+ * canción y canción. Así que la cola se le ENTREGA a Spotify
+ * (`/me/player/queue`) y enlaza él, sin huecos y sin adivinar.
+ *
+ * **Las dependencias son valores, nunca el objeto `player`.** El hook devuelve
+ * un objeto nuevo en cada renderizado; meterlo en un `useCallback` lo recrea
+ * siempre, y un efecto que dependa de ese callback se dispara sin parar. La
+ * primera versión hacía justo eso y acabó pidiendo tokens en bucle hasta comerse
+ * el límite de peticiones (429).
  */
+
 type Cuenta = { connected: boolean; premium: boolean };
 
 /**
@@ -40,7 +52,7 @@ type Cuenta = { connected: boolean; premium: boolean };
  * `id` es opcional a propósito: una pista de la cola lo tiene y hay que sacarla
  * al ponerla, pero un resultado de búsqueda que se pone directamente no está en
  * ninguna cola y no hay nada que sacar. Un solo tipo para las dos cosas evita
- * dos caminos de reproducción que se desincronizan.
+ * dos caminos de reproducción que acaban desincronizados.
  */
 export type Ponible = {
   trackUri: string;
@@ -66,8 +78,7 @@ type Valor = {
   /** Añade a la cola. Si no suena nada, arranca en el momento. */
   encolar: (pista: SpotifyQueueTrack) => Promise<void>;
   quitar: (id: string) => Promise<void>;
-  /** Cierra la sesión de Spotify de esta cuenta. Ver su cuerpo para el porqué
-   *  de no tocar nada más: el resto se apaga solo. */
+  /** Cierra la sesión de Spotify de esta cuenta. */
   desconectar: () => Promise<void>;
 };
 
@@ -81,18 +92,15 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
   // Referencias además del estado: el encadenado se dispara desde un evento del
   // SDK, y una función creada en un renderizado anterior vería la cola de aquel
-  // momento — justo el caso que importa, alguien añadiendo una canción mientras
-  // suena otra.
+  // momento — justo el caso que importa, alguien añadiendo algo mientras suena.
   const colaRef = useRef<SpotifyQueueTrack[]>([]);
   colaRef.current = cola;
   const canalRef = useRef<string | null>(null);
   canalRef.current = canal;
 
   /**
-   * Las pistas que ya se le entregaron a la cola de Spotify.
-   *
-   * Sin esto, cada vez que la cola compartida cambia volveríamos a mandar todo
-   * y la misma canción se apilaría varias veces en la cola de Spotify.
+   * Lo que ya se le entregó a la cola de Spotify. Sin esto, cada cambio en la
+   * cola compartida reenviaría todo y la misma canción se apilaría varias veces.
    */
   const despachadas = useRef<Set<string>>(new Set());
 
@@ -125,7 +133,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     [refrescar],
   );
 
-  /** Saca una pista de la cola, en la base y en pantalla. */
+  /** Saca una pista de la cola, en pantalla y en la base. */
   const quitar = useCallback(async (id: string) => {
     setCola((previa) => previa.filter((t) => t.id !== id));
     await api.delete(`/spotify/queue/${id}`).catch(() => {});
@@ -134,14 +142,13 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   /**
    * Cierra la sesión de Spotify de esta cuenta.
    *
-   * Basta con borrar la conexión y poner `cuenta` a desconectada: `useSpotifyPlayer`
-   * ya observa ese valor (`activo` = `cuenta?.connected`) y su propio efecto de
-   * montaje se encarga de llamar a `disconnect()` sobre el SDK al ver que deja
-   * de estar activo — repetirlo aquí sería la misma limpieza dos veces.
+   * Basta con borrar la conexión y marcar la cuenta como desconectada: el motor
+   * observa ese valor y su propia limpieza llama a `disconnect()` al ver que
+   * deja de estar activo — repetirlo aquí sería la misma limpieza dos veces.
    *
-   * Lo que SÍ suena en la sala para el resto no se toca: la sesión compartida
-   * es del canal, no de esta cuenta, y desconectarse no debería silenciar lo
-   * que ya estaban escuchando los demás.
+   * Lo que suena en la sala para el resto no se toca: la sesión compartida es
+   * del canal, no de esta cuenta, y desconectarse no debería callar lo que los
+   * demás estaban escuchando.
    */
   const desconectar = useCallback(async () => {
     await api.delete("/integrations/spotify");
@@ -149,25 +156,17 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const puedeSonar = player.estado.listo && !player.estado.sinPremium;
-
-  /*
-   * Lo que sigue depende de VALORES y no del objeto `player`.
-   *
-   * El hook devuelve un objeto nuevo en cada renderizado, así que meterlo en las
-   * dependencias de un `useCallback` lo recrea siempre — y un efecto que dependa
-   * de ese callback se dispara en cada renderizado. La primera versión hacía
-   * justo eso y acabó pidiendo tokens en bucle hasta comerse el límite de
-   * peticiones de la API (429). Extraer las piezas estables lo corta de raíz.
-   */
   const encolarEnSpotify = player.encolarEnSpotify;
+  const reproducirUri = player.reproducirUri;
   const uriSonando = player.estado.pista?.uri ?? null;
+  const sonando = player.estado.reproduciendo;
 
   /**
    * Entrega a Spotify todo lo que está en la cola compartida y aún no le hemos
-   * pasado. Spotify se encarga del encadenado, sin huecos entre canciones.
+   * pasado, para que encadene sin huecos.
    *
-   * En serie y no en paralelo: la cola de Spotify respeta el orden en que
-   * llegan las peticiones, y con `Promise.all` el orden lo decide la red.
+   * En serie y no en paralelo: la cola de Spotify respeta el orden en que llegan
+   * las peticiones, y con `Promise.all` el orden lo decidiría la red.
    */
   const sincronizarConSpotify = useCallback(async () => {
     // Sin nada sonando no hay cola donde encolar: Spotify necesita una
@@ -179,7 +178,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         await encolarEnSpotify(pista.trackUri);
         despachadas.current.add(pista.trackUri);
       } catch {
-        // Si una falla, se deja sin marcar para reintentarla en la próxima
+        // Si una falla se deja sin marcar, para reintentarla en la siguiente
         // sincronización en vez de perderla en silencio.
         break;
       }
@@ -187,13 +186,13 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   }, [puedeSonar, uriSonando, encolarEnSpotify]);
 
   /**
-   * Si otra persona de la sala añade algo mientras suena la música, quien
-   * pincha tiene que entregárselo a Spotify — el que añadió puede no tener ni
-   * Premium ni reproductor, así que no puede hacerlo él.
+   * Si otra persona de la sala añade algo mientras suena la música, quien pincha
+   * tiene que entregárselo a Spotify: el que añadió puede no tener ni Premium ni
+   * reproductor, así que no puede hacerlo él.
    *
-   * La dependencia es la FIRMA de la cola, no el array: un `useState` devuelve
-   * un array nuevo en cada carga aunque el contenido sea idéntico, y con eso el
-   * efecto volvería a dispararse sin que haya nada nuevo que entregar.
+   * La dependencia es la FIRMA de la cola, no el array: `useState` devuelve un
+   * array nuevo en cada carga aunque el contenido sea idéntico, y con eso el
+   * efecto se dispararía sin que haya nada nuevo que entregar.
    */
   const firmaCola = cola.map((t) => t.id).join(",");
   useEffect(() => {
@@ -205,11 +204,10 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
    *
    * Poner algo tarda un momento en confirmarse, y sin señal en pantalla lo
    * natural es volver a pulsar. Dos órdenes solapadas se estorban —la segunda
-   * llega mientras la primera aún está trasladando el dispositivo— y el
-   * resultado es que no suena ninguna, que es justo el «hay que darle varias
-   * veces» que esto viene a arreglar. El cerrojo va en una referencia y no en
-   * el estado porque tiene que ser cierto en el instante, sin esperar a un
-   * renderizado.
+   * llega mientras la primera todavía traslada el dispositivo— y el resultado es
+   * que no suena ninguna: justo el «hay que darle varias veces» que esto viene a
+   * arreglar. El cerrojo va en una referencia y no en el estado porque tiene que
+   * ser cierto en el instante, sin esperar a un renderizado.
    */
   const enCurso = useRef(false);
   const [poniendo, setPoniendo] = useState(false);
@@ -220,9 +218,9 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       enCurso.current = true;
       setPoniendo(true);
       try {
-        await player.reproducirUri(pista.trackUri);
-        // Al poner algo se rompe la cola que Spotify tenía montada, así que lo
-        // despachado deja de ser válido y hay que volver a entregarlo.
+        await reproducirUri(pista.trackUri);
+        // Poner algo rompe la cola que Spotify tenía montada, así que lo
+        // despachado deja de valer y hay que volver a entregarlo.
         despachadas.current.clear();
         despachadas.current.add(pista.trackUri);
         if (pista.id) await quitar(pista.id);
@@ -232,7 +230,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         setPoniendo(false);
       }
     },
-    [player, quitar, sincronizarConSpotify],
+    [reproducirUri, quitar, sincronizarConSpotify],
   );
 
   const encolar = useCallback(
@@ -244,23 +242,22 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
       // Si no suena nada, esto es además la orden de empezar: una cola con cosas
       // dentro que no se mueve parece estropeada.
-      const nadaSonando = !player.estado.pista || !player.estado.reproduciendo;
-      if (puedeSonar && nadaSonando) {
+      if (puedeSonar && (!uriSonando || !sonando)) {
         await poner(pista).catch(() => {});
         return;
       }
       // Y si ya suena algo, va detrás en la cola de Spotify para que enlace.
       await sincronizarConSpotify();
     },
-    [player.estado.pista, player.estado.reproduciendo, puedeSonar, poner, sincronizarConSpotify],
+    [puedeSonar, uriSonando, sonando, poner, sincronizarConSpotify],
   );
 
   /**
    * Cuando empieza a sonar una pista, sacarla de la cola compartida.
    *
-   * Da igual quién la haya puesto: si la encadenó Spotify, este es el único
-   * momento en que nos enteramos. Así lo que se ve en la lista es siempre lo
-   * que queda por sonar, que es lo que la palabra «cola» promete.
+   * Da igual quién la pusiera: si la encadenó Spotify, este es el único momento
+   * en que nos enteramos. Así la lista enseña siempre lo que queda por sonar,
+   * que es lo que la palabra «cola» promete.
    */
   alCambiarPista.current = (uri: string) => {
     setCola((previa) => {
@@ -276,9 +273,9 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Publicar al resto de la sala qué suena. Solo al cambiar de canción o de
-   * play a pausa: en cada tic del contador serían cuatro escrituras por segundo
-   * y por persona.
+   * Publicar al resto de la sala qué suena. Solo al cambiar de canción o de play
+   * a pausa: en cada tic del contador serían cuatro escrituras por segundo y por
+   * persona.
    */
   const ultimoPublicado = useRef("");
   useEffect(() => {
@@ -301,7 +298,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         isPlaying: player.estado.reproduciendo,
       })
       .catch(() => {});
-    // `posicionMs` va en el cuerpo como instantánea pero fuera de las
+    // `posicionMs` viaja en el cuerpo como instantánea pero queda fuera de las
     // dependencias: si entrara, publicaríamos sin parar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.estado.pista, player.estado.reproduciendo]);
