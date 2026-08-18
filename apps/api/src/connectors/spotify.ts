@@ -56,6 +56,13 @@ export function authorizeUrl(state: string): string {
     scope: scopes.join(" "),
     redirect_uri: env.SPOTIFY_REDIRECT_URI,
     state,
+    // Sin esto, a quien ya había autorizado la app antes Spotify puede
+    // saltarle la pantalla de permisos y devolverle un token silencioso —
+    // ni pantalla que aceptar, ni aviso de que faltó. Es exactamente el caso
+    // de "reconectar" para conseguir un scope nuevo: sin `show_dialog`, un
+    // reconectar puede no reconectar nada de verdad. Fuerza a Spotify a
+    // volver a preguntar siempre, así el scope pedido se concede de verdad.
+    show_dialog: "true",
   });
   return `${ACCOUNTS}/authorize?${params.toString()}`;
 }

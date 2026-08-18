@@ -2,7 +2,16 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
-import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { env } from "../env.js";
+import { badRequest, forbidden, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import {
+  buildOrgAssetKey,
+  deleteObject,
+  headObject,
+  organizationOfKey,
+  signDownload,
+  signUpload,
+} from "../storage/s3.js";
 
 const uuid = z.string().uuid();
 const slug = z
@@ -31,7 +40,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
         `select o.id, o.name, o.slug, o.created_at as "createdAt", m.role,
-                o.immersive_enabled as "immersiveEnabled"
+                o.immersive_enabled as "immersiveEnabled", o.logo_key as "logoKey"
            from organizations o
            join organization_members m on m.organization_id = o.id
           where m.user_id = $1
@@ -147,6 +156,219 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         memberId,
       ]),
     );
+    return reply.status(204).send();
+  });
+
+  /**
+   * Subir o bajar a alguien entre admin y miembro.
+   *
+   * No es lo mismo que traspasar la propiedad: eso implica que deje de haber
+   * cero propietarios en algún instante, y es una operación distinta con sus
+   * propias garantías. Esta ruta se queda corta a propósito y solo mueve gente
+   * entre los otros dos roles.
+   */
+  app.patch("/organizations/:orgId/members/:memberId", async (request) => {
+    const userId = requireUser(request);
+    const { orgId, memberId } = parseParams(
+      z.object({ orgId: uuid, memberId: uuid }),
+      request.params,
+    );
+    const body = parseBody(z.object({ role: z.enum(["admin", "member"]) }), request.body);
+
+    if (memberId === userId) throw badRequest("no puedes cambiar tu propio rol");
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ role: string }>(
+        "select role from organization_members where organization_id = $1 and user_id = $2",
+        [orgId, memberId],
+      );
+      const actual = rows[0];
+      if (!actual) throw notFound("esa persona no es miembro de la organización");
+      if (actual.role === "owner") {
+        throw forbidden("no se puede cambiar el rol del propietario");
+      }
+
+      const { rows: actualizado } = await db.query<{ userId: string; role: string }>(
+        `update organization_members set role = $3
+          where organization_id = $1 and user_id = $2
+        returning user_id as "userId", role`,
+        [orgId, memberId, body.role],
+      );
+      // Sin permiso, la política organization_members_update afecta a cero
+      // filas: no hay excepción que atrapar, solo una fila que no cambió.
+      if (actualizado.length === 0) {
+        throw forbidden("sin permiso para cambiar roles en esta organización");
+      }
+      return { member: actualizado[0] };
+    });
+  });
+
+  // --- Foto de la organización ------------------------------------------------
+  /**
+   * Paso 1: reservar la clave y firmar la subida.
+   *
+   * El permiso se comprueba aquí a mano y no solo con RLS porque firmar una
+   * URL no toca la base de datos — sin esta comprobación, cualquier miembro
+   * podría obtener un PUT firmado hacia la carpeta de la organización, aunque
+   * el POST de confirmación de más abajo fuera a rechazarle igualmente el
+   * UPDATE. Mejor no dejar que suba nada que luego no va a poder colgarse.
+   */
+  app.post("/organizations/:orgId/logo", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        fileName: z.string().trim().min(1).max(255),
+        mimeType: z.string().trim().max(255).default("application/octet-stream"),
+      }),
+      request.body,
+    );
+
+    await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ ok: boolean }>("select public.is_org_admin($1) as ok", [
+        orgId,
+      ]);
+      if (!rows[0]?.ok) {
+        throw forbidden("solo quien administra puede cambiar la foto de la organización");
+      }
+    });
+
+    const logoKey = buildOrgAssetKey(orgId, body.fileName);
+    return {
+      logoKey,
+      uploadUrl: await signUpload(logoKey, body.mimeType),
+      expiresIn: env.S3_SIGNED_URL_TTL,
+    };
+  });
+
+  /** Paso 2: confirmar, y borrar la foto anterior si había una. */
+  app.post("/organizations/:orgId/logo/confirm", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const body = parseBody(z.object({ logoKey: z.string().min(1).max(500) }), request.body);
+
+    // La organización tiene que aparecer en la propia clave: sin esto,
+    // cualquiera con sesión podría confirmar una clave ajena y colgarle a su
+    // organización la foto de otra.
+    if (organizationOfKey(body.logoKey) !== orgId) {
+      throw badRequest("la clave no pertenece a esta organización");
+    }
+
+    const head = await headObject(body.logoKey);
+    if (!head) throw badRequest("la subida no llegó a completarse");
+
+    const previous = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ logoKey: string | null }>(
+        `select logo_key as "logoKey" from organizations where id = $1`,
+        [orgId],
+      );
+      if (rows.length === 0) throw notFound("organización no encontrada");
+
+      const { rowCount } = await db.query("update organizations set logo_key = $2 where id = $1", [
+        orgId,
+        body.logoKey,
+      ]);
+      if (!rowCount) {
+        throw forbidden("solo quien administra puede cambiar la foto de la organización");
+      }
+      return rows[0]!.logoKey;
+    });
+
+    if (previous && previous !== body.logoKey) await deleteObject(previous);
+    return { logoKey: body.logoKey };
+  });
+
+  /** URL firmada para pintar la foto. `null` si la organización no tiene. */
+  app.get("/organizations/:orgId/logo-url", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+
+    const key = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ logoKey: string | null }>(
+        `select logo_key as "logoKey" from organizations where id = $1`,
+        [orgId],
+      );
+      if (rows.length === 0) throw notFound("organización no encontrada");
+      return rows[0]!.logoKey;
+    });
+
+    if (!key) return { url: null };
+    return { url: await signDownload(key, "logo", "inline"), expiresIn: env.S3_SIGNED_URL_TTL };
+  });
+
+  app.delete("/organizations/:orgId/logo", async (request, reply) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+
+    const previous = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ logoKey: string | null }>(
+        `select logo_key as "logoKey" from organizations where id = $1`,
+        [orgId],
+      );
+      if (rows.length === 0) throw notFound("organización no encontrada");
+      if (!rows[0]!.logoKey) return null;
+
+      const { rowCount } = await db.query("update organizations set logo_key = null where id = $1", [
+        orgId,
+      ]);
+      // Sin permiso, la política de UPDATE afecta a cero filas: no hay nada
+      // que borrar del almacén tampoco, porque en la base no cambió nada.
+      return rowCount ? rows[0]!.logoKey : null;
+    });
+
+    if (previous) await deleteObject(previous);
+    return reply.status(204).send();
+  });
+
+  // --- Enlaces de la organización ---------------------------------------------
+  app.get("/organizations/:orgId/links", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select id, label, url, position, created_at as "createdAt"
+           from organization_links where organization_id = $1
+          order by position, created_at`,
+        [orgId],
+      );
+      return { links: rows };
+    });
+  });
+
+  app.post("/organizations/:orgId/links", async (request, reply) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        label: z.string().trim().min(1).max(60),
+        url: z.string().trim().min(1).max(2000).url("tiene que ser una URL válida"),
+      }),
+      request.body,
+    );
+
+    const link = await withUser(userId, async (db) => {
+      // Al final de la lista siempre, para no reordenar los que ya había cada
+      // vez que se añade uno.
+      const { rows: siguiente } = await db.query<{ n: string }>(
+        "select coalesce(max(position), -1) + 1 as n from organization_links where organization_id = $1",
+        [orgId],
+      );
+      const { rows } = await db.query(
+        `insert into organization_links (organization_id, label, url, position, created_by)
+         values ($1,$2,$3,$4,$5)
+         returning id, label, url, position, created_at as "createdAt"`,
+        [orgId, body.label, body.url, Number(siguiente[0]!.n), userId],
+      );
+      return rows[0];
+    });
+
+    return reply.status(201).send({ link });
+  });
+
+  app.delete("/organizations/:orgId/links/:linkId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { linkId } = parseParams(z.object({ orgId: uuid, linkId: uuid }), request.params);
+    await withUser(userId, (db) => db.query("delete from organization_links where id = $1", [linkId]));
     return reply.status(204).send();
   });
 

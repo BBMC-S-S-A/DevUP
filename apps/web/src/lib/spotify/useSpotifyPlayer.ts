@@ -144,7 +144,27 @@ async function llamarSpotify(
       ...(init.headers ?? {}),
     },
   });
-  if (!respuesta.ok) throw new Error(`Spotify respondió ${respuesta.status} en ${ruta}`);
+  if (!respuesta.ok) {
+    // El cuerpo del error es donde Spotify explica lo que de verdad pasa, y
+    // tirarlo cuesta caro: dos 403 idénticos a la vista pueden ser «esta cuenta
+    // no está en la lista de la app» o «este endpoint no está disponible para
+    // esta app», que se arreglan en sitios distintos. Sin leerlo, los dos se ven
+    // como "403" a secas y no hay forma de saber cuál es.
+    //
+    // El prefijo «respondió N en RUTA» se conserva tal cual: hay reintentos y
+    // comprobaciones que lo buscan por texto (`respondió 404`, `includes("403")`),
+    // así que el motivo se añade al final en vez de reescribir el mensaje.
+    const cuerpo = await respuesta.text().catch(() => "");
+    let motivo = "";
+    try {
+      motivo = (JSON.parse(cuerpo) as { error?: { message?: string } }).error?.message ?? "";
+    } catch {
+      motivo = cuerpo.slice(0, 140);
+    }
+    throw new Error(
+      `Spotify respondió ${respuesta.status} en ${ruta}` + (motivo ? `: ${motivo}` : ""),
+    );
+  }
   if (respuesta.status === 204) return null;
   const texto = await respuesta.text();
   return texto ? JSON.parse(texto) : null;
@@ -686,13 +706,30 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
     return lista;
   }, []);
 
-  /** Las pistas de una playlist, o las guardadas si es la lista disfrazada. */
+  /**
+   * Las pistas de una playlist, o las guardadas si es la lista disfrazada.
+   *
+   * El 403 de aquí NO significa lo que parece. Se comprobó contra la API con
+   * un token recién emitido y con todos los permisos concedidos:
+   * `/playlists/{id}/tracks` contesta 403 para todas las listas —incluidas las
+   * creadas por la propia cuenta— mientras `/me/playlists` y `/me/tracks`
+   * contestan 200. Es una restricción de la aplicación en Spotify, no del
+   * token, y por eso reconectar no la arregla: quien lo intente repetirá el
+   * trámite para nada.
+   *
+   * Se sigue marcando como `sin_permiso` para que la interfaz lo distinga de
+   * una lista vacía de verdad, pero lo que ofrece en ese caso es poner la lista
+   * entera, que va por `context_uri` y no necesita leer las pistas.
+   */
   const listarPistas = useCallback(async (playlistId: string) => {
     const ruta =
       playlistId === "guardadas"
         ? "/me/tracks?limit=50"
         : `/playlists/${playlistId}/tracks?limit=50`;
-    const carga = (await llamarSpotify(ruta)) as {
+    const carga = (await llamarSpotify(ruta).catch((fallo: Error) => {
+      if (fallo.message.includes("403")) throw new Error("sin_permiso");
+      throw fallo;
+    })) as {
       items: ({
         track?: {
           uri?: string;

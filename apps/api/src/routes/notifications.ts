@@ -22,7 +22,7 @@ const COLUMNS = `
 export async function notificar(
   db: Db,
   destinatario: string,
-  kind: "mention" | "task_assigned" | "invitation" | "recording",
+  kind: "mention" | "task_assigned" | "invitation" | "recording" | "announcement",
   title: string,
   body: string,
   link: string,

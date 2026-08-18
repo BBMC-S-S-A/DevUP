@@ -69,6 +69,19 @@ export function organizationOfKey(key: string): string | null {
   return first && /^[0-9a-f-]{36}$/i.test(first) ? first : null;
 }
 
+/**
+ * Clave de un activo propio de la organización (hoy solo su foto) y no de un
+ * workspace concreto — de ahí la carpeta fija `org-assets` en vez del
+ * `{workspace_id}` de `buildStorageKey`. Misma frontera de seguridad: la
+ * primera carpeta de verdad es la organización, y quien firma comprueba antes
+ * que quien pide pertenece a ella.
+ */
+export function buildOrgAssetKey(organizationId: string, fileName: string): string {
+  const raw = extname(fileName).slice(0, 12).toLowerCase();
+  const ext = /^\.[a-z0-9]+$/.test(raw) ? raw : "";
+  return `${organizationId}/org-assets/${randomUUID()}${ext}`;
+}
+
 export async function signUpload(key: string, contentType: string): Promise<string> {
   return getSignedUrl(
     s3,

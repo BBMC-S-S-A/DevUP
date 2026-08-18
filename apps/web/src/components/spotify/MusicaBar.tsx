@@ -21,9 +21,9 @@ import { SpotifyWidget } from "./SpotifyWidget";
  *    dos son «cosas que van contigo», y agrupadas se leen como un solo bloque
  *    de estado en vez de como dos avisos compitiendo.
  *
- *  · En la oficina no aparece. Esa vista es un espacio para recorrer y tiene su
+ *  · En DevVerse no aparece. Esa vista es un espacio para recorrer y tiene su
  *    propia interfaz; añadirle cromo flotante es justo lo que la hace dejar de
- *    funcionar. La contrapartida honesta: estando dentro de la oficina no se
+ *    funcionar. La contrapartida honesta: estando dentro de DevVerse no se
  *    puede pausar la música sin salir.
  */
 export function MusicaBar() {
@@ -31,7 +31,7 @@ export function MusicaBar() {
   const { activeChannelId, room } = useVoiceCall();
   const pathname = usePathname();
 
-  const enOficina = pathname?.includes("/oficina") ?? false;
+  const enOficina = pathname?.includes("/devverse") ?? false;
   const hayLlamada = Boolean(activeChannelId) && room.status !== "idle";
 
   // Se pinta si este navegador está reproduciendo, o si la sala tiene algo

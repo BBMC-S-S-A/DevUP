@@ -6,12 +6,12 @@ import { useCallback, useEffect, useState } from "react";
  * Profesional o inmersiva.
  *
  * La vista profesional es la que ya existía y es la de por defecto, siempre.
- * Ver docs/decisiones/0002-vistas-profesional-e-inmersiva.md: la oficina es
- * opcional y tiene que seguir siéndolo — quien nunca la abra no debe notar
- * que existe más allá de un botón.
+ * Ver docs/decisiones/0002-vistas-profesional-e-inmersiva.md: DevVerse (antes
+ * "la oficina") es opcional y tiene que seguir siéndolo — quien nunca lo abra
+ * no debe notar que existe más allá de un botón.
  *
  * La preferencia vive en `localStorage` y no en el perfil, a propósito. Es una
- * decisión por dispositivo: la misma persona quiere la oficina en el portátil
+ * decisión por dispositivo: la misma persona quiere DevVerse en el portátil
  * grande de casa y la lista sobria en el monitor compartido de la oficina, y
  * guardarla en el servidor le impondría la misma en los dos.
  */
