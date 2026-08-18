@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../../auth/plugin.js";
 import { getAppToken, searchTracks } from "../../connectors/spotify.js";
 import { withUser } from "../../db/pool.js";
-import { notFound, parseBody, parseParams, requireUser } from "../../lib/http.js";
+import { parseBody, parseParams, requireUser } from "../../lib/http.js";
 import { announceSpotifySession } from "../../realtime/signaling.js";
 
 const uuid = z.string().uuid();
@@ -99,7 +99,19 @@ export async function spotifySalaRoutes(app: FastifyInstance): Promise<void> {
       );
       return rows[0]?.channel_id ?? null;
     });
-    if (!channelId) throw notFound("no encontrada");
+    /**
+     * Borrar algo que ya no está no es un fallo: es el resultado que se pedía.
+     *
+     * Una misma pista se quita dos veces por caminos distintos —al ponerla, y
+     * otra vez cuando el reproductor avisa de que empezó a sonar— y la segunda
+     * llegaba a una fila que ya no existía. Contestar 404 ahí llenaba la consola
+     * de errores rojos por un funcionamiento correcto, que es la mejor forma de
+     * que nadie mire la consola cuando falle algo de verdad.
+     *
+     * Sin fila no hay nada que anunciar: la sala ya se enteró con el primer
+     * borrado.
+     */
+    if (!channelId) return reply.status(204).send();
     announceSpotifySession(channelId, { kind: "queue-changed" });
     return reply.status(204).send();
   });

@@ -676,6 +676,7 @@ export function Buscador({
 export function Biblioteca({
   listar,
   listarPistas,
+  listarColaDeSpotify,
   onPonerLista,
   puedeReproducir,
   channelId,
@@ -683,6 +684,8 @@ export function Biblioteca({
 }: {
   listar: () => Promise<Playlist[]>;
   listarPistas: (id: string) => Promise<SpotifyTrack[]>;
+  /** La cola del reproductor: lo único que Spotify sí deja leer de una lista. */
+  listarColaDeSpotify: () => Promise<SpotifyTrack[]>;
   onPonerLista: (uri: string) => Promise<void>;
   /** Ojear las listas no lo exige; poner una, sí. */
   puedeReproducir: boolean;
@@ -695,6 +698,7 @@ export function Biblioteca({
   const [abierta, setAbierta] = useState<Playlist | null>(null);
   const [pistas, setPistas] = useState<SpotifyTrack[] | null>(null);
   const [pistasSinPermiso, setPistasSinPermiso] = useState(false);
+  const [cola, setCola] = useState<SpotifyTrack[] | null>(null);
 
   useEffect(() => {
     void listar()
@@ -820,13 +824,63 @@ export function Biblioteca({
             {puedeReproducir && (
               <button
                 type="button"
-                onClick={() => void onPonerLista(abierta.uri)}
+                onClick={async () => {
+                  await onPonerLista(abierta.uri);
+                  // La cola tarda un momento en existir: Spotify la monta al
+                  // aceptar el contexto, no al recibir la orden.
+                  await new Promise((r) => setTimeout(r, 1200));
+                  setCola(await listarColaDeSpotify().catch(() => []));
+                }}
                 className="presionable mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#1db954]
                   px-3 text-[11px] font-semibold text-black hover:brightness-110"
               >
                 <Play size={12} />
                 Poner esta lista
               </button>
+            )}
+
+            {/* La vuelta a la restricción: Spotify no deja leer las canciones de
+                una lista, pero sí la cola del reproductor. En cuanto suena, se
+                puede enseñar lo que viene detrás. Es media respuesta y se dice
+                cuál media es — son las siguientes, no la lista entera. */}
+            {cola !== null && cola.length > 0 && (
+              <div className="mt-4 text-left">
+                <Rotulo className="block px-1">A continuación</Rotulo>
+                <p className="mb-1.5 px-1 text-[10px] leading-snug text-faint">
+                  Lo que Spotify tiene encolado de esta lista, no la lista completa.
+                </p>
+                <ul className="space-y-0.5">
+                  {cola.map((pista, i) => (
+                    <li
+                      key={`${pista.uri}-${i}`}
+                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-raised"
+                    >
+                      <span className="w-4 shrink-0 text-right font-mono text-[10px] tabular-nums text-faint">
+                        {i + 1}
+                      </span>
+                      {pista.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={pista.imageUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
+                      ) : (
+                        <span className="grid size-7 shrink-0 place-items-center rounded bg-raised text-faint">
+                          <Music size={11} />
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[11px] font-medium leading-tight">
+                          {pista.name}
+                        </span>
+                        <span className="block truncate text-[10px] leading-tight text-faint">
+                          {pista.artist}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
+                        {reloj(pista.durationMs)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         ) : pistas.length === 0 ? (
