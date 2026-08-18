@@ -261,9 +261,18 @@ export type Announcement = {
  *  la lista de tarjetas del panel, no una migración. */
 export type DashboardWidget = "spotify" | "noticias" | "notificaciones" | "enlaces";
 
+/** Posición y tamaño en celdas de la rejilla, nunca en píxeles. */
+export type DashboardCasilla = { x: number; y: number; w: number; h: number };
+
 export type DashboardPrefs = {
   widgets: DashboardWidget[];
   spotifyMode: "boton" | "expandido";
+  /**
+   * Dónde va cada widget. Vacío significa «nunca se ha colocado a mano», y el
+   * panel deriva una rejilla del orden de `widgets` — así quien viene de la
+   * versión en columna no se encuentra el panel revuelto.
+   */
+  layout: Partial<Record<DashboardWidget, DashboardCasilla>>;
 };
 
 export type Recording = {

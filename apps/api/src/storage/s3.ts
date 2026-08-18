@@ -175,12 +175,32 @@ export async function ensureBucket(): Promise<void> {
   }
 
   try {
-    await s3.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
+    await s3.send(
+      new CreateBucketCommand({
+        Bucket: env.S3_BUCKET,
+        /**
+         * `CreateBucketConfiguration` explícito, aunque parezca redundante.
+         *
+         * Sin él, el SDK genera un cuerpo que MinIO rechaza con «The XML you
+         * provided was not well-formed» — comprobado contra el almacén de
+         * producción: la llamada simple falla y esta pasa. Con
+         * `LocationConstraint` sin definir el SDK emite la forma que
+         * corresponde a us-east-1, que es la que MinIO entiende.
+         *
+         * Esto estuvo roto sin que se notara: la creación fallaba al arrancar,
+         * el aviso se perdía entre los registros y todo seguía pareciendo
+         * normal hasta que alguien subía un archivo y la petición moría en el
+         * almacén, fuera del alcance de la API.
+         */
+        CreateBucketConfiguration: { LocationConstraint: undefined },
+      }),
+    );
     console.log(`[s3] bucket «${env.S3_BUCKET}» creado`);
   } catch (error) {
     console.warn(
-      `[s3] no se pudo preparar el bucket «${env.S3_BUCKET}». ` +
-        `¿Está levantado el almacén en ${env.S3_ENDPOINT}?`,
+      `[s3] NO SE PUDO PREPARAR EL BUCKET «${env.S3_BUCKET}»: ninguna subida de ` +
+        `archivos va a funcionar, y fallará en el navegador sin que la API se entere, ` +
+        `porque los bytes van directos al almacén. ¿Está levantado en ${env.S3_ENDPOINT}?`,
       error instanceof Error ? error.message : error,
     );
     return;

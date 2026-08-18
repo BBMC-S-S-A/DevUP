@@ -1,8 +1,8 @@
 "use client";
 
-import { GripVertical, LayoutDashboard, Music, TriangleAlert, X } from "lucide-react";
+import { LayoutDashboard, Music, TriangleAlert, X } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   AnadirWidget,
@@ -11,31 +11,46 @@ import {
   NoticiasWidget,
   NotificacionesWidget,
 } from "@/components/dashboard/DashboardWidgets";
+import {
+  COLUMNAS,
+  Rejilla,
+  disposicionPorDefecto,
+  type Casilla,
+  type Disposicion,
+} from "@/components/dashboard/Rejilla";
 import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { type DashboardPrefs, type DashboardWidget, type Workspace, ApiError, api } from "@/lib/api";
 import { useSpotify } from "@/lib/spotify/SpotifyProvider";
 
-/** Igual que en la barra del workspace: el índice se topa para que el panel
- *  número nueve no entre más de medio segundo tarde. */
-function retraso(indice: number): CSSProperties {
-  return { "--retraso": `${Math.min(indice, 6) * 45}ms` } as CSSProperties;
-}
-
 /**
  * El panel personal.
  *
  * «Personal» en dos sentidos a la vez: vive por persona (`/me/dashboard`, no
- * por organización) y se lee por dispositivo con la misma sesión, así que
- * quien lo ordena en el portátil lo encuentra igual en el escritorio. Ningún
- * compañero puede ver ni tocar el de otro — ver 0019, `user_dashboard_prefs`.
+ * por organización) y se lee por dispositivo con la misma sesión, así que quien
+ * lo coloca en el portátil lo encuentra igual en el escritorio. Ningún compañero
+ * puede ver ni tocar el de otro — ver 0019, `user_dashboard_prefs`.
  *
- * Arrastrar y soltar sigue el mismo patrón nativo que ya usa el tablero de
- * tareas (`TaskBoard`): sin librería nueva, con `draggable` y los eventos de
- * toda la vida. Aquí hay una sola columna, así que reordenar es más simple:
- * soltar sobre una tarjeta la intercambia de sitio con la que se soltó.
+ * Es una rejilla, no una lista: cada tarjeta va donde se la ponga y con el
+ * tamaño que se le dé. La mecánica del arrastre vive en `Rejilla`; aquí solo
+ * queda qué se pinta dentro de cada celda y qué se guarda.
  */
+
+/**
+ * Cuántas filas ocupa cada widget cuando nadie ha dicho lo contrario.
+ *
+ * No es un capricho de diseño: un widget con menos alto del que su contenido
+ * necesita nace con barra de desplazamiento, y eso en un panel se lee como que
+ * está roto. Estos son los altos con los que cada uno se ve entero.
+ */
+const ALTO_NATURAL: Record<DashboardWidget, number> = {
+  spotify: 4,
+  noticias: 3,
+  notificaciones: 3,
+  enlaces: 2,
+};
+
 export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { canal } = useSpotify();
@@ -43,8 +58,6 @@ export default function PanelPage() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [prefs, setPrefs] = useState<DashboardPrefs | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [arrastrado, setArrastrado] = useState<DashboardWidget | null>(null);
-  const [sobrevolado, setSobrevolado] = useState<DashboardWidget | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -60,41 +73,63 @@ export default function PanelPage() {
       );
   }, [workspaceId]);
 
-  /** Optimista siempre: nada aquí es tan importante como para hacer esperar a
-   *  un arrastre a que el servidor confirme. Si falla, un aviso basta. */
+  /** Optimista siempre: nada aquí es tan importante como para hacer esperar a un
+   *  arrastre a que el servidor confirme. Si falla, un aviso basta. */
   const guardar = useCallback(async (siguiente: DashboardPrefs) => {
     setPrefs(siguiente);
     try {
       await api.put("/me/dashboard", siguiente);
     } catch {
-      toast.error("No se pudo guardar el orden del panel");
+      toast.error("No se pudo guardar la disposición del panel");
     }
   }, []);
 
-  const mover = (origen: DashboardWidget, destino: DashboardWidget) => {
-    if (!prefs || origen === destino) return;
-    const lista = [...prefs.widgets];
-    const iOrigen = lista.indexOf(origen);
-    const iDestino = lista.indexOf(destino);
-    if (iOrigen === -1 || iDestino === -1) return;
-    lista.splice(iOrigen, 1);
-    lista.splice(iDestino, 0, origen);
-    void guardar({ ...prefs, widgets: lista });
-  };
+  /**
+   * La disposición efectiva. Si nunca se ha colocado nada a mano, se deriva del
+   * orden guardado en vez de dejar el panel vacío: quien viene de la versión en
+   * columna encuentra sus widgets en el mismo orden de lectura, ya repartidos en
+   * dos columnas.
+   */
+  const disposicion = useMemo<Disposicion<DashboardWidget>>(() => {
+    if (!prefs) return {};
+    const guardada = prefs.layout ?? {};
+    const faltan = prefs.widgets.filter((id) => !guardada[id]);
+    if (faltan.length === 0) return guardada;
+
+    // Los que ya tenían sitio lo conservan; los que no, se colocan debajo.
+    const usadas = Object.values(guardada) as Casilla[];
+    const primeraLibre = usadas.reduce((max, c) => Math.max(max, c.y + c.h), 0);
+    const nuevos = disposicionPorDefecto(faltan, (id) => ALTO_NATURAL[id]);
+    for (const casilla of Object.values(nuevos) as Casilla[]) casilla.y += primeraLibre;
+    return { ...guardada, ...nuevos };
+  }, [prefs]);
 
   const quitar = (id: DashboardWidget) => {
     if (!prefs) return;
-    void guardar({ ...prefs, widgets: prefs.widgets.filter((w) => w !== id) });
+    // La casilla se va con el widget: si vuelve a añadirse, se coloca de nuevo
+    // en un hueco libre en vez de reaparecer donde estaba y pisar a otro.
+    const layout = { ...(prefs.layout ?? {}) };
+    delete layout[id];
+    void guardar({ ...prefs, widgets: prefs.widgets.filter((w) => w !== id), layout });
   };
 
   const anadir = (id: DashboardWidget) => {
     if (!prefs) return;
-    void guardar({ ...prefs, widgets: [...prefs.widgets, id] });
+    const usadas = Object.values(disposicion) as Casilla[];
+    const abajo = usadas.reduce((max, c) => Math.max(max, c.y + c.h), 0);
+    void guardar({
+      ...prefs,
+      widgets: [...prefs.widgets, id],
+      layout: {
+        ...disposicion,
+        [id]: { x: 0, y: abajo, w: 2, h: ALTO_NATURAL[id] },
+      },
+    });
   };
 
   const ponerModoSpotify = (modo: "boton" | "expandido") => {
     if (!prefs) return;
-    void guardar({ ...prefs, spotifyMode: modo });
+    void guardar({ ...prefs, spotifyMode: modo, layout: disposicion });
   };
 
   if (error) {
@@ -107,10 +142,12 @@ export default function PanelPage() {
 
   if (!workspace || !prefs) {
     return (
-      <div className="mx-auto max-w-3xl space-y-3 px-6 py-8">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="devup-esqueleto h-24 rounded-2xl" />
-        ))}
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${COLUMNAS}, 1fr)` }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="devup-esqueleto col-span-2 h-60 rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -120,13 +157,13 @@ export default function PanelPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
+    <div className="mx-auto max-w-6xl px-6 py-8">
       <header className="mb-6">
         <Rotulo className="block">Panel</Rotulo>
         <h1 className="mt-1 text-xl font-semibold">Tu panel</h1>
         <p className="mt-1 text-xs text-faint">
-          Arrastra cada tarjeta para reordenarla a tu gusto. Es tuyo — nadie más en la organización
-          lo ve así.
+          Arrastra cada tarjeta por su asa para colocarla, y estírala por la esquina de abajo a la
+          derecha para darle el tamaño que quieras. Es tuyo — nadie más en la organización lo ve así.
         </p>
       </header>
 
@@ -137,39 +174,16 @@ export default function PanelPage() {
           pista="Añade alguno de la lista de abajo para empezar a personalizar tu panel."
         />
       ) : (
-        <div className="space-y-3">
-          {prefs.widgets.map((id, indice) => {
+        <Rejilla
+          orden={prefs.widgets}
+          disposicion={disposicion}
+          onCambiar={(siguiente) => void guardar({ ...prefs, layout: siguiente })}
+        >
+          {(id) => {
             const { titulo, icono: Icono } = CATALOGO_WIDGETS[id];
-            const sobrevoladoAqui = sobrevolado === id && arrastrado !== null && arrastrado !== id;
-
             return (
-              <div
-                key={id}
-                draggable
-                onDragStart={() => setArrastrado(id)}
-                onDragEnd={() => {
-                  setArrastrado(null);
-                  setSobrevolado(null);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setSobrevolado(id);
-                }}
-                onDragLeave={() => setSobrevolado((actual) => (actual === id ? null : actual))}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (arrastrado) mover(arrastrado, id);
-                  setSobrevolado(null);
-                }}
-                style={retraso(indice)}
-                className={`devup-entrada panel overflow-hidden rounded-2xl
-                  transition-[transform,opacity] duration-[var(--dur-hover)] ease-[var(--ease-out)]
-                  motion-reduce:transition-none
-                  ${arrastrado === id ? "opacity-50" : ""}
-                  ${sobrevoladoAqui ? "panel-vivo" : ""}`}
-              >
-                <div className="flex cursor-grab items-center gap-2 border-b border-line/70 bg-raised/30 px-3.5 py-2.5 active:cursor-grabbing">
-                  <GripVertical size={13} className="shrink-0 text-faint" aria-hidden />
+              <div className="panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl">
+                <div className="flex shrink-0 items-center gap-2 border-b border-line/70 bg-raised/30 px-3.5 py-2.5">
                   <Icono size={14} className="shrink-0 text-muted" />
                   <span className="min-w-0 flex-1 truncate text-xs font-semibold">{titulo}</span>
 
@@ -206,24 +220,28 @@ export default function PanelPage() {
                   </BotonIcono>
                 </div>
 
-                {id === "spotify" &&
-                  (canal ? (
-                    <SpotifyWidget channelId={canal} variante={prefs.spotifyMode} />
-                  ) : (
-                    <div className="px-4 py-6 text-center">
-                      <Music size={18} className="mx-auto mb-2 text-faint" />
-                      <p className="text-[11px] leading-relaxed text-faint">
-                        Entra a un canal de voz para compartir música aquí.
-                      </p>
-                    </div>
-                  ))}
-                {id === "noticias" && <NoticiasWidget organizationId={workspace.organizationId} />}
-                {id === "notificaciones" && <NotificacionesWidget />}
-                {id === "enlaces" && <EnlacesWidget organizationId={workspace.organizationId} />}
+                {/* El cuerpo se desplaza por dentro: una tarjeta más pequeña que
+                    su contenido no debe desbordar la celda ni estirar la rejilla. */}
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  {id === "spotify" &&
+                    (canal ? (
+                      <SpotifyWidget channelId={canal} variante={prefs.spotifyMode} />
+                    ) : (
+                      <div className="px-4 py-6 text-center">
+                        <Music size={18} className="mx-auto mb-2 text-faint" />
+                        <p className="text-[11px] leading-relaxed text-faint">
+                          Entra a un canal de voz para compartir música aquí.
+                        </p>
+                      </div>
+                    ))}
+                  {id === "noticias" && <NoticiasWidget organizationId={workspace.organizationId} />}
+                  {id === "notificaciones" && <NotificacionesWidget />}
+                  {id === "enlaces" && <EnlacesWidget organizationId={workspace.organizationId} />}
+                </div>
               </div>
             );
-          })}
-        </div>
+          }}
+        </Rejilla>
       )}
 
       <div className="mt-5">
