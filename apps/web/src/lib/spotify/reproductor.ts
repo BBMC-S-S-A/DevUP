@@ -278,6 +278,33 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
   }, [activo]);
 
   /**
+   * Un reproductor que no arranca tiene que DECIRLO.
+   *
+   * Si el SDK se queda a medias sin emitir ningún error —pasa cuando el
+   * navegador no puede con el contenido protegido— nadie pone `fallo`, así que
+   * la interfaz enseña «Preparando el reproductor…» eternamente. Un spinner
+   * infinito es indistinguible de algo roto y no da ninguna pista de por dónde
+   * mirar, que es exactamente el tipo de silencio que más caro sale.
+   */
+  useEffect(() => {
+    if (!activo || estado.listo || estado.fallo || estado.sinPremium) return;
+    const id = setTimeout(() => {
+      setEstado((e) =>
+        e.listo || e.fallo || e.sinPremium
+          ? e
+          : {
+              ...e,
+              fallo:
+                "El reproductor no arrancó. Lo más común es que el navegador no pueda " +
+                "reproducir contenido protegido: prueba en Chrome de escritorio, fuera de " +
+                "incógnito y sin bloqueadores",
+            },
+      );
+    }, 20_000);
+    return () => clearTimeout(id);
+  }, [activo, estado.listo, estado.fallo, estado.sinPremium]);
+
+  /**
    * [T4] El tictac es nuestro. `player_state_changed` NO va marcando el tiempo:
    * solo avisa de cambios (pausa, pista nueva, salto). Sin este intervalo la
    * barra de progreso se queda clavada mientras la canción suena — uno de los

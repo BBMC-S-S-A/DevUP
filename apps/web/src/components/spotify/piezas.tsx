@@ -809,8 +809,13 @@ export function Biblioteca({
             <p className="text-[11px] leading-relaxed text-warn">
               Spotify no deja ver las canciones de una lista desde esta aplicación.
             </p>
+            {/* La promesa solo se hace si se puede cumplir: el botón de abajo
+                necesita reproductor, y sin él «ponerla entera sí funciona» es
+                otra mentira más de las que llevamos toda la noche quitando. */}
             <p className="mt-1 text-[10px] leading-relaxed text-faint">
-              Ponerla entera sí funciona.
+              {puedeReproducir
+                ? "Ponerla entera sí funciona."
+                : "Podrás ponerla entera cuando conecte el reproductor."}
             </p>
             {puedeReproducir && (
               <button
