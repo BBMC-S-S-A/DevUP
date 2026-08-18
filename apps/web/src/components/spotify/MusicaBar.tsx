@@ -18,28 +18,28 @@ import { SpotifyWidget } from "./SpotifyWidget";
  * DOS DECISIONES DE SITIO, las dos por no tapar nada:
  *
  *  · Se apila justo encima de la barra de llamada cuando hay una abierta. Las
- *    dos son «cosas que van contigo», y agrupadas se leen como un solo bloque
- *    de estado en vez de como dos avisos compitiendo.
+ *    dos son «cosas que van contigo», y agrupadas se leen como un solo bloque de
+ *    estado en vez de como dos avisos compitiendo.
  *
  *  · En DevVerse no aparece. Esa vista es un espacio para recorrer y tiene su
  *    propia interfaz; añadirle cromo flotante es justo lo que la hace dejar de
- *    funcionar. La contrapartida honesta: estando dentro de DevVerse no se
- *    puede pausar la música sin salir.
+ *    funcionar. La contrapartida honesta: estando dentro de DevVerse no se puede
+ *    pausar la música sin salir.
  */
 export function MusicaBar() {
   const { canal, sesion, player } = useSpotify();
   const { activeChannelId, room } = useVoiceCall();
   const pathname = usePathname();
 
-  const enOficina = pathname?.includes("/devverse") ?? false;
+  const enDevVerse = pathname?.includes("/devverse") ?? false;
   const hayLlamada = Boolean(activeChannelId) && room.status !== "idle";
 
   // Se pinta si este navegador está reproduciendo, o si la sala tiene algo
-  // sonando aunque lo ponga otra persona — saber qué suena vale también cuando
-  // no eres quien pincha.
+  // sonando aunque lo ponga otra persona: saber qué suena vale también cuando no
+  // eres quien pincha.
   const pista = player.estado.pista;
   const enSala = sesion?.trackName ? sesion : null;
-  if (enOficina || !canal || (!pista && !enSala)) return null;
+  if (enDevVerse || !canal || (!pista && !enSala)) return null;
 
   const puedeControlar = player.estado.listo && !player.estado.sinPremium && pista !== null;
   const titulo = pista?.nombre ?? enSala?.trackName ?? "";
