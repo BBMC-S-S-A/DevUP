@@ -363,6 +363,28 @@ h3 {
   animation: devup-barrido 1.4s var(--ease-in-out) infinite;
 }
 
+/* El anillo que se expande una vez al entrar en DevVerse (DevVerseEntrance).
+   Una sola pasada, no en bucle: entrar es un evento puntual, no un estado que
+   siga "pasando" mientras se espera — eso ya lo dice el pulso del texto
+   "Entrando…", que si reutiliza `.animate-pulse-slow`. 500 ms y no los 200-260
+   ms de un panel corriente porque esto no es chrome de trabajo diario (regla
+   3 de la cabecera): es la puerta de un espacio que se abre una vez por
+   visita, más cerca de la entrada escalonada del acceso que de un menú. */
+@keyframes devup-portal-anillo {
+  from {
+    opacity: 0.7;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+.devup-portal-anillo {
+  animation: devup-portal-anillo 500ms var(--ease-out) forwards;
+}
+
 /* Cursor de terminal, para la máquina de escribir del acceso. */
 @keyframes devup-cursor {
   0%, 100% { opacity: 1; }
@@ -430,7 +452,8 @@ h3 {
 
   .devup-cursor,
   .animate-pulse-slow,
-  .devup-esqueleto::after {
+  .devup-esqueleto::after,
+  .devup-portal-anillo {
     animation: none;
   }
 

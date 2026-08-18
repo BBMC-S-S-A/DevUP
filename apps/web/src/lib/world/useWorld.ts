@@ -204,7 +204,7 @@ export function useWorld({
               break;
 
             case "error":
-              setError((message.message as string) ?? "error en la oficina");
+              setError((message.message as string) ?? "error en DevVerse");
               setStatus("error");
               break;
           }
@@ -218,13 +218,13 @@ export function useWorld({
         socket.onerror = () => {
           if (!closed) {
             setStatus("error");
-            setError("no se pudo conectar con la oficina");
+            setError("no se pudo conectar con DevVerse");
           }
         };
       } catch {
         if (!closed) {
           setStatus("error");
-          setError("no se pudo conectar con la oficina");
+          setError("no se pudo conectar con DevVerse");
         }
       }
     };

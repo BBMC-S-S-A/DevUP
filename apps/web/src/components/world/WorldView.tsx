@@ -15,6 +15,7 @@ import { useWorld } from "@/lib/world/useWorld";
 import { useEditor } from "@/lib/world/useEditor";
 import type { Avatar, LiveData, WorldMap, Zone } from "@/lib/world/types";
 import { AvatarEditor } from "./AvatarEditor";
+import { DevVerseEntrance } from "./DevVerseEntrance";
 import { ZoneEditor } from "./ZoneEditor";
 import { ProximityAudio } from "./ProximityAudio";
 
@@ -505,11 +506,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   }
 
   if (!scene) {
-    return (
-      <div className="grid h-full place-items-center">
-        <Loader2 className="animate-spin text-faint" size={20} />
-      </div>
-    );
+    return <DevVerseEntrance />;
   }
 
   const nearby = [...world.roster].filter((peer) => {

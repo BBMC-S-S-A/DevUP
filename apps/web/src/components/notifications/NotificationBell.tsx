@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bell, BellOff, CheckCheck, Mail, Radio, SquareCheck } from "lucide-react";
+import { AtSign, Bell, BellOff, CheckCheck, Mail, Megaphone, Radio, SquareCheck } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Notification, api } from "@/lib/api";
@@ -13,6 +13,7 @@ const ICONOS = {
   task_assigned: SquareCheck,
   invitation: Mail,
   recording: Radio,
+  announcement: Megaphone,
 } as const;
 
 /**

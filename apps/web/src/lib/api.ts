@@ -32,6 +32,13 @@ async function refreshSession(): Promise<boolean> {
       const response = await fetch(`${API_URL}/auth/refresh`, {
         method: "POST",
         credentials: "include",
+        // Un POST sin datos necesita igualmente cabecera y cuerpo: Fastify
+        // contesta 415 si falta `content-type`, y 400 si la cabecera está pero
+        // el cuerpo viene vacío. Sin esto el refresco fallaba SIEMPRE, y como
+        // el fallo se leía como "no se pudo refrescar", ningún 401 se llegaba
+        // a reintentar: la sesión moría al caducar en vez de renovarse.
+        headers: { "content-type": "application/json" },
+        body: "{}",
       });
       return response.ok;
     } catch {
@@ -52,14 +59,25 @@ type Options = Omit<RequestInit, "body"> & { body?: unknown };
 async function request<T>(path: string, options: Options = {}, retry = true): Promise<T> {
   const { body, headers, ...rest } = options;
 
+  // POST, PUT y PATCH llevan cuerpo aunque quien llama no pase ninguno. Marcar
+  // un canal como leído o cerrar sesión no tienen datos que mandar, pero Fastify
+  // rechaza con 415 un POST sin `content-type`, y con 400 uno que la traiga sin
+  // cuerpo. En esos casos se manda un objeto vacío, que las rutas que no leen el
+  // cuerpo ignoran sin enterarse.
+  const llevaCuerpo = ["POST", "PUT", "PATCH"].includes((rest.method ?? "GET").toUpperCase());
+
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
     credentials: "include",
     headers: {
-      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      ...(body !== undefined || llevaCuerpo ? { "content-type": "application/json" } : {}),
       ...headers,
     },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(body !== undefined
+      ? { body: JSON.stringify(body) }
+      : llevaCuerpo
+        ? { body: "{}" }
+        : {}),
   });
 
   if (response.status === 401 && retry && !path.startsWith("/auth/")) {
@@ -129,7 +147,7 @@ export type PendingInvitation = {
 
 export type Notification = {
   id: string;
-  kind: "mention" | "task_assigned" | "invitation" | "recording";
+  kind: "mention" | "task_assigned" | "invitation" | "recording" | "announcement";
   title: string;
   body: string;
   link: string;
@@ -144,6 +162,8 @@ export type Organization = {
   slug: string;
   role: "owner" | "admin" | "member";
   createdAt: string;
+  /** Clave en el almacén, no URL: hay que pedir `/organizations/:id/logo-url` para pintarla. */
+  logoKey?: string | null;
 };
 
 export type Workspace = {
@@ -216,6 +236,34 @@ export type OrganizationMember = {
   role: "owner" | "admin" | "member";
   displayName: string;
   avatarUrl: string | null;
+};
+
+export type OrganizationLink = {
+  id: string;
+  label: string;
+  url: string;
+  position: number;
+  createdAt: string;
+};
+
+export type Announcement = {
+  id: string;
+  organizationId: string;
+  title: string;
+  body: string;
+  authorId: string | null;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Catálogo cerrado a propósito: añadir un widget nuevo es tocar este tipo y
+ *  la lista de tarjetas del panel, no una migración. */
+export type DashboardWidget = "spotify" | "noticias" | "notificaciones" | "enlaces";
+
+export type DashboardPrefs = {
+  widgets: DashboardWidget[];
+  spotifyMode: "boton" | "expandido";
 };
 
 export type Recording = {

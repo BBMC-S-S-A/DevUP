@@ -8,8 +8,10 @@ import {
   Github,
   LogOut,
   Mail,
+  Megaphone,
   Plus,
   Search,
+  Settings,
   UserRound,
   Users,
   TrendingUp,
@@ -69,6 +71,8 @@ const ACCESOS = [
   { ruta: "ventas", icono: TrendingUp, titulo: "Ventas", pista: "Embudo y clientes" },
   { ruta: "github", icono: Github, titulo: "GitHub", pista: "Repos y actividad" },
   { ruta: "dev", icono: Code2, titulo: "Entorno de dev", pista: "Editor y terminal real" },
+  { ruta: "noticias", icono: Megaphone, titulo: "Noticias", pista: "Lo que publica el equipo" },
+  { ruta: "ajustes", icono: Settings, titulo: "Ajustes", pista: "Miembros, foto y enlaces" },
 ] as const;
 
 /** El rol viene en inglés de la API; aquí solo se traduce para leerlo. */
@@ -184,9 +188,7 @@ export default function OrganizationsPage() {
               >
                 {/* Cabecera de instrumento */}
                 <header className="filo-luz flex flex-wrap items-center gap-x-3 gap-y-2 bg-raised/30 px-4 py-3.5">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong bg-canvas/60 text-accent">
-                    <Building2 size={16} />
-                  </span>
+                  <InsigniaOrganizacion organization={org} />
                   <div className="min-w-0 flex-1">
                     <Rotulo className="block">Organización</Rotulo>
                     <h2 className="mt-0.5 truncate text-base font-semibold">{org.name}</h2>
@@ -264,6 +266,44 @@ export default function OrganizationsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * La chapa con la inicial se sustituye por la foto real en cuanto hay una.
+ * Pide la URL firmada solo si `logoKey` viene puesto —la mayoría de
+ * organizaciones no tendrán foto todavía— para no gastar una petición por
+ * tarjeta sin necesidad.
+ */
+function InsigniaOrganizacion({ organization }: { organization: Organization }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!organization.logoKey) {
+      setUrl(null);
+      return;
+    }
+    let cancelado = false;
+    void api
+      .get<{ url: string | null }>(`/organizations/${organization.id}/logo-url`)
+      .then((respuesta) => {
+        if (!cancelado) setUrl(respuesta.url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [organization.id, organization.logoKey]);
+
+  return (
+    <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-line-strong bg-canvas/60 text-accent">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="size-full object-cover" />
+      ) : (
+        <Building2 size={16} />
+      )}
+    </span>
   );
 }
 

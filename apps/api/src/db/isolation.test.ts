@@ -1128,6 +1128,103 @@ async function main(): Promise<void> {
     });
     check("un DELETE de Bruno sobre la cola de Acme afecta a cero filas", brunoDeletedTrack === 0);
 
+    // --- Enlaces y noticias de la organización (0019) ---------------------
+    //
+    // Las dos cuelgan de is_org_admin para escribir y de is_org_member para
+    // leer: Carla, que es miembro raso de Acme, tiene que poder LEER lo que
+    // Ana publique pero no poder publicar ni añadir un enlace ella misma.
+    console.log("\nEnlaces y noticias");
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into organization_links (organization_id, label, url, position, created_by)
+         values ($1,'Repositorio','https://github.com/acme/producto',0,$2)`,
+        [acme.org, ana],
+      ),
+    );
+    check("Carla ve el enlace que Ana publicó", (await count(carla, "organization_links")) === 1);
+    check("Bruno no ve ningún enlace de Acme", (await count(bruno, "organization_links")) === 0);
+
+    await denied("Carla, que es miembro raso, no puede añadir un enlace", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into organization_links (organization_id, label, url, position, created_by)
+           values ($1,'Colado','https://ejemplo.test',1,$2)`,
+          [acme.org, carla],
+        ),
+      ),
+    );
+
+    const brunoDeletedLink = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "delete from organization_links where organization_id = $1",
+        [acme.org],
+      );
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Bruno sobre los enlaces de Acme afecta a cero filas", brunoDeletedLink === 0);
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into announcements (organization_id, author_id, title, body)
+         values ($1,$2,'Aviso','Cambiamos el horario de despliegue')`,
+        [acme.org, ana],
+      ),
+    );
+    check("Carla ve la noticia que Ana publicó", (await count(carla, "announcements")) === 1);
+    check("Bruno no ve ninguna noticia de Acme", (await count(bruno, "announcements")) === 0);
+
+    await denied("Carla, que es miembro raso, no puede publicar una noticia", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into announcements (organization_id, author_id, title, body)
+           values ($1,$2,'Colada','de quien no administra')`,
+          [acme.org, carla],
+        ),
+      ),
+    );
+
+    const carlaEditedAnnouncement = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        "update announcements set title = 'editada' where organization_id = $1",
+        [acme.org],
+      );
+      return rowCount ?? 0;
+    });
+    check(
+      "Carla, que es miembro raso, no puede editar una noticia (afecta a cero filas)",
+      carlaEditedAnnouncement === 0,
+    );
+
+    // --- Panel personal (0019) ----------------------------------------------
+    //
+    // Sin organization_id: la única regla es «tu fila, y solo la tuya». Ni
+    // siquiera Ana, que administra la organización de Carla, puede ver ni
+    // tocar el panel de Carla.
+    console.log("\nPanel personal");
+
+    await withUser(carla, (db) =>
+      db.query(
+        `insert into user_dashboard_prefs (user_id, widgets, spotify_mode)
+         values ($1,'["spotify"]'::jsonb,'expandido')`,
+        [carla],
+      ),
+    );
+    check("Carla ve su propio panel", (await count(carla, "user_dashboard_prefs")) === 1);
+    check(
+      "Ana, que administra la organización de Carla, no ve el panel de Carla",
+      (await count(ana, "user_dashboard_prefs")) === 0,
+    );
+
+    const anaEditedCarlaPrefs = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "update user_dashboard_prefs set spotify_mode = 'boton' where user_id = $1",
+        [carla],
+      );
+      return rowCount ?? 0;
+    });
+    check("Ana no puede tocar el panel de Carla (afecta a cero filas)", anaEditedCarlaPrefs === 0);
+
     // --- El editor ---------------------------------------------------------
     //
     // Decorar es social: quien pertenece al canal puede amueblar su sala. Lo

@@ -79,6 +79,23 @@ function put(url: string, file: File, options: UploadOptions): Promise<void> {
   });
 }
 
+/**
+ * La foto de una organización sigue el mismo patrón de tres pasos que un
+ * archivo cualquiera —reservar, subir, confirmar— y por eso reutiliza `put()`
+ * en vez de repetir el `XMLHttpRequest`. Lo único que cambia es el sitio: no
+ * hay barra de progreso porque una foto pesa poco y el sitio donde se usa
+ * (Ajustes) no tiene hueco para una.
+ */
+export async function uploadOrgLogo(organizationId: string, file: File): Promise<string> {
+  const reserved = await api.post<{ logoKey: string; uploadUrl: string }>(
+    `/organizations/${organizationId}/logo`,
+    { fileName: file.name, mimeType: file.type || "application/octet-stream" },
+  );
+  await put(reserved.uploadUrl, file, {});
+  await api.post(`/organizations/${organizationId}/logo/confirm`, { logoKey: reserved.logoKey });
+  return reserved.logoKey;
+}
+
 export async function downloadUrl(
   fileId: string,
   disposition: "inline" | "attachment" = "inline",

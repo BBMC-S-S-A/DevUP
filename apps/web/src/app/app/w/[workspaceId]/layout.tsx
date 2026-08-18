@@ -6,6 +6,7 @@ import {
   Gamepad2,
   Hash,
   KanbanSquare,
+  LayoutDashboard,
   Loader2,
   Lock,
   LogOut,
@@ -87,11 +88,11 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [loadUnread, pathname]);
 
-  const officeHref = `/app/w/${workspaceId}/oficina`;
+  const officeHref = `/app/w/${workspaceId}/devverse`;
   const inOffice = pathname === officeHref;
 
-  // Recordar la preferencia significa esto: quien dejó la oficina abierta la
-  // encuentra abierta. Solo desde la raíz del workspace — entrar directo a un
+  // Recordar la preferencia significa esto: quien dejó DevVerse abierto lo
+  // encuentra abierto. Solo desde la raíz del workspace — entrar directo a un
   // canal es una intención explícita y no se pisa.
   useEffect(() => {
     if (!modeReady) return;
@@ -101,7 +102,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   }, [modeReady, mode, pathname, workspaceId, officeHref, router]);
 
   if (loading) {
-    // Camino a la oficina no se pinta el esqueleto de la barra: sería el
+    // Camino a DevVerse no se pinta el esqueleto de la barra: sería el
     // destello de una barra que en ese destino no va a existir, y un elemento
     // que aparece para desaparecer se lee como un fallo.
     return inOffice ? (
@@ -138,7 +139,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const voice = channels.filter((c) => c.kind === "voice");
   const text = channels.filter((c) => c.kind === "text");
 
-  // Dentro de la oficina la barra lateral desaparece: media pantalla de lista
+  // Dentro de DevVerse la barra lateral desaparece: media pantalla de lista
   // de canales al lado de un espacio que existe para recorrerse rompe justo
   // lo que la vista inmersiva aporta. Queda un solo botón para volver.
   if (inOffice) {
@@ -234,6 +235,20 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             <GrupoRotulo titulo="Espacio" />
             <ul className="space-y-0.5">
               <li>
+                {/* El panel es la única pieza de esta lista que no es de este
+                    workspace en sentido estricto —vive por persona, ver
+                    /me/dashboard— pero entrar desde aquí es lo natural: es donde
+                    ya se está mirando este espacio de trabajo. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/panel`}
+                  icono={<LayoutDashboard size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/panel`}
+                  indice={0}
+                >
+                  Panel
+                </ItemNav>
+              </li>
+              <li>
                 <ItemNav
                   href={`/app/w/${workspaceId}`}
                   icono={<Files size={15} />}
@@ -254,7 +269,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                 </ItemNav>
               </li>
               <li>
-                {/* La oficina es opcional y se entra a ella a propósito. Va la
+                {/* DevVerse es opcional y se entra a ella a propósito. Va la
                     última del grupo y sin resaltar: quien no la quiera no debería
                     tropezarse con ella. */}
                 <ItemNav
@@ -265,7 +280,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   onClick={() => setMode("immersive")}
                   sufijo={<Chip>beta</Chip>}
                 >
-                  Oficina
+                  DevVerse
                 </ItemNav>
               </li>
             </ul>

@@ -66,6 +66,9 @@ type Valor = {
   /** Añade a la cola. Si no suena nada, arranca en el momento. */
   encolar: (pista: SpotifyQueueTrack) => Promise<void>;
   quitar: (id: string) => Promise<void>;
+  /** Cierra la sesión de Spotify de esta cuenta. Ver su cuerpo para el porqué
+   *  de no tocar nada más: el resto se apaga solo. */
+  desconectar: () => Promise<void>;
 };
 
 const Contexto = createContext<Valor | null>(null);
@@ -126,6 +129,23 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   const quitar = useCallback(async (id: string) => {
     setCola((previa) => previa.filter((t) => t.id !== id));
     await api.delete(`/spotify/queue/${id}`).catch(() => {});
+  }, []);
+
+  /**
+   * Cierra la sesión de Spotify de esta cuenta.
+   *
+   * Basta con borrar la conexión y poner `cuenta` a desconectada: `useSpotifyPlayer`
+   * ya observa ese valor (`activo` = `cuenta?.connected`) y su propio efecto de
+   * montaje se encarga de llamar a `disconnect()` sobre el SDK al ver que deja
+   * de estar activo — repetirlo aquí sería la misma limpieza dos veces.
+   *
+   * Lo que SÍ suena en la sala para el resto no se toca: la sesión compartida
+   * es del canal, no de esta cuenta, y desconectarse no debería silenciar lo
+   * que ya estaban escuchando los demás.
+   */
+  const desconectar = useCallback(async () => {
+    await api.delete("/integrations/spotify");
+    setCuenta({ connected: false, premium: false });
   }, []);
 
   const puedeSonar = player.estado.listo && !player.estado.sinPremium;
@@ -298,6 +318,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     poniendo,
     encolar,
     quitar,
+    desconectar,
   };
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
