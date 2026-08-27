@@ -178,19 +178,68 @@ posibilidad hay de cada cosa. Es buena práctica, es lo que exigen las tiendas d
 aplicaciones para lo que se vende, y sobre todo evita la conversación de «esto
 está trucado» — que llega siempre, y con números no hay discusión.
 
-**Y una raya que conviene no cruzar nunca.** Mientras las monedas **solo se
-ganen trabajando y no se puedan comprar con dinero**, esto es una mecánica de
-juego y nada más. El día que exista un botón de comprar monedas, los cofres
-pasan a ser otra cosa: hay países que los han restringido o prohibido cuando hay
-dinero real de por medio, y el asunto deja de ser de diseño y pasa a ser legal.
-
-No es un problema hoy. Es una raya que hay que saber que está ahí antes de
-acercarse a ella, porque «vender monedas» parece un añadido pequeño y no lo es.
-
 **Los cofres**, por categoría como decías: accesorios, prendas superiores,
 prendas inferiores, cabeza, y uno de skins mucho más caro. Que los baratos
 caigan a menudo y los caros casi nunca es lo que hace que abrir uno sea un
 momento.
+
+---
+
+## 5 bis. Cómo entra el dinero, si entra
+
+Propuesta sobre la mesa: en vez de vender monedas, **vender las cajas
+directamente**, para esquivar el asunto de la moneda propia.
+
+**Hay que decirlo claro: eso va en la dirección contraria.** No es una crítica a
+la idea de monetizar —que es legítima y llegará— sino a cuál de las dos puertas
+es la delicada.
+
+Lo que está regulado en varios países no es «tener una moneda virtual». Es
+**pagar dinero real por un resultado aleatorio**. Vender monedas y que las
+monedas abran cajas es eso mismo con un paso en medio; **vender la caja
+directamente es eso mismo sin el paso en medio.** Bélgica es el caso más
+conocido de un regulador europeo tratando las cajas de pago como juego de azar,
+y no ha sido el único país en moverse. Además, las tiendas de aplicaciones
+—donde acabaría la versión móvil— exigen publicar las probabilidades de
+cualquier caja que se venda.
+
+No soy quien para darte asesoría legal y no la estoy dando: lo que digo es que
+esa opción concreta te mete en una conversación con abogados, y las otras no.
+
+Y hay un segundo motivo, que en este producto pesa igual: **DevUP es una
+herramienta de trabajo.** Vender tiradas de suerte a alguien cuya moneda se gana
+trabajando mezcla dos cosas que conviene tener separadas.
+
+### La salida, que además es mejor diseño
+
+**El dinero compra certeza. El trabajo compra suerte.**
+
+| | Cómo se consigue | Qué da |
+|---|---|---|
+| **Cajas** | **Solo con monedas ganadas trabajando.** Nunca con dinero | Aleatorio |
+| **Tienda** | **Dinero real** | Lo que ves, exactamente eso |
+| **Pase de temporada** | **Dinero real** | Una lista de recompensas conocida de antemano, que se desbloquea usando la plataforma |
+
+Es la inversión de lo habitual y funciona mejor por tres razones:
+
+1. **Esquiva el problema entero.** Nada aleatorio se vende. No hay
+   probabilidades que publicar ni jurisdicción que mirar.
+2. **Las cajas siguen valiendo algo.** Si se pudieran comprar, dejan de ser un
+   premio por trabajar y pasan a ser un artículo. Lo que hace especial abrir una
+   caja es que te la ganaste.
+3. **Quien paga sabe qué se lleva**, que es lo que la gente quiere de verdad
+   cuando saca la tarjeta. La frustración de pagar y que no salga es la que
+   genera las reseñas malas y, últimamente, los reguladores.
+
+Y deja las dos economías sin tocarse: **el dinero nunca acelera lo que se gana
+trabajando**, así que la moneda del §6 sigue significando lo mismo y el granjeo
+sigue sin tener premio.
+
+**Si aun así quieres vender aleatoriedad**, la versión menos mala es: nunca a
+menores, probabilidades publicadas en la ficha, contador de consuelo visible —no
+oculto—, y consultarlo con alguien que sepa de la normativa de los países donde
+vayáis a cobrar. Es una decisión que se puede tomar; solo no conviene tomarla
+sin saber que es esa.
 
 ---
 

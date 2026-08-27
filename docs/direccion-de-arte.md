@@ -276,6 +276,39 @@ Para no adivinar:
 
 ---
 
+## 10. Con qué se dibuja: Claude Design o Claude Code
+
+No es una elección: son dos herramientas para dos momentos distintos, y usar la
+que no toca cuesta caro en los dos sentidos.
+
+| Trabajo | Con qué | Por qué |
+|---|---|---|
+| Concepto del personaje, láminas, el folleto | **Claude Design** | Son lienzos que se miran y se retocan a mano. Se exportan a PNG y PDF |
+| Maquetas de pantalla y flujos | **Claude Design** | Mover una caja con el ratón es más rápido que describirla |
+| **Los sprites que van al juego** | **Ni uno ni otro: un editor de pixel art** | Ver abajo |
+| Animaciones de la plataforma | **Claude Code** | Ya son CSS en `globals.css`, con su sistema de curvas y duraciones |
+| El atlas y el renderizador | **Claude Code** | Es código, va al repositorio y lo cubre la CI |
+
+**Por qué los sprites no salen de ninguna de las dos.** Claude Design dibuja
+lienzos: formas, texto, capas. El pixel art es lo contrario — se coloca **píxel
+a píxel**, y las decisiones que importan pasan en una rejilla de 40 × 64 donde
+mover un punto cambia la expresión de una cara. Eso pide una herramienta de
+pixel art (Aseprite es la que usa todo el mundo, y no es cara) y a alguien
+mirando la rejilla.
+
+**Lo que sí puede hacer Claude Code, y es útil de verdad:** generar el sprite
+**por código** —dibujarlo con el mismo lienzo que ya usa el juego— para tener
+algo en pantalla el mismo día y decidir sobre ello. Sirve de boceto y de
+andamio; para el arte definitivo, la mano gana.
+
+**Y una advertencia sobre el flujo.** Lo que salga de Claude Design es una
+lámina, no un recurso del juego. Que se vea bien en una lámina y no funcione a
+tamaño real es el error clásico: **el concepto se aprueba mirándolo a 1× dentro
+de la sala**, no ampliado en una presentación. Por eso el boceto que viene lleva
+las dos escalas.
+
+---
+
 ## Apéndice · Dos decisiones que quedan cerradas
 
 **Monedas por favores: decidido, entra.** Queda como intercambio libre entre
