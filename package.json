@@ -17,7 +17,10 @@
     "db:migrate": "npm run migrate --workspace apps/api",
     "db:reset": "npm run migrate:reset --workspace apps/api",
     "test:rls": "npm run test:rls --workspace apps/api",
-    "test:world": "npm run test:world --workspace apps/api"
+    "test:world": "npm run test:world --workspace apps/api",
+    "respaldo:ahora": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/respaldo-base-de-datos.sh",
+    "respaldo:probar": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/probar-restauracion.sh",
+    "respaldo:almacen": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-almacen sh scripts/respaldo-almacen.sh"
   },
   "engines": {
     "node": ">=20.11"
