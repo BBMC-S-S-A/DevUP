@@ -327,18 +327,37 @@ mientras los cinco usuarios están en la misma oficina.
 
 ---
 
-## 7. Lo que necesito que decidas
+## 7. Decisiones tomadas y lo que queda por decidir
 
-1. **¿Qué es `/app`?** ¿El conmutador de organizaciones, o el hogar del
-   producto? Es la decisión que ordena I1 entero, y es la que hoy hace que un
-   enlace tenga dos nombres.
-2. **¿Móvil, sí o no?** No pido que se haga: pido que se decida y se escriba.
-   Si la respuesta es no, el bloque G necesita al menos que el correo de
-   invitación y el acceso funcionen en un teléfono.
-3. **¿Va antes o después de D?** Propongo antes, por el argumento del §5. Si hay
-   demo con fecha, puede tener sentido lo contrario — pero que sea una decisión.
-4. **¿Tema claro ahora o nunca?** Ahora son tokens. Dentro de seis pantallas
+Actualizado el 27 de agosto de 2026. El contexto largo está en
+[`vision-y-mvp.md`](vision-y-mvp.md).
+
+### Decidido
+
+1. **`/app` es el hogar del producto**, no el conmutador de organizaciones. I1
+   se construye sobre eso, y el enlace pasa a llamarse igual en las cinco
+   pantallas.
+2. **Móvil: sí.** Deja de ser una pregunta abierta y pasa a ser requisito, con
+   dos consecuencias sobre lo escrito arriba:
+   - **I1 nace con cajón**, no con una barra fija de 64 y un `pl-64` que luego
+     haya que desmontar. Construir el armazón dos veces es justo lo que este
+     plan existe para evitar (+1 pt sobre I1).
+   - **I5 deja de tener que decidir el móvil** y pasa a rematar las pantallas
+     que se queden estrechas (−1 pt). El total de ~28 pts no se mueve.
+   - Lo que **no** va a móvil es DevVerse: un espacio isométrico recorrible en
+     un teléfono no es la misma cosa hecha más pequeña. Es la separación en dos
+     mundos del §5 de `vision-y-mvp.md`, y es lo que permite que la plataforma
+     baje a móvil sin arrastrarlo.
+3. **La plataforma y DevVerse se separan**, con un contrato mínimo entre ellos:
+   el trabajo genera puntos, los puntos se gastan en DevVerse. Para este plan
+   significa que I1 es el armazón de **la plataforma**, y que la zona
+   restringida del §6 sigue intacta.
+4. **Va antes de D**, como proponía el §5.
+
+### Sin decidir
+
+5. **¿Tema claro ahora o nunca?** Ahora son tokens. Dentro de seis pantallas
    más, son seis pantallas.
-5. **¿Empiezo por I1 o por los ocho `confirm()`?** I1 es lo que más se nota;
+6. **¿Empiezo por I1 o por los ocho `confirm()`?** I1 es lo que más se nota;
    los `confirm()` son media tarde y arreglan los ocho momentos en que el
    producto da más miedo.
