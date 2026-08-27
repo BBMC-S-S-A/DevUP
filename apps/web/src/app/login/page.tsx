@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import { ApiError, type SignupPolicy, type User, api } from "@/lib/api";
 import { Boton } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
+import { LogoAnimado } from "@/components/marca/LogoAnimado";
 import { Logo } from "@/components/ui/Logo";
 import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
@@ -172,6 +173,13 @@ function LoginForm() {
         </div>
 
         <div className="relative max-w-md">
+          {/* La marca encendiéndose. Va aquí y no en la cabecera porque es una
+              animación de arranque, no un icono: necesita tamaño para que la luz
+              se lea recorriendo el contorno, y necesita estar donde la mirada
+              cae primero. En pantalla estrecha no aparece — ahí el formulario es
+              lo único que importa y esto sería un adorno que estorba. */}
+          <LogoAnimado tamano={124} className="devup-entrada mb-7" />
+
           <h2
             className="devup-entrada text-[2rem] leading-[1.08] text-ink"
             style={retraso(80)}
