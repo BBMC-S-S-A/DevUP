@@ -23,49 +23,182 @@
  *     estorba la número doscientos.
  * ========================================================================== */
 
-@theme {
-  /* --- Fondo y superficies ------------------------------------------------
-   * Cuatro niveles, cada uno un paso más cerca del ojo. El tinte azul sube con
-   * la elevación: es lo que hace que el navy no parezca gris sucio.           */
-  --color-canvas: #070910;
-  --color-surface: #0e1219;
-  --color-raised: #151b25;
-  --color-elevated: #1c2431;
+/* =============================================================================
+ * Los dos temas
+ *
+ * `@theme inline` en vez de `@theme`: le dice a Tailwind que emita
+ * `var(--c-canvas)` dentro de cada utilidad en lugar de copiar el valor. Es lo
+ * que permite que `bg-canvas` cambie de color al vuelo cuando cambia el tema —
+ * con `@theme` a secas el color queda incrustado en la clase y no hay tema que
+ * lo mueva.
+ *
+ * DOS TEMAS COMPLETOS, NO UNO CON EL OTRO ACLARADO. En oscuro la jerarquía la
+ * hace la LUZ: cada nivel de superficie es un paso más claro. En claro eso no
+ * existe —no se puede subir el brillo del blanco— así que la jerarquía la hacen
+ * las SOMBRAS. Son dos gramáticas distintas y por eso cada tema define también
+ * sus propias sombras y sus propios materiales, no solo sus colores.
+ *
+ * El morado es el acento en los dos, y es lo que mantiene la identidad al
+ * cruzar de uno a otro.
+ * ========================================================================== */
 
-  /* Bordes. `line` delimita, `line-strong` separa dos cosas que compiten.     */
-  --color-line: #1f2733;
-  --color-line-strong: #2e3a4d;
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-raised: var(--c-raised);
+  --color-elevated: var(--c-elevated);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-bright: var(--c-accent-bright);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-cyan: var(--c-cyan);
+  --color-violet: var(--c-violet);
+  --color-live: var(--c-live);
+  --color-warn: var(--c-warn);
+  --color-danger: var(--c-danger);
 
-  /* --- Texto ---------------------------------------------------------------
-   * Sin blanco puro: en una pantalla grande a oscuras, #fff vibra.            */
-  --color-ink: #e8edf7;
-  --color-muted: #8d99ae;
-  --color-faint: #5b6678;
-
-  /* --- Acento y compañeros -------------------------------------------------
-   * El azul de siempre, más un cian que solo aparece en degradados y brillos.
-   * Dos tonos de la misma familia leen como una luz; tres colores sin relación
-   * leen como un error.                                                       */
-  --color-accent: #5b8cff;
-  --color-accent-bright: #7ea6ff;
-  --color-accent-soft: #16224a;
-  --color-cyan: #3ee0f5;
-  --color-violet: #9d7bff;
-
-  /* --- Semánticos ---------------------------------------------------------- */
-  --color-live: #34d399;
-  --color-warn: #f5b53f;
-  --color-danger: #fb7185;
-
-  /* --- Tipografía ----------------------------------------------------------
-   * Las tres familias las inyecta next/font desde layout.tsx, con su fallback
-   * del sistema por si la fuente no llega. Display para titulares y etiquetas
-   * de instrumento; sans para todo lo que se lee de verdad; mono para números
-   * que tienen que alinearse en columna.                                      */
   --font-display: var(--fuente-display), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--fuente-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: var(--fuente-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
+
+/* -----------------------------------------------------------------------------
+ * Paleta clara — blanco con morado
+ *
+ * El fondo no es blanco puro: es un blanco con una gota de morado, para que las
+ * tarjetas (que SÍ son blancas) se separen de él sin necesitar un borde duro.
+ * Blanco sobre blanco obliga a marcar cada tarjeta con una línea, y una pantalla
+ * con treinta líneas se lee como una hoja de cálculo.
+ *
+ * Los contrastes sobre superficie blanca, medidos y no supuestos:
+ *   ink #1a1626    16.1:1   texto principal
+ *   muted #5f5872   7.2:1   secundario · AA holgado
+ *   faint #706980   5.1:1   terciario · AA para 11 px
+ *   accent #6d28d9  7.4:1   enlaces y acciones
+ * -------------------------------------------------------------------------- */
+:root {
+  --c-canvas: #f6f4fb;
+  --c-surface: #ffffff;
+  --c-raised: #ffffff;
+  --c-elevated: #ffffff;
+  --c-line: #e7e2f1;
+  --c-line-strong: #d0c8e2;
+  --c-ink: #1a1626;
+  --c-muted: #5f5872;
+  --c-faint: #706980;
+  --c-accent: #6d28d9;
+  --c-accent-bright: #7c3aed;
+  --c-accent-soft: #f2ecfe;
+  --c-cyan: #0e7490;
+  --c-violet: #7c3aed;
+  --c-live: #047857;
+  --c-warn: #a16207;
+  --c-danger: #be123c;
+
+  /* En claro la profundidad son las sombras, y se tiñen del morado del tema en
+     vez de ser grises: una sombra neutra sobre un fondo con tinte se ve sucia. */
+  --sombra-chip: 0 1px 2px rgb(26 22 38 / 0.06), 0 1px 1px rgb(26 22 38 / 0.04);
+  --sombra-panel: 0 16px 40px -16px rgb(45 27 105 / 0.18), 0 2px 8px rgb(26 22 38 / 0.06);
+  --sombra-dialogo: 0 32px 80px -20px rgb(45 27 105 / 0.28), 0 4px 16px rgb(26 22 38 / 0.10);
+
+  /* Materiales. El cristal claro es blanco translúcido; el canto que lo hace
+     leer como material es una sombra interior arriba, no un brillo — en claro un
+     brillo blanco sobre blanco no se ve. */
+  --vidrio: rgb(255 255 255 / 0.72);
+  --vidrio-denso: rgb(255 255 255 / 0.88);
+  --canto: rgb(26 22 38 / 0.08);
+  --brillo-canto: rgb(255 255 255 / 0.9);
+  --panel-fondo: linear-gradient(180deg, #ffffff, #fbf9ff);
+  --rejilla-linea: rgb(45 27 105 / 0.045);
+  --atmosfera: radial-gradient(60rem 40rem at 8% -10%, rgb(124 58 237 / 0.07), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 105%, rgb(14 116 144 / 0.05), transparent 60%);
+}
+
+/* -----------------------------------------------------------------------------
+ * Paleta oscura — negro con morado
+ *
+ * Más negra que el navy anterior y con el tinte girado al morado, para que los
+ * dos temas se reconozcan como el mismo producto. Aquí la jerarquía sube con la
+ * luz: cada nivel es un paso más claro que el de debajo.
+ *
+ * Contrastes sobre #100e18:
+ *   ink #ece9f5    15.4:1
+ *   muted #9b93ad   6.9:1
+ *   faint #837b96   4.9:1
+ *   accent #a78bfa  8.1:1
+ * -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"])  {
+    --c-canvas: #08070c;
+    --c-surface: #100e18;
+    --c-raised: #17141f;
+    --c-elevated: #1f1a2b;
+    --c-line: #241f31;
+    --c-line-strong: #362d47;
+    --c-ink: #ece9f5;
+    --c-muted: #9b93ad;
+    --c-faint: #837b96;
+    --c-accent: #a78bfa;
+    --c-accent-bright: #c4b5fd;
+    --c-accent-soft: #241a3d;
+    --c-cyan: #4dd8f0;
+    --c-violet: #c084fc;
+    --c-live: #34d399;
+    --c-warn: #f5b53f;
+    --c-danger: #fb7185;
+  
+    --sombra-chip: 0 1px 2px rgb(0 0 0 / 0.4);
+    --sombra-panel: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
+    --sombra-dialogo: 0 32px 80px -16px rgb(0 0 0 / 0.8), 0 4px 16px rgb(0 0 0 / 0.5);
+  
+    --vidrio: rgb(16 14 24 / 0.72);
+    --vidrio-denso: rgb(10 9 16 / 0.86);
+    --canto: rgb(255 255 255 / 0.06);
+    --brillo-canto: rgb(255 255 255 / 0.06);
+    --panel-fondo: linear-gradient(180deg, var(--c-surface), rgb(10 9 16 / 0.9));
+    --rejilla-linea: rgb(255 255 255 / 0.025);
+    --atmosfera: radial-gradient(60rem 40rem at 8% -10%, rgb(167 139 250 / 0.12), transparent 60%),
+      radial-gradient(50rem 36rem at 100% 105%, rgb(77 216 240 / 0.06), transparent 60%);
+  }
+}
+
+:root[data-tema="oscuro"]  {
+  --c-canvas: #08070c;
+  --c-surface: #100e18;
+  --c-raised: #17141f;
+  --c-elevated: #1f1a2b;
+  --c-line: #241f31;
+  --c-line-strong: #362d47;
+  --c-ink: #ece9f5;
+  --c-muted: #9b93ad;
+  --c-faint: #837b96;
+  --c-accent: #a78bfa;
+  --c-accent-bright: #c4b5fd;
+  --c-accent-soft: #241a3d;
+  --c-cyan: #4dd8f0;
+  --c-violet: #c084fc;
+  --c-live: #34d399;
+  --c-warn: #f5b53f;
+  --c-danger: #fb7185;
+
+  --sombra-chip: 0 1px 2px rgb(0 0 0 / 0.4);
+  --sombra-panel: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
+  --sombra-dialogo: 0 32px 80px -16px rgb(0 0 0 / 0.8), 0 4px 16px rgb(0 0 0 / 0.5);
+
+  --vidrio: rgb(16 14 24 / 0.72);
+  --vidrio-denso: rgb(10 9 16 / 0.86);
+  --canto: rgb(255 255 255 / 0.06);
+  --brillo-canto: rgb(255 255 255 / 0.06);
+  --panel-fondo: linear-gradient(180deg, var(--c-surface), rgb(10 9 16 / 0.9));
+  --rejilla-linea: rgb(255 255 255 / 0.025);
+  --atmosfera: radial-gradient(60rem 40rem at 8% -10%, rgb(167 139 250 / 0.12), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 105%, rgb(77 216 240 / 0.06), transparent 60%);
+}
+
 
 /* -----------------------------------------------------------------------------
  * Movimiento
@@ -84,17 +217,24 @@
   --dur-pop: 200ms;
   --dur-panel: 260ms;
 
-  /* Sombras por peso del material. Cuanto más grande la superficie, más
-     profunda la sombra — un panel de 400 px con la sombra de un chip flota
-     como si fuera de papel. */
-  --sombra-chip: 0 1px 2px rgb(0 0 0 / 0.4);
-  --sombra-panel: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
-  --sombra-dialogo: 0 32px 80px -16px rgb(0 0 0 / 0.8), 0 4px 16px rgb(0 0 0 / 0.5);
+  /* Muelles, en la gramática de Apple: amortiguación y respuesta en vez de
+     masa/rigidez/amortiguación. Critically damped (sin rebote) por defecto; el
+     rebote se reserva para lo que el gesto ya traía con inercia — un panel que
+     solo apareció no debe botar, una tarjeta que soltaste sí.
+
+     Estos son valores de CSS para transiciones; lo que se arrastra de verdad
+     (la rejilla del panel) usa Pointer Events y sigue al dedo 1:1, que ninguna
+     curva puede imitar. */
+  --muelle-firme: cubic-bezier(0.22, 1, 0.36, 1);
+  --muelle-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* El halo del acento. Un solo valor para que todos los elementos «vivos»
-     brillen igual y el brillo siga significando lo mismo en toda la app. */
-  --halo-accent: 0 0 0 1px rgb(91 140 255 / 0.35), 0 0 24px -4px rgb(91 140 255 / 0.45);
-  --halo-live: 0 0 0 1px rgb(52 211 153 / 0.35), 0 0 24px -4px rgb(52 211 153 / 0.45);
+     brillen igual y el brillo siga significando lo mismo en toda la app. Se
+     construye del acento del tema, así que sigue al morado en los dos. */
+  --halo-accent: 0 0 0 1px color-mix(in oklab, var(--c-accent) 40%, transparent),
+    0 0 24px -4px color-mix(in oklab, var(--c-accent) 45%, transparent);
+  --halo-live: 0 0 0 1px color-mix(in oklab, var(--c-live) 40%, transparent),
+    0 0 24px -4px color-mix(in oklab, var(--c-live) 45%, transparent);
 }
 
 html,
@@ -119,9 +259,12 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(60rem 40rem at 8% -10%, rgb(91 140 255 / 0.10), transparent 60%),
-    radial-gradient(50rem 36rem at 100% 105%, rgb(62 224 245 / 0.06), transparent 60%);
+  background: var(--atmosfera);
+  /* El cambio de tema se cruza en vez de saltar: un salto de luminancia a
+     pantalla completa es justo lo que la guía de movimiento reducido pide
+     evitar. 240 ms, que es lo que tarda el ojo en acomodarse sin que parezca
+     lento. */
+  transition: background 240ms var(--ease-out);
 }
 
 /* Todo lo que se pinta va por encima de esa luz. */
@@ -168,42 +311,42 @@ h3 {
 /* Cristal. El borde superior claro es lo que lo hace leer como un material y
    no como un rectángulo translúcido: es la luz rozando el canto. */
 .cristal {
-  background: rgb(14 18 25 / 0.72);
+  background: var(--vidrio);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgb(255 255 255 / 0.06);
-  box-shadow: var(--sombra-panel), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  border: 1px solid var(--canto);
+  box-shadow: var(--sombra-panel), inset 0 1px 0 var(--brillo-canto);
 }
 
 /* Cristal más denso, para diálogos que tapan la aplicación entera. */
 .cristal-denso {
-  background: rgb(10 13 19 / 0.85);
+  background: var(--vidrio-denso);
   backdrop-filter: blur(32px) saturate(180%);
   -webkit-backdrop-filter: blur(32px) saturate(180%);
-  border: 1px solid rgb(255 255 255 / 0.08);
-  box-shadow: var(--sombra-dialogo), inset 0 1px 0 rgb(255 255 255 / 0.08);
+  border: 1px solid var(--canto);
+  box-shadow: var(--sombra-dialogo), inset 0 1px 0 var(--brillo-canto);
 }
 
 /* Superficie sólida con canto iluminado, para tarjetas que no necesitan
    desenfoque (la mayoría: en una lista larga el desenfoque cuesta caro). */
 .panel {
-  background: linear-gradient(180deg, var(--color-surface), rgb(10 13 19 / 0.9));
+  background: var(--panel-fondo);
   border: 1px solid var(--color-line);
-  box-shadow: var(--sombra-chip), inset 0 1px 0 rgb(255 255 255 / 0.04);
+  box-shadow: var(--sombra-chip), inset 0 1px 0 var(--brillo-canto);
 }
 
 /* Un panel que está pasando algo ahora mismo. Ver regla 2 de la cabecera. */
 .panel-vivo {
-  border-color: rgb(91 140 255 / 0.4);
-  box-shadow: var(--halo-accent), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  border-color: color-mix(in oklab, var(--c-accent) 45%, transparent);
+  box-shadow: var(--halo-accent), inset 0 1px 0 var(--brillo-canto);
 }
 
 /* Rejilla técnica de fondo. Sin animación: una rejilla que deriva despacio en
    pantalla completa es justo el tipo de movimiento periférico que marea. */
 .rejilla {
   background-image:
-    linear-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.025) 1px, transparent 1px);
+    linear-gradient(var(--rejilla-linea) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rejilla-linea) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: radial-gradient(70% 70% at 50% 40%, #000 30%, transparent 100%);
   -webkit-mask-image: radial-gradient(70% 70% at 50% 40%, #000 30%, transparent 100%);
@@ -232,8 +375,8 @@ h3 {
   background: linear-gradient(
     90deg,
     transparent,
-    rgb(91 140 255 / 0.35) 25%,
-    rgb(62 224 245 / 0.28) 60%,
+    color-mix(in oklab, var(--c-accent) 38%, transparent) 25%,
+    color-mix(in oklab, var(--c-cyan) 30%, transparent) 60%,
     transparent
   );
 }

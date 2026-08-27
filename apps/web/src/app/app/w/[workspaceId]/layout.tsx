@@ -23,6 +23,7 @@ import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
+import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
@@ -312,6 +313,15 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             className="pointer-events-none absolute inset-x-0 top-0 h-px
               bg-gradient-to-r from-transparent via-line-strong to-transparent"
           />
+          {/* El tema vive en el pie de la barra, con la cuenta y no en unos
+              ajustes: es una preferencia de la persona —como el volumen— y no
+              una configuración del producto. Aquí se alcanza desde cualquier
+              pantalla sin salir de lo que se está haciendo. */}
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <Rotulo>Tema</Rotulo>
+            <SelectorTema />
+          </div>
+
           <div className="flex items-center gap-2.5">
             <span
               aria-hidden
