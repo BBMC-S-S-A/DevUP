@@ -605,6 +605,77 @@ h3 {
 .devup-marca-anima [data-marca="halo"] { animation-name: devup-marca-encendido; }
 .devup-marca-anima [data-marca="punto"] { animation-name: devup-marca-punto; }
 
+/* -----------------------------------------------------------------------------
+   Materializar: el cristal llega como material, no como opacidad
+   -----------------------------------------------------------------------------
+   Un panel de cristal que solo sube de opacidad se lee como una calcomanía: el
+   desenfoque ya está a tope en el primer fotograma, así que lo que hay debajo
+   aparece borroso de golpe. Animando el desenfoque Y la escala juntos, la
+   superficie se condensa — primero se ve el fondo casi limpio, luego cuaja.
+
+   Va aparte de `devup-emerge` y no dentro, porque `backdrop-filter` sobre un
+   elemento que no es cristal crea un contexto de filtro que no hacía falta, y
+   eso sí cuesta en una lista larga.
+   -------------------------------------------------------------------------- */
+@keyframes devup-materializa {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+    backdrop-filter: blur(0) saturate(100%);
+    -webkit-backdrop-filter: blur(0) saturate(100%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+.devup-materializa {
+  animation: devup-materializa var(--dur-panel) var(--muelle-firme);
+}
+
+/* -----------------------------------------------------------------------------
+   Lo que acaba de llegar lo dice, una vez
+   -----------------------------------------------------------------------------
+   Un mensaje nuevo, una notificación, una fila que aparece en una tabla. Es un
+   halo que se enciende y se apaga UNA vez, y ahí está la diferencia con
+   `panel-vivo`: aquel significa «esto sigue pasando» y late sin parar; esto
+   significa «esto acaba de pasar» y se va.
+
+   Si latiera, en un canal con conversación viva habría cinco cosas latiendo a la
+   vez y ninguna querría decir nada — que es la regla 2 de la cabecera de este
+   archivo.
+   -------------------------------------------------------------------------- */
+@keyframes devup-llega {
+  0% {
+    background-color: color-mix(in oklab, var(--c-accent) 14%, transparent);
+    box-shadow: inset 2px 0 0 var(--c-accent);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 2px 0 0 transparent;
+  }
+}
+
+.devup-llega {
+  animation: devup-llega 1.4s var(--ease-out);
+}
+
+/* -----------------------------------------------------------------------------
+   Borde de desplazamiento: el contenido se desvanece bajo el cromo flotante
+   -----------------------------------------------------------------------------
+   En vez de una línea de 1 px debajo de una cabecera pegada. La línea dice «aquí
+   se corta»; el desvanecido dice «esto sigue por debajo», que es la verdad, y
+   además hace que la cabecera de cristal se lea como algo que flota encima en
+   lugar de una franja pegada al borde.
+   -------------------------------------------------------------------------- */
+.devup-borde-scroll {
+  mask-image: linear-gradient(to bottom, transparent, #000 14px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px);
+}
+
 /* Cursor de terminal, para la máquina de escribir del acceso. */
 @keyframes devup-cursor {
   0%, 100% { opacity: 1; }
@@ -676,6 +747,17 @@ h3 {
   .devup-portal-anillo,
   .devup-marca-anima [data-marca] {
     animation: none;
+  }
+
+  /* El cristal cruza en vez de condensarse: el cambio de desenfoque a pantalla
+     parcial es de los que marean. Y lo que acaba de llegar se sigue señalando,
+     porque eso es comprensión y no adorno — solo que sin el halo, que es el
+     trozo vestibular. */
+  .devup-materializa {
+    animation: devup-velo var(--dur-pop) var(--ease-out);
+  }
+  .devup-llega {
+    animation: devup-llega 1.4s linear;
   }
 
   /* La marca no desaparece: se queda encendida y quieta. Quitar la animación
