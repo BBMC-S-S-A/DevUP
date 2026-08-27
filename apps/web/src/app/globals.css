@@ -676,6 +676,37 @@ h3 {
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px);
 }
 
+/* -----------------------------------------------------------------------------
+   Levantar y aterrizar: el arrastre de la rejilla del panel
+   -----------------------------------------------------------------------------
+   NO LLEVA PROYECCIÓN DE INERCIA, y es una decisión, no un olvido. Lanzar un
+   elemento a donde iba el gesto es lo correcto en un scroll o en una hoja
+   deslizante, donde el destino es continuo. En una rejilla donde alguien coloca
+   una tarjeta a propósito, la inercia le quita precisión: sueltas en la celda
+   que querías y la tarjeta se va una más allá.
+
+   Lo que sí hace falta es que se note que la tarjeta está EN LA MANO mientras
+   se mueve, y que ATERRIZA al soltarla. Sin lo primero el arrastre parece que
+   empuja un hueco; sin lo segundo la tarjeta salta a su sitio y el gesto termina
+   en un corte seco.
+   -------------------------------------------------------------------------- */
+.devup-levantada {
+  transform: scale(1.02);
+  box-shadow: var(--sombra-dialogo);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out);
+}
+
+@keyframes devup-asienta {
+  from { transform: scale(1.02); }
+  to { transform: scale(1); }
+}
+
+.devup-asienta {
+  animation: devup-asienta var(--dur-pop) var(--muelle-rebote);
+}
+
 /* Cursor de terminal, para la máquina de escribir del acceso. */
 @keyframes devup-cursor {
   0%, 100% { opacity: 1; }
@@ -755,6 +786,15 @@ h3 {
      trozo vestibular. */
   .devup-materializa {
     animation: devup-velo var(--dur-pop) var(--ease-out);
+  }
+
+  /* Levantar se queda —es la señal de que la tarjeta está agarrada, y eso es
+     comprensión— pero sin escalar: solo la sombra. El aterrizaje desaparece. */
+  .devup-levantada {
+    transform: none;
+  }
+  .devup-asienta {
+    animation: none;
   }
   .devup-llega {
     animation: devup-llega 1.4s linear;

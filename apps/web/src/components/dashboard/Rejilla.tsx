@@ -155,8 +155,26 @@ export function Rejilla<T extends string>({
     [gesto, disposicion, celdaEn],
   );
 
+  /**
+   * Qué tarjeta acaba de aterrizar, para que el gesto no termine en seco.
+   *
+   * Se limpia sola: la clase solo tiene que estar el tiempo que dura la
+   * animación. Dejarla puesta haría que la tarjeta volviera a asentarse en cada
+   * renderizado siguiente, que es peor que no animar nada.
+   */
+  const [aterrizando, setAterrizando] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aterrizando) return;
+    const id = setTimeout(() => setAterrizando(null), 260);
+    return () => clearTimeout(id);
+  }, [aterrizando]);
+
   const alSoltar = useCallback(() => {
-    if (gesto && previa && valida) onCambiar(previa);
+    if (gesto && previa && valida) {
+      onCambiar(previa);
+      setAterrizando(gesto.id);
+    }
     setGesto(null);
     setPrevia(null);
     setValida(true);
@@ -238,11 +256,15 @@ export function Rejilla<T extends string>({
               gridColumn: `${casilla.x + 1} / span ${casilla.w}`,
               gridRow: `${casilla.y + 1} / span ${casilla.h}`,
             }}
-            className={`group/celda relative min-h-0 transition-shadow duration-150
+            className={`group/celda relative min-h-0 rounded-2xl transition-shadow duration-150
               ${moviendose ? "z-20" : "z-0"}
               ${moviendose && !valida ? "outline outline-2 outline-danger" : ""}
               ${moviendose && valida ? "outline outline-2 outline-accent" : ""}
-              rounded-2xl`}
+              ${/* Levantada mientras está en la mano, y aterriza al soltarla:
+                    sin lo primero el arrastre parece que empuja un hueco, y sin
+                    lo segundo el gesto termina en un corte seco. */ ""}
+              ${moviendose ? "devup-levantada" : ""}
+              ${aterrizando === id ? "devup-asienta" : ""}`}
           >
             <div className="h-full min-h-0 overflow-hidden rounded-2xl">{children(id)}</div>
 
