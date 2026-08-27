@@ -333,6 +333,13 @@ común. Es un incentivo, no una deuda entre compañeros.
 No es una decisión que tenga que tomarse ya. Sí conviene que se tome a
 propósito.
 
+> **Decidido el 27 de agosto: entra, como intercambio libre entre personas.**
+> El razonamiento es que la moneda solo compra cosmética, así que lo que
+> alguien haga con la suya es asunto suyo. El reparo de arriba queda levantado
+> y se conserva solo como constancia de que se miró. Lo único que arrastra al
+> código está en [`direccion-de-arte.md`](direccion-de-arte.md), apéndice: toda
+> transferencia deja registro, por poder cuadrar saldos, no por desconfianza.
+
 ---
 
 ## 5. La demo, reordenada
