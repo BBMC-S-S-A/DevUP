@@ -54,6 +54,46 @@ trabajo de arte se pierde en el zoom.
 
 ---
 
+## 2 bis. Corrección: no es pixel art a mano, es un modelo 3D renderizado
+
+> **Decidido el 27 de agosto, y corrige lo que dice el §3 de abajo.**
+
+El primer boceto salió dibujado de frente y plano, y la respuesta fue la
+correcta: **los personajes tienen que verse en tres dimensiones**. Así que la
+técnica cambia, aunque el destino no.
+
+**El personaje se modela en 3D de verdad** —volumen, esqueleto y luz
+direccional— **y lo que entra al juego es un render de ese modelo** a 44 × 64
+px. El motor sigue siendo el mismo lienzo 2D de hoy y el contrato del §1 se
+mantiene intacto: ni el renderizador ni la red se enteran. Es como se hicieron
+los isométricos clásicos, y como se hacen hoy buena parte de los muebles de
+Habbo.
+
+Por qué esta salida y no las otras tres que había sobre la mesa:
+
+- **Las cuatro direcciones son gratis.** Se gira el modelo 90° y se vuelve a
+  renderizar. A mano serían cuatro dibujos por prenda y por fotograma.
+- **El andar sale del esqueleto**, no de dibujar fotograma a fotograma.
+- **El catálogo deja de dar miedo.** Con 10-15 skins y cuatro piezas por
+  ranura, dibujar a mano son unos 500 sprites; modelar y renderizar es una
+  prenda y un botón.
+- **Todo comparte la misma luz**, así que una prenda nueva nunca desentona con
+  las viejas.
+- El coste está al principio: montar la tubería. Después cada prenda es barata.
+
+Dos consecuencias sobre lo escrito más abajo. La instrucción de **dibujar las
+piezas teñibles en escala de grises** (§4) deja de aplicarse tal cual: el tinte
+pasa a ser material del modelo. Y la recomendación de **no tocar la proyección**
+(§3) sigue en pie y ahora es más barata de sostener: la cámara del render se
+coloca donde haga falta para casar con la rejilla que ya existe.
+
+Lo que se conserva entero: la proporción de avatar —la cabeza pesa un tercio,
+porque con proporción humana real el muñeco se lee como una figurita fina—, las
+ranuras del catálogo, y que un avatar guardado hoy siga siendo válido cuando el
+arte cambie.
+
+---
+
 ## 3. La bifurcación que hay que nombrar: proyección y arte no son lo mismo
 
 Dices dos cosas que conviene separar, porque una es barata y la otra no.

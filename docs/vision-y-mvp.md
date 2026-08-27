@@ -343,6 +343,36 @@ B se hace en los huecos: son cosas de una tarde cada una.
 
 ---
 
+## 6 bis. Público y modelo de negocio
+
+Cerrado el 27 de agosto, y recogido en
+[`DevUP-Propuesta-de-Desarrollo.pdf`](DevUP-Propuesta-de-Desarrollo.pdf).
+
+**A quién va dirigido:** cualquier organización que construya software. Dos
+perfiles que se parecen menos de lo que parece — la **empresa de desarrollo**,
+que entrega a terceros y necesita aislamiento estricto entre clientes, y la
+**empresa con un área de desarrollo**, que construye para sí misma. Y un tercero
+que no paga y que importa igual: quien trabaja solo o con dos amigos, que es
+quien más sufre la dispersión y menos herramientas tiene contra ella.
+
+**Cómo se sostiene:** quien trabaja solo o casi solo no paga —hasta cuatro
+personas, plataforma completa—. No es generosidad: es el canal de entrada. A
+partir de ahí, por persona y mes: del orden de 12 USD el plan de equipo y 24 USD
+el de empresa, con el **consumo de agente medido aparte**, porque tiene coste
+variable real y meterlo en tarifa plana obliga a encarecer a todos o a poner un
+tope silencioso.
+
+La justificación del número es la única comparación que un comprador hace de
+verdad: las herramientas que DevUP reúne se pagan hoy por separado, cada una en
+el orden de 7 a 20 USD por persona, así que el conjunto queda por debajo de la
+suma de lo que sustituye. Son cifras **para validar**, no una tarifa cerrada.
+
+La venta de artículos cosméticos para DevVerse queda como idea sin cerrar y
+fuera del plan — ver `avatares-y-economia.md` §5 bis para por qué vender
+aleatoriedad es la puerta delicada y no la moneda.
+
+---
+
 ## 7. Lo que necesito que decidas
 
 1. **¿Cuál es la demo?** Lo que se enseña el primer día decide el orden de todo
