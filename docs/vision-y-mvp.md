@@ -175,7 +175,18 @@ de que Spotify nos levante la cuota.
 enlace es lo correcto aunque solo hubiera Spotify. El enlace es de una
 plataforma; la canción es del equipo.
 
-### 4.2 La cámara por cercanía — la idea sí, el automatismo no
+### 4.2 La cámara por cercanía — resuelto, ver `lluvia-de-ideas.md` §2
+
+> **Actualización del 27 de agosto.** Este apartado se escribió suponiendo
+> encendido automático. La versión aclarada —acercarse abre un menú con
+> *saludar* y *llamar*, y las cámaras se encienden solo si los dos aceptan— no
+> tiene ninguno de los dos problemas de abajo: una llamada individual es una
+> sola conexión entre dos navegadores, cifrada de punta a punta por definición.
+> **No hay nada que romper y no hay servidor de medios que meter.** El diseño
+> completo, con la pizarra por canal de datos, está en
+> [`lluvia-de-ideas.md`](lluvia-de-ideas.md) §2. Lo que sigue se queda porque
+> el techo de la malla que describe sigue siendo real para las salas grandes y
+> para la comunidad visitando edificios.
 
 Dos problemas, uno de gente y uno de física.
 
