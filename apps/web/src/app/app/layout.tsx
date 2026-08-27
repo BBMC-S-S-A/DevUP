@@ -1,11 +1,10 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
+import { LogoAnimado } from "@/components/marca/LogoAnimado";
 import { MusicaBar } from "@/components/spotify/MusicaBar";
 import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
-import { Logo } from "@/components/ui/Logo";
 import { Rotulo } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
 import { SpotifyProvider } from "@/lib/spotify/SpotifyProvider";
@@ -35,12 +34,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     // dos merece que se espere.
     return (
       <div className="grid min-h-screen place-items-center px-6">
-        <div className="flex flex-col items-center gap-3.5">
-          <Logo size={44} animated />
-          <Rotulo className="flex items-center gap-2">
-            <Loader2 size={11} className="animate-spin" />
-            Comprobando sesión
-          </Rotulo>
+        <div className="flex flex-col items-center gap-7">
+          {/* La marca encendiéndose hace de espera. Sustituye al logo quieto con
+              un girador al lado, y no por vistosidad: el girador giraba a su
+              ritmo y la marca a otro, así que eran dos relojes distintos
+              diciendo lo mismo. Esta animación ya lleva su propio latido —los
+              tres puntos avanzan con el recorrido de la luz—, de modo que lo que
+              se mira es una sola cosa progresando. */}
+          <LogoAnimado tamano={148} />
+          <Rotulo>Comprobando sesión</Rotulo>
         </div>
       </div>
     );

@@ -3,6 +3,7 @@ import { Chakra_Petch, JetBrains_Mono, Sora } from "next/font/google";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import { SessionProvider } from "@/lib/session";
+import { GUION_TEMA, TemaProvider } from "@/lib/tema";
 import "./globals.css";
 
 /**
@@ -42,13 +43,30 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="es" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    <html
+      lang="es"
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* El tema se aplica ANTES del primer pintado.
+            Con React no llega: para cuando monta, el navegador ya pintó un
+            fotograma, y ese fotograma sería un fogonazo blanco en la cara de
+            quien trabaja de noche. Por eso va como script en el head y no como
+            efecto — es el único sitio que corre antes de pintar.
+            `suppressHydrationWarning` en el <html> porque este script le añade
+            un atributo que el servidor no puso, y React lo señalaría como
+            discrepancia sin serlo. */}
+        <script dangerouslySetInnerHTML={{ __html: GUION_TEMA }} />
+      </head>
       <body className="min-h-screen bg-canvas text-ink antialiased">
-        <SessionProvider>{children}</SessionProvider>
-        {/* La interfaz es siempre oscura, sin alternancia de tema — theme
-            fijo en vez de "system", que aquí no tendría con qué alternar. */}
+        <TemaProvider>
+          <SessionProvider>{children}</SessionProvider>
+        </TemaProvider>
+        {/* Los avisos siguen al tema en vez de quedarse oscuros: un toast negro
+            sobre una interfaz clara se lee como un error del navegador. */}
         <Toaster
-          theme="dark"
+          theme="system"
           position="bottom-right"
           toastOptions={{
             classNames: {

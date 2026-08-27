@@ -36,6 +36,35 @@ import { useSession } from "@/lib/session";
 export function ChannelChat({ channelId }: { channelId: string }) {
   const { user } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
+
+  /**
+   * Qué mensajes acaban de llegar, para señalarlos una vez.
+   *
+   * Hace falta distinguirlos de la historia porque la animación se dispara al
+   * montar el elemento: marcar todos haría que el canal entero destellara al
+   * abrirlo, que es justo lo contrario de señalar algo.
+   *
+   * El conjunto de «ya vistos» arranca NULO y no vacío, y solo se rellena con la
+   * primera carga que traiga algo. Si se inicializara en el primer efecto —
+   * cuando la lista todavía está vacía— la carga siguiente entraría entera como
+   * novedad, y el destello sería el de todo el historial.
+   */
+  const yaVistos = useRef<Set<string> | null>(null);
+  const [recienLlegados, setRecienLlegados] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    if (yaVistos.current === null) {
+      yaVistos.current = new Set(messages.map((m) => m.id));
+      return;
+    }
+
+    const nuevos = messages.filter((m) => !yaVistos.current!.has(m.id)).map((m) => m.id);
+    if (nuevos.length === 0) return;
+    for (const id of nuevos) yaVistos.current.add(id);
+    setRecienLlegados(new Set(nuevos));
+  }, [messages]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [exhausted, setExhausted] = useState(false);
@@ -181,6 +210,7 @@ export function ChannelChat({ channelId }: { channelId: string }) {
               <MessageRow
                 key={message.id}
                 message={message}
+                recien={recienLlegados.has(message.id)}
                 previous={messages[index - 1]}
                 mine={message.authorId === user?.id}
                 onReply={() => setReplyTo(message)}
@@ -343,6 +373,7 @@ function etiquetaDia(fecha: Date): string {
 
 function MessageRow({
   message,
+  recien,
   previous,
   mine,
   onReply,
@@ -350,6 +381,8 @@ function MessageRow({
   onDelete,
 }: {
   message: Message;
+  /** Llegó DESPUÉS de abrir el canal, no es historia. */
+  recien: boolean;
   previous: Message | undefined;
   mine: boolean;
   onReply: () => void;
@@ -384,7 +417,8 @@ function MessageRow({
 
       <div
         className={`devup-velo group relative flex gap-3 rounded-xl px-2 py-1 transition-colors
-          duration-150 hover:bg-raised/50 ${grouped ? "" : "mt-2.5"}`}
+          duration-150 hover:bg-raised/50 ${grouped ? "" : "mt-2.5"}
+          ${recien ? "devup-llega" : ""}`}
       >
         <div className="w-8 shrink-0 pt-0.5">
           {grouped ? (
