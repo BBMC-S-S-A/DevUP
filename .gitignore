@@ -20,3 +20,6 @@ npm-debug.log*
 
 .vercel
 .supabase/
+
+# Los respaldos nunca entran en git: llevan dentro los datos de producción.
+/respaldos/

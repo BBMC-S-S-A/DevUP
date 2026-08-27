@@ -1,0 +1,28 @@
+# Los scripts de shell SIEMPRE con LF, aunque se trabaje en Windows.
+#
+# `core.autocrlf=true` —lo normal en Windows— convierte a CRLF al hacer
+# checkout. Un `.sh` con CRLF se monta tal cual dentro de un contenedor Linux y
+# el shebang pasa a ser `#!/bin/sh\r`, que no existe: el script no arranca y el
+# error («no such file or directory» sobre un archivo que está ahí) no se parece
+# en nada a la causa.
+#
+# Pasó a un paso de ocurrir con los scripts de respaldo: funcionaban recién
+# escritos y se habrían roto en el primer clon limpio, que es justo el momento
+# en que hacen falta.
+*.sh text eol=lf
+
+# Igual para lo que ejecuta un contenedor o un intérprete POSIX.
+*.mjs text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# El SQL de las migraciones lo lee Postgres dentro de Linux.
+*.sql text eol=lf
+
+# Binarios: que git no intente arreglarles los finales de línea.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
