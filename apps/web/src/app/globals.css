@@ -385,6 +385,83 @@ h3 {
   animation: devup-portal-anillo 500ms var(--ease-out) forwards;
 }
 
+/* -----------------------------------------------------------------------------
+   El arranque de la marca: una luz recorre el contorno de la D
+   -----------------------------------------------------------------------------
+   Del proyecto de diseño «Loading animation with purple light». Tres tiempos en
+   un ciclo de 4,5 s: la luz da una vuelta al contorno dejando estela (2,8 s), el
+   trazo queda encendido respirando (1 s), y se apaga para repetir (0,7 s).
+
+   TODO EN CSS Y NADA EN JAVASCRIPT. El original corría sobre el runtime del
+   lienzo de diseño, con un reloj propio y un `requestAnimationFrame` vivo. Aquí
+   esto se pinta en el acceso, que es la primera pantalla y muchas veces la única
+   que ve alguien con el portátil justo: un temporizador latiendo a 60 fps por
+   una decoración es exactamente lo que no debe competir con el formulario.
+
+   La luz se dibuja con `pathLength: 1000` y guiones: el contorno mide siempre
+   mil, dé el tamaño que dé, así que un mismo porcentaje avanza lo mismo en un
+   icono de 32 px y en la marca grande del acceso.
+   -------------------------------------------------------------------------- */
+
+/* La estela: el guión crece de nada a todo el trazo. */
+@keyframes devup-marca-estela {
+  0%, 2.6% { stroke-dasharray: 0 1000; }
+  62.2%, 100% { stroke-dasharray: 1000 1000; }
+}
+
+/* La cabeza del cometa, que va por delante de la estela. */
+@keyframes devup-marca-cometa {
+  0%, 2.6% { stroke-dashoffset: 0; }
+  62.2%, 100% { stroke-dashoffset: -954; }
+}
+
+@keyframes devup-marca-punta {
+  0%, 2.6% { stroke-dashoffset: 0; }
+  62.2%, 100% { stroke-dashoffset: -985; }
+}
+
+/* El encendido del trazo: sube con el recorrido, respira mientras aguanta y se
+   apaga al final. Los dos puntos de 71% y 78% son la respiración. */
+@keyframes devup-marca-encendido {
+  0%, 2.6% { opacity: 0; }
+  62.2% { opacity: 1; }
+  71% { opacity: 0.86; }
+  78% { opacity: 1; }
+  84.4% { opacity: 0.94; }
+  98.2%, 100% { opacity: 0; }
+}
+
+/* La cabeza solo existe mientras la luz viaja: al llegar al final se funde con
+   la estela en vez de quedarse como un bulto parado. */
+@keyframes devup-marca-cabeza {
+  0%, 2.6% { opacity: 0; }
+  8% { opacity: 1; }
+  55% { opacity: 1; }
+  62.2%, 100% { opacity: 0; }
+}
+
+/* Los tres puntos de carga, que se encienden al ritmo del recorrido. */
+@keyframes devup-marca-punto {
+  0%, 2.6% { opacity: 0.18; }
+  62.2%, 84.4% { opacity: 1; }
+  98.2%, 100% { opacity: 0.18; }
+}
+
+.devup-marca-anima [data-marca] {
+  animation-duration: 4.5s;
+  animation-iteration-count: infinite;
+  /* easeInOutSine, la del original: la luz entra y sale del recorrido sin
+     tirones, que es lo que la hace leer como algo que se desliza y no como algo
+     que se arrastra. */
+  animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+.devup-marca-anima [data-marca="estela"] { animation-name: devup-marca-estela, devup-marca-encendido; }
+.devup-marca-anima [data-marca="cometa"] { animation-name: devup-marca-cometa, devup-marca-cabeza; }
+.devup-marca-anima [data-marca="punta"] { animation-name: devup-marca-punta, devup-marca-cabeza; }
+.devup-marca-anima [data-marca="halo"] { animation-name: devup-marca-encendido; }
+.devup-marca-anima [data-marca="punto"] { animation-name: devup-marca-punto; }
+
 /* Cursor de terminal, para la máquina de escribir del acceso. */
 @keyframes devup-cursor {
   0%, 100% { opacity: 1; }
@@ -453,8 +530,24 @@ h3 {
   .devup-cursor,
   .animate-pulse-slow,
   .devup-esqueleto::after,
-  .devup-portal-anillo {
+  .devup-portal-anillo,
+  .devup-marca-anima [data-marca] {
     animation: none;
+  }
+
+  /* La marca no desaparece: se queda encendida y quieta. Quitar la animación
+     dejándola en su primer fotograma la borraría de la pantalla. */
+  .devup-marca-anima [data-marca="estela"],
+  .devup-marca-anima [data-marca="halo"] {
+    stroke-dasharray: 1000 1000;
+    opacity: 1;
+  }
+  .devup-marca-anima [data-marca="cometa"],
+  .devup-marca-anima [data-marca="punta"] {
+    opacity: 0;
+  }
+  .devup-marca-anima [data-marca="punto"] {
+    opacity: 1;
   }
 
   .presionable:active,

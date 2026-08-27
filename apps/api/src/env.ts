@@ -69,7 +69,23 @@ const schema = z.object({
   MAIL_FROM: z.string().default("DevUP <no-reply@devup.local>"),
 
   // --- Almacenamiento S3-compatible ------------------------------------------
+  //
+  // DOS DIRECCIONES PARA EL MISMO ALMACÉN, Y NO ES REDUNDANCIA.
+  //
+  // `S3_ENDPOINT` es la pública, y tiene que serlo: las URLs firmadas las abre
+  // el navegador de cada persona, así que apuntan a un host alcanzable desde
+  // fuera. `S3_ENDPOINT_INTERNO` es por dónde habla el servidor consigo mismo.
+  //
+  // Con una sola dirección, comprobar que una subida llegó salía a internet,
+  // atravesaba Cloudflare y volvía: 154 ms medidos, contra 3 ms por la red de
+  // contenedores. Cincuenta veces más lento, y —lo que importa— dependiendo de
+  // que la red de salida funcione para una pregunta que el servidor puede
+  // responderse solo. Cualquier corte ahí fuera se convertía en «la subida no
+  // llegó a completarse» sobre un archivo que estaba perfectamente guardado.
+  //
+  // Sin definir, vale la pública: en desarrollo las dos son la misma.
   S3_ENDPOINT: z.string().url(),
+  S3_ENDPOINT_INTERNO: z.string().url().optional(),
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1),
   S3_ACCESS_KEY_ID: z.string().min(1),
