@@ -14,9 +14,8 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env, webOrigins } from "../env.js";
 
-export const s3 = new S3Client({
+const comun = {
   region: env.S3_REGION,
-  endpoint: env.S3_ENDPOINT,
   forcePathStyle: env.S3_FORCE_PATH_STYLE,
   credentials: {
     accessKeyId: env.S3_ACCESS_KEY_ID,
@@ -36,7 +35,30 @@ export const s3 = new S3Client({
   // tamaño real se verifica con HEAD al confirmar.
   requestChecksumCalculation: "WHEN_REQUIRED",
   responseChecksumValidation: "WHEN_REQUIRED",
-});
+} as const;
+
+/**
+ * El cliente que FIRMA. Apunta a la dirección pública porque las URLs que
+ * produce las abre el navegador de cada persona.
+ */
+export const s3 = new S3Client({ ...comun, endpoint: env.S3_ENDPOINT });
+
+/**
+ * El cliente que el servidor usa CONSIGO MISMO: comprobar que una subida llegó,
+ * borrar lo que ya no vale, preparar el bucket al arrancar.
+ *
+ * Va por la red interna, que es donde está el almacén de verdad. Antes todo esto
+ * salía a internet y volvía por el mismo camino que un visitante cualquiera —50
+ * veces más lento, y sujeto a que la red de salida funcione para una pregunta
+ * que el servidor puede responderse solo—. Un corte ahí fuera se convertía en
+ * «la subida no llegó a completarse» sobre un archivo bien guardado.
+ *
+ * Sin `S3_ENDPOINT_INTERNO` definido son el mismo cliente, que es lo correcto en
+ * desarrollo: allí no hay dos redes.
+ */
+export const s3Interno = env.S3_ENDPOINT_INTERNO
+  ? new S3Client({ ...comun, endpoint: env.S3_ENDPOINT_INTERNO })
+  : s3;
 
 /**
  * Compone la clave de un objeto.
@@ -117,7 +139,7 @@ export async function headObject(
   key: string,
 ): Promise<{ size: number; contentType: string } | null> {
   try {
-    const result = await s3.send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+    const result = await s3Interno.send(new HeadObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
     return {
       size: result.ContentLength ?? 0,
       contentType: result.ContentType ?? "application/octet-stream",
@@ -128,7 +150,7 @@ export async function headObject(
 }
 
 export async function deleteObject(key: string): Promise<void> {
-  await s3.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key })).catch(() => {
+  await s3Interno.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key })).catch(() => {
     // Un objeto que no se puede borrar es basura que ocupa, no un fallo que
     // deba tumbar la petición del usuario. Queda en el registro y ya.
     console.warn(`[s3] no se pudo borrar ${key}`);
@@ -140,7 +162,7 @@ export async function deleteObjects(keys: string[]): Promise<void> {
   // DeleteObjects admite 1000 por llamada.
   for (let i = 0; i < keys.length; i += 1000) {
     const batch = keys.slice(i, i + 1000).map((Key) => ({ Key }));
-    await s3
+    await s3Interno
       .send(
         new DeleteObjectsCommand({
           Bucket: env.S3_BUCKET,
@@ -168,14 +190,14 @@ export async function deleteObjects(keys: string[]): Promise<void> {
  */
 export async function ensureBucket(): Promise<void> {
   try {
-    await s3.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+    await s3Interno.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
     return;
   } catch {
     // No existe o no se puede consultar: se intenta crear abajo.
   }
 
   try {
-    await s3.send(
+    await s3Interno.send(
       new CreateBucketCommand({
         Bucket: env.S3_BUCKET,
         /**
@@ -207,7 +229,7 @@ export async function ensureBucket(): Promise<void> {
   }
 
   try {
-    await s3.send(
+    await s3Interno.send(
       new PutBucketCorsCommand({
         Bucket: env.S3_BUCKET,
         CORSConfiguration: {
