@@ -249,6 +249,14 @@ protegerlo:
 
 ## 9. Qué me hace falta cuando envíes las referencias
 
+> **Llegaron el 27 de agosto.** Confirman pixel art con contorno cerrado,
+> paleta corta y saturada sobre oscuro —compatible con la de `globals.css`—,
+> cara de cuatro píxeles y accesorios como capas evidentes. Lo que resuelven,
+> lo que proponen de tamaño y las ranuras nuevas están en
+> [`avatares-y-economia.md`](avatares-y-economia.md) §1 y §2. La lista de abajo
+> se conserva porque tres de sus cinco puntos siguen abiertos: el tamaño exacto,
+> cuántos cuerpos base hay, y si anda o se desliza.
+
 Para no adivinar:
 
 1. **El tamaño del personaje en píxeles.** Es la decisión que condiciona todas
