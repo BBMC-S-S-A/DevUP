@@ -18,7 +18,7 @@ export default function Home() {
   // primer fotograma del producto: una línea de texto suelta en negro se lee
   // como una página rota, la marca encendida se lee como algo arrancando.
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden px-6">
+    <main className="relative grid min-h-[100svh] place-items-center overflow-hidden px-6">
       <div className="rejilla pointer-events-none absolute inset-0" />
       <div className="relative flex flex-col items-center gap-4">
         <Logo size={44} animated />

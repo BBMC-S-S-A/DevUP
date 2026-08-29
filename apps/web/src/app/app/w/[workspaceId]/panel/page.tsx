@@ -134,7 +134,7 @@ export default function PanelPage() {
 
   if (error) {
     return (
-      <div className="grid min-h-[60vh] place-items-center px-6">
+      <div className="grid min-h-[60svh] place-items-center px-6">
         <EstadoVacio icono={<TriangleAlert size={20} className="text-danger" />} titulo={error} />
       </div>
     );

@@ -120,7 +120,7 @@ export function AvatarEditor({
           </button>
         </header>
 
-        <div className="flex max-h-[70vh] gap-5 overflow-y-auto p-5">
+        <div className="flex max-h-[70svh] gap-5 overflow-y-auto p-5">
           <div className="sticky top-0 shrink-0 self-start rounded-xl border border-line bg-canvas p-2">
             <canvas ref={canvasRef} style={{ width: 120, height: 150 }} />
           </div>

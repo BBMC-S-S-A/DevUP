@@ -20,7 +20,7 @@ export default function WorkspacePage() {
 
   if (!workspace) {
     return (
-      <div className="grid h-screen place-items-center">
+      <div className="alto-util-fijo grid place-items-center">
         <span className="flex items-center gap-2 text-faint">
           <Loader2 className="animate-spin" size={16} />
           <Rotulo>abriendo la biblioteca</Rotulo>
@@ -30,7 +30,7 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="alto-util">
       {/* La cabecera lleva la rejilla y el filo de luz porque es la única
           superficie fija de la vista: da profundidad al fondo y marca dónde
           acaba el rótulo y empieza el almacén, sin un borde duro de por medio. */}

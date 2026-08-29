@@ -168,7 +168,7 @@ export function ChannelChat({ channelId }: { channelId: string }) {
   };
 
   return (
-    <Tarjeta className="relative flex h-[clamp(26rem,58vh,40rem)] flex-col overflow-hidden">
+    <Tarjeta className="relative flex h-[clamp(26rem,58svh,40rem)] flex-col overflow-hidden">
       {/* El aviso de «cargando anteriores» flota sobre la lista en vez de
           empujarla: al paginar hacia atrás se está midiendo la altura del
           scroll para no perder el sitio, y un elemento que aparece y

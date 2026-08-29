@@ -11,6 +11,7 @@ import {
 } from "react";
 import { api, type SpotifyQueueTrack, type SpotifySession } from "../api";
 import { useSpotifyPlayer } from "./reproductor";
+import { toast } from "sonner";
 
 /**
  * La música vive aquí, no en la página del canal.
@@ -54,8 +55,16 @@ type Cuenta = { connected: boolean; premium: boolean };
  * ninguna cola y no hay nada que sacar. Un solo tipo para las dos cosas evita
  * dos caminos de reproducción que acaban desincronizados.
  */
+/**
+ * Algo que se puede poner a sonar.
+ *
+ * `trackUri` ya no es obligatorio: desde que la cola guarda la canción y no
+ * el enlace, hay pistas que solo traen ISRC y su dirección en Spotify se
+ * resuelve en el momento. Lo que no puede faltar es una de las dos.
+ */
 export type Ponible = {
-  trackUri: string;
+  trackUri?: string | null;
+  isrc?: string | null;
   trackName: string;
   trackArtist: string;
   id?: string;
@@ -168,22 +177,55 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
    * En serie y no en paralelo: la cola de Spotify respeta el orden en que llegan
    * las peticiones, y con `Promise.all` el orden lo decidiría la red.
    */
+  /**
+   * Cómo se llama esta canción en Spotify.
+   *
+   * Si viene con dirección de Spotify, esa. Si no —porque la añadió alguien
+   * desde otro servicio, o porque solo se guardó el ISRC—, se pregunta a la
+   * API, que la busca por su identificador internacional.
+   *
+   * Lo resuelto se recuerda para el resto de la sesión: el ISRC de una
+   * canción no cambia, y volver a buscarlo en cada sincronización sería una
+   * petición por canción y por ciclo.
+   */
+  const resueltas = useRef(new Map<string, string | null>());
+
+  const direccionAqui = useCallback(async (pista: Ponible) => {
+    if (pista.trackUri?.startsWith("spotify:")) return pista.trackUri;
+    if (!pista.isrc) return null;
+    if (resueltas.current.has(pista.isrc)) return resueltas.current.get(pista.isrc) ?? null;
+
+    const { track } = await api.get<{ track: { uri: string } | null }>(
+      `/spotify/resolver?isrc=${encodeURIComponent(pista.isrc)}`,
+    );
+    const uri = track?.uri ?? null;
+    resueltas.current.set(pista.isrc, uri);
+    return uri;
+  }, []);
+
   const sincronizarConSpotify = useCallback(async () => {
     // Sin nada sonando no hay cola donde encolar: Spotify necesita una
     // reproducción activa para aceptar `/me/player/queue`.
     if (!puedeSonar || !uriSonando) return;
     for (const pista of colaRef.current) {
-      if (despachadas.current.has(pista.trackUri)) continue;
+      // Se lleva la cuenta por identificador de fila y no por dirección: una
+      // canción sin dirección propia no tendría con qué marcarse, y la misma
+      // canción añadida dos veces a propósito son dos filas y suena dos veces.
+      if (despachadas.current.has(pista.id)) continue;
       try {
-        await encolarEnSpotify(pista.trackUri);
-        despachadas.current.add(pista.trackUri);
+        const uri = await direccionAqui(pista);
+        // Sin dirección en este catálogo no se puede hacer nada, pero tampoco
+        // es un fallo: se marca como despachada para no volver a buscarla en
+        // cada sincronización y se sigue con la siguiente.
+        if (uri) await encolarEnSpotify(uri);
+        despachadas.current.add(pista.id);
       } catch {
         // Si una falla se deja sin marcar, para reintentarla en la siguiente
         // sincronización en vez de perderla en silencio.
         break;
       }
     }
-  }, [puedeSonar, uriSonando, encolarEnSpotify]);
+  }, [puedeSonar, uriSonando, encolarEnSpotify, direccionAqui]);
 
   /**
    * Si otra persona de la sala añade algo mientras suena la música, quien pincha
@@ -218,19 +260,30 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       enCurso.current = true;
       setPoniendo(true);
       try {
-        await reproducirUri(pista.trackUri);
+        // Una pista puede venir sin dirección de Spotify —la añadió alguien
+        // desde otro servicio— y entonces hay que preguntar por su ISRC. Si
+        // tampoco está en este catálogo, no se puede poner y se dice: dejarlo
+        // en silencio parecería que el botón no funciona.
+        const uri = await direccionAqui(pista);
+        if (!uri) {
+          toast.error(`«${pista.trackName}» no está en Spotify.`);
+          return;
+        }
+        await reproducirUri(uri);
         // Poner algo rompe la cola que Spotify tenía montada, así que lo
         // despachado deja de valer y hay que volver a entregarlo.
         despachadas.current.clear();
-        despachadas.current.add(pista.trackUri);
-        if (pista.id) await quitar(pista.id);
+        if (pista.id) {
+          despachadas.current.add(pista.id);
+          await quitar(pista.id);
+        }
         await sincronizarConSpotify();
       } finally {
         enCurso.current = false;
         setPoniendo(false);
       }
     },
-    [reproducirUri, quitar, sincronizarConSpotify],
+    [reproducirUri, quitar, sincronizarConSpotify, direccionAqui],
   );
 
   const encolar = useCallback(

@@ -210,7 +210,7 @@ export default function SalesPage() {
   if (loading) return <EsqueletoEmbudo />;
 
   return (
-    <div className="min-h-screen">
+    <div className="alto-util">
       {/* La cabecera es el tablero de instrumentos: rejilla de fondo, filo de
           luz en vez de borde duro y las dos cifras que resumen la pantalla. */}
       <header className="filo-luz relative px-6 pb-5 pt-4">
@@ -577,7 +577,7 @@ function Inicial({ nombre }: { nombre: string }) {
  */
 function EsqueletoEmbudo() {
   return (
-    <div className="min-h-screen" aria-busy="true">
+    <div className="min-h-[100svh]" aria-busy="true">
       <header className="filo-luz relative px-6 pb-5 pt-4">
         <div aria-hidden className="rejilla pointer-events-none absolute inset-0" />
         <div className="relative">

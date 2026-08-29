@@ -23,3 +23,7 @@ npm-debug.log*
 
 # Los respaldos nunca entran en git: llevan dentro los datos de producción.
 /respaldos/
+
+# Configuración local de herramientas: rutas y puertos de la máquina de cada
+# cual, no del proyecto.
+.claude/

@@ -308,6 +308,75 @@ h3 {
   scrollbar-color: var(--color-line-strong) transparent;
 }
 
+/* --- El alto de pantalla en un móvil ---------------------------------------
+
+   DOS PROBLEMAS DISTINTOS QUE SE ARREGLAN JUNTOS.
+
+   El primero: `100vh` en un móvil NO es lo que se ve. Cuenta también la
+   barra del navegador que se esconde al desplazar, así que una pantalla de
+   alto completo queda cortada por abajo justo donde suelen estar los
+   botones. `svh` —small viewport height— es el alto con la barra puesta,
+   que es el único que siempre se ve.
+
+   El segundo: debajo de 768 px el armazón pone una cinta de 3rem con el
+   botón del cajón. Una pantalla que pida el alto entero DENTRO de esa cinta
+   se pasa justo esos 3rem, y aparece un desplazamiento vertical que no
+   lleva a ninguna parte. Se descuenta con una variable en vez de a mano en
+   cada pantalla, porque el día que la cinta cambie de alto hay un solo
+   sitio que tocar.
+*/
+:root {
+  --alto-cinta: 3rem;
+}
+@media (min-width: 768px) {
+  :root {
+    --alto-cinta: 0px;
+  }
+}
+
+/* El alto útil: lo que queda de pantalla debajo de la cinta. */
+.alto-util {
+  min-height: calc(100svh - var(--alto-cinta));
+}
+/* Igual, pero fijo: para lo que se desplaza por dentro —el chat, el tablero,
+   la oficina— y no debe crecer con su contenido. */
+.alto-util-fijo {
+  height: calc(100svh - var(--alto-cinta));
+}
+
+/* --- Objetivos táctiles ----------------------------------------------------
+
+   Con el dedo, un botón de 32 px se falla. La guía de todos los sistemas
+   dice 44, y la diferencia entre acertar y no acertar en una barra de
+   herramientas es exactamente esa.
+
+   `pointer: coarse` y no un punto de ruptura por ancho: lo que decide el
+   tamaño es con qué se señala, no cuánto mide la pantalla. Una tableta
+   grande se toca con el dedo y un portátil pequeño con un ratón.
+
+   Crece la ZONA PULSABLE, no el icono: el dibujo se queda como está y lo que
+   se estira es el área alrededor, así que la composición no se mueve.
+
+   NO SE APLICA A TODO LO PULSABLE, y esa fue la primera versión: hay ocho
+   elementos `presionable` que son enlaces dentro de una línea de texto, y
+   ahí un área de 44 px se solapa con el enlace de al lado y uno de los dos
+   se queda sin poder tocarse. Va en una clase que se pide donde tiene
+   sentido: los botones de icono, que son los pequeños de verdad.
+*/
+.toque-comodo {
+  position: relative;
+}
+@media (pointer: coarse) {
+  .toque-comodo::after {
+    content: "";
+    position: absolute;
+    inset: 50% 50%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
 ::selection {
   background: rgb(124 58 237 / 0.28);
   color: var(--color-ink);

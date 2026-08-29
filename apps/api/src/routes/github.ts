@@ -2,6 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { fetchGithubFileContent, fetchGithubStats, fetchGithubTree } from "../connectors/github.js";
+import {
+  CARPETAS,
+  analizarMigracion,
+  migracionesDelArbol,
+} from "../connectors/migraciones.js";
+import { ARCHIVOS_DE_INTERES, diagnosticar } from "../connectors/integraciones.js";
 import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
@@ -94,6 +100,142 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.status(201).send({ repo });
+  });
+
+  /**
+   * Las migraciones de un repositorio, pasadas por el criterio.
+   *
+   * SE LEEN, NO SE EJECUTAN. Ni se conecta a la base del cliente ni se corre
+   * nada: se piden los archivos y se analiza el texto. Ejecutar para averiguar
+   * si algo es seguro es el orden equivocado.
+   *
+   * SE PIDEN EN SERIE Y CON TOPE. Cada archivo es una petición a GitHub, y un
+   * repositorio con doscientas migraciones agotaría el límite de la
+   * organización entera en una sola visita a esta pantalla. Se leen las
+   * últimas cuarenta, que es donde está lo que se acaba de escribir, y se dice
+   * cuántas se dejaron fuera — un tope silencioso se lee como «todo está
+   * bien», que es justo lo contrario de lo que esta pantalla existe para
+   * decir.
+   */
+  app.get("/github/repos/:repoId/migraciones", async (request) => {
+    const userId = requireUser(request);
+    const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
+
+    const { token, fullName } = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
+        "select connection_id, full_name from github_repos where id = $1",
+        [repoId],
+      );
+      if (!rows[0]) throw notFound("repositorio no encontrado");
+      return {
+        token: await getDecryptedSecret(db, rows[0].connection_id),
+        fullName: rows[0].full_name,
+      };
+    });
+
+    const arbol = await fetchGithubTree(token, fullName);
+    const todas = migracionesDelArbol(arbol.map((e) => e.path));
+
+    if (todas.length === 0) {
+      return {
+        fullName,
+        carpetasMiradas: CARPETAS,
+        migraciones: [],
+        omitidas: 0,
+      };
+    }
+
+    const TOPE = 40;
+    const omitidas = Math.max(0, todas.length - TOPE);
+    const aLeer = todas.slice(-TOPE);
+
+    const migraciones = [];
+    for (const archivo of aLeer) {
+      try {
+        const sql = await fetchGithubFileContent(token, fullName, archivo);
+        migraciones.push(analizarMigracion(archivo, sql));
+      } catch (error) {
+        // Un archivo ilegible —demasiado grande, o retirado entre el árbol y
+        // la lectura— no tira el análisis de los otros treinta y nueve.
+        migraciones.push({
+          archivo,
+          veredicto: "aviso" as const,
+          hallazgos: [
+            {
+              severidad: "aviso" as const,
+              regla: "idempotente" as const,
+              mensaje:
+                error instanceof Error
+                  ? `No se pudo leer: ${error.message}`
+                  : "No se pudo leer este archivo.",
+              linea: null,
+            },
+          ],
+        });
+      }
+    }
+
+    return { fullName, carpetasMiradas: CARPETAS, migraciones, omitidas };
+  });
+
+  /**
+   * Qué se está haciendo a mano en este repositorio.
+   *
+   * Lee el árbol y unos pocos archivos concretos —los manifiestos de
+   * dependencias y una muestra del código de servidor— y devuelve
+   * recomendaciones con su prueba. No ejecuta nada y no escribe nada.
+   *
+   * LOS ARCHIVOS SE ELIGEN, NO SE DESCARGA EL REPOSITORIO. Cada uno es una
+   * petición a GitHub contra un límite compartido por toda la organización:
+   * bajarse el proyecto para diagnosticarlo dejaría sin cuota al resto del
+   * conector. Con los manifiestos y una docena de archivos de servidor se
+   * responde a todo lo que hoy se pregunta.
+   */
+  app.get("/github/repos/:repoId/integraciones", async (request) => {
+    const userId = requireUser(request);
+    const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
+
+    const { token, fullName } = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
+        "select connection_id, full_name from github_repos where id = $1",
+        [repoId],
+      );
+      if (!rows[0]) throw notFound("repositorio no encontrado");
+      return {
+        token: await getDecryptedSecret(db, rows[0].connection_id),
+        fullName: rows[0].full_name,
+      };
+    });
+
+    const arbol = await fetchGithubTree(token, fullName);
+    const rutas = arbol.filter((e) => e.type === "blob").map((e) => e.path);
+
+    const aLeer = [
+      // Manifiestos, incluidos los de los subproyectos: en un monorepo la raíz
+      // solo tiene herramientas de construcción.
+      ...rutas.filter((r) => ARCHIVOS_DE_INTERES.some((n) => r === n || r.endsWith(`/${n}`))).slice(0, 8),
+      // Y una muestra del código de servidor, que es donde se ve lo que se
+      // hace a mano.
+      ...rutas
+        .filter((r) => /\.(ts|js|mjs|py|go|rb|php)$/.test(r) && /(^|\/)(src|app|server|api|lib)\//.test(r))
+        .slice(0, 12),
+    ];
+
+    const archivos = new Map<string, string>();
+    for (const archivo of aLeer) {
+      try {
+        archivos.set(archivo, await fetchGithubFileContent(token, fullName, archivo));
+      } catch {
+        // Un archivo que no se puede leer se salta: el diagnóstico se hace con
+        // lo que haya, y decir menos es mejor que no decir nada.
+      }
+    }
+
+    return {
+      fullName,
+      recomendaciones: diagnosticar({ rutas, archivos }),
+      archivosLeidos: archivos.size,
+    };
   });
 
   app.post("/github/repos/:repoId/refresh", async (request) => {

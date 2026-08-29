@@ -3,7 +3,9 @@
 import {
   ArrowLeft,
   Code2,
+  Database,
   Github,
+  Lightbulb,
   LogOut,
   Megaphone,
   Search,
@@ -17,6 +19,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BotonIcono } from "@/components/ui/Boton";
+import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
@@ -117,7 +120,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
 
   if (error || !organizacion) {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
+      <div className="grid min-h-[100svh] place-items-center px-6">
         <div className="text-center">
           <p className="text-sm text-muted">{error ?? "No se pudo cargar la organización."}</p>
           <Link
@@ -141,6 +144,8 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
     { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
     { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
     { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
+    { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
+    { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
   ];
 
   return (
@@ -309,6 +314,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
       </>
     }>
       {children}
+      <PaletaComandos orgId={orgId} />
     </Armazon>
   );
 }

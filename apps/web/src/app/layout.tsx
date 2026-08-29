@@ -60,7 +60,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             discrepancia sin serlo. */}
         <script dangerouslySetInnerHTML={{ __html: GUION_TEMA }} />
       </head>
-      <body className="min-h-screen bg-canvas text-ink antialiased">
+      <body className="min-h-[100svh] bg-canvas text-ink antialiased">
         <TemaProvider>
           <SessionProvider>
             <ProveedorConfirmar>{children}</ProveedorConfirmar>

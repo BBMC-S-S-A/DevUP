@@ -67,7 +67,7 @@ export function Armazon({
   }, [abierto]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100svh]">
       {/* Cinta superior, solo en móvil: sin ella no hay forma de llamar al
           cajón, y sin el título no se sabe dónde se está. */}
       <div className="cristal fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 px-3 md:hidden">
@@ -77,7 +77,7 @@ export function Armazon({
           onClick={() => setAbierto(true)}
           aria-label="Abrir la navegación"
           aria-expanded={abierto}
-          className="presionable grid size-9 place-items-center rounded-xl text-muted hover:text-ink"
+          className="presionable toque-comodo grid size-9 place-items-center rounded-xl text-muted hover:text-ink"
         >
           <Menu size={17} />
         </button>
@@ -116,7 +116,7 @@ export function Armazon({
             boton.current?.focus();
           }}
           aria-label="Cerrar la navegación"
-          className="presionable absolute right-2 top-2 z-10 grid size-8 place-items-center
+          className="presionable toque-comodo absolute right-2 top-2 z-10 grid size-8 place-items-center
             rounded-lg text-faint hover:text-ink md:hidden"
         >
           <X size={15} />
@@ -125,7 +125,7 @@ export function Armazon({
         {barra}
       </aside>
 
-      <main className="min-h-screen pt-12 md:pt-0 md:pl-64">{children}</main>
+      <main className="alto-util pt-12 md:pt-0 md:pl-64">{children}</main>
     </div>
   );
 }
@@ -139,7 +139,7 @@ export function Armazon({
  */
 export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100svh]">
       <aside className="cristal fixed inset-y-0 left-0 z-30 hidden w-64 flex-col rounded-none md:flex">
         <div className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           <div className="devup-esqueleto h-2.5 w-24 rounded" />
@@ -159,7 +159,7 @@ export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
           ))}
         </div>
       </aside>
-      <main className="min-h-screen md:pl-64" />
+      <main className="min-h-[100svh] md:pl-64" />
     </div>
   );
 }

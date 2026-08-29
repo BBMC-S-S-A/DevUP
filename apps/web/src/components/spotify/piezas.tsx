@@ -582,6 +582,7 @@ export function Buscador({
       const { track } = await api.post<{ track: SpotifyQueueTrack }>(
         `/channels/${channelId}/spotify/queue`,
         {
+          isrc: pista.isrc,
           trackUri: pista.uri,
           trackName: pista.name,
           trackArtist: pista.artist,
@@ -649,6 +650,7 @@ export function Buscador({
                 etiqueta={`Reproducir ${pista.name} ahora`}
                 onClick={() =>
                   void onReproducir({
+                    isrc: pista.isrc,
                     trackUri: pista.uri,
                     trackName: pista.name,
                     trackArtist: pista.artist,
@@ -846,6 +848,7 @@ export function Biblioteca({
                       const { track } = await api.post<{ track: SpotifyQueueTrack }>(
                         `/channels/${channelId}/spotify/queue`,
                         {
+                          isrc: pista.isrc,
                           trackUri: pista.uri,
                           trackName: pista.name,
                           trackArtist: pista.artist,
