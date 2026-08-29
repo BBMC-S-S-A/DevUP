@@ -55,7 +55,18 @@ export function useWorld({
   displayName,
   selfUserId,
   onZoneChange,
-}: Options) {
+  onDirecto,
+}: Options & {
+  /**
+   * Lo que llega dirigido a mí y no a la sala: una llamada, su respuesta, o
+   * un trozo de negociación de la conexión.
+   *
+   * Se saca por aquí en vez de gestionarlo dentro porque este hook ya tiene
+   * bastante con mover gente por una planta. La llamada la lleva useLlamada,
+   * que sabe de WebRTC y no sabe de mundos.
+   */
+  onDirecto?: (mensaje: { type: string; fromPeerId: string; [k: string]: unknown }) => void;
+}) {
   const [status, setStatus] = useState<WorldStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   /** Solo para la lista lateral: cambia al entrar y salir gente, no al moverse. */
@@ -73,6 +84,8 @@ export function useWorld({
   const selfBubbleRef = useRef<{ text: string; until: number } | null>(null);
   const selfEmoteRef = useRef<{ kind: NonNullable<Peer["emote"]>; until: number } | null>(null);
   const zoneRef = useRef<string | null>(null);
+  const onDirectoRef = useRef(onDirecto);
+  onDirectoRef.current = onDirecto;
   const sceneRef = useRef<Scene | null>(scene);
   const onZoneChangeRef = useRef(onZoneChange);
 
@@ -197,6 +210,14 @@ export function useWorld({
               if (peer) peer.zoneId = (message.zoneId as string | null) ?? null;
               setRoster([...stateRef.current.peers.values()]);
               break;
+            }
+
+            case "knocked":
+            case "knock-answered":
+            case "rtc": {
+              // Sin interpretar: este hook es el buzón, no el destinatario.
+              onDirectoRef.current?.(message as never);
+              return;
             }
 
             case "ping":
@@ -411,9 +432,24 @@ export function useWorld({
     self.moving = false;
   }, []);
 
+  /**
+   * Manda un mensaje por el socket del mundo.
+   *
+   * Existe para la llamada individual: la negociación viaja por aquí porque
+   * este socket ya conoce a los dos y no hace falta abrir un segundo. El
+   * servidor solo reparte — no entiende ni guarda lo que va dentro.
+   */
+  const enviar = useCallback((mensaje: Record<string, unknown>) => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(mensaje));
+    return true;
+  }, []);
+
   return {
     status,
     error,
+    enviar,
     stateRef,
     roster,
     avatars,

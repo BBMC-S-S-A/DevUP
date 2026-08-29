@@ -17,6 +17,8 @@ import type { Avatar, LiveData, WorldMap, Zone } from "@/lib/world/types";
 import { AvatarEditor } from "./AvatarEditor";
 import { DevVerseEntrance } from "./DevVerseEntrance";
 import { ZoneEditor } from "./ZoneEditor";
+import { useLlamada } from "@/lib/world/useLlamada";
+import { LlamadaEntrante, MenuCercania, PanelLlamada } from "./Cercania";
 import { ProximityAudio } from "./ProximityAudio";
 
 /**
@@ -25,6 +27,16 @@ import { ProximityAudio } from "./ProximityAudio";
  * persona, que es donde se rompe por encima de seis.
  */
 export const AUDIBLE_RADIUS = 5.5;
+
+/**
+ * A qué distancia se ofrece hablar con alguien.
+ *
+ * Más corto que el radio en que se le oye, y a propósito: oír a media sala
+ * está bien, pero que el menú de «llamar» salte por cada persona que pasa
+ * cerca lo convierte en ruido que se aprende a ignorar. Dos casillas y media
+ * es ponerse delante de alguien, no cruzarse con él.
+ */
+const RADIO_MENU = 2.5;
 
 const KEYS: Record<string, keyof Input> = {
   ArrowUp: "up",
@@ -179,13 +191,23 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
   const zoneRef = useRef<Zone | null>(null);
 
+  // El manejador viaja por una referencia porque useWorld se monta antes que
+  // useLlamada y esta necesita el `enviar` de aquella. Pasar la función
+  // directamente sería una dependencia circular; pasar una que la busca en el
+  // momento, no.
+  const recibirLlamadaRef = useRef<((m: never) => void) | null>(null);
+
   const world = useWorld({
     workspaceId,
     scene,
     displayName: user?.displayName ?? "tú",
     selfUserId: user?.id ?? "",
     onZoneChange,
+    onDirecto: (mensaje) => recibirLlamadaRef.current?.(mensaje as never),
   });
+
+  const llamada = useLlamada(world.enviar);
+  recibirLlamadaRef.current = llamada.recibir as never;
 
   // El teclado se monta una sola vez; el editor cambia en cada renderizado.
   // Sin estas referencias, el efecto se volvería a montar constantemente — es
@@ -514,6 +536,17 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     return Math.hypot(peer.x - self.x, peer.y - self.y) <= AUDIBLE_RADIUS;
   });
 
+  // Solo la persona más cercana, y solo una. Un menú por cada uno de los que
+  // hay alrededor sería una fila de tarjetas tapando la oficina; y con dos a
+  // la misma distancia, elegir la más cercana es la regla que menos sorprende.
+  const cerca = nearby
+    .map((peer) => ({
+      peer,
+      d: Math.hypot(peer.x - stateRef.current.self.x, peer.y - stateRef.current.self.y),
+    }))
+    .filter(({ d }) => d <= RADIO_MENU)
+    .sort((a, b) => a.d - b.d)[0]?.peer;
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-canvas">
       <canvas
@@ -636,6 +669,41 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
           </div>
         </form>
       )}
+
+      {/* El menú al acercarse. No aparece con el editor abierto: ahí uno está
+          amueblando, no socializando, y la tarjeta taparía justo lo que se
+          está colocando. */}
+      {cerca && !editor.active && llamada.estado.fase === "libre" && (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-30 -translate-x-1/2">
+          <MenuCercania
+            nombre={cerca.displayName}
+            title={cerca.title}
+            presence={cerca.presence}
+            ocupado={false}
+            onSaludar={() => world.emote("wave")}
+            onLlamar={() => llamada.llamar(cerca.peerId, cerca.displayName)}
+          />
+        </div>
+      )}
+
+      {llamada.estado.fase === "entrante" && (
+        <LlamadaEntrante
+          nombre={llamada.estado.nombre}
+          title={llamada.estado.title}
+          onAceptar={() => void llamada.responder(true)}
+          onRechazar={() => void llamada.responder(false)}
+        />
+      )}
+
+      <PanelLlamada
+        estado={llamada.estado}
+        remoto={llamada.remoto}
+        conVideo={llamada.conVideo}
+        onColgar={llamada.colgar}
+        onCamara={() => void llamada.encenderCamara()}
+        enviarPorCanal={llamada.enviarPorCanal}
+        escucharCanal={llamada.escucharCanal}
+      />
 
       {editor.active && editingZone && <ZoneEditor zone={editingZone} editor={editor} />}
 
