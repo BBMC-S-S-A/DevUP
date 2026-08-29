@@ -43,7 +43,7 @@ function Recuperar() {
   const coinciden = repetida.length > 0 && password === repetida;
 
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden px-6 py-12">
+    <main className="relative grid min-h-[100svh] place-items-center overflow-hidden px-6 py-12">
       <div className="rejilla pointer-events-none absolute inset-0" />
       <div className="pointer-events-none absolute inset-0" style={{ background: LUZ }} />
 

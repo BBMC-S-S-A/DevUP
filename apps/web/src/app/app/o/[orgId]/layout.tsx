@@ -120,7 +120,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
 
   if (error || !organizacion) {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
+      <div className="grid min-h-[100svh] place-items-center px-6">
         <div className="text-center">
           <p className="text-sm text-muted">{error ?? "No se pudo cargar la organización."}</p>
           <Link

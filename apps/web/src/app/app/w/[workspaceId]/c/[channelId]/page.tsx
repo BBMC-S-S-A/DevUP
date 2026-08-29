@@ -28,7 +28,7 @@ export default function ChannelPage() {
 
   if (error) {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
+      <div className="grid min-h-[100svh] place-items-center px-6">
         <EstadoVacio
           icono={<AlertTriangle size={20} />}
           titulo="No se pudo abrir el canal"

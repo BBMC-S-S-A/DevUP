@@ -33,7 +33,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     // instantánea se ven igual durante el primer segundo, y solo uno de los
     // dos merece que se espere.
     return (
-      <div className="grid min-h-screen place-items-center px-6">
+      <div className="grid min-h-[100svh] place-items-center px-6">
         <div className="flex flex-col items-center gap-7">
           {/* La marca encendiéndose hace de espera. Sustituye al logo quieto con
               un girador al lado, y no por vistosidad: el girador giraba a su

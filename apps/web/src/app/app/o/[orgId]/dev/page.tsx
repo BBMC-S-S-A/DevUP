@@ -16,7 +16,7 @@ export default function DevPage() {
   const { orgId } = useParams<{ orgId: string }>();
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100svh]">
       <header className="filo-luz relative bg-surface/40">
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 

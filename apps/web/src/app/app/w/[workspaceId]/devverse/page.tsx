@@ -14,7 +14,7 @@ import { WorldView } from "@/components/world/WorldView";
 export default function DevVersePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   return (
-    <div className="h-screen w-full">
+    <div className="h-[100svh] w-full">
       <WorldView workspaceId={workspaceId} />
     </div>
   );

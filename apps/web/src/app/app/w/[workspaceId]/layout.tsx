@@ -110,7 +110,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     // destello de una barra que en ese destino no va a existir, y un elemento
     // que aparece para desaparecer se lee como un fallo.
     return inOffice ? (
-      <div className="grid min-h-screen place-items-center">
+      <div className="grid min-h-[100svh] place-items-center">
         <Loader2 className="animate-spin text-faint" size={20} />
       </div>
     ) : (
@@ -120,7 +120,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
   if (error || !workspace) {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
+      <div className="grid min-h-[100svh] place-items-center px-6">
         <EstadoVacio
           icono={<TriangleAlert size={20} className="text-danger" />}
           titulo={error ?? "workspace no encontrado"}
@@ -148,7 +148,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   // lo que la vista inmersiva aporta. Queda un solo botón para volver.
   if (inOffice) {
     return (
-      <div className="relative h-screen">
+      <div className="relative h-[100svh]">
         {children}
         <button
           type="button"

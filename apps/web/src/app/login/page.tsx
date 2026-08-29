@@ -152,7 +152,7 @@ function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
+    <main className="grid min-h-[100svh] lg:grid-cols-2">
       {/* Panel de marca. Oculto en móvil: en una pantalla pequeña es la
           mitad del sitio gastada en algo que no ayuda a entrar. */}
       <aside className="relative hidden overflow-hidden border-r border-line bg-surface lg:flex lg:flex-col lg:justify-between lg:p-12">
