@@ -510,14 +510,36 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   useEffect(() => () => voiceRef.current.leaveChannel(), []);
 
   const { refreshAvatars } = world;
+  /**
+   * Guardar el aspecto, con dos destinos posibles.
+   *
+   * «Solo aquí» lo guarda como atuendo de esta organización; «en todas
+   * partes», como el personaje de siempre. La distinción existe porque
+   * mucha gente quiere ir de una manera con su equipo y de otra con el
+   * cliente, y hasta ahora tenía que elegir una sola para todo.
+   *
+   * El personaje base es el que manda donde no hay atuendo, así que
+   * guardar «en todas partes» NO borra los atuendos que ya existan: cambia
+   * el fondo, no lo que está puesto encima. Quitarse uno es explícito.
+   */
   const saveAvatar = useCallback(
-    async (look: Avatar) => {
-      await api.put("/world/avatar", look);
+    async (look: Avatar, soloAqui: boolean) => {
+      await api.put(
+        soloAqui ? `/world/avatar?workspace=${workspaceId}` : "/world/avatar",
+        look,
+      );
       await refreshAvatars();
       setEditing(false);
     },
-    [refreshAvatars],
+    [refreshAvatars, workspaceId],
   );
+
+  /** Quitarse el atuendo de aquí y volver al personaje de siempre. */
+  const quitarAtuendo = useCallback(async () => {
+    await api.delete(`/world/outfit/${workspaceId}`);
+    await refreshAvatars();
+    setEditing(false);
+  }, [refreshAvatars, workspaceId]);
 
   if (loadError) {
     return (
@@ -712,6 +734,8 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
           initial={avatars.get(selfUserId)}
           onCancel={() => setEditing(false)}
           onSave={saveAvatar}
+          llevaAtuendo={world.conAtuendoPropio}
+          onQuitarAtuendo={quitarAtuendo}
         />
       )}
     </div>

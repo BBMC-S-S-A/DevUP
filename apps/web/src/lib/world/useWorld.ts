@@ -73,6 +73,8 @@ export function useWorld({
   const [roster, setRoster] = useState<Peer[]>([]);
   const [avatars, setAvatars] = useState<Map<string, Avatar>>(new Map());
   const [zone, setZone] = useState<Zone | null>(null);
+  /** Si llevo atuendo guardado en ESTA organización. */
+  const [conAtuendoPropio, setConAtuendoPropio] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const stateRef = useRef<WorldState>({
@@ -99,23 +101,35 @@ export function useWorld({
   useEffect(() => {
     let cancelled = false;
     void api
-      .get<{ avatars: (Avatar & { userId: string })[] }>("/world/avatars")
+      .get<{ avatars: (Avatar & { userId: string; conAtuendo?: boolean })[] }>(
+        // Con el espacio de trabajo, la API devuelve a cada cual con el
+        // atuendo de ESTA organización y, a quien no tenga, con su
+        // personaje de siempre. Resolverlo en el servidor evita que la
+        // oficina tenga que saber a qué organización pertenece.
+        `/world/avatars?workspace=${workspaceId}`,
+      )
       .then(({ avatars: list }) => {
         if (cancelled) return;
         setAvatars(new Map(list.map(({ userId, ...look }) => [userId, look])));
+        setConAtuendoPropio(
+          list.find((a) => a.userId === selfUserId)?.conAtuendo ?? false,
+        );
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workspaceId, selfUserId]);
 
   const refreshAvatars = useCallback(async () => {
-    const { avatars: list } = await api.get<{ avatars: (Avatar & { userId: string })[] }>(
-      "/world/avatars",
+    const { avatars: list } = await api.get<{
+      avatars: (Avatar & { userId: string; conAtuendo?: boolean })[];
+    }>(
+      `/world/avatars?workspace=${workspaceId}`,
     );
     setAvatars(new Map(list.map(({ userId, ...look }) => [userId, look])));
-  }, []);
+    setConAtuendoPropio(list.find((a) => a.userId === selfUserId)?.conAtuendo ?? false);
+  }, [workspaceId, selfUserId]);
 
   // --- Conexión -------------------------------------------------------------
   useEffect(() => {
@@ -454,6 +468,7 @@ export function useWorld({
     roster,
     avatars,
     refreshAvatars,
+    conAtuendoPropio,
     zone,
     selfUserId,
     displayName,

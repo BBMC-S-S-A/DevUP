@@ -1048,6 +1048,60 @@ async function main(): Promise<void> {
     });
     check("un DELETE de Bruno sobre el repositorio de Acme afecta a cero filas", brunoDeletedRepo === 0);
 
+    // --- Atuendos por organización ---------------------------------------------
+    //
+    // Lo que se prueba aquí es la diferencia entre la política de
+    // `world_avatars` y la de `world_outfits`. La primera dice «compartimos
+    // alguna organización»; la segunda, «los dos estamos en ESTA». Con la
+    // condición laxa, quien comparte contigo la organización A vería cómo vas
+    // vestido en la B — que es exactamente lo que el atuendo existe para
+    // separar.
+    console.log("\nAtuendos por organización");
+
+    await withUser(ana, (db) =>
+      db.query(`select public.upsert_world_outfit($1, '{"hat":3,"topTone":9}'::jsonb)`, [
+        acme.org,
+      ]),
+    );
+
+    check("Ana ve el atuendo que se puso en Acme", (await count(ana, "world_outfits")) === 1);
+    check(
+      "Carla, de la misma organización, también lo ve",
+      (await count(carla, "world_outfits")) === 1,
+    );
+    check("Bruno, de otra, no lo ve", (await count(bruno, "world_outfits")) === 0);
+
+    await denied(
+      "Bruno no puede vestirse en una organización a la que no pertenece",
+      () =>
+        withUser(bruno, (db) =>
+          db.query(`select public.upsert_world_outfit($1, '{}'::jsonb)`, [acme.org]),
+        ),
+    );
+
+    // Y el caso que justifica que esta tabla exista aparte: el personaje base
+    // sigue viéndose entre quienes comparten cualquier organización, pero el
+    // atuendo no sale de la suya.
+    const brunoBorroAtuendo = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "delete from world_outfits where organization_id = $1",
+        [acme.org],
+      );
+      return rowCount ?? 0;
+    });
+    check(
+      "un DELETE de Bruno sobre el atuendo de Ana afecta a cero filas",
+      brunoBorroAtuendo === 0,
+    );
+
+    const anaSeLoQuito = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "delete from world_outfits where organization_id = $1",
+        [acme.org],
+      );
+      return rowCount ?? 0;
+    });
+    check("Ana sí puede quitárselo y volver a su personaje", anaSeLoQuito === 1);
     // --- Entornos y despliegues -----------------------------------------------
     //
     // `deployments` no tiene política de INSERT ni de UPDATE: la escribe

@@ -82,6 +82,17 @@ export function parseParams<S extends ZodTypeAny>(schema: S, params: unknown): o
   return parseBody(schema, params);
 }
 
+/**
+ * Igual, para la cadena de consulta.
+ *
+ * Tiene su propio nombre aunque haga lo mismo: en el sitio de la llamada,
+ *  dice de dónde viene el dato, y de dónde viene un dato es la
+ * mitad de saber cuánto fiarse de él.
+ */
+export function parseQuery<S extends ZodTypeAny>(schema: S, query: unknown): output<S> {
+  return parseBody(schema, query);
+}
+
 /** Extrae el id de usuario de la petición, o falla con 401. */
 export function requireUser(request: FastifyRequest): string {
   if (!request.userId) throw unauthorized();
