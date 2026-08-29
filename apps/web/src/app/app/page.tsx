@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { ApiError, type Organization, type PendingInvitation, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Boton } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
 import { Chip, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
@@ -432,14 +432,10 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
           placeholder="correo@empresa.com"
           className="min-w-48 flex-1"
         />
-        <select
+        <Desplegable
           value={rol}
           onChange={(event) => setRol(event.target.value as "member" | "admin")}
           aria-label="Rol de la invitación"
-          className="h-10 rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none
-            transition-[border-color,box-shadow] duration-200
-            hover:border-line-strong
-            focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         >
           {/* El fondo va en cada opción: el desplegable nativo de Windows lo
               pinta blanco si no se le dice otra cosa. */}
@@ -449,7 +445,7 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
           <option className="bg-surface" value="admin">
             Administrador
           </option>
-        </select>
+        </Desplegable>
         <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
         </Boton>

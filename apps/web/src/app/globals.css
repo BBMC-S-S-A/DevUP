@@ -98,6 +98,14 @@
      quedaron los quince en azul: el campo enfocado no era del mismo producto
      que el botón de al lado. */
   --anillo-foco: rgb(109 40 217 / 0.18);
+
+  /* Los controles nativos —el desplegable de responsables, el calendario del
+     campo de fecha, la barra de desplazamiento— los pinta el sistema, no
+     nosotros. `color-scheme` es lo único que los entera de en qué tema están.
+     Estaba clavado a `dark` en una clase de TaskBoard, que funcionaba cuando
+     solo había un tema y desde que hay dos da un desplegable negro sobre una
+     página blanca. Aquí sigue al tema como todo lo demás. */
+  color-scheme: light;
   --c-cyan: #0e7490;
   --c-violet: #7c3aed;
   --c-live: #047857;
@@ -151,6 +159,7 @@
     --c-accent-bright: #c4b5fd;
     --c-accent-soft: #241a3d;
     --anillo-foco: rgb(167 139 250 / 0.26);
+    color-scheme: dark;
     --c-cyan: #4dd8f0;
     --c-violet: #c084fc;
     --c-live: #34d399;
@@ -186,6 +195,7 @@
   --c-accent-bright: #c4b5fd;
   --c-accent-soft: #241a3d;
   --anillo-foco: rgb(167 139 250 / 0.26);
+  color-scheme: dark;
   --c-cyan: #4dd8f0;
   --c-violet: #c084fc;
   --c-live: #34d399;

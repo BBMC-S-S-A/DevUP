@@ -13,6 +13,7 @@ import { TagBadge } from "@/components/files/TagBadge";
 import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { AreaTexto, Desplegable } from "@/components/ui/Field";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
@@ -454,7 +455,7 @@ function NewTask({
       }}
       className="devup-emerge origin-bottom"
     >
-      <textarea
+      <AreaTexto
         autoFocus
         value={title}
         onChange={(event) => setTitle(event.target.value)}
@@ -467,10 +468,6 @@ function NewTask({
         }}
         rows={2}
         placeholder="Qué hay que hacer"
-        className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-2.5 text-sm leading-snug outline-none
-          transition-[border-color,box-shadow,background-color] duration-200
-          placeholder:text-faint hover:border-line-strong
-          focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
       />
       <div className="mt-1.5 flex gap-1.5">
         <Boton
@@ -576,11 +573,11 @@ function TaskDialog({
   const [tagIds, setTagIds] = useState(task.tags.map((t) => t.id));
   const [busy, setBusy] = useState(false);
 
-  // `color-scheme: dark` no es cosmético en los nativos: sin él, el desplegable
-  // de responsables y el calendario del campo de fecha salen blancos de Windows
-  // en mitad de una interfaz oscura.
+  // El calendario del campo de fecha lo pinta el sistema; que salga en el tema
+  // correcto lo decide `color-scheme`, que ahora vive en globals.css junto a la
+  // paleta en vez de clavado aquí a oscuro.
   const nativo = `h-10 w-full rounded-xl border border-line bg-canvas/60 px-3 text-sm text-ink outline-none
-    [color-scheme:dark] transition-[border-color,box-shadow] duration-200
+    transition-[border-color,box-shadow] duration-200
     hover:border-line-strong focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--anillo-foco)]`;
 
   return (
@@ -622,15 +619,11 @@ function TaskDialog({
           <span className="mb-1.5 block font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
             Detalle
           </span>
-          <textarea
+          <AreaTexto
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={4}
             placeholder="Detalles, contexto, criterio de aceptación…"
-            className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
-              transition-[border-color,box-shadow,background-color] duration-200
-              placeholder:text-faint hover:border-line-strong
-              focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
           />
         </div>
 
@@ -639,10 +632,10 @@ function TaskDialog({
             <span className="mb-1.5 block font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
               Responsable
             </span>
-            <select
+            <Desplegable
+              contenedor="w-full"
               value={assigneeId}
               onChange={(event) => setAssigneeId(event.target.value)}
-              className={nativo}
             >
               <option value="">Sin asignar</option>
               {members.map((member) => (
@@ -650,7 +643,7 @@ function TaskDialog({
                   {member.displayName}
                 </option>
               ))}
-            </select>
+            </Desplegable>
           </label>
 
           <label className="block">

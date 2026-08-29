@@ -16,7 +16,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import {
   type OrganizationLink,
@@ -246,7 +246,9 @@ function Miembros({
               </span>
 
               {administro && member.role !== "owner" && member.userId !== yo ? (
-                <select
+                <Desplegable
+                  tamano="sm"
+                  contenedor="shrink-0"
                   value={member.role}
                   onChange={async (event) => {
                     const role = event.target.value as "admin" | "member";
@@ -257,7 +259,6 @@ function Miembros({
                       toast.error(caught instanceof ApiError ? caught.message : "no se pudo cambiar el rol");
                     }
                   }}
-                  className="h-8 shrink-0 rounded-lg border border-line bg-canvas/60 px-2 text-xs outline-none hover:border-line-strong focus:border-accent/60"
                 >
                   <option className="bg-surface" value="member">
                     Miembro
@@ -265,7 +266,7 @@ function Miembros({
                   <option className="bg-surface" value="admin">
                     Admin
                   </option>
-                </select>
+                </Desplegable>
               ) : (
                 <Chip tono={member.role === "member" ? "neutro" : "accent"}>{ROLES[member.role]}</Chip>
               )}
@@ -363,11 +364,10 @@ function Invitar({ orgId }: { orgId: string }) {
           placeholder="correo@empresa.com"
           className="min-w-48 flex-1"
         />
-        <select
+        <Desplegable
           value={rol}
           onChange={(event) => setRol(event.target.value as "member" | "admin")}
           aria-label="Rol de la invitación"
-          className="h-10 rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none hover:border-line-strong focus:border-accent/60"
         >
           <option className="bg-surface" value="member">
             Miembro
@@ -375,7 +375,7 @@ function Invitar({ orgId }: { orgId: string }) {
           <option className="bg-surface" value="admin">
             Administrador
           </option>
-        </select>
+        </Desplegable>
         <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
         </Boton>

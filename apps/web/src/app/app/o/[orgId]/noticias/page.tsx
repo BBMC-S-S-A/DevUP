@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { AreaTexto, Entrada } from "@/components/ui/Field";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { type Announcement, type OrganizationMember, ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -241,16 +241,12 @@ function NuevaNoticia({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Título"
         />
-        <textarea
+        <AreaTexto
           required
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={4}
           placeholder="Qué hay que saber"
-          className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
-            transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-faint
-            hover:border-line-strong
-            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         />
         <div className="flex items-center gap-1.5">
           <div className="flex-1">
@@ -314,15 +310,11 @@ function EditarNoticia({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Título"
         />
-        <textarea
+        <AreaTexto
           required
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={5}
-          className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
-            transition-[border-color,box-shadow,background-color] duration-200
-            hover:border-line-strong
-            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         />
         <div className="flex items-center gap-1.5 pt-1">
           <div className="flex-1">

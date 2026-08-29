@@ -16,7 +16,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -790,15 +790,11 @@ function ClientForm({
           placeholder="Correo"
         />
       </div>
-      <textarea
+      <AreaTexto
         value={notes}
         onChange={(event) => setNotes(event.target.value)}
         placeholder="Notas"
         rows={2}
-        className="w-full resize-none rounded-xl border border-line bg-canvas/60 px-3.5 py-2.5 text-sm outline-none
-          transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-faint
-          hover:border-line-strong focus:border-accent/60 focus:bg-canvas
-          focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
       />
       <div className="flex justify-end gap-1.5">
         <Boton tamano="sm" variante="fantasma" onClick={onCancel}>
@@ -1107,20 +1103,17 @@ function NewThing({
       <div className="space-y-3">
         {kind === "deal" && (
           <Campo label="Cliente">
-            <select
+            <Desplegable
+              contenedor="w-full"
               value={clientId}
               onChange={(event) => setClientId(event.target.value)}
-              className="h-10 w-full rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none
-                transition-[border-color,box-shadow,background-color] duration-200
-                hover:border-line-strong focus:border-accent/60 focus:bg-canvas
-                focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
             >
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
                 </option>
               ))}
-            </select>
+            </Desplegable>
           </Campo>
         )}
 
