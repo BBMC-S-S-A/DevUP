@@ -371,3 +371,31 @@ export type Message = {
   createdAt: string;
   editedAt: string | null;
 };
+
+export type EstadoDespliegue = "pending" | "running" | "success" | "failure" | "cancelled";
+
+export type Despliegue = {
+  id: string;
+  state: EstadoDespliegue;
+  commitSha: string | null;
+  commitMessage: string | null;
+  author: string | null;
+  logUrl: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type Entorno = {
+  id: string;
+  name: string;
+  kind: "production" | "staging" | "preview";
+  url: string | null;
+  /** `owner/repo:entorno` en GitHub. Null = entorno anotado a mano. */
+  externalId: string | null;
+  connectionId: string | null;
+  syncedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  /** El último despliegue, que es lo que enseña la tarjeta. */
+  ultimo: Despliegue | null;
+};

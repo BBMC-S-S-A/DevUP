@@ -7,6 +7,7 @@ import {
   LogOut,
   Megaphone,
   Search,
+  Server,
   Settings,
   Target,
   UserRound,
@@ -138,6 +139,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
     { href: `${base}/ventas`, icono: <Target size={14} />, texto: "Ventas" },
     { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
     { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
+    { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
   ];
 
   return (
