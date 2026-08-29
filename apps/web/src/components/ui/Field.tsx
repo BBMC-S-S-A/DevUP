@@ -32,7 +32,7 @@ export function Field({
           transition-[border-color,box-shadow,background-color] duration-200
           placeholder:text-faint
           hover:border-line-strong
-          focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]
+          focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]
           disabled:opacity-60"
       />
       {hint && <span className="mt-1.5 block text-xs text-faint">{hint}</span>}
@@ -52,7 +52,7 @@ export function Entrada({
         transition-[border-color,box-shadow,background-color] duration-200
         placeholder:text-faint
         hover:border-line-strong
-        focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]
+        focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]
         ${className}`}
     />
   );

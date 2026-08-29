@@ -19,6 +19,7 @@ import { type Message, api } from "@/lib/api";
 import { useChannelFeed } from "@/lib/chat/useChannelFeed";
 import { downloadUrl, formatBytes } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 /**
  * Conversación de un canal.
@@ -34,6 +35,7 @@ import { useSession } from "@/lib/session";
  * Lo único que se mueve es un fundido de opacidad de 200 ms (`devup-velo`).
  */
 export function ChannelChat({ channelId }: { channelId: string }) {
+  const confirmar = useConfirmar();
   const { user } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
 
@@ -219,7 +221,14 @@ export function ChannelChat({ channelId }: { channelId: string }) {
                   setDraft(message.body);
                 }}
                 onDelete={async () => {
-                  if (!window.confirm("¿Eliminar el mensaje?")) return;
+                  if (
+                    !(await confirmar({
+                      titulo: "¿Eliminar el mensaje?",
+                      accion: "Eliminar",
+                      peligro: true,
+                    }))
+                  )
+                    return;
                   await api.delete(`/messages/${message.id}`);
                   setMessages((current) => current.filter((m) => m.id !== message.id));
                 }}
@@ -274,7 +283,7 @@ export function ChannelChat({ channelId }: { channelId: string }) {
             void send();
           }}
           className="rounded-xl border border-line bg-canvas/60 transition-[border-color,box-shadow]
-            duration-200 focus-within:border-accent/60 focus-within:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+            duration-200 focus-within:border-accent/60 focus-within:shadow-[0_0_0_3px_var(--anillo-foco)]"
         >
           <label className="sr-only" htmlFor="devup-redactor">
             Mensaje

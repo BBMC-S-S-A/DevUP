@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 /**
  * El botón de la aplicación.
@@ -23,7 +23,7 @@ const VARIANTES: Record<Variante, string> = {
   // no como un rectángulo plano de color.
   primario:
     "bg-gradient-to-b from-accent-bright to-accent text-canvas font-medium " +
-    "shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(91_140_255/0.7)] " +
+    "shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)] " +
     "hover:brightness-110",
   secundario:
     "border border-line bg-raised/60 text-ink hover:border-line-strong hover:bg-raised",
@@ -51,6 +51,11 @@ export function Boton({
   cargando?: boolean;
   icono?: ReactNode;
   children?: ReactNode;
+  /** En React 19 la ref es una prop más y viaja con el resto al `<button>`.
+   *  Se declara porque hay quien necesita darle el foco — el diálogo de
+   *  confirmación arranca con el foco en Cancelar cuando la acción no tiene
+   *  vuelta atrás. */
+  ref?: Ref<HTMLButtonElement>;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button

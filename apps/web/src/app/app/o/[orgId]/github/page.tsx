@@ -25,6 +25,7 @@ import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, type Connection, type GithubRepo, api } from "@/lib/api";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 /**
  * Conector de GitHub (S7, primera pieza). Un token de acceso personal de
@@ -60,6 +61,7 @@ function semaforo(conclusion: string | null): Semaforo {
 }
 
 export default function GithubPage() {
+  const confirmar = useConfirmar();
   const { orgId } = useParams<{ orgId: string }>();
 
   const [connection, setConnection] = useState<Connection | null | undefined>(undefined);
@@ -149,7 +151,16 @@ export default function GithubPage() {
                   tamano="sm"
                   icono={<Unplug size={13} />}
                   onClick={async () => {
-                    if (!confirm("¿Desconectar esta cuenta de GitHub? Se quitan también sus repositorios.")) return;
+                    if (
+                      !(await confirmar({
+                        titulo: "¿Desconectar esta cuenta de GitHub?",
+                        descripcion:
+                          "Se quitan también sus repositorios de esta organización.",
+                        accion: "Desconectar",
+                        peligro: true,
+                      }))
+                    )
+                      return;
                     try {
                       await api.delete(`/connections/${connection.id}`);
                       toast.success("GitHub desconectado");
@@ -461,7 +472,7 @@ function NuevoRepo({
               transition-[border-color,box-shadow,background-color] duration-200
               placeholder:font-sans placeholder:text-faint
               hover:border-line-strong
-              focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+              focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
           />
         </label>
         <Boton

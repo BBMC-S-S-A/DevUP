@@ -15,7 +15,7 @@ import { useSession } from "@/lib/session";
    haber visto nunca la aplicación — si parecen de otro producto, la invitación
    parece un enlace sospechoso. */
 const LUZ =
-  "radial-gradient(34rem 26rem at 50% -8%, rgb(91 140 255 / 0.14), transparent 60%)," +
+  "radial-gradient(34rem 26rem at 50% -8%, rgb(124 58 237 / 0.14), transparent 60%)," +
   "radial-gradient(26rem 20rem at 92% 100%, rgb(62 224 245 / 0.07), transparent 60%)";
 
 const TONOS = {
@@ -278,7 +278,7 @@ function EnlacePrimario({ href, children }: { href: string; children: React.Reac
       href={href}
       className="presionable mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-xl
         bg-gradient-to-b from-accent-bright to-accent px-4 text-sm font-medium text-canvas
-        shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(91_140_255/0.7)]
+        shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)]
         hover:brightness-110"
     >
       {children}

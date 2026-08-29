@@ -93,6 +93,11 @@
   --c-accent: #6d28d9;
   --c-accent-bright: #7c3aed;
   --c-accent-soft: #f2ecfe;
+  /* Anillo de foco. Es un token y no un valor suelto porque estaba escrito a
+     mano en quince archivos, y cuando la paleta pasó de azul a morado se
+     quedaron los quince en azul: el campo enfocado no era del mismo producto
+     que el botón de al lado. */
+  --anillo-foco: rgb(109 40 217 / 0.18);
   --c-cyan: #0e7490;
   --c-violet: #7c3aed;
   --c-live: #047857;
@@ -145,6 +150,7 @@
     --c-accent: #a78bfa;
     --c-accent-bright: #c4b5fd;
     --c-accent-soft: #241a3d;
+    --anillo-foco: rgb(167 139 250 / 0.26);
     --c-cyan: #4dd8f0;
     --c-violet: #c084fc;
     --c-live: #34d399;
@@ -179,6 +185,7 @@
   --c-accent: #a78bfa;
   --c-accent-bright: #c4b5fd;
   --c-accent-soft: #241a3d;
+  --anillo-foco: rgb(167 139 250 / 0.26);
   --c-cyan: #4dd8f0;
   --c-violet: #c084fc;
   --c-live: #34d399;
@@ -292,7 +299,7 @@ h3 {
 }
 
 ::selection {
-  background: rgb(91 140 255 / 0.3);
+  background: rgb(124 58 237 / 0.28);
   color: var(--color-ink);
 }
 

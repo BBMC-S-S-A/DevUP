@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 const ROLES: Record<OrganizationMember["role"], string> = {
   owner: "Propietario",
@@ -215,6 +216,7 @@ function Miembros({
   administro: boolean;
   onChange: () => Promise<void>;
 }) {
+  const confirmar = useConfirmar();
   return (
     <Tarjeta className="p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -272,7 +274,16 @@ function Miembros({
                 <BotonIcono
                   etiqueta={`Expulsar a ${member.displayName}`}
                   onClick={async () => {
-                    if (!confirm(`¿Quitar a ${member.displayName} de la organización?`)) return;
+                    if (
+                      !(await confirmar({
+                        titulo: `¿Quitar a ${member.displayName} de la organización?`,
+                        descripcion:
+                          "Perderá el acceso a los espacios de trabajo de esta organización.",
+                        accion: "Quitar",
+                        peligro: true,
+                      }))
+                    )
+                      return;
                     try {
                       await api.delete(`/organizations/${orgId}/members/${member.userId}`);
                       await onChange();

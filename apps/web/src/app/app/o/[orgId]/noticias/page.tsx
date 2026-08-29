@@ -9,6 +9,7 @@ import { Entrada } from "@/components/ui/Field";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { type Announcement, type OrganizationMember, ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 function retraso(indice: number): CSSProperties {
   return { "--retraso": `${Math.min(indice, 8) * 40}ms` } as CSSProperties;
@@ -25,6 +26,7 @@ function retraso(indice: number): CSSProperties {
  * del propósito.
  */
 export default function AnnouncementsPage() {
+  const confirmar = useConfirmar();
   const { orgId } = useParams<{ orgId: string }>();
   const { user } = useSession();
 
@@ -109,7 +111,14 @@ export default function AnnouncementsPage() {
                 puedeEditar={administro}
                 onEditar={() => setEditando(noticia)}
                 onBorrar={async () => {
-                  if (!confirm(`¿Borrar «${noticia.title}»?`)) return;
+                  if (
+                    !(await confirmar({
+                      titulo: `¿Borrar «${noticia.title}»?`,
+                      accion: "Borrar",
+                      peligro: true,
+                    }))
+                  )
+                    return;
                   try {
                     await api.delete(`/announcements/${noticia.id}`);
                     setItems((prev) => prev?.filter((n) => n.id !== noticia.id) ?? null);
@@ -241,7 +250,7 @@ function NuevaNoticia({
           className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
             transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-faint
             hover:border-line-strong
-            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         />
         <div className="flex items-center gap-1.5">
           <div className="flex-1">
@@ -313,7 +322,7 @@ function EditarNoticia({
           className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
             transition-[border-color,box-shadow,background-color] duration-200
             hover:border-line-strong
-            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         />
         <div className="flex items-center gap-1.5 pt-1">
           <div className="flex-1">

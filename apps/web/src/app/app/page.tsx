@@ -439,7 +439,7 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
           className="h-10 rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none
             transition-[border-color,box-shadow] duration-200
             hover:border-line-strong
-            focus:border-accent/60 focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+            focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         >
           {/* El fondo va en cada opción: el desplegable nativo de Windows lo
               pinta blanco si no se le dice otra cosa. */}
@@ -573,7 +573,7 @@ function NewWorkspace({
             aria-pressed={visibility === value}
             className={`presionable flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 font-display text-xs font-medium ${
               visibility === value
-                ? "border-accent/40 bg-accent-soft text-accent shadow-[0_0_16px_-6px_rgb(91_140_255/0.8)]"
+                ? "border-accent/40 bg-accent-soft text-accent shadow-[0_0_16px_-6px_rgb(124_58_237/0.8)]"
                 : "border-line text-muted hover:border-line-strong hover:text-ink"
             }`}
           >

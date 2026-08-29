@@ -274,7 +274,7 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
                   className="h-9 rounded-xl border border-line bg-canvas/60 px-3 text-xs text-muted outline-none
                     transition-[border-color,box-shadow] duration-200
                     hover:border-line-strong
-                    focus:border-accent/60 focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+                    focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
                 >
                   {room.devices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>

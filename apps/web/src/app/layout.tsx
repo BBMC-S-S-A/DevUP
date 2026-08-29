@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Chakra_Petch, JetBrains_Mono, Sora } from "next/font/google";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
+import { ProveedorConfirmar } from "@/components/ui/Confirmar";
 import { SessionProvider } from "@/lib/session";
 import { GUION_TEMA, TemaProvider } from "@/lib/tema";
 import "./globals.css";
@@ -61,7 +62,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-screen bg-canvas text-ink antialiased">
         <TemaProvider>
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider>
+            <ProveedorConfirmar>{children}</ProveedorConfirmar>
+          </SessionProvider>
         </TemaProvider>
         {/* Los avisos siguen al tema en vez de quedarse oscuros: un toast negro
             sobre una interfaz clara se lee como un error del navegador. */}

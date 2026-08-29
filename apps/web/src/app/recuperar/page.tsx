@@ -13,7 +13,7 @@ import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 /* Mismo chasis que el acceso y la invitación: quien llega aquí viene de un
    correo y tiene que reconocer el producto en el primer vistazo. */
 const LUZ =
-  "radial-gradient(34rem 26rem at 50% -8%, rgb(91 140 255 / 0.14), transparent 60%)," +
+  "radial-gradient(34rem 26rem at 50% -8%, rgb(124 58 237 / 0.14), transparent 60%)," +
   "radial-gradient(26rem 20rem at 92% 100%, rgb(62 224 245 / 0.07), transparent 60%)";
 
 /** Lo que exige el servidor. Aquí solo se usa para dar señal antes de enviar. */
@@ -85,7 +85,7 @@ function Recuperar() {
                 href="/login"
                 className="presionable mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl
                   bg-gradient-to-b from-accent-bright to-accent px-4 text-sm font-medium text-canvas
-                  shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(91_140_255/0.7)]
+                  shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)]
                   hover:brightness-110"
               >
                 <LogIn size={15} />
