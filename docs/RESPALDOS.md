@@ -120,17 +120,54 @@ No es «hay que reconectar»: es que los tokens guardados se vuelven ruido y no 
 forma de leerlos. Un respaldo de la base **sin** esa clave restaura las filas de
 `connection_secrets` y no sirven para nada.
 
-### Lo que hace falta, y que no puede hacer un script
+### Lo que hace falta
+
+Los dos primeros no los puede hacer un script: son llevar un archivo a un sitio
+seguro y acordarse de cuándo. El tercero sí, y ya está escrito.
 
 1. **Copiar `.env.production` a un gestor de contraseñas** —o a un sobre sellado,
    pero fuera de esta máquina—. Es un archivo pequeño y cambia poco.
 2. **Anotar en qué fecha se copió.** Una copia de hace tres meses a la que le
    faltan dos variables nuevas se descubre en el peor momento.
-3. **Rotación:** hoy no hay procedimiento porque rotar `VAULT_MASTER_KEY` exige
-   descifrar con la vieja y volver a cifrar con la nueva, en una sola
-   transacción, para cada fila de `connection_secrets`. Mientras eso no exista,
-   la clave **no se cambia**. Si alguna vez hay que cambiarla, primero se escribe
-   ese script y se prueba en desarrollo.
+3. **Rotación: ya se puede.** Hasta ahora aquí ponía que no había procedimiento
+   y que, mientras no lo hubiera, la clave no se cambiaba. Eso convertía una
+   credencial normal en una que no se puede rotar aunque se filtre, que es la
+   peor propiedad que puede tener una clave maestra.
+
+### Rotar `VAULT_MASTER_KEY`
+
+```bash
+node scripts/rotar-clave-boveda.mjs --generar                        # ensayo
+node scripts/rotar-clave-boveda.mjs --generar --aplicar .env.production
+```
+
+**Sin `--aplicar` no escribe nada.** Hace el trabajo entero —descifra, vuelve a
+cifrar, comprueba— y deshace la transacción. Un ensayo que pasa significa que la
+rotación de verdad va a funcionar, y cuesta lo mismo que no hacerlo.
+
+**Para la API antes de rotar.** Una cuenta que alguien conecte a mitad nacería
+cifrada con la clave vieja y se quedaría fuera. El script cuenta las filas al
+empezar y al terminar y aborta si cambiaron, así que la carrera es un fallo
+ruidoso y no una pérdida silenciosa — pero es mejor no provocarla.
+
+Lo que hace seguro el script, y por qué:
+
+| | |
+|---|---|
+| Una sola transacción | A medias es el peor sitio: parte con la clave vieja y parte con la nueva, y ninguna de las dos sirve para el conjunto |
+| Descifra lo que acaba de cifrar y lo compara | Con AES-GCM cifrar no falla nunca por su cuenta; sin esta comprobación, escribir ruido se descubriría el día que hiciera falta el token |
+| Aborta si alguna fila no abre con la clave vieja | Rotar «solo las que abren» dejaría el resto ilegible para siempre |
+| Cuenta las filas al empezar y al acabar | Convierte la carrera con la API en un aborto en vez de en una fila perdida |
+| Usa `DATABASE_ADMIN_URL` | Con el rol de la aplicación, RLS escondería filas, y rotar «las que se ven» es la forma de perder media bóveda sin un solo error |
+
+**Después de rotar, tres cosas en el mismo rato:** pegar la clave nueva en
+`.env.production`, reiniciar la API, y abrir una conexión guardada para
+comprobar que responde. **Guarda la clave vieja hasta que ese tercer paso salga
+bien.**
+
+Y una que se olvida: **los respaldos anteriores siguen cifrados con la clave
+vieja.** Restaurar un volcado de antes de la rotación pide aquella clave, no la
+nueva. Anota la fecha del cambio junto a las dos.
 
 ---
 

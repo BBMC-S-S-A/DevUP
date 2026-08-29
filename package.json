@@ -22,6 +22,7 @@
     "respaldo:probar": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/probar-restauracion.sh",
     "doc:pdf": "node scripts/md-a-pdf.mjs",
     "correo:probar": "node scripts/probar-correo.mjs",
+    "boveda:rotar": "node scripts/rotar-clave-boveda.mjs",
     "respaldo:almacen": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-almacen sh scripts/respaldo-almacen.sh"
   },
   "engines": {
