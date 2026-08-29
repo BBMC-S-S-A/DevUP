@@ -62,21 +62,57 @@ Los tres son tuyos porque los tres son credenciales o decisiones, no código.
 Es el bloque A de la propuesta, y no añade una sola función. Con usuarios reales
 dentro, es lo único que separa «se cayó un rato» de «se perdió».
 
-- **Sacar `.env.production` de esta máquina.** Contiene `VAULT_MASTER_KEY`, que
-  descifra todas las credenciales guardadas de terceros. Existe en un solo
-  archivo, en un solo ordenador, y en ninguna copia. Si se pierde, la bóveda
-  queda ilegible para siempre — y eso no lo arregla ningún respaldo de la base,
-  porque lo que hay dentro está cifrado con ella.
-- **SMTP de verdad.** Hoy las invitaciones y los recuperar-contraseña se
-  escriben en el registro del servidor en vez de enviarse. Sirve para probar y no
-  sirve para tener usuarios. Además es lo que permitiría que un respaldo fallido
-  avise a alguien, que hoy no pasa.
-- **Decidir TURN: levantarlo o contratarlo.** El código está hecho
-  —`routes/ice.ts` emite credenciales temporales por HMAC— y `coturn` está en el
-  compose de desarrollo pero **no en el de producción**, con las tres variables
-  vacías. Hoy solo hay STUN: las llamadas funcionan en una red plana y fallan
-  detrás de ciertas redes corporativas o móviles, de forma intermitente y difícil
-  de reportar.
+Al ponerse con ello, los tres puntos resultaron ser otra cosa de la que decía el
+plan. Ninguno era «escribir la función que falta».
+
+### SMTP · hecho lo que era código
+
+El mailer llevaba escrito desde el principio y `nodemailer` es dependencia: no
+faltaba código, faltaba **poder comprobarlo**. Sin `SMTP_URL` el mailer escribe
+el mensaje en el registro, que es cómodo y no prueba nada — esa rama no se
+autentica, no negocia TLS y no descubre que el remitente no está autorizado.
+Poner credenciales de verdad y esperar a la primera invitación era estrenar todo
+eso en producción.
+
+Ahora hay un buzón de mentira en el compose de desarrollo (Mailpit, que habla
+SMTP de verdad y enseña lo recibido en el 8025) y `npm run correo:probar`, que
+separa las dos mitades: `verify()` prueba conexión y autenticación, y solo
+después se envía. Un fallo dice si no se llegó al servidor, si no te dejaron
+entrar, o si te dejaron entrar y luego no aceptaron el mensaje.
+
+**Lo que queda es tuyo:** dar de alta un proveedor y pegar `SMTP_URL`. Se
+comprueba en diez segundos.
+
+### La bóveda · hecho, y quita una restricción permanente
+
+`RESPALDOS.md` decía que rotar `VAULT_MASTER_KEY` «no puede hacerlo un script» y
+que, mientras no lo hubiera, la clave no se cambia nunca. Eso convertía una
+credencial normal en una que no se puede rotar **aunque se filtre**, que es la
+peor propiedad que puede tener una clave maestra.
+
+Ya existe `npm run boveda:rotar`, con ensayo que no escribe nada, y probado
+provocando cada fallo — incluida la carrera con la API, con 3.000 filas de
+relleno y una conexión insertada a mitad.
+
+**Lo que queda es tuyo, y no lo puede hacer un script:** llevar
+`.env.production` fuera de esta máquina, a un gestor de contraseñas, y anotar la
+fecha. Sigue existiendo en un solo archivo, en un solo ordenador, y en ninguna
+copia.
+
+### TURN · deja de ser una decisión
+
+No hay nada que construir: `routes/ice.ts` ya funciona de las dos maneras
+—Metered.ca si hay clave, y credenciales HMAC para un coturn propio si no—.
+
+Y la rama de auto-alojarlo está cerrada por cómo se despliega hoy:
+`docker-compose.prod.yml` **no publica ni un solo puerto**. Todo entra por el
+túnel de Cloudflare, que es un proxy de HTTP y no sabe llevar UDP 3478 a ningún
+sitio, sobre una NAT doméstica sin IP pública. Un coturn levantado aquí no lo
+alcanzaría nadie desde fuera.
+
+**Así que es un alta, no una decisión:** dos variables, `METERED_APP_NAME` y
+`METERED_API_KEY`. Auto-alojarlo vuelve a la mesa con la decisión 0003, no
+antes.
 
 ---
 
