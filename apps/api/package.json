@@ -11,6 +11,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "migrate:reset": "tsx src/db/migrate.ts --reset",
     "test:rls": "tsx src/db/isolation.test.ts",
+    "test:migraciones": "tsx src/connectors/migraciones.test.ts",
     "test:world": "tsx src/realtime/world.test.ts"
   },
   "dependencies": {

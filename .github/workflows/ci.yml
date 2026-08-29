@@ -79,6 +79,14 @@ jobs:
         # pertenece a ese canal.
         run: npm run test:world
 
+      - name: El criterio de migraciones
+        # Comprueba el analizador que se le aplica al repositorio de un
+        # cliente, y lo hace contra nuestras propias migraciones: si a las
+        # veinticuatro que sí cumplen el criterio les pone un error, el
+        # equivocado es el analizador. Es el único banco de pruebas honesto que
+        # hay para esto.
+        run: npm run test:migraciones
+
       - name: Migraciones idempotentes
         # Aplicarlas dos veces no debe cambiar nada ni fallar. Detecta la
         # migración que se editó después de aplicarse, que es la forma más

@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Code2,
+  Database,
   Github,
   LogOut,
   Megaphone,
@@ -142,6 +143,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
     { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
     { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
     { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
+    { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
   ];
 
   return (
