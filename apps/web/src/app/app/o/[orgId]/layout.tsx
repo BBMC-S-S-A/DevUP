@@ -5,6 +5,7 @@ import {
   Code2,
   Database,
   Github,
+  Lightbulb,
   LogOut,
   Megaphone,
   Search,
@@ -144,6 +145,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
     { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
     { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
     { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
+    { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
   ];
 
   return (

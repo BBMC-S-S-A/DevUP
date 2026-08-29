@@ -17,6 +17,7 @@
     "db:migrate": "npm run migrate --workspace apps/api",
     "db:reset": "npm run migrate:reset --workspace apps/api",
     "test:rls": "npm run test:rls --workspace apps/api",
+    "test:integraciones": "npm run test:integraciones --workspace apps/api",
     "test:migraciones": "npm run test:migraciones --workspace apps/api",
     "test:world": "npm run test:world --workspace apps/api",
     "respaldo:ahora": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/respaldo-base-de-datos.sh",
