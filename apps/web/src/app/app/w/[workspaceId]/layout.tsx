@@ -24,6 +24,7 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
+import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -348,6 +349,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
       }
     >
       {children}
+      <PaletaComandos orgId={workspace.organizationId} />
     </Armazon>
   );
 }

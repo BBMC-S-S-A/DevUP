@@ -17,6 +17,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BotonIcono } from "@/components/ui/Boton";
+import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
@@ -309,6 +310,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
       </>
     }>
       {children}
+      <PaletaComandos orgId={orgId} />
     </Armazon>
   );
 }
