@@ -279,4 +279,37 @@ for etiqueta, paso in (('a', 1.0), ('b', -1.0)):
     g = sprite(YAWS[0], paso, escala, ox, oy)
     guarda(g, 1, f'{OUT}/m_paso{etiqueta}_1x.png')
 
+
+# --- La hoja de contactos --------------------------------------------------
+#
+# FALTABA, y la cadena del README no funcionaba sin ella: build_pdf.py la pide
+# para la segunda figura y nadie la generaba. Se hacía a mano, y como los .png
+# de esta carpeta no se versionan, quien intentara rehacer el documento se
+# encontraba con que el último paso reventaba sin decir por qué.
+#
+# Las seis piezas a 5x, en fila, con el mismo hueco entre todas. El ancho sale
+# 1368 porque es el que espera la proporción de la figura en build_pdf.py; si
+# algún día cambia el número de piezas, hay que cambiar los dos sitios.
+def hoja_de_contactos(nombres, escala_px=5, ancho_total=1368, alto_total=320):
+    piezas = [Image.open(f'{OUT}/m_{n}_1x.png') for n in nombres]
+    ancho_pieza = piezas[0].width * escala_px
+    alto_pieza = piezas[0].height * escala_px
+
+    huecos = len(piezas) - 1
+    sobra = ancho_total - ancho_pieza * len(piezas)
+    hueco = sobra // huecos if huecos else 0
+    # Lo que no reparten los huecos enteros se va a los márgenes, para que la
+    # fila quede centrada en vez de pegada a la izquierda.
+    margen = (sobra - hueco * huecos) // 2
+
+    hoja = Image.new('RGBA', (ancho_total, alto_total), (0, 0, 0, 0))
+    y = (alto_total - alto_pieza) // 2
+    for i, pieza in enumerate(piezas):
+        grande = pieza.resize((ancho_pieza, alto_pieza), Image.NEAREST)
+        hoja.paste(grande, (margen + i * (ancho_pieza + hueco), y), grande)
+    hoja.save(f'{OUT}/hoja_direcciones.png')
+
+
+hoja_de_contactos(('sur', 'este', 'norte', 'oeste', 'pasoa', 'pasob'))
+
 print('ok')
