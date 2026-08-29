@@ -1,15 +1,15 @@
 "use client";
 
 import { ArrowLeft, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { AreaTexto, Entrada } from "@/components/ui/Field";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { type Announcement, type OrganizationMember, ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 function retraso(indice: number): CSSProperties {
   return { "--retraso": `${Math.min(indice, 8) * 40}ms` } as CSSProperties;
@@ -26,6 +26,7 @@ function retraso(indice: number): CSSProperties {
  * del propósito.
  */
 export default function AnnouncementsPage() {
+  const confirmar = useConfirmar();
   const { orgId } = useParams<{ orgId: string }>();
   const { user } = useSession();
 
@@ -57,13 +58,6 @@ export default function AnnouncementsPage() {
       <header className="filo-luz relative bg-surface/40">
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-2xl px-6 pb-7 pt-5">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Organizaciones
-          </Link>
           <div className="mt-5 flex items-center gap-3.5">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
               <Megaphone size={20} />
@@ -117,7 +111,14 @@ export default function AnnouncementsPage() {
                 puedeEditar={administro}
                 onEditar={() => setEditando(noticia)}
                 onBorrar={async () => {
-                  if (!confirm(`¿Borrar «${noticia.title}»?`)) return;
+                  if (
+                    !(await confirmar({
+                      titulo: `¿Borrar «${noticia.title}»?`,
+                      accion: "Borrar",
+                      peligro: true,
+                    }))
+                  )
+                    return;
                   try {
                     await api.delete(`/announcements/${noticia.id}`);
                     setItems((prev) => prev?.filter((n) => n.id !== noticia.id) ?? null);
@@ -240,16 +241,12 @@ function NuevaNoticia({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Título"
         />
-        <textarea
+        <AreaTexto
           required
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={4}
           placeholder="Qué hay que saber"
-          className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
-            transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-faint
-            hover:border-line-strong
-            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
         />
         <div className="flex items-center gap-1.5">
           <div className="flex-1">
@@ -313,15 +310,11 @@ function EditarNoticia({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Título"
         />
-        <textarea
+        <AreaTexto
           required
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={5}
-          className="w-full resize-none rounded-xl border border-line bg-canvas/60 p-3 text-sm leading-relaxed outline-none
-            transition-[border-color,box-shadow,background-color] duration-200
-            hover:border-line-strong
-            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
         />
         <div className="flex items-center gap-1.5 pt-1">
           <div className="flex-1">

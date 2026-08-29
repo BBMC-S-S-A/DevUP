@@ -18,7 +18,6 @@ import {
   Unplug,
   XCircle,
 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +25,7 @@ import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, type Connection, type GithubRepo, api } from "@/lib/api";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 /**
  * Conector de GitHub (S7, primera pieza). Un token de acceso personal de
@@ -61,6 +61,7 @@ function semaforo(conclusion: string | null): Semaforo {
 }
 
 export default function GithubPage() {
+  const confirmar = useConfirmar();
   const { orgId } = useParams<{ orgId: string }>();
 
   const [connection, setConnection] = useState<Connection | null | undefined>(undefined);
@@ -126,14 +127,6 @@ export default function GithubPage() {
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 
         <div className="relative mx-auto max-w-4xl px-6 pb-7 pt-5">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Organizaciones
-          </Link>
-
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
@@ -158,7 +151,16 @@ export default function GithubPage() {
                   tamano="sm"
                   icono={<Unplug size={13} />}
                   onClick={async () => {
-                    if (!confirm("¿Desconectar esta cuenta de GitHub? Se quitan también sus repositorios.")) return;
+                    if (
+                      !(await confirmar({
+                        titulo: "¿Desconectar esta cuenta de GitHub?",
+                        descripcion:
+                          "Se quitan también sus repositorios de esta organización.",
+                        accion: "Desconectar",
+                        peligro: true,
+                      }))
+                    )
+                      return;
                     try {
                       await api.delete(`/connections/${connection.id}`);
                       toast.success("GitHub desconectado");
@@ -470,7 +472,7 @@ function NuevoRepo({
               transition-[border-color,box-shadow,background-color] duration-200
               placeholder:font-sans placeholder:text-faint
               hover:border-line-strong
-              focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+              focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
           />
         </label>
         <Boton

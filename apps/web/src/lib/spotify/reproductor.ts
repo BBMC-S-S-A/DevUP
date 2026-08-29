@@ -375,6 +375,14 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
     return false;
   }, []);
 
+  /** Manda la reproducción a otro dispositivo sin cortar la canción. */
+  const transferirA = useCallback(async (dispositivoId: string) => {
+    await llamarSpotify("/me/player", {
+      method: "PUT",
+      body: JSON.stringify({ device_ids: [dispositivoId], play: true }),
+    });
+  }, []);
+
   /**
    * Manda una orden de reproducción y comprueba el resultado.
    *
@@ -393,6 +401,10 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
       }
       if (!id) throw new Error("el reproductor todavía no tiene dispositivo");
 
+      // Solo se transfiere una vez por identificador: si transferir no bastó,
+      // repetirlo tampoco va a bastar, y cada intento cuesta una petición.
+      let transferido = false;
+
       for (let intento = 0; intento < 4; intento++) {
         try {
           await llamarSpotify(`/me/player/play?device_id=${id}`, {
@@ -403,10 +415,43 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
           // Aceptada pero muda: se reintenta como si hubiera fallado.
         } catch (fallo) {
           const mensaje = (fallo as Error).message;
+
+          /**
+           * Un 404 es «Spotify no conoce ese dispositivo», y hay dos motivos
+           * distintos con dos remedios distintos. Probarlos en el orden
+           * equivocado deja el fallo dando vueltas:
+           *
+           *  1. El dispositivo existe pero no está ACTIVO en la cuenta. Se
+           *     arregla transfiriéndole la reproducción, que es lo que lo
+           *     registra en la lista de dispositivos de Spotify.
+           *  2. El identificador caducó de verdad. Ahí sí toca reconectar el SDK.
+           *
+           * Se intenta primero transferir porque es lo más barato y el caso más
+           * común, y porque reconectar NO siempre cambia nada: Spotify suele
+           * devolver el MISMO identificador al reconectar, así que renovar de
+           * primeras puede reintentar contra el mismo dispositivo muerto una y
+           * otra vez. Es exactamente lo que se vio en producción — seis 404
+           * seguidos con el mismo device_id.
+           */
           if (/respondió 404/.test(mensaje)) {
+            if (!transferido) {
+              transferido = true;
+              const ok = await transferirA(id).then(
+                () => true,
+                () => false,
+              );
+              if (ok) {
+                await esperar(400);
+                continue;
+              }
+            }
+
             const nuevo = await renovarDispositivo();
-            if (!nuevo) throw fallo;
+            // Si el reconectado trae el mismo identificador, insistir es perder
+            // el tiempo: no hay nada más que probar por este camino.
+            if (!nuevo || nuevo === id) throw fallo;
             id = nuevo;
+            transferido = false;
             continue;
           }
           if (!/respondió (502|503)/.test(mensaje)) throw fallo;
@@ -415,7 +460,7 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
       }
       throw new Error("Spotify aceptó la orden pero no llegó a sonar");
     },
-    [esperarQueSuene, renovarDispositivo],
+    [esperarQueSuene, renovarDispositivo, transferirA],
   );
 
   const reproducirUri = useCallback((uri: string) => ordenar({ uris: [uri] }), [ordenar]);
@@ -604,13 +649,6 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
     return carga?.devices ?? [];
   }, []);
 
-  /** Manda la reproducción a otro dispositivo sin cortar la canción. */
-  const transferirA = useCallback(async (dispositivoId: string) => {
-    await llamarSpotify("/me/player", {
-      method: "PUT",
-      body: JSON.stringify({ device_ids: [dispositivoId], play: true }),
-    });
-  }, []);
 
   return {
     estado,

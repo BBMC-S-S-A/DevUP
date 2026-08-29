@@ -83,6 +83,37 @@ services:
       --denied-peer-ip=172.16.0.0-172.31.255.255
       --denied-peer-ip=192.168.0.0-192.168.255.255
 
+  # Buzón de correo de mentira.
+  #
+  # EXISTE PORQUE «SIN SMTP SE ESCRIBE EN EL REGISTRO» NO PRUEBA NADA. Esa rama
+  # del mailer no llega a hablar SMTP con nadie: no se autentica, no negocia
+  # TLS, no compone un mensaje y no descubre que el remitente está mal. El día
+  # que se pongan credenciales de verdad, todo eso se estrena en producción y
+  # contra un proveedor que muchas veces rechaza en silencio.
+  #
+  # Mailpit habla SMTP de verdad en el 1025 y enseña lo que recibe en el 8025.
+  # Con SMTP_URL=smtp://localhost:1025 el ciclo entero —invitar, verificar,
+  # recuperar— se puede recorrer y LEER, que es la parte que faltaba.
+  #
+  # No lleva credenciales ni TLS a propósito: acepta lo que le llegue. Lo que
+  # valida es nuestro lado del trato, no el del proveedor.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: devup-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   devup-pgdata:
   devup-minio:

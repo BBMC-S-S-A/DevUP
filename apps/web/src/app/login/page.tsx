@@ -35,7 +35,7 @@ const MODULOS = [
 /* La luz de la cabina: el foco azul arriba a la izquierda repite el de
    `body::before`, para que el acceso y la aplicación estén iluminados igual. */
 const LUZ_MARCA =
-  "radial-gradient(38rem 30rem at 10% 4%, rgb(91 140 255 / 0.16), transparent 62%)," +
+  "radial-gradient(38rem 30rem at 10% 4%, rgb(124 58 237 / 0.16), transparent 62%)," +
   "radial-gradient(30rem 24rem at 92% 98%, rgb(62 224 245 / 0.09), transparent 60%)";
 
 /** El escalonado vive en CSS (`--retraso` de globals.css); esto solo lo escribe. */

@@ -166,7 +166,7 @@ export function NotificationBell() {
             aria-hidden
             className="pointer-events-none absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center
               rounded-full border border-canvas bg-accent px-1 font-mono text-[9px] font-bold leading-none
-              tabular-nums text-canvas shadow-[0_0_12px_-2px_rgb(91_140_255/0.9)]"
+              tabular-nums text-canvas shadow-[0_0_12px_-2px_rgb(124_58_237/0.9)]"
           >
             {/* Late el halo, no la cifra: un número que parpadea no se lee. */}
             <span className="absolute -inset-1 animate-pulse-slow rounded-full bg-accent/25 blur-[2px]" />

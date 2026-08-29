@@ -66,6 +66,34 @@ oyéndose, TURN está bien puesto.
 
 ---
 
+## Con el despliegue de hoy no se puede auto-alojar
+
+Esto estaba en el plan como una decisión —«levantarlo o contratarlo»— y no lo
+es, porque una de las dos ramas está cerrada por cómo se despliega hoy.
+
+`docker-compose.prod.yml` **no publica ni un solo puerto**. Todo entra por el
+túnel de Cloudflare, que es un proxy de HTTP: sabe llevar `hytrex.co` a `web` y
+`api.hytrex.co` a `api`, y no sabe llevar UDP 3478 a ningún sitio. Debajo hay
+una NAT doméstica sin puertos abiertos y sin IP pública fija.
+
+TURN necesita justo lo contrario: una dirección pública a la que el navegador
+pueda llegar por su cuenta. Un coturn levantado aquí no lo alcanzaría nadie
+desde fuera, y el `coturn` que hay en el compose de desarrollo existe para
+probar el camino de relé en local, no para exponerlo.
+
+**Así que es un alta, no una decisión.** Y el código ya está de las dos formas:
+`routes/ice.ts` habla con Metered.ca si hay `METERED_API_KEY`, y si no, firma
+credenciales temporales por HMAC para un coturn propio. Poner TURN en marcha
+hoy son dos variables:
+
+```
+METERED_APP_NAME=...
+METERED_API_KEY=...
+```
+
+Auto-alojarlo vuelve a la mesa el día que esto viva en un servidor con IP
+pública — es decir, con la decisión 0003, no antes.
+
 ## En producción
 
 Tres cosas cambian, y las tres importan.

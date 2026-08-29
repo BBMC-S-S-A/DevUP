@@ -12,14 +12,14 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, api } from "@/lib/api";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 /**
  * El embudo de ventas.
@@ -99,7 +99,7 @@ const STAGES: {
   tono: "neutro" | "accent" | "live" | "warn" | "danger";
 }[] = [
   { id: "lead", label: "Contacto", rgb: "91 102 120", rgbTexto: "141 153 174", tono: "neutro" },
-  { id: "qualified", label: "Cualificada", rgb: "91 140 255", rgbTexto: "91 140 255", tono: "accent" },
+  { id: "qualified", label: "Cualificada", rgb: "139 92 246", rgbTexto: "139 92 246", tono: "accent" },
   { id: "proposal", label: "Propuesta", rgb: "245 181 63", rgbTexto: "245 181 63", tono: "warn" },
   { id: "won", label: "Ganada", rgb: "52 211 153", rgbTexto: "52 211 153", tono: "live" },
   { id: "lost", label: "Perdida", rgb: "251 113 133", rgbTexto: "251 113 133", tono: "danger" },
@@ -217,14 +217,6 @@ export default function SalesPage() {
         <div aria-hidden className="rejilla pointer-events-none absolute inset-0" />
 
         <div className="relative">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Workspaces
-          </Link>
-
           <div className="mt-3 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
             <div className="flex flex-wrap items-end gap-x-7 gap-y-4">
               <div>
@@ -640,6 +632,7 @@ function ClientsPanel({
   onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
+  const confirmar = useConfirmar();
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -691,7 +684,14 @@ function ClientsPanel({
                   etiqueta={`Borrar ${client.name}`}
                   className="hover:text-danger"
                   onClick={async () => {
-                    if (!confirm(`¿Borrar «${client.name}»?`)) return;
+                    if (
+                      !(await confirmar({
+                        titulo: `¿Borrar «${client.name}»?`,
+                        accion: "Borrar",
+                        peligro: true,
+                      }))
+                    )
+                      return;
                     try {
                       await api.delete(`/clients/${client.id}`);
                       toast.success("Cliente borrado");
@@ -790,15 +790,11 @@ function ClientForm({
           placeholder="Correo"
         />
       </div>
-      <textarea
+      <AreaTexto
         value={notes}
         onChange={(event) => setNotes(event.target.value)}
         placeholder="Notas"
         rows={2}
-        className="w-full resize-none rounded-xl border border-line bg-canvas/60 px-3.5 py-2.5 text-sm outline-none
-          transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-faint
-          hover:border-line-strong focus:border-accent/60 focus:bg-canvas
-          focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
       />
       <div className="flex justify-end gap-1.5">
         <Boton tamano="sm" variante="fantasma" onClick={onCancel}>
@@ -1107,20 +1103,17 @@ function NewThing({
       <div className="space-y-3">
         {kind === "deal" && (
           <Campo label="Cliente">
-            <select
+            <Desplegable
+              contenedor="w-full"
               value={clientId}
               onChange={(event) => setClientId(event.target.value)}
-              className="h-10 w-full rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none
-                transition-[border-color,box-shadow,background-color] duration-200
-                hover:border-line-strong focus:border-accent/60 focus:bg-canvas
-                focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
             >
               {clients.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
                 </option>
               ))}
-            </select>
+            </Desplegable>
           </Campo>
         )}
 
@@ -1270,4 +1263,4 @@ function BotonPunteado({ onClick, children }: { onClick: () => void; children: R
 const CONTROL_NUMERICO =
   "h-9 w-full rounded-lg border border-line bg-canvas/60 px-2.5 text-right font-mono text-xs tabular-nums " +
   "outline-none transition-[border-color,box-shadow,background-color] duration-200 " +
-  "hover:border-line-strong focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]";
+  "hover:border-line-strong focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]";

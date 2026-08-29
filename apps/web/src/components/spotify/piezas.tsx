@@ -45,6 +45,7 @@ import { type Ponible } from "@/lib/spotify/SpotifyProvider";
 import { reloj, type Playlist, type useSpotifyPlayer } from "@/lib/spotify/reproductor";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Rotulo } from "@/components/ui/Superficies";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 /** Las pestañas del panel, en el orden en que se pintan. */
 export type Pestana = "cola" | "buscar" | "biblioteca" | "dispositivos";
@@ -104,6 +105,7 @@ export function Conectar() {
  * Spotify: no hay otro panel de cuenta que lo repita.
  */
 export function Conectada({ onDesconectar }: { onDesconectar: () => Promise<void> }) {
+  const confirmar = useConfirmar();
   const [saliendo, setSaliendo] = useState(false);
 
   return (
@@ -116,7 +118,15 @@ export function Conectada({ onDesconectar }: { onDesconectar: () => Promise<void
         type="button"
         disabled={saliendo}
         onClick={async () => {
-          if (!confirm("¿Cerrar sesión de Spotify? Dejarás de poder reproducir desde aquí.")) return;
+          if (
+            !(await confirmar({
+              titulo: "¿Cerrar sesión de Spotify?",
+              descripcion:
+                "Dejarás de poder reproducir desde aquí. Se puede volver a conectar cuando quieras.",
+              accion: "Cerrar sesión",
+            }))
+          )
+            return;
           setSaliendo(true);
           try {
             await onDesconectar();
@@ -323,7 +333,7 @@ export function Barra({
             reposo se lee mejor sin un punto encima. */}
         <span
           className={`absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink
-            shadow-[0_0_8px_rgb(91_140_255/0.8)] transition-opacity duration-150
+            shadow-[0_0_8px_rgb(124_58_237/0.8)] transition-opacity duration-150
             ${agarrando ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
           style={{ left: `${progreso}%` }}
         />
@@ -364,7 +374,7 @@ export function Transporte({ player }: { player: ReturnType<typeof useSpotifyPla
           aria-label={estado.reproduciendo ? "Pausar" : "Reproducir"}
           className="presionable grid size-10 place-items-center rounded-full
             bg-gradient-to-b from-accent-bright to-accent text-canvas
-            shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(91_140_255/0.8)]
+            shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.8)]
             hover:brightness-110"
         >
           {estado.reproduciendo ? <Pause size={17} /> : <Play size={17} className="ml-0.5" />}
@@ -597,7 +607,7 @@ export function Buscador({
           placeholder="Canción, artista o álbum…"
           className="h-9 w-full rounded-xl border border-line bg-canvas/60 pl-8 pr-8 text-xs outline-none
             transition-[border-color,box-shadow] duration-200 placeholder:text-faint
-            focus:border-accent/60 focus:shadow-[0_0_0_3px_rgb(91_140_255/0.14)]"
+            focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
         />
         {buscando && (
           <Loader2

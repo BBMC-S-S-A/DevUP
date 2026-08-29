@@ -12,12 +12,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Entrada } from "@/components/ui/Field";
+import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import {
   type OrganizationLink,
@@ -28,6 +27,7 @@ import {
 } from "@/lib/api";
 import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
+import { useConfirmar } from "@/components/ui/Confirmar";
 
 const ROLES: Record<OrganizationMember["role"], string> = {
   owner: "Propietario",
@@ -76,13 +76,6 @@ export default function OrganizationSettingsPage() {
       <header className="filo-luz relative bg-surface/40">
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-3xl px-6 pb-7 pt-5">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Organizaciones
-          </Link>
           <div className="mt-5 flex items-center gap-3.5">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
               <Settings size={20} />
@@ -223,6 +216,7 @@ function Miembros({
   administro: boolean;
   onChange: () => Promise<void>;
 }) {
+  const confirmar = useConfirmar();
   return (
     <Tarjeta className="p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -252,7 +246,9 @@ function Miembros({
               </span>
 
               {administro && member.role !== "owner" && member.userId !== yo ? (
-                <select
+                <Desplegable
+                  tamano="sm"
+                  contenedor="shrink-0"
                   value={member.role}
                   onChange={async (event) => {
                     const role = event.target.value as "admin" | "member";
@@ -263,7 +259,6 @@ function Miembros({
                       toast.error(caught instanceof ApiError ? caught.message : "no se pudo cambiar el rol");
                     }
                   }}
-                  className="h-8 shrink-0 rounded-lg border border-line bg-canvas/60 px-2 text-xs outline-none hover:border-line-strong focus:border-accent/60"
                 >
                   <option className="bg-surface" value="member">
                     Miembro
@@ -271,7 +266,7 @@ function Miembros({
                   <option className="bg-surface" value="admin">
                     Admin
                   </option>
-                </select>
+                </Desplegable>
               ) : (
                 <Chip tono={member.role === "member" ? "neutro" : "accent"}>{ROLES[member.role]}</Chip>
               )}
@@ -280,7 +275,16 @@ function Miembros({
                 <BotonIcono
                   etiqueta={`Expulsar a ${member.displayName}`}
                   onClick={async () => {
-                    if (!confirm(`¿Quitar a ${member.displayName} de la organización?`)) return;
+                    if (
+                      !(await confirmar({
+                        titulo: `¿Quitar a ${member.displayName} de la organización?`,
+                        descripcion:
+                          "Perderá el acceso a los espacios de trabajo de esta organización.",
+                        accion: "Quitar",
+                        peligro: true,
+                      }))
+                    )
+                      return;
                     try {
                       await api.delete(`/organizations/${orgId}/members/${member.userId}`);
                       await onChange();
@@ -360,11 +364,10 @@ function Invitar({ orgId }: { orgId: string }) {
           placeholder="correo@empresa.com"
           className="min-w-48 flex-1"
         />
-        <select
+        <Desplegable
           value={rol}
           onChange={(event) => setRol(event.target.value as "member" | "admin")}
           aria-label="Rol de la invitación"
-          className="h-10 rounded-xl border border-line bg-canvas/60 px-3 text-sm outline-none hover:border-line-strong focus:border-accent/60"
         >
           <option className="bg-surface" value="member">
             Miembro
@@ -372,7 +375,7 @@ function Invitar({ orgId }: { orgId: string }) {
           <option className="bg-surface" value="admin">
             Administrador
           </option>
-        </select>
+        </Desplegable>
         <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
         </Boton>

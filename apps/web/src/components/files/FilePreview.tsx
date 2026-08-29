@@ -6,6 +6,7 @@ import { type FileRecord, api } from "@/lib/api";
 import { downloadUrl, formatBytes, kindOf } from "@/lib/files/upload";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Chip, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
+import { useConfirmar } from "@/components/ui/Confirmar";
 import { TagBadge } from "./TagBadge";
 
 /** Nombre corto del tipo, para el chip de la cabecera. */
@@ -39,6 +40,7 @@ export function FilePreview({
   onClose: () => void;
   onDeleted: (fileId: string) => void;
 }) {
+  const confirmar = useConfirmar();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -135,7 +137,14 @@ export function FilePreview({
               disabled={deleting}
               className="hover:bg-danger/10 hover:text-danger"
               onClick={async () => {
-                if (!window.confirm(`¿Eliminar «${file.name}»? No se puede deshacer.`)) return;
+                if (
+                  !(await confirmar({
+                    titulo: `¿Eliminar «${file.name}»?`,
+                    accion: "Eliminar",
+                    peligro: true,
+                  }))
+                )
+                  return;
                 setDeleting(true);
                 try {
                   await api.delete(`/files/${file.id}`);

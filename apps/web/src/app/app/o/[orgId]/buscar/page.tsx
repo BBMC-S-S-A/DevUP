@@ -156,14 +156,6 @@ function Buscador() {
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 
         <div className="relative mx-auto max-w-2xl px-6 pb-9 pt-5">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Organizaciones
-          </Link>
-
           <div className="mt-8 text-center">
             <Rotulo>Búsqueda global</Rotulo>
             <h1 className="mt-2.5 text-2xl font-semibold">
@@ -191,7 +183,7 @@ function Buscador() {
                 placeholder:text-faint
                 hover:border-line-strong
                 focus:border-accent/60 focus:bg-canvas
-                focus:shadow-[0_0_0_4px_rgb(91_140_255/0.12),0_16px_40px_-16px_rgb(91_140_255/0.55)]"
+                focus:shadow-[0_0_0_4px_rgb(109_40_217/0.12),0_16px_40px_-16px_rgb(124_58_237/0.55)]"
             />
             {/* Fuera del botón: `.presionable` sustituye el `transform` al
                 pulsar y se llevaría por delante el centrado vertical. */}
