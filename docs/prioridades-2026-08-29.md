@@ -96,20 +96,30 @@ dentro, es lo único que separa «se cayó un rato» de «se perdió».
   desarrollo no es un gestor de servicios. La pregunta ya no es si conviene un
   servidor de verdad, es cuándo.
 
-### 4.1 Lo que sí se puede hacer hoy con Docker Desktop
+### 4.1 Que esté encendido a ratos es una decisión, no un descuido
 
-Dos cosas, y ninguna es código:
+`AutoStart` está en `false` y **se queda así**. DevUP es un MVP y todavía no
+tiene usuarios de fuera: tener producción encendida en un portátil las
+veinticuatro horas cuesta batería, memoria y ruido a cambio de una
+disponibilidad que hoy no le sirve a nadie. Se abre Docker Desktop cuando se va
+a trabajar y se cierra al terminar.
 
-- **Activar «Start Docker Desktop when you sign in»** (Settings → General). Hoy
-  está en `false`: después de reiniciar el ordenador, DevUP sigue caído hasta que
-  alguien abre la aplicación a mano.
-- **Minimizar en vez de salir.** Cerrar la ventana del panel deja el motor
-  corriendo en la bandeja; *Quit Docker Desktop* lo para. Es la diferencia entre
-  quitarse el panel de en medio y apagar producción.
+Dos consecuencias que conviene tener claras mientras dure:
 
-Los contenedores están todos en `restart: unless-stopped`, así que **al volver a
-abrir la aplicación se levantan solos** — no hace falta un `up -d`. Lo único que
-se rompía en cada ciclo era el respaldo, y eso ya está arreglado.
+- **Los contenedores vuelven solos.** Están todos en `restart: unless-stopped`,
+  así que al abrir la aplicación se levantan sin ningún `up -d`. Lo único que se
+  rompía en cada uno de esos ciclos era el respaldo, y eso ya está arreglado.
+- **Choca con el despliegue automático**, y conviene saberlo antes de registrar
+  el ejecutor: si alguien empuja a la rama principal con la máquina apagada o
+  con Docker cerrado, el trabajo de despliegue falla en el `docker compose up`.
+  No rompe nada —producción se queda como estaba— pero el aviso en rojo llega
+  igual, y hay que saber leerlo como «no estaba encendido» y no como «el
+  despliegue está roto». La forma limpia de convivir con las dos cosas es
+  desplegar a mano mientras dure el MVP, o aceptar los rojos.
+- **El día que haya alguien de fuera dentro, esto deja de valer.** Y entonces la
+  respuesta no es la casilla de arranque automático: es la decisión 0003. Una
+  casilla haría que producción dependiera de que la sesión de Windows esté
+  abierta, que es el mismo problema con otra cara.
 
 ---
 

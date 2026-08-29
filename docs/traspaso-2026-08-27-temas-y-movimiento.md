@@ -17,7 +17,7 @@ graph TD
   subgraph AHORA["Bloquea, y solo lo puedes hacer tú"]
     RESP["Decidir DÓNDE van los respaldos<br/>hoy en el mismo disco"]:::urgente
     RUNNER["Registrar el runner<br/>config.cmd + token"]:::urgente
-    DOCKER["Producción vive dentro de<br/>Docker Desktop, que es de sesión"]:::urgente
+    DOCKER["Abrir Docker al empezar<br/>decidido: solo mientras se trabaja"]
     SPOT["Spotify: extensión de cuota<br/>+ añadir compañeros"]:::externo
   end
 
@@ -140,7 +140,7 @@ configurado (las variables están vacías). Las dos veces bastaba un `grep`.
 
 | | |
 |---|---|
-| **Docker Desktop** | No se cae: se para cuando se cierra la aplicación, y no arranca al iniciar sesión (`AutoStart: false`). Producción se va con ella. Los datos están a salvo, la disponibilidad no |
+| **Docker Desktop** | Se abre a mano y solo mientras se trabaja: es un MVP y no tiene que estar disponible siempre. Los contenedores vuelven solos al abrirla. Recordar abrirlo antes de tocar nada |
 | **`VAULT_MASTER_KEY`** | Si se pierde, todas las credenciales de la bóveda quedan ilegibles. No está en ninguna copia |
 | **RLS falla en silencio** | Tabla sin política = 0 filas afectadas y ningún error. Toda tabla nueva necesita política **y** caso en `isolation.test.ts` |
 | **La oficina inmersiva** | No se toca `components/world/`, `lib/world/`, rutas de `devverse` ni `view-mode.tsx` |
