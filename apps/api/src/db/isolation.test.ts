@@ -1048,6 +1048,89 @@ async function main(): Promise<void> {
     });
     check("un DELETE de Bruno sobre el repositorio de Acme afecta a cero filas", brunoDeletedRepo === 0);
 
+    // --- Entornos y despliegues -----------------------------------------------
+    //
+    // `deployments` no tiene política de INSERT ni de UPDATE: la escribe
+    // `upsert_deployment` (security definer) y nadie más. Lo que se prueba
+    // aquí es que la lectura hereda de la organización del entorno, que
+    // crear un entorno es cosa de administración, y —lo importante— que un
+    // INSERT directo sobre `deployments` no cuela aunque el entorno sea tuyo.
+    console.log("\nEntornos y despliegues");
+
+    const acmeEntorno = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into environments (organization_id, name, kind, url, created_by)
+         values ($1,'producción','production','https://acme.example',$2) returning id`,
+        [acme.org, ana],
+      );
+      const id = rows[0]!.id;
+      await db.query(
+        `select public.upsert_deployment($1,'gh-1','success','a1b2c3d','sube el panel',
+                                        'ana','https://github.com/acme/p/actions/runs/1',
+                                        now(), now())`,
+        [id],
+      );
+      return id;
+    });
+
+    check("Ana ve el entorno que creó", (await count(ana, "environments")) === 1);
+    check(
+      "Carla, miembro rasa de la misma organización, también lo ve",
+      (await count(carla, "environments")) === 1,
+    );
+    check("Bruno no ve el entorno de Acme", (await count(bruno, "environments")) === 0);
+
+    check("Carla ve el despliegue del entorno", (await count(carla, "deployments")) === 1);
+    check("Bruno no ve el despliegue de Acme", (await count(bruno, "deployments")) === 0);
+
+    await denied("Carla, que es miembro rasa, no puede crear un entorno", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into environments (organization_id, name, created_by) values ($1,'colado',$2)`,
+          [acme.org, carla],
+        ),
+      ),
+    );
+
+    await denied("Bruno no puede crear un entorno en Acme", () =>
+      withUser(bruno, (db) =>
+        db.query(
+          `insert into environments (organization_id, name, created_by) values ($1,'intruso',$2)`,
+          [acme.org, bruno],
+        ),
+      ),
+    );
+
+    // El caso que de verdad importa: ni siquiera la dueña del entorno puede
+    // escribir un despliegue a mano. Si esto dejara de fallar, cualquiera
+    // podría pintar «producción desplegada y en verde» sin que lo estuviera.
+    await denied("ni Ana puede insertar un despliegue a mano", () =>
+      withUser(ana, (db) =>
+        db.query(
+          `insert into deployments (environment_id, external_id, state)
+           values ($1,'inventado','success')`,
+          [acmeEntorno],
+        ),
+      ),
+    );
+
+    const anaCambioDespliegue = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "update deployments set state = 'failure' where environment_id = $1",
+        [acmeEntorno],
+      );
+      return rowCount ?? 0;
+    });
+    check(
+      "un UPDATE de Ana sobre un despliegue afecta a cero filas",
+      anaCambioDespliegue === 0,
+    );
+
+    const brunoBorroEntorno = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("delete from environments where id = $1", [acmeEntorno]);
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Bruno sobre el entorno de Acme afecta a cero filas", brunoBorroEntorno === 0);
     // --- Música compartida (Spotify) -------------------------------------------
     //
     // Las dos tablas cuelgan de can_access_channel, igual que los mensajes:
