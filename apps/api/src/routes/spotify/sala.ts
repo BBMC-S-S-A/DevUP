@@ -1,9 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../../auth/plugin.js";
-import { getAppToken, searchTracks } from "../../connectors/spotify.js";
+import {
+  buscarPorIsrc,
+  getAppToken,
+  normalizarIsrc,
+  searchTracks,
+} from "../../connectors/spotify.js";
 import { withUser } from "../../db/pool.js";
-import { parseBody, parseParams, requireUser } from "../../lib/http.js";
+import { parseBody, parseParams, parseQuery, requireUser } from "../../lib/http.js";
 import { announceSpotifySession } from "../../realtime/signaling.js";
 
 const uuid = z.string().uuid();
@@ -27,13 +32,35 @@ export async function spotifySalaRoutes(app: FastifyInstance): Promise<void> {
     return { tracks: await searchTracks(token, q) };
   });
 
+  /**
+   * De ISRC a una canción reproducible aquí.
+   *
+   * Es la mitad que hace agnóstica la cola. La lista guarda la canción; cada
+   * reproductor pregunta por aquí cómo se llama esa canción en SU servicio.
+   * El día que haya un segundo servicio, esto es lo único que hay que
+   * escribir otra vez — la cola no cambia.
+   *
+   * Con el token de la aplicación y no con el de quien pregunta: buscar en el
+   * catálogo no es una acción sobre la cuenta de nadie, y pedir la conexión
+   * personal para esto dejaría sin música a quien todavía no la ha conectado.
+   */
+  app.get("/spotify/resolver", { onRequest: requireSession }, async (request) => {
+    const { isrc } = parseQuery(z.object({ isrc: z.string().min(1) }), request.query);
+    const token = await getAppToken();
+    const track = await buscarPorIsrc(token, isrc);
+    // 200 con `null` y no 404: que una grabación no esté en este catálogo es
+    // una respuesta normal —pasa con material antiguo y autoeditado— y no un
+    // error del que haya que informar como si algo se hubiera roto.
+    return { track };
+  });
+
   // --- Cola ----------------------------------------------------------------
   app.get("/channels/:channelId/spotify/queue", { onRequest: requireSession }, async (request) => {
     const userId = requireUser(request);
     const { channelId } = parseParams(z.object({ channelId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `select id, track_uri as "trackUri", track_name as "trackName",
+        `select id, isrc, track_uri as "trackUri", track_name as "trackName",
                 track_artist as "trackArtist", track_image_url as "trackImageUrl",
                 duration_ms as "durationMs", added_by as "addedBy"
            from channel_queue_tracks
@@ -49,15 +76,28 @@ export async function spotifySalaRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { channelId } = parseParams(z.object({ channelId: uuid }), request.params);
     const body = parseBody(
-      z.object({
-        trackUri: z.string().min(1),
-        trackName: z.string().min(1).max(200),
-        trackArtist: z.string().min(1).max(200),
-        trackImageUrl: z.string().url().nullable().default(null),
-        durationMs: z.number().int().positive().nullable().default(null),
-      }),
+      z
+        .object({
+          // Los dos opcionales, pero al menos uno: sin ISRC ni dirección, la
+          // fila es un título suelto que nadie puede reproducir. La base tiene
+          // la misma regla; esto la dice antes y con mejor mensaje.
+          isrc: z.string().nullable().default(null),
+          trackUri: z.string().min(1).nullable().default(null),
+          trackName: z.string().min(1).max(200),
+          trackArtist: z.string().min(1).max(200),
+          trackImageUrl: z.string().url().nullable().default(null),
+          durationMs: z.number().int().positive().nullable().default(null),
+        })
+        .refine((v) => v.isrc !== null || v.trackUri !== null, {
+          message: "hace falta el ISRC o la dirección de la canción",
+        }),
       request.body,
     );
+
+    // Se normaliza aquí y no en la base: un ISRC con guiones o en minúsculas
+    // es el mismo código, y si entrara tal cual la misma canción parecería dos
+    // canciones distintas.
+    const isrc = normalizarIsrc(body.isrc);
 
     const track = await withUser(userId, async (db) => {
       const { rows } = await db.query<{ position: number }>(
@@ -66,13 +106,14 @@ export async function spotifySalaRoutes(app: FastifyInstance): Promise<void> {
       );
       const inserted = await db.query(
         `insert into channel_queue_tracks
-           (channel_id, track_uri, track_name, track_artist, track_image_url, duration_ms, added_by, position)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)
-         returning id, track_uri as "trackUri", track_name as "trackName",
+           (channel_id, isrc, track_uri, track_name, track_artist, track_image_url, duration_ms, added_by, position)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         returning id, isrc, track_uri as "trackUri", track_name as "trackName",
                    track_artist as "trackArtist", track_image_url as "trackImageUrl",
                    duration_ms as "durationMs", added_by as "addedBy"`,
         [
           channelId,
+          isrc,
           body.trackUri,
           body.trackName,
           body.trackArtist,

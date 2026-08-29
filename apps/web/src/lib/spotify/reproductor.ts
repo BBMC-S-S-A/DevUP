@@ -631,6 +631,10 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
       .filter((t): t is NonNullable<typeof t> => Boolean(t && t.uri))
       .map((t) => ({
         uri: t.uri as string,
+        // Esta respuesta no incluye `external_ids`, así que aquí no hay ISRC
+        // que leer. No se inventa: una pista sin él sigue teniendo dirección,
+        // que es todo lo que hace falta para sonar en este servicio.
+        isrc: null,
         name: t.name || "Sin título",
         artist: (t.artists ?? [])
           .map((a) => a?.name)

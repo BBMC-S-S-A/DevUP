@@ -110,6 +110,15 @@ export type SpotifyTrack = {
   artist: string;
   imageUrl: string | null;
   durationMs: number;
+  /**
+   * El identificador internacional de grabación.
+   *
+   * Es lo que hace que la cola sea del equipo y no de Spotify: identifica la
+   * canción, no su dirección en un servicio. Puede faltar —hay grabaciones
+   * sin ISRC asignado, sobre todo material antiguo o autoeditado— y por eso
+   * la dirección se sigue guardando también.
+   */
+  isrc: string | null;
 };
 
 export async function searchTracks(token: string, query: string): Promise<SpotifyTrack[]> {
@@ -126,6 +135,7 @@ export async function searchTracks(token: string, query: string): Promise<Spotif
         artists: { name: string }[];
         album: { images: { url: string }[] };
         duration_ms: number;
+        external_ids?: { isrc?: string };
       }[];
     };
   };
@@ -135,7 +145,43 @@ export async function searchTracks(token: string, query: string): Promise<Spotif
     artist: track.artists.map((a) => a.name).join(", "),
     imageUrl: track.album.images[0]?.url ?? null,
     durationMs: track.duration_ms,
+    isrc: normalizarIsrc(track.external_ids?.isrc),
   }));
+}
+
+/**
+ * Deja el ISRC en su forma canónica, o lo descarta.
+ *
+ * Los catálogos lo devuelven a veces con guiones y a veces en minúsculas, y
+ * el mismo código escrito de dos formas no se parece a sí mismo — que es lo
+ * único que se le pide a un identificador. Lo que no encaje con el formato se
+ * devuelve como nulo en vez de guardarse: un ISRC inventado es peor que
+ * ninguno, porque se resolvería a la canción equivocada de alguien.
+ */
+export function normalizarIsrc(valor: string | null | undefined): string | null {
+  if (!valor) return null;
+  const limpio = valor.replace(/[\s-]/g, "").toUpperCase();
+  return /^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$/.test(limpio) ? limpio : null;
+}
+
+/**
+ * De ISRC a dirección de Spotify.
+ *
+ * Es la mitad que hace agnóstica a la cola: una canción añadida desde otro
+ * servicio —o desde este, hace un año, con una dirección que ya no existe— se
+ * encuentra igual porque el ISRC no es de nadie.
+ *
+ * `isrc:` es un filtro de la búsqueda de Spotify, no un tipo de recurso: no
+ * hay ningún punto de la API que resuelva un ISRC directamente, así que la
+ * búsqueda es el único camino. Se pide una sola y se coge la primera: para un
+ * mismo ISRC puede haber varias entradas —el sencillo y el álbum— y son la
+ * misma grabación.
+ */
+export async function buscarPorIsrc(token: string, isrc: string): Promise<SpotifyTrack | null> {
+  const codigo = normalizarIsrc(isrc);
+  if (!codigo) return null;
+  const [pista] = await searchTracks(token, `isrc:${codigo}`);
+  return pista ?? null;
 }
 
 /** `product` es "premium", "free" o "open" (cuenta sin verificar). */

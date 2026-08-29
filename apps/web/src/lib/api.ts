@@ -329,11 +329,20 @@ export type SpotifyTrack = {
   artist: string;
   imageUrl: string | null;
   durationMs: number;
+  isrc: string | null;
 };
 
 export type SpotifyQueueTrack = {
   id: string;
-  trackUri: string;
+  /**
+   * El identificador internacional de grabación: lo que identifica a la
+   * canción con independencia del servicio. Es lo que hace que esta cola sea
+   * del equipo y no de Spotify.
+   */
+  isrc: string | null;
+  /** Su dirección en el servicio desde el que se añadió. Es un atajo, no la
+   *  identidad: quien escuche en otro servicio la resuelve por ISRC. */
+  trackUri: string | null;
   trackName: string;
   trackArtist: string;
   trackImageUrl: string | null;
