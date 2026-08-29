@@ -112,12 +112,17 @@ export const api = {
 };
 
 // --- Tipos compartidos con la API -------------------------------------------
+export type Presencia = "available" | "busy_open" | "do_not_disturb";
+
 export type User = {
   id: string;
   email: string;
   displayName: string;
   avatarUrl: string | null;
   emailVerified: boolean;
+  presence: Presencia;
+  /** A qué se dedica. Sale en la cartelera de DevVerse. */
+  title: string | null;
 };
 
 export type SignupPolicy = {

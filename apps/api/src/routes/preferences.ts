@@ -116,4 +116,44 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
       return rows[0]!;
     });
   });
+
+  /**
+   * El perfil visible: el rol y el estado de presencia.
+   *
+   * PATCH y no PUT porque los dos campos se cambian por separado y desde
+   * sitios distintos: el rol se escribe una vez en ajustes, y el estado varias
+   * veces al día desde la barra. Un PUT obligaría a mandar el rol entero cada
+   * vez que alguien se pone «no molestar», y a que la barra lo conociera para
+   * no borrarlo sin querer.
+   *
+   * `title` acepta cadena vacía para borrarlo. La alternativa —mandar null—
+   * obligaría a distinguir «no lo toco» de «lo dejo en blanco», y `undefined`
+   * ya significa lo primero.
+   */
+  app.patch("/me/profile", async (request) => {
+    const userId = requireUser(request);
+    const body = parseBody(
+      z.object({
+        presence: z.enum(["available", "busy_open", "do_not_disturb"]).optional(),
+        title: z.string().trim().max(40).optional(),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ presence: string; title: string | null }>(
+        `update profiles
+            set presence = coalesce($2::presence_state, presence),
+                title    = case
+                             when $3::text is null then title
+                             when btrim($3) = '' then null
+                             else btrim($3)
+                           end
+          where id = $1
+      returning presence, title`,
+        [userId, body.presence ?? null, body.title ?? null],
+      );
+      return rows[0]!;
+    });
+  });
 }

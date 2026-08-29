@@ -24,6 +24,7 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
+import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
@@ -309,6 +310,10 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               ajustes: es una preferencia de la persona —como el volumen— y no
               una configuración del producto. Aquí se alcanza desde cualquier
               pantalla sin salir de lo que se está haciendo. */}
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <Rotulo>Estado</Rotulo>
+            <SelectorPresencia />
+          </div>
           <div className="mb-2.5 flex items-center justify-between gap-2">
             <Rotulo>Tema</Rotulo>
             <SelectorTema />

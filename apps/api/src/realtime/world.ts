@@ -75,6 +75,8 @@ const publicMember = (m: WorldMember) => ({
   peerId: m.peerId,
   userId: m.userId,
   displayName: m.displayName,
+  presence: m.presence,
+  title: m.title,
   x: m.x,
   y: m.y,
   facing: m.facing,
@@ -94,7 +96,14 @@ const publicMember = (m: WorldMember) => ({
 async function authorize(
   request: FastifyRequest,
   workspaceId: string,
-): Promise<{ userId: string; displayName: string; allowedZones: Set<string>; spawn: { x: number; y: number } } | null> {
+): Promise<{
+  userId: string;
+  displayName: string;
+  presence: "available" | "busy_open" | "do_not_disturb";
+  title: string | null;
+  allowedZones: Set<string>;
+  spawn: { x: number; y: number };
+} | null> {
   const { ticket } = request.query as { ticket?: string };
   if (!ticket) return null;
 
@@ -142,8 +151,12 @@ async function authorize(
       [roomId],
     );
 
-    const { rows: profile } = await db.query<{ display_name: string }>(
-      "select display_name from profiles where id = $1",
+    const { rows: profile } = await db.query<{
+      display_name: string;
+      presence: "available" | "busy_open" | "do_not_disturb";
+      title: string | null;
+    }>(
+      "select display_name, presence, title from profiles where id = $1",
       [userId],
     );
 
@@ -152,6 +165,8 @@ async function authorize(
     return {
       userId,
       displayName: profile[0]?.display_name ?? "alguien",
+      presence: profile[0]?.presence ?? "available",
+      title: profile[0]?.title ?? null,
       allowedZones: new Set(zones.map((z) => z.id)),
       // Se aparece justo delante de la puerta de la primera sala que se puede
       // ver, en el pasillo. Aparecer en el centro geométrico de la planta
@@ -241,6 +256,8 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
       peerId,
       userId: identity.userId,
       displayName: identity.displayName,
+      presence: identity.presence,
+      title: identity.title,
       socket,
       x: identity.spawn.x,
       y: identity.spawn.y,

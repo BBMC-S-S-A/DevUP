@@ -17,6 +17,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BotonIcono } from "@/components/ui/Boton";
+import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
@@ -274,6 +275,10 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             className="pointer-events-none absolute inset-x-0 top-0 h-px
               bg-gradient-to-r from-transparent via-line-strong to-transparent"
           />
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <Rotulo>Estado</Rotulo>
+            <SelectorPresencia />
+          </div>
           <div className="mb-2.5 flex items-center justify-between gap-2">
             <Rotulo>Tema</Rotulo>
             <SelectorTema />

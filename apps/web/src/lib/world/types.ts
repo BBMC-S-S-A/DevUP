@@ -81,6 +81,17 @@ export const DEFAULT_AVATAR: Avatar = {
 };
 
 /**
+ * Los tres estados de presencia.
+ *
+ * El que importa es el de en medio. Las herramientas de trabajo ofrecen
+ * «disponible» y «no molestar», y la verdad la mayor parte del tiempo no es
+ * ninguna de las dos: es «ocupado, pero abierto a llamadas». Sin él, la gente
+ * se pone «no molestar» para que la dejen trabajar y de paso se aísla de lo
+ * que sí importaba.
+ */
+export type Presencia = "available" | "busy_open" | "do_not_disturb";
+
+/**
  * Alguien dentro de la oficina.
  *
  * `x`/`y` es dónde se dibuja ahora mismo; `tx`/`ty` es lo último que dijo el
@@ -92,6 +103,9 @@ export type Peer = {
   peerId: string;
   userId: string;
   displayName: string;
+  /** A qué se dedica. Texto libre, puede no estar. */
+  title?: string | null;
+  presence?: Presencia;
   x: number;
   y: number;
   tx: number;
