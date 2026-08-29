@@ -21,6 +21,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { SelectorTema } from "@/components/ui/SelectorTema";
@@ -111,7 +112,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         <Loader2 className="animate-spin text-faint" size={20} />
       </div>
     ) : (
-      <EsqueletoBarra />
+      <EsqueletoArmazon filas={6} />
     );
   }
 
@@ -166,19 +167,10 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const inicial = workspace.name.trim().charAt(0).toUpperCase();
 
   return (
-    <div className="min-h-screen">
-      {/* La barra va fija y pegada al canto izquierdo, y el contenido reserva su
-          ancho con relleno en vez de con margen: así los fondos de cada página
-          siguen corriendo por debajo del cristal, que es lo único que hace que
-          un cristal parezca cristal y no un rectángulo gris translúcido. */}
-      <aside className="cristal fixed inset-y-0 left-0 z-30 flex w-64 flex-col rounded-none">
-        {/* Canto de luz vertical: el equivalente lateral de .filo-luz. Separa la
-            barra del contenido sin el borde duro de toda la vida. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-px
-            bg-gradient-to-b from-transparent via-accent/25 to-transparent"
-        />
+    <Armazon
+      titulo={workspace.name}
+      barra={
+        <>
 
         <header className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           <Link
@@ -347,51 +339,14 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             </BotonIcono>
           </div>
         </footer>
-      </aside>
-
-      <main className="min-h-screen pl-64">{children}</main>
-    </div>
+        </>
+      }
+    >
+      {children}
+    </Armazon>
   );
 }
 
-/**
- * Esqueleto de la barra mientras llegan workspace y canales.
- *
- * Pinta la silueta real —chapa, nombre, filas— en vez de un giro centrado: el
- * hueco ya está donde va a estar el contenido, así que al llegar los datos nada
- * salta de sitio.
- */
-function EsqueletoBarra() {
-  return (
-    <div className="min-h-screen">
-      <aside className="cristal fixed inset-y-0 left-0 z-30 flex w-64 flex-col rounded-none">
-        <div className="filo-luz px-4 pb-3.5 pt-4">
-          <div className="devup-esqueleto h-2.5 w-20 rounded" />
-          <div className="mt-3.5 flex items-center gap-2.5">
-            <div className="devup-esqueleto size-9 rounded-xl" />
-            <div className="devup-esqueleto h-3 flex-1 rounded" />
-          </div>
-        </div>
-        <div className="flex-1 space-y-1.5 px-2.5 py-4">
-          {Array.from({ length: 8 }, (_, i) => (
-            // El desvanecido hacia abajo evita que ocho barras idénticas lean
-            // como una tabla de datos vacía.
-            <div
-              key={i}
-              className="devup-esqueleto h-7 rounded-lg"
-              style={{ opacity: 1 - i * 0.11 }}
-            />
-          ))}
-        </div>
-      </aside>
-      <main className="grid min-h-screen place-items-center pl-64">
-        <Loader2 className="animate-spin text-faint" size={20} />
-      </main>
-    </div>
-  );
-}
-
-/** Cabecera de grupo: rótulo, filete y, si se pasa, el recuento en cifra mono. */
 function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }) {
   return (
     <div className="mb-1.5 flex items-center gap-2 px-3">

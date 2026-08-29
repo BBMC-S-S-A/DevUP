@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Code2,
   Github,
-  Loader2,
   LogOut,
   Megaphone,
   Search,
@@ -18,6 +17,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } 
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BotonIcono } from "@/components/ui/Boton";
 import { SelectorTema } from "@/components/ui/SelectorTema";
+import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -32,10 +32,10 @@ import { useSession } from "@/lib/session";
  * veces, con la deriva que era de esperar: cuatro la llamaban «Organizaciones»
  * y una «Workspaces», el mismo enlace al mismo sitio con dos nombres.
  *
- * Tiene la misma factura que el del espacio de trabajo a propósito: barra fija
- * de cristal con canto de luz, esqueleto con la silueta real, pie con tema,
- * sesión y campana. Dos armazones que se parecen se leen como un producto; dos
- * que se parecen «casi» se leen como un error.
+ * La barra la pone <Armazon>, compartido con el del espacio de trabajo: mismo
+ * cristal, mismo canto de luz, mismo cajón en móvil. Dos armazones que se
+ * parecen se leen como un producto; dos que se parecen «casi» se leen como un
+ * error, y dos escritos por separado acaban pareciéndose «casi».
  *
  * DEBAJO DE LAS PANTALLAS VAN LOS ESPACIOS DE TRABAJO de esta organización, y
  * no en una pantalla aparte: es el camino que más se recorre, y tenerlo en la
@@ -111,7 +111,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
   const enDev = pathname === `/app/o/${orgId}/dev`;
   if (enDev) return <>{children}</>;
 
-  if (cargando) return <EsqueletoBarra />;
+  if (cargando) return <EsqueletoArmazon />;
 
   if (error || !organizacion) {
     return (
@@ -141,13 +141,8 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <div className="min-h-screen">
-      <aside className="cristal fixed inset-y-0 left-0 z-30 flex w-64 flex-col rounded-none">
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-px
-            bg-gradient-to-b from-transparent via-accent/25 to-transparent"
-        />
+    <Armazon titulo={organizacion.name} barra={
+      <>
 
         <header className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           {/* «Organizaciones», una sola vez y en un solo sitio. Es el nombre que
@@ -304,10 +299,10 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             </BotonIcono>
           </div>
         </footer>
-      </aside>
-
-      <main className="min-h-screen pl-64">{children}</main>
-    </div>
+      </>
+    }>
+      {children}
+    </Armazon>
   );
 }
 
@@ -356,40 +351,5 @@ function ItemNav({
       <span className={`shrink-0 ${activo ? "text-accent" : "text-faint"}`}>{icono}</span>
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </Link>
-  );
-}
-
-/**
- * Esqueleto de la barra mientras llegan la organización y sus espacios.
- *
- * Pinta la silueta real —chapa, nombre, filas— y no un giro centrado: lo que
- * viene después ocupa este sitio, así que la página no salta al llegar.
- */
-function EsqueletoBarra() {
-  return (
-    <div className="min-h-screen">
-      <aside className="cristal fixed inset-y-0 left-0 z-30 flex w-64 flex-col rounded-none">
-        <div className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
-          <div className="devup-esqueleto h-2.5 w-24 rounded" />
-          <div className="mt-3 flex items-center gap-2.5">
-            <div className="devup-esqueleto size-9 rounded-xl" />
-            <div className="devup-esqueleto h-3 flex-1 rounded" />
-          </div>
-        </div>
-        <div className="flex-1 space-y-2 px-2.5 py-4">
-          <div className="devup-esqueleto h-9 rounded-xl" />
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              style={{ animationDelay: `${i * 60}ms` }}
-              className="devup-esqueleto h-7 rounded-lg"
-            />
-          ))}
-        </div>
-      </aside>
-      <main className="grid min-h-screen place-items-center pl-64">
-        <Loader2 className="animate-spin text-faint" size={20} />
-      </main>
-    </div>
   );
 }
