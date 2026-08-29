@@ -26,6 +26,7 @@ import { Field } from "@/components/ui/Field";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, type Connection, type GithubRepo, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { Pagina } from "@/components/ui/Pagina";
 
 /**
  * Conector de GitHub (S7, primera pieza). Un token de acceso personal de
@@ -120,65 +121,50 @@ export default function GithubPage() {
   }, [repos]);
 
   return (
-    <div className="min-h-screen">
-      <header className="filo-luz relative bg-surface/40">
-        {/* La rejilla solo en la cabecera: es donde hay sitio para que la
-            máscara radial se abra y no quede un recorte a media altura. */}
-        <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
-
-        <div className="relative mx-auto max-w-4xl px-6 pb-7 pt-5">
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
-                <Github size={20} />
-              </span>
-              <div>
-                <h1 className="text-xl font-semibold">GitHub</h1>
-                <Rotulo className="mt-1 block">Conector · telemetría de repositorios</Rotulo>
-              </div>
-            </div>
-
-            {connection && (
-              <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/50 py-1.5 pl-3.5 pr-1.5">
-                <span className="flex items-center gap-2">
-                  <span className="animate-pulse-slow size-1.5 rounded-full bg-live" aria-hidden />
-                  <span className="text-xs text-muted">
-                    {connection.displayName || "cuenta sin nombre"}
-                  </span>
+    <Pagina
+      titulo="GitHub"
+      rotulo="Conector · telemetría de repositorios"
+      icono={<Github size={20} />}
+      ancho="lg"
+      acciones={
+          connection && (
+            <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/50 py-1.5 pl-3.5 pr-1.5">
+              <span className="flex items-center gap-2">
+                <span className="animate-pulse-slow size-1.5 rounded-full bg-live" aria-hidden />
+                <span className="text-xs text-muted">
+                  {connection.displayName || "cuenta sin nombre"}
                 </span>
-                <Boton
-                  variante="fantasma"
-                  tamano="sm"
-                  icono={<Unplug size={13} />}
-                  onClick={async () => {
-                    if (
-                      !(await confirmar({
-                        titulo: "¿Desconectar esta cuenta de GitHub?",
-                        descripcion:
-                          "Se quitan también sus repositorios de esta organización.",
-                        accion: "Desconectar",
-                        peligro: true,
-                      }))
-                    )
-                      return;
-                    try {
-                      await api.delete(`/connections/${connection.id}`);
-                      toast.success("GitHub desconectado");
-                      await load();
-                    } catch (caught) {
-                      toast.error(caught instanceof ApiError ? caught.message : "no se pudo desconectar");
-                    }
-                  }}
-                >
-                  Desconectar
-                </Boton>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-8">
+              </span>
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                icono={<Unplug size={13} />}
+                onClick={async () => {
+                  if (
+                    !(await confirmar({
+                      titulo: "¿Desconectar esta cuenta de GitHub?",
+                      descripcion:
+                        "Se quitan también sus repositorios de esta organización.",
+                      accion: "Desconectar",
+                      peligro: true,
+                    }))
+                  )
+                    return;
+                  try {
+                    await api.delete(`/connections/${connection.id}`);
+                    toast.success("GitHub desconectado");
+                    await load();
+                  } catch (caught) {
+                    toast.error(caught instanceof ApiError ? caught.message : "no se pudo desconectar");
+                  }
+                }}
+              >
+                Desconectar
+              </Boton>
+            </div>
+          )
+      }
+    >
         {error && (
           <div className="devup-entrada mb-5">
             <Averia titulo="El panel no pudo cargar" detalle={error} />
@@ -248,8 +234,7 @@ export default function GithubPage() {
             />
           </>
         )}
-      </main>
-    </div>
+    </Pagina>
   );
 }
 

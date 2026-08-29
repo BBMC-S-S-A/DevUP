@@ -28,6 +28,7 @@ import {
 import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { Fallo, Pagina } from "@/components/ui/Pagina";
 
 const ROLES: Record<OrganizationMember["role"], string> = {
   owner: "Propietario",
@@ -72,34 +73,21 @@ export default function OrganizationSettingsPage() {
   const administro = yo ? yo.role === "owner" || yo.role === "admin" : false;
 
   return (
-    <div className="min-h-screen">
-      <header className="filo-luz relative bg-surface/40">
-        <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative mx-auto max-w-3xl px-6 pb-7 pt-5">
-          <div className="mt-5 flex items-center gap-3.5">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
-              <Settings size={20} />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold">Ajustes</h1>
-              <Rotulo className="mt-1 block">Foto, miembros y enlaces de la organización</Rotulo>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl space-y-5 px-6 py-8">
+    <Pagina
+      titulo="Ajustes"
+      rotulo="Foto, miembros y enlaces de la organización"
+      icono={<Settings size={20} />}
+    >
+      <div className="space-y-5">
         {error && (
-          <p className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {error}
-          </p>
+          <Fallo onReintentar={() => void load()}>{error}</Fallo>
         )}
 
         <FotoOrganizacion orgId={orgId} puedeEditar={administro} />
         <Miembros orgId={orgId} members={members} yo={user?.id ?? null} administro={administro} onChange={load} />
         <Enlaces orgId={orgId} puedeEditar={administro} />
-      </main>
-    </div>
+      </div>
+    </Pagina>
   );
 }
 

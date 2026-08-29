@@ -6,10 +6,11 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { AreaTexto, Entrada } from "@/components/ui/Field";
-import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { Dialogo, EstadoVacio, Tarjeta } from "@/components/ui/Superficies";
 import { type Announcement, type OrganizationMember, ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { Fallo, Pagina } from "@/components/ui/Pagina";
 
 function retraso(indice: number): CSSProperties {
   return { "--retraso": `${Math.min(indice, 8) * 40}ms` } as CSSProperties;
@@ -54,27 +55,17 @@ export default function AnnouncementsPage() {
   }, [load]);
 
   return (
-    <div className="min-h-screen">
-      <header className="filo-luz relative bg-surface/40">
-        <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative mx-auto max-w-2xl px-6 pb-7 pt-5">
-          <div className="mt-5 flex items-center gap-3.5">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
-              <Megaphone size={20} />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold">Noticias</h1>
-              <Rotulo className="mt-1 block">Lo que publica quien administra</Rotulo>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-6 py-8">
+    <>
+      <Pagina
+        titulo="Noticias"
+        rotulo="Lo que publica quien administra"
+        icono={<Megaphone size={20} />}
+        ancho="sm"
+      >
         {error && (
-          <p className="mb-5 flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          <Fallo className="mb-5" onReintentar={() => void load()}>
             {error}
-          </p>
+          </Fallo>
         )}
 
         {administro && (
@@ -130,7 +121,7 @@ export default function AnnouncementsPage() {
             ))}
           </div>
         )}
-      </main>
+      </Pagina>
 
       {editando && (
         <EditarNoticia
@@ -142,7 +133,7 @@ export default function AnnouncementsPage() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
