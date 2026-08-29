@@ -26,22 +26,37 @@ petición de un cliente— hay que acordarse de borrarlo también aquí.
 
 ---
 
-## 2. Dónde van · **decisión pendiente**
+## 2. Dónde van · a mano, y a propósito
 
 Por defecto van a `./respaldos`, es decir **en el mismo disco** que la base y el
-almacén. Eso protege de un borrado por error y **no protege de lo que de verdad
-da miedo**: que ese disco falle.
+almacén. Eso protege de un borrado por error y no protege de que ese disco falle.
 
-Para que sea un respaldo de verdad, `RUTA_RESPALDOS` en `.env.production` tiene
-que apuntar fuera de esta máquina:
+Hubo un momento en que esto figuraba como «decisión pendiente» que bloqueaba
+todo lo demás, con `RUTA_RESPALDOS` apuntando a una unidad de red. Se descartó
+al mirar el tamaño:
+
+> **Todo lo que hay que salvar son unos 2 MB.** El volcado de la base pesa 285 KB
+> y el almacén entero unos 1,7 MB.
+
+A ese tamaño montar una unidad de red o un bucket es más ceremonia que
+protección. Mientras esto sea un MVP, lo que toca es copiar la carpeta a mano
+donde sea de vez en cuando:
 
 ```bash
-RUTA_RESPALDOS=//servidor/respaldos/devup
+tar -czf devup-$(date +%Y%m%d).tar.gz respaldos/
 ```
 
-Una unidad de red montada, un disco externo, un bucket de otro proveedor — lo
-que sea que no muera con la máquina. Hasta que eso se decida, lo que hay es media
-red de seguridad, y conviene no confundirla con una entera.
+Y llevarse ese archivo a otro sitio: un pendrive, otro ordenador, el correo. Un
+minuto, sin configurar nada.
+
+**`.env.production` va aparte, y no dentro de ese paquete.** Lleva
+`VAULT_MASTER_KEY`, que es justo lo que descifra los secretos del volcado:
+meterlos en el mismo archivo que se manda por correo es guardar la llave dentro
+de la caja. Ese va al gestor de contraseñas, y son 3 KB de texto — cabe en una
+nota segura. Ver el apartado 4.
+
+`RUTA_RESPALDOS` sigue existiendo para el día que esto viva en un servidor de
+verdad. Hoy no hace falta tocarla.
 
 Otras dos variables, ambas opcionales:
 

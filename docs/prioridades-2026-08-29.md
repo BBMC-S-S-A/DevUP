@@ -45,15 +45,33 @@ registrar el ejecutor, no después.
 
 ---
 
-## 2. Hoy · lo que bloquea y solo puedes hacer tú
+## 2. Hoy · una sola cosa
 
-| | Qué | Cuánto cuesta |
-|---|---|---|
-| **1** | **Dónde van los respaldos.** Hoy en el mismo disco que la base. Ya protegen de un borrado por error; no protegen de que el disco falle. Una línea `RUTA_RESPALDOS=` en `.env.production` apuntando a un disco externo o una unidad de red | 2 minutos |
-| **2** | **Registrar el ejecutor** (`config.cmd` + token), después de decidir lo de la copia de trabajo | 10 minutos |
-| **3** | **Pedir la extensión de cuota de Spotify** y añadir a los compañeros en las 5 plazas del modo desarrollo | 15 minutos |
+Este apartado tenía tres puntos y una decisión que decía bloquear el resto. Al
+mirar los tamaños se cayó casi todo solo:
 
-Los tres son tuyos porque los tres son credenciales o decisiones, no código.
+> **Todo lo que hay que salvar son unos 2 MB.** El volcado de la base pesa
+> 285 KB y el almacén entero 1,7 MB. `.env.production` son 3 KB de texto.
+
+A ese tamaño, «decidir dónde van los respaldos» no era una decisión de
+infraestructura: era una carpeta que cabe en cualquier parte. No hace falta
+montar una unidad de red ni tocar `RUTA_RESPALDOS`.
+
+**Lo único que hay que hacer, y de vez en cuando:**
+
+```bash
+tar -czf devup-$(date +%Y%m%d).tar.gz respaldos/
+```
+
+y llevarse ese archivo a otro sitio — un pendrive, otro ordenador, el correo.
+
+**Y una vez, aparte:** copiar `.env.production` a un gestor de contraseñas. Va
+**separado** del paquete a propósito: lleva `VAULT_MASTER_KEY`, que es lo que
+descifra los secretos del volcado. Meterlos juntos en el archivo que se manda
+por correo es guardar la llave dentro de la caja.
+
+Eso es todo. Con esas dos cosas, perder la máquina esta noche significa perder
+una tarde, no el producto.
 
 ---
 
@@ -80,8 +98,13 @@ separa las dos mitades: `verify()` prueba conexión y autenticación, y solo
 después se envía. Un fallo dice si no se llegó al servidor, si no te dejaron
 entrar, o si te dejaron entrar y luego no aceptaron el mensaje.
 
-**Lo que queda es tuyo:** dar de alta un proveedor y pegar `SMTP_URL`. Se
-comprueba en diez segundos.
+**Lo que queda puede esperar.** Dar de alta un proveedor y pegar `SMTP_URL` es
+lo que falta, pero hoy no hay nadie de fuera: a los compañeros se les añade a
+mano y las contraseñas se pueden reponer por la base. El correo se vuelve
+urgente el día que alguien tenga que recibir una invitación o recuperar su
+contraseña sin que estés tú delante — es decir, con la beta.
+
+Cuando toque, se comprueba en diez segundos con el comando de arriba.
 
 ### La bóveda · hecho, y quita una restricción permanente
 
@@ -111,8 +134,34 @@ sitio, sobre una NAT doméstica sin IP pública. Un coturn levantado aquí no lo
 alcanzaría nadie desde fuera.
 
 **Así que es un alta, no una decisión:** dos variables, `METERED_APP_NAME` y
-`METERED_API_KEY`. Auto-alojarlo vuelve a la mesa con la decisión 0003, no
-antes.
+`METERED_API_KEY`. Auto-alojarlo vuelve a la mesa con la decisión 0003.
+
+Y **tampoco corre prisa mientras el uso sea de puertas adentro.** Sin TURN las
+llamadas funcionan en una red plana y fallan en algunas corporativas y móviles.
+Con el equipo en la misma oficina eso casi nunca aparece; el día que alguien
+llame desde fuera y no se oiga, ya sabemos que son dos variables y dónde van.
+
+---
+
+## 3.1 Lo que se recorta por ser un MVP
+
+Estas cosas estaban en el plan porque son lo correcto para un producto en
+producción. DevUP todavía no lo es —no hay nadie de fuera dentro— y hacerlas
+ahora es pagar por adelantado una factura que quizá no llegue en esta forma.
+Quedan escritas con **cuándo dejan de poder esperar**, que es lo único que hace
+útil aplazar algo.
+
+| Se aplaza | Qué se pierde mientras tanto | Deja de esperar cuando |
+|---|---|---|
+| Despliegue automático (registrar el ejecutor) | Desplegar es un comando a mano | Alguien más empuje a la rama principal a menudo |
+| SPF y DKIM en el DNS | El correo saldría a spam… si hubiera correo | Se dé de alta el SMTP |
+| SMTP | Nadie puede ser invitado ni recuperar su contraseña solo | Entre alguien de fuera |
+| TURN gestionado | Las llamadas fallan en algunas redes ajenas | Se llame desde fuera de la oficina |
+| `RUTA_RESPALDOS` a una unidad de red | Nada: son 2 MB que se copian a mano | Los respaldos no quepan en un correo |
+
+Y una que **no** se recorta, aunque lo parezca: copiar `.env.production` fuera de
+la máquina. No es despliegue profesional, es que `VAULT_MASTER_KEY` existe en un
+solo archivo y sin ella la bóveda es ruido. Cuesta un copiar y pegar.
 
 ---
 
@@ -206,17 +255,24 @@ sistema sin correo real y sin copias comprobadas no es una beta.
 
 ## 6. Lo que falta decidir
 
-De las cinco decisiones abiertas de la propuesta, **una ya está resuelta**: el
-tema claro entró, y entró junto al oscuro con conmutador y respeto por la
-preferencia del sistema. Quedan cuatro, más una nueva:
+De las cinco decisiones abiertas de la propuesta quedan **dos**, y ninguna es de
+infraestructura:
 
-1. Dónde van los respaldos. *Bloquea el bloque A entero.*
-2. Si el servidor de retransmisión de voz se levanta o se contrata.
-3. Los tres ritos que acuñan moneda al empezar, y el techo semanal por persona.
+1. Los tres ritos que acuñan moneda al empezar, y el techo semanal por persona.
    Media hora de conversación y define la economía entera de DevVerse.
-4. El tamaño definitivo del avatar y cuántos cuerpos base hay de salida.
-5. **Nueva:** si la copia de producción se queda siempre en la rama principal y
-   limpia, o si el despliegue clona aparte. Va antes de registrar el ejecutor.
+2. El tamaño definitivo del avatar y cuántos cuerpos base hay de salida.
+
+Las otras tres se cerraron:
+
+- **El tema claro** entró, junto al oscuro y con conmutador.
+- **Dónde van los respaldos** dejó de ser una decisión al ver que son 2 MB: se
+  copian a mano y ya.
+- **Levantar o contratar TURN** dejó de ser una decisión al ver que producción no
+  publica ningún puerto: si algún día hace falta, es un alta.
+
+Y una que aparece sola el día que se registre el ejecutor, no antes: si la copia
+de producción se queda siempre en la rama principal y limpia, o si el despliegue
+clona aparte.
 
 ---
 
