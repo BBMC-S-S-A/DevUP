@@ -87,7 +87,7 @@ export function BotonIcono({
       {...props}
       aria-label={etiqueta}
       title={etiqueta}
-      className={`presionable grid size-8 shrink-0 place-items-center rounded-lg text-muted
+      className={`presionable toque-comodo grid size-8 shrink-0 place-items-center rounded-lg text-muted
         hover:bg-raised hover:text-ink disabled:pointer-events-none disabled:opacity-40 ${className}`}
     >
       {children}

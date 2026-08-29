@@ -182,18 +182,18 @@ export function FilePreview({
             <img
               src={url}
               alt={file.name}
-              className="max-h-[70vh] max-w-full rounded-xl object-contain shadow-[var(--sombra-panel)]"
+              className="max-h-[70svh] max-w-full rounded-xl object-contain shadow-[var(--sombra-panel)]"
             />
           ) : kind === "video" ? (
             <video
               src={url}
               controls
-              className="max-h-[70vh] max-w-full rounded-xl shadow-[var(--sombra-panel)]"
+              className="max-h-[70svh] max-w-full rounded-xl shadow-[var(--sombra-panel)]"
             />
           ) : kind === "audio" ? (
             <audio src={url} controls className="w-full max-w-md" />
           ) : kind === "pdf" ? (
-            <iframe src={url} title={file.name} className="h-[70vh] w-full rounded-xl bg-white" />
+            <iframe src={url} title={file.name} className="h-[70svh] w-full rounded-xl bg-white" />
           ) : (
             <EstadoVacio
               icono={<FileQuestion size={20} />}

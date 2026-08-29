@@ -77,7 +77,7 @@ export function Armazon({
           onClick={() => setAbierto(true)}
           aria-label="Abrir la navegación"
           aria-expanded={abierto}
-          className="presionable grid size-9 place-items-center rounded-xl text-muted hover:text-ink"
+          className="presionable toque-comodo grid size-9 place-items-center rounded-xl text-muted hover:text-ink"
         >
           <Menu size={17} />
         </button>
@@ -116,7 +116,7 @@ export function Armazon({
             boton.current?.focus();
           }}
           aria-label="Cerrar la navegación"
-          className="presionable absolute right-2 top-2 z-10 grid size-8 place-items-center
+          className="presionable toque-comodo absolute right-2 top-2 z-10 grid size-8 place-items-center
             rounded-lg text-faint hover:text-ink md:hidden"
         >
           <X size={15} />
@@ -125,7 +125,7 @@ export function Armazon({
         {barra}
       </aside>
 
-      <main className="min-h-screen pt-12 md:pt-0 md:pl-64">{children}</main>
+      <main className="alto-util pt-12 md:pt-0 md:pl-64">{children}</main>
     </div>
   );
 }

@@ -19,7 +19,7 @@ export default function BoardPage() {
 
   if (!workspace) {
     return (
-      <div className="grid h-screen place-items-center">
+      <div className="alto-util-fijo grid place-items-center">
         <Loader2 className="animate-spin text-faint" size={20} />
       </div>
     );

@@ -129,7 +129,7 @@ export function Dialogo({
         // desenfoque ya está a tope en el primer fotograma, así que lo de detrás
         // aparece borroso de golpe. Animando desenfoque y escala juntos, la
         // superficie cuaja como un material que llega.
-        className={`devup-materializa cristal-denso w-full ${anchos[ancho]} max-h-[85vh] overflow-y-auto rounded-2xl p-5`}
+        className={`devup-materializa cristal-denso w-full ${anchos[ancho]} max-h-[85svh] overflow-y-auto rounded-2xl p-5`}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">

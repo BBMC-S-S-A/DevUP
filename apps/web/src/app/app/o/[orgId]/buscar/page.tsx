@@ -151,7 +151,7 @@ function Buscador() {
   const vacio = results !== null && results.length === 0 && !loading;
 
   return (
-    <div className="min-h-screen">
+    <div className="alto-util">
       <header className="filo-luz relative bg-surface/40">
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 

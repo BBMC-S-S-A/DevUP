@@ -123,7 +123,7 @@ export function DevWorkspace({ orgId }: { orgId: string }) {
 
   if (status === "arrancando") {
     return (
-      <div className="grid h-[70vh] place-items-center">
+      <div className="grid h-[70svh] place-items-center">
         <div className="flex flex-col items-center gap-3 text-sm text-faint">
           <Loader2 size={20} className="animate-spin" />
           Arrancando el entorno de desarrollo…
@@ -148,7 +148,7 @@ export function DevWorkspace({ orgId }: { orgId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid h-[70vh] grid-cols-[220px_1fr] grid-rows-[1fr_220px] gap-3">
+      <div className="grid h-[70svh] grid-cols-[220px_1fr] grid-rows-[1fr_220px] gap-3">
         <div className="row-span-2 overflow-y-auto rounded-2xl border border-line bg-raised/30 p-2">
           <FileTree nodos={arbol} rutaActiva={rutaActiva} onAbrir={abrirArchivo} />
         </div>

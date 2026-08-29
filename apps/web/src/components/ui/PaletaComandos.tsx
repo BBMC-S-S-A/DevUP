@@ -138,7 +138,7 @@ export function PaletaComandos({ orgId }: { orgId: string }) {
 
   return (
     <div
-      className="devup-velo fixed inset-0 z-[60] flex items-start justify-center bg-canvas/70 p-4 pt-[12vh] backdrop-blur-md"
+      className="devup-velo fixed inset-0 z-[60] flex items-start justify-center bg-canvas/70 p-4 pt-[12svh] backdrop-blur-md"
       onMouseDown={(evento) => {
         if (evento.target === evento.currentTarget) setAbierta(false);
       }}
@@ -177,7 +177,7 @@ export function PaletaComandos({ orgId }: { orgId: string }) {
         </div>
 
         {resultados.length > 0 ? (
-          <ul className="max-h-[50vh] overflow-y-auto p-1.5">
+          <ul className="max-h-[50svh] overflow-y-auto p-1.5">
             {resultados.map((r, i) => {
               const Icono = ICONOS[r.entity];
               return (

@@ -54,13 +54,13 @@ export function Pagina({
   const columna = ANCHOS[ancho];
 
   return (
-    <div className="min-h-screen">
+    <div className="alto-util">
       <header className="filo-luz relative bg-surface/40">
         {/* La rejilla solo en la cabecera: es donde hay sitio para que la
             máscara radial se abra y no quede un recorte a media altura. */}
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 
-        <div className={`relative mx-auto ${columna} px-6 pb-7 pt-6`}>
+        <div className={`relative mx-auto ${columna} px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6`}>
           <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
             <div className="flex flex-wrap items-center gap-x-7 gap-y-4">
               <div className="flex items-center gap-3.5">
@@ -92,7 +92,7 @@ export function Pagina({
         </div>
       </header>
 
-      <main className={`mx-auto ${columna} px-6 py-8`}>{children}</main>
+      <main className={`mx-auto ${columna} px-4 py-6 sm:px-6 sm:py-8`}>{children}</main>
     </div>
   );
 }

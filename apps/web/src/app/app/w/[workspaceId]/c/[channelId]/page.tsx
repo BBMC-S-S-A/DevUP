@@ -43,7 +43,7 @@ export default function ChannelPage() {
   const esVoz = channel.kind === "voice";
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="alto-util flex flex-col">
       {/* La cabecera se queda pegada arriba porque en un canal largo es lo único
           que dice dónde estás. Sin borde duro: el filo de luz separa y a la vez
           ilumina lo que pasa por debajo. */}
@@ -135,7 +135,7 @@ function CabeceraSeccion({ icono, titulo }: { icono: ReactNode; titulo: string }
  */
 function CanalCargando() {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="alto-util flex flex-col">
       <header className="filo-luz sticky top-0 z-20 bg-canvas/80 px-8 py-3.5 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center gap-3">
           <span className="devup-esqueleto size-10 rounded-xl" />
