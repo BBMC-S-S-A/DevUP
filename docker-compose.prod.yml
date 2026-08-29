@@ -139,8 +139,7 @@ services:
       - ./scripts:/scripts:ro
     # Uno nada más arrancar: así un despliegue nuevo se puede verificar en el
     # momento en vez de esperar al primer ciclo.
-    command: >-
-      sh -c 'while true; do /scripts/respaldo-base-de-datos.sh || echo "[respaldo] el ciclo falló, se reintenta al siguiente"; sleep "$$INTERVALO"; done'
+    command: ["sh", "/scripts/respaldo-en-bucle.sh", "/scripts/respaldo-base-de-datos.sh"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,8 +158,7 @@ services:
     volumes:
       - ${RUTA_RESPALDOS:-./respaldos}:/respaldos
       - ./scripts:/scripts:ro
-    command: >-
-      -c 'while true; do /scripts/respaldo-almacen.sh || echo "[respaldo] el ciclo falló, se reintenta al siguiente"; sleep "$$INTERVALO"; done'
+    command: ["/scripts/respaldo-en-bucle.sh", "/scripts/respaldo-almacen.sh"]
     depends_on:
       minio:
         condition: service_healthy

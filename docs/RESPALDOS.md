@@ -147,3 +147,24 @@ que esto viva en un servidor de verdad, cron.
 Tampoco avisa a nadie si falla. Un ciclo que revienta se registra y se reintenta
 al siguiente, pero nadie se enterará salvo que mire los registros. Avisar por
 correo depende de tener SMTP, que es el otro punto pendiente del bloque A.
+
+### La carrera de arranque, y por qué el reintento es corto
+
+Costó dos días de respaldos perdidos descubrirlo, así que queda escrito.
+
+`depends_on: condition: service_healthy` ordena el arranque **solo cuando lo
+arranca Compose**. Cuando se reinicia el demonio de Docker —y en esta máquina ha
+pasado tres veces en dos días— la política `restart: unless-stopped` devuelve
+todos los contenedores a la vez y sin ese orden. El respaldo salía antes que
+Postgres, `pg_dump` daba «connection refused», y el bucle se dormía el intervalo
+entero: **veinticuatro horas sin copia por una carrera de treinta segundos**.
+
+Por eso el planificador vive en `scripts/respaldo-en-bucle.sh` y reintenta cada
+minuto hasta diez veces antes de esperar al ciclo siguiente. Diez minutos cubren
+cualquier arranque de Postgres; si a los diez minutos sigue fallando ya no es una
+carrera sino una avería, y castigar la máquina cada minuto no la arregla.
+
+Cómo se ve que pasó: los archivos `.parcial-*.dump` de cero bytes en
+`base-de-datos/` son intentos que murieron antes del volcado. Uno suelto no dice
+nada; varios seguidos sin ningún `devup-*.dump` entre ellos es exactamente este
+fallo.
