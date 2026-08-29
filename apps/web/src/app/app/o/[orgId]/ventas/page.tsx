@@ -12,7 +12,6 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -217,14 +216,6 @@ export default function SalesPage() {
         <div aria-hidden className="rejilla pointer-events-none absolute inset-0" />
 
         <div className="relative">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Workspaces
-          </Link>
-
           <div className="mt-3 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
             <div className="flex flex-wrap items-end gap-x-7 gap-y-4">
               <div>

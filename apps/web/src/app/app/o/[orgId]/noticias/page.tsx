@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowLeft, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { toast } from "sonner";
@@ -57,13 +56,6 @@ export default function AnnouncementsPage() {
       <header className="filo-luz relative bg-surface/40">
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-2xl px-6 pb-7 pt-5">
-          <Link
-            href="/app"
-            className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
-          >
-            <ArrowLeft size={13} />
-            Organizaciones
-          </Link>
           <div className="mt-5 flex items-center gap-3.5">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
               <Megaphone size={20} />
