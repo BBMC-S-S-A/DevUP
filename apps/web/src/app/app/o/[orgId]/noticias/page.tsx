@@ -1,15 +1,17 @@
 "use client";
 
-import { ArrowLeft, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
+import { Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { AreaTexto, Entrada } from "@/components/ui/Field";
-import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
-import { type Announcement, type OrganizationMember, ApiError, api } from "@/lib/api";
+import { Dialogo, EstadoVacio, Tarjeta } from "@/components/ui/Superficies";
+import type { Announcement, OrganizationMember } from "@/lib/api";
+import { ApiError, api, sembrar, useRecurso } from "@/lib/datos";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { Fallo, Pagina } from "@/components/ui/Pagina";
 
 function retraso(indice: number): CSSProperties {
   return { "--retraso": `${Math.min(indice, 8) * 40}ms` } as CSSProperties;
@@ -30,58 +32,46 @@ export default function AnnouncementsPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const { user } = useSession();
 
-  const [items, setItems] = useState<Announcement[] | null>(null);
-  const [administro, setAdministro] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState<Announcement | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const [{ announcements }, { members }] = await Promise.all([
-        api.get<{ announcements: Announcement[] }>(`/organizations/${orgId}/announcements`),
-        api.get<{ members: OrganizationMember[] }>(`/organizations/${orgId}/members`),
-      ]);
-      setItems(announcements);
-      const yo = members.find((m) => m.userId === user?.id);
-      setAdministro(yo ? yo.role === "owner" || yo.role === "admin" : false);
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "no se pudo cargar");
-    }
-  }, [orgId, user?.id]);
+  // Dos recursos y no uno: los miembros los piden también ajustes y el tablero
+  // de tareas, así que pedirlos por su propia clave hace que los tres compartan
+  // la misma respuesta en vez de traerla tres veces. Es lo que la caché existe
+  // para hacer, y no funciona si cada pantalla los envuelve en una clave suya.
+  const noticias = useRecurso<{ announcements: Announcement[] }>(
+    `/organizations/${orgId}/announcements`,
+  );
+  const miembros = useRecurso<{ members: OrganizationMember[] }>(
+    `/organizations/${orgId}/members`,
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const items = noticias.datos?.announcements ?? null;
+  const error = noticias.error ?? miembros.error;
+  const yo = miembros.datos?.members.find((m) => m.userId === user?.id);
+  const administro = yo ? yo.role === "owner" || yo.role === "admin" : false;
+  const clave = `/organizations/${orgId}/announcements`;
 
   return (
-    <div className="min-h-screen">
-      <header className="filo-luz relative bg-surface/40">
-        <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative mx-auto max-w-2xl px-6 pb-7 pt-5">
-          <div className="mt-5 flex items-center gap-3.5">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-line-strong bg-raised text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
-              <Megaphone size={20} />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold">Noticias</h1>
-              <Rotulo className="mt-1 block">Lo que publica quien administra</Rotulo>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-6 py-8">
+    <>
+      <Pagina
+        titulo="Noticias"
+        rotulo="Lo que publica quien administra"
+        icono={<Megaphone size={20} />}
+        ancho="sm"
+      >
         {error && (
-          <p className="mb-5 flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          <Fallo className="mb-5" onReintentar={() => void noticias.recargar()}>
             {error}
-          </p>
+          </Fallo>
         )}
 
         {administro && (
           <div className="mb-5">
             <NuevaNoticia
               orgId={orgId}
-              onPublished={(noticia) => setItems((prev) => [noticia, ...(prev ?? [])])}
+                            onPublished={(noticia) =>
+                sembrar(clave, { announcements: [noticia, ...(items ?? [])] })
+              }
             />
           </div>
         )}
@@ -121,7 +111,9 @@ export default function AnnouncementsPage() {
                     return;
                   try {
                     await api.delete(`/announcements/${noticia.id}`);
-                    setItems((prev) => prev?.filter((n) => n.id !== noticia.id) ?? null);
+                    sembrar(clave, {
+                      announcements: (items ?? []).filter((n) => n.id !== noticia.id),
+                    });
                   } catch (caught) {
                     toast.error(caught instanceof ApiError ? caught.message : "no se pudo borrar");
                   }
@@ -130,19 +122,23 @@ export default function AnnouncementsPage() {
             ))}
           </div>
         )}
-      </main>
+      </Pagina>
 
       {editando && (
         <EditarNoticia
           noticia={editando}
           onCerrar={() => setEditando(null)}
           onGuardada={(actualizada) => {
-            setItems((prev) => prev?.map((n) => (n.id === actualizada.id ? actualizada : n)) ?? null);
+            sembrar(clave, {
+              announcements: (items ?? []).map((n) =>
+                n.id === actualizada.id ? actualizada : n,
+              ),
+            });
             setEditando(null);
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 

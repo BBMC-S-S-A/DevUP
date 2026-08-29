@@ -112,12 +112,17 @@ export const api = {
 };
 
 // --- Tipos compartidos con la API -------------------------------------------
+export type Presencia = "available" | "busy_open" | "do_not_disturb";
+
 export type User = {
   id: string;
   email: string;
   displayName: string;
   avatarUrl: string | null;
   emailVerified: boolean;
+  presence: Presencia;
+  /** A qué se dedica. Sale en la cartelera de DevVerse. */
+  title: string | null;
 };
 
 export type SignupPolicy = {
@@ -370,4 +375,32 @@ export type Message = {
   file: { id: string; name: string; mimeType: string; sizeBytes: string } | null;
   createdAt: string;
   editedAt: string | null;
+};
+
+export type EstadoDespliegue = "pending" | "running" | "success" | "failure" | "cancelled";
+
+export type Despliegue = {
+  id: string;
+  state: EstadoDespliegue;
+  commitSha: string | null;
+  commitMessage: string | null;
+  author: string | null;
+  logUrl: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type Entorno = {
+  id: string;
+  name: string;
+  kind: "production" | "staging" | "preview";
+  url: string | null;
+  /** `owner/repo:entorno` en GitHub. Null = entorno anotado a mano. */
+  externalId: string | null;
+  connectionId: string | null;
+  syncedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  /** El último despliegue, que es lo que enseña la tarjeta. */
+  ultimo: Despliegue | null;
 };

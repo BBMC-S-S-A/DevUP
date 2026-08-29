@@ -234,7 +234,17 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
     // delante del asiento: si no, la silla tapa a quien está sentado en ella.
     drawAvatar(ctx, px, py, avatar, peer.facing, peer.moving, time, peer.sitting);
     ctx.globalAlpha = 1;
-    drawNameplate(ctx, px, py, peer.displayName, isSelf ? "#5b8cff" : audible ? "#e7ebf2" : "#5c6577");
+    drawNameplate(
+      ctx,
+      px,
+      py,
+      peer.displayName,
+      // El acento del propio avatar sigue al de la marca. Estaba en azul de
+      // cuando la paleta era azul, y se quedó ahí al pasar a morado.
+      isSelf ? "#a78bfa" : audible ? "#e7ebf2" : "#5c6577",
+      peer.title,
+      peer.presence,
+    );
 
     if (peer.emote) {
       // Progreso de 0 a 1 a lo largo de la vida del gesto. Para uno mismo no

@@ -133,6 +133,16 @@ export function send(socket: WebSocket, payload: Outbound): void {
 export type WorldMember = BaseMember & {
   userId: string;
   displayName: string;
+  /**
+   * La cartelera: a qué se dedica y si se le puede interrumpir.
+   *
+   * Se resuelve al conectar y viaja con cada reparto, en vez de pedirse
+   * aparte: son dos campos cortos, y una segunda petición por cada persona
+   * que entra en la sala para pintar su cartel sería mucho más cara que
+   * llevarlos puestos.
+   */
+  presence: "available" | "busy_open" | "do_not_disturb";
+  title: string | null;
   /** Coordenadas en tiles, con decimales: el avatar se mueve entre casillas. */
   x: number;
   y: number;

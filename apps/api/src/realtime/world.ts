@@ -68,13 +68,64 @@ const inbound = z.discriminatedUnion("type", [
     type: z.literal("emote"),
     emote: z.enum(["wave", "yes", "clap", "hand"]),
   }),
+  /**
+   * ACERCARSE ABRE UN MENÚ; NO ENCIENDE NADA.
+   *
+   * La idea original era que aproximarse a alguien encendiera las cámaras
+   * solo, y chocaba con el cifrado de extremo a extremo: en un espacio con
+   * mucha gente, el vídeo automático obliga a un servidor de medios en
+   * medio, que es exactamente lo que rompería el cifrado. La versión
+   * acordada —y mejor diseño— es esta: acercarse ofrece «saludar» o
+   * «llamar», y las cámaras se encienden solo si los dos aceptan.
+   *
+   * Una llamada individual son dos navegadores y una sola conexión, cifrada
+   * por definición y sin nada en medio. Este socket hace de cartero de la
+   * negociación y nada más: reparte sin entender ni conservar, el mismo
+   * papel que ya tiene con las burbujas de texto.
+   */
+  z.object({ type: z.literal("knock"), toPeerId: z.string().uuid() }),
+  z.object({
+    type: z.literal("knock-reply"),
+    toPeerId: z.string().uuid(),
+    accept: z.boolean(),
+  }),
+  /**
+   * SDP e ICE de la llamada individual, y lo que se dibuje en la pizarra
+   * viaja por el canal de datos de esa misma conexión — no por aquí.
+   *
+   * `data` es opaco a propósito: en cuanto el servidor entienda lo que
+   * reparte, empieza a poder guardarlo. Se valida el tamaño y el
+   * destinatario, y nada más.
+   */
+  z.object({
+    type: z.literal("rtc"),
+    toPeerId: z.string().uuid(),
+    data: z.unknown(),
+  }),
   z.object({ type: z.literal("pong") }),
 ]);
+
+/**
+ * Manda algo a un par concreto de la misma oficina.
+ *
+ * Devuelve si llegó. El destinatario tiene que estar en ESTE workspace: sin
+ * esa comprobación, un identificador de par adivinado dejaría llamar a
+ * cualquiera de cualquier organización, que es un canal de contacto no
+ * pedido y ninguna política de la base lo taparía — esto no pasa por SQL.
+ */
+function enviarA(workspaceId: string, toPeerId: string, payload: Parameters<typeof send>[1]): boolean {
+  const destino = worldHub.members(workspaceId).find((m) => m.peerId === toPeerId);
+  if (!destino) return false;
+  send(destino.socket, payload);
+  return true;
+}
 
 const publicMember = (m: WorldMember) => ({
   peerId: m.peerId,
   userId: m.userId,
   displayName: m.displayName,
+  presence: m.presence,
+  title: m.title,
   x: m.x,
   y: m.y,
   facing: m.facing,
@@ -94,7 +145,14 @@ const publicMember = (m: WorldMember) => ({
 async function authorize(
   request: FastifyRequest,
   workspaceId: string,
-): Promise<{ userId: string; displayName: string; allowedZones: Set<string>; spawn: { x: number; y: number } } | null> {
+): Promise<{
+  userId: string;
+  displayName: string;
+  presence: "available" | "busy_open" | "do_not_disturb";
+  title: string | null;
+  allowedZones: Set<string>;
+  spawn: { x: number; y: number };
+} | null> {
   const { ticket } = request.query as { ticket?: string };
   if (!ticket) return null;
 
@@ -142,8 +200,12 @@ async function authorize(
       [roomId],
     );
 
-    const { rows: profile } = await db.query<{ display_name: string }>(
-      "select display_name from profiles where id = $1",
+    const { rows: profile } = await db.query<{
+      display_name: string;
+      presence: "available" | "busy_open" | "do_not_disturb";
+      title: string | null;
+    }>(
+      "select display_name, presence, title from profiles where id = $1",
       [userId],
     );
 
@@ -152,6 +214,8 @@ async function authorize(
     return {
       userId,
       displayName: profile[0]?.display_name ?? "alguien",
+      presence: profile[0]?.presence ?? "available",
+      title: profile[0]?.title ?? null,
       allowedZones: new Set(zones.map((z) => z.id)),
       // Se aparece justo delante de la puerta de la primera sala que se puede
       // ver, en el pasillo. Aparecer en el centro geométrico de la planta
@@ -241,6 +305,8 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
       peerId,
       userId: identity.userId,
       displayName: identity.displayName,
+      presence: identity.presence,
+      title: identity.title,
       socket,
       x: identity.spawn.x,
       y: identity.spawn.y,
@@ -333,6 +399,36 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
             (other) => other.allowedZones.has(zoneId),
             peerId,
           );
+          return;
+        }
+
+        case "knock": {
+          // Llamar a alguien que no está en la oficina no es un error del
+          // que informar: se ha ido mientras se pulsaba el botón.
+          enviarA(workspaceId, message.data.toPeerId, {
+            type: "knocked",
+            fromPeerId: peerId,
+            displayName: me.displayName,
+            title: me.title,
+          });
+          return;
+        }
+
+        case "knock-reply": {
+          enviarA(workspaceId, message.data.toPeerId, {
+            type: "knock-answered",
+            fromPeerId: peerId,
+            accept: message.data.accept,
+          });
+          return;
+        }
+
+        case "rtc": {
+          enviarA(workspaceId, message.data.toPeerId, {
+            type: "rtc",
+            fromPeerId: peerId,
+            data: message.data.data,
+          });
           return;
         }
 

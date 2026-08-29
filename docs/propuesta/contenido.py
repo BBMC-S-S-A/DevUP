@@ -116,19 +116,23 @@ BLOQUES = [
 
 ("h2", "5. Qué existe hoy"),
 ("p", "DevUP no empieza de cero. Escrito a partir del código y no de lo que prometían "
-      "los planes: hay <b>119 puntos de API</b> en 18 módulos, <b>42 tablas</b> con "
-      "política de aislamiento en todas, <b>20 migraciones</b>, <b>16 pantallas</b>, y "
-      "<b>156 comprobaciones de aislamiento entre organizaciones</b> en verde en cada "
-      "cambio."),
+      "los planes: hay <b>129 puntos de API</b> en 18 módulos, <b>44 tablas</b> —43 con "
+      "política de aislamiento; la que falta es el registro de migraciones, que no "
+      "guarda datos de nadie—, <b>21 migraciones</b>, <b>18 pantallas</b>, y <b>166 "
+      "comprobaciones de aislamiento entre organizaciones</b> en verde en cada cambio."),
 ("p", "De las tres promesas del producto, dos están completas y en producción: el "
       "<b>espacio de trabajo</b> —organizaciones, canales, mensajería, llamadas con "
       "voz, vídeo y pantalla compartida, grabación con consentimiento, biblioteca de "
       "archivos, tablero de tareas, búsqueda global— y el <b>control de ventas</b> "
       "—servicios, clientes, embudo, cotizaciones y objetivos—."),
-("p", "La tercera —infraestructura y agentes— está empezada: hay bóveda de credenciales "
-      "cifrada, conector de GitHub, música compartida por canal y un entorno de "
-      "desarrollo embebido en fase inicial. Existe además <b>DevVerse</b>, el espacio "
-      "recorrible con avatares, funcional y en beta."),
+("p", "La tercera —infraestructura y agentes— está a medias. Hay bóveda de credenciales "
+      "cifrada y con rotación de su clave maestra, conector de GitHub, música compartida "
+      "por canal, un entorno de desarrollo embebido en fase inicial y, desde ahora, la "
+      "<b>vista de infraestructura</b>: entornos y despliegues del equipo en una sola "
+      "pantalla, preguntando al proveedor en vez de desplegando. Lo que no existe todavía "
+      "de esa tercera promesa son los <b>agentes</b> y las <b>integraciones guiadas</b>. "
+      "Existe además <b>DevVerse</b>, el espacio recorrible con avatares, funcional y en "
+      "beta."),
 ("p", "Lo que falta es lo que ocupa la segunda mitad de este documento."),
 
 ("h2", "6. Cómo se sostiene"),
@@ -182,22 +186,23 @@ BLOQUES = [
       "navegación entre pantallas. Cada funcionalidad llegó como una pantalla completa e "
       "independiente, y ninguna llegó como una pieza dentro de un marco, porque el marco "
       "nunca se escribió. Dieciséis veces seguidas."),
-("p", "Contado con números del código de hoy: las tarjetas se rehacen a mano <b>88 "
-      "veces</b> frente a 23 que usan la primitiva; hay <b>55 botones crudos</b> frente "
-      "a 97 que usan la del sistema; hay <b>12 desplegables y áreas de texto</b> "
-      "escritos uno a uno porque no existe primitiva que importar; y las <b>ocho "
-      "acciones irreversibles</b> del producto —borrar un cliente, quitar a alguien de "
-      "la organización, desconectar una cuenta— se deciden en el cuadro gris del sistema "
-      "operativo, sin el nombre del producto y sin el peligro marcado."),
-("p", "La misma cabecera está copiada en cinco pantallas, y ya ha derivado: cuatro "
-      "llaman «Organizaciones» al enlace de vuelta y una lo llama «Workspaces» —el mismo "
-      "enlace, al mismo sitio, con dos nombres—. No existe armazón de organización, así "
-      "que para ir de Ventas a GitHub hay que volver al inicio y volver a entrar. Y hay "
-      "<b>33 puntos de ruptura responsive en dieciséis pantallas</b>, con una barra "
-      "lateral de ancho fijo: el producto no es que se vea mal en un teléfono, es que no "
-      "está construido para que exista un teléfono."),
-("quote", "Todas las interfaces se van a rehacer. No el estilo —que está bien— sino el "
-          "armazón que nunca se construyó debajo."),
+("p", "<b>Buena parte de esto ya está hecho, y conviene decir cuál.</b> Existen el "
+      "armazón de organización, el marco de página, el diálogo de confirmación, el "
+      "desplegable, el área de texto y una capa de datos con caché. Las <b>ocho acciones "
+      "irreversibles</b> ya no se deciden en el cuadro gris del sistema operativo; los "
+      "<b>doce desplegables y áreas de texto</b> escritos a mano son ahora primitivas; y "
+      "las <b>cinco cabeceras copiadas</b> son una sola."),
+("p", "Lo que sigue pendiente del diagnóstico son dos cosas, y son las dos más caras: "
+      "las <b>88 llamadas a la API sueltas</b> en pantallas, que hay que ir migrando a la "
+      "capa nueva una por una, y las <b>pantallas que crecieron sin dividirse</b> —la de "
+      "ventas mide 1.273 líneas—, que no se pueden partir con seguridad mientras no haya "
+      "pruebas que abran un navegador."),
+("p", "El responsive sigue siendo el punto débil, aunque menos que al escribir esto: la "
+      "navegación ya es un cajón en pantalla estrecha en vez de una barra fija que se "
+      "come dos tercios del ancho. Lo que falta es el resto — las pantallas de dentro se "
+      "diseñaron para un monitor, y que la barra se aparte no las arregla."),
+("quote", "No el estilo —que está bien— sino el armazón que nunca se construyó debajo. "
+          "Escrito antes de construirlo; hoy está en pie y lo que queda es mudarse a él."),
 
 ("h2", "8. Lo que hay que hacer"),
 ("p", "En orden, y con el motivo del orden. La regla es siempre la misma: primero lo que "
@@ -205,10 +210,15 @@ BLOQUES = [
       "solo hace falta cuando duela."),
 
 ("h3", "A · Que nada se pierda"),
-("p", "Nada de esto añade una función y todo esto evita perder lo que ya hay. Hoy hay "
-      "usuarios reales, una organización con su historia dentro, grabaciones de llamadas "
-      "y credenciales de terceros cifradas, y <b>no hay ninguna copia de seguridad</b>. "
-      "Si el disco falla esta noche no se pierde una demo: se pierde el producto."),
+("p", "Nada de esto añade una función y todo esto evita perder lo que ya hay: usuarios "
+      "reales, una organización con su historia dentro, grabaciones de llamadas y "
+      "credenciales de terceros cifradas."),
+("p", "<b>Las copias ya existen</b>, con su restauración probada y su procedimiento de "
+      "rotación de la clave maestra. Lo que queda de este bloque es lo que no puede hacer "
+      "un script: llevarse el archivo con los secretos fuera de la máquina, y dar de alta "
+      "un servidor de correo. Y una lección que costó dos días de respaldos perdidos: "
+      "<i>tener el script</i> y <i>tener la copia</i> no son lo mismo, y solo la segunda "
+      "cuenta — el planificador fallaba en silencio en cada reinicio y nadie se enteraba."),
 ("bullets", [
     "Copias de seguridad de la base de datos y del almacén, fuera de esa máquina, con "
     "retención y con una restauración probada. Una copia que nadie ha restaurado no es "
@@ -270,12 +280,16 @@ BLOQUES = [
     "deje de doler.",
 ]),
 
-("h3", "D · Vista unificada de infraestructura"),
-("p", "Entornos y despliegues del cliente en una sola pantalla, sobre la bóveda que ya "
-      "existe. Cierra la tercera promesa y es lo que más se ve. Y vale doble por un "
-      "motivo que no es evidente: es lo que enciende los muebles que están puestos en "
-      "DevVerse y no hacen nada —la pantalla de despliegue y el rack de servidores—, que "
-      "hoy son decorado."),
+("h3", "D · Vista unificada de infraestructura — <i>primera versión en pie</i>"),
+("p", "Entornos y despliegues en una sola pantalla, sobre la bóveda que ya existe. Ya se "
+      "puede añadir un entorno, apuntarlo a un repositorio y ver en qué estado quedó lo "
+      "último que entró, con su commit, su autor y un enlace al registro."),
+("p", "Pregunta a GitHub y no a un proveedor de alojamiento, que es coherente con la "
+      "decisión de orquestar en vez de desplegar: para la mayoría de equipos la "
+      "plataforma que ya usan es Actions, y su credencial ya estaba en la bóveda. Lo que "
+      "falta es el segundo proveedor —que es donde se comprobará si la traducción de "
+      "estados aguanta— y encender con esto los muebles de DevVerse que hoy son "
+      "decorado: la pantalla de despliegue y el rack de servidores."),
 
 ("h3", "Integraciones guiadas"),
 ("p", "La pieza más diferenciadora del producto, y la que menos cuesta enseñar. La forma "
@@ -456,15 +470,11 @@ BLOQUES = [
       "delante."),
 
 ("h2", "13. Lo que falta decidir"),
+("p", "De las cinco que había, tres se han cerrado solas al mirarlas de cerca. Las copias no necesitaban una unidad de red: todo lo que hay que salvar son dos megas, así que se copian a mano y ya. El servidor de voz no era una decisión sino un alta, porque auto-alojarlo es imposible con el despliegue de hoy —no se publica ni un puerto—. Y el tema claro entró, junto al oscuro y con conmutador."),
 ("bullets", [
-    "Dónde van las copias de seguridad. Una copia en el mismo disco no protege del caso "
-    "que importa, y es la única decisión que bloquea el bloque A entero.",
-    "Si el servidor de retransmisión de voz se levanta o se contrata.",
     "Los tres ritos concretos que acuñan moneda al empezar, y el techo semanal por "
     "persona. Es media hora de conversación y define la economía entera.",
     "El tamaño definitivo del avatar y cuántos cuerpos base hay de salida.",
-    "Si el tema claro entra ahora —que son unos cuantos valores de color— o no entra "
-    "nunca. Dentro de seis pantallas más deja de ser barato.",
 ]),
 
 ("pagebreak",),

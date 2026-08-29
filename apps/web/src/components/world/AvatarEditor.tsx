@@ -24,10 +24,20 @@ export function AvatarEditor({
   initial,
   onSave,
   onCancel,
+  organizacion,
+  llevaAtuendo = false,
+  onQuitarAtuendo,
 }: {
   initial?: Avatar;
-  onSave: (look: Avatar) => Promise<void>;
+  /** `soloAqui` decide si esto es un atuendo de esta organización o el
+   *  personaje de siempre. */
+  onSave: (look: Avatar, soloAqui: boolean) => Promise<void>;
   onCancel: () => void;
+  /** El nombre de la organización, para poder decirlo en el botón. */
+  organizacion?: string;
+  /** Ya hay un atuendo guardado aquí: se puede quitar. */
+  llevaAtuendo?: boolean;
+  onQuitarAtuendo?: () => Promise<void>;
 }) {
   const [look, setLook] = useState<Avatar>(initial ?? DEFAULT_AVATAR);
   const [saving, setSaving] = useState(false);
@@ -70,13 +80,26 @@ export function AvatarEditor({
     return () => cancelAnimationFrame(frame);
   }, [look]);
 
-  const save = async () => {
+  const save = async (soloAqui: boolean) => {
     setSaving(true);
     setError(null);
     try {
-      await onSave(look);
+      await onSave(look, soloAqui);
     } catch {
       setError("no se pudo guardar tu personaje");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const quitar = async () => {
+    if (!onQuitarAtuendo) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onQuitarAtuendo();
+    } catch {
+      setError("no se pudo quitar el atuendo");
     } finally {
       setSaving(false);
     }
@@ -184,7 +207,22 @@ export function AvatarEditor({
 
         {error && <p className="px-5 pb-2 text-xs text-danger">{error}</p>}
 
-        <footer className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
+        {/* DOS BOTONES DE GUARDAR, no un desplegable con dos opciones. Lo que
+            se decide aquí no es una preferencia, es a dónde va este cambio, y
+            enterrarlo en un menú haría que casi todo el mundo guardara sin
+            enterarse de que había una alternativa. «Solo aquí» va primero y
+            en secundario porque es la opción cauta. */}
+        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+          {llevaAtuendo && onQuitarAtuendo && (
+            <button
+              type="button"
+              onClick={() => void quitar()}
+              disabled={saving}
+              className="mr-auto rounded-lg px-2 py-1.5 text-xs text-faint transition hover:text-danger disabled:opacity-40"
+            >
+              Quitarme el atuendo de aquí
+            </button>
+          )}
           <button
             type="button"
             onClick={onCancel}
@@ -194,12 +232,26 @@ export function AvatarEditor({
           </button>
           <button
             type="button"
-            onClick={() => void save()}
+            onClick={() => void save(true)}
             disabled={saving}
+            title={
+              organizacion
+                ? `Así te verán solo en ${organizacion}`
+                : "Así te verán solo en esta organización"
+            }
+            className="rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition hover:border-line-strong hover:text-ink disabled:opacity-40"
+          >
+            Solo aquí
+          </button>
+          <button
+            type="button"
+            onClick={() => void save(false)}
+            disabled={saving}
+            title="Tu personaje de siempre, donde no lleves atuendo"
             className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-canvas disabled:opacity-40"
           >
             {saving && <Loader2 size={12} className="animate-spin" />}
-            Guardar
+            En todas partes
           </button>
         </footer>
       </div>

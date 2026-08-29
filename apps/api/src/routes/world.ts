@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
-import { HttpError, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { HttpError, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
 
 const uuid = z.string().uuid();
 /** Los índices de catálogo y de paleta van acotados igual que en el esquema. */
@@ -239,14 +239,43 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get("/world/avatars", async (request) => {
     const userId = requireUser(request);
+    // `org` opcional: sin ella se devuelve el personaje base, que es lo que
+    // pedía un cliente anterior a los atuendos y sigue siendo una respuesta
+    // correcta.
+    const { workspace } = parseQuery(
+      z.object({ workspace: uuid.optional() }),
+      request.query,
+    );
+
     return withUser(userId, async (db) => {
+      // COALESCE campo a campo y no `coalesce(fila_entera)`: un atuendo a
+      // medias no existe —la tabla tiene valor por defecto en las catorce
+      // columnas— así que basta con preferir la fila del atuendo cuando la
+      // hay. El LEFT JOIN es lo que hace que quien no se ha vestido en esta
+      // organización siga saliendo con su personaje de siempre en vez de
+      // desaparecer de la lista.
       const { rows } = await db.query(
-        `select user_id as "userId", body, hair, top, bottom,
-                skin_tone as "skinTone", hair_tone as "hairTone",
-                top_tone  as "topTone",  bottom_tone as "bottomTone",
-                hat, glasses, beard, shoes,
-                hat_tone as "hatTone", shoes_tone as "shoesTone"
-           from world_avatars`,
+        `select a.user_id as "userId",
+                coalesce(o.body, a.body) as body,
+                coalesce(o.hair, a.hair) as hair,
+                coalesce(o.top, a.top) as top,
+                coalesce(o.bottom, a.bottom) as bottom,
+                coalesce(o.skin_tone, a.skin_tone) as "skinTone",
+                coalesce(o.hair_tone, a.hair_tone) as "hairTone",
+                coalesce(o.top_tone, a.top_tone) as "topTone",
+                coalesce(o.bottom_tone, a.bottom_tone) as "bottomTone",
+                coalesce(o.hat, a.hat) as hat,
+                coalesce(o.glasses, a.glasses) as glasses,
+                coalesce(o.beard, a.beard) as beard,
+                coalesce(o.shoes, a.shoes) as shoes,
+                coalesce(o.hat_tone, a.hat_tone) as "hatTone",
+                coalesce(o.shoes_tone, a.shoes_tone) as "shoesTone",
+                (o.user_id is not null) as "conAtuendo"
+           from world_avatars a
+           left join world_outfits o
+             on o.user_id = a.user_id
+            and o.organization_id = public.org_of_workspace($1)`,
+        [workspace ?? null],
       );
       return { avatars: rows };
     });
@@ -276,10 +305,43 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
       request.body,
     );
 
+    // Con `workspace` se guarda como atuendo de SU organización; sin él, como
+    // el personaje de siempre. Un único endpoint y no dos porque lo que se
+    // manda es idéntico: cambia dónde se guarda, no qué.
+    const { workspace } = parseQuery(
+      z.object({ workspace: uuid.optional() }),
+      request.query,
+    );
+
     await withUser(userId, (db) =>
-      db.query("select public.upsert_world_avatar($1::jsonb)", [JSON.stringify(body)]),
+      workspace
+        ? db.query(
+            "select public.upsert_world_outfit(public.org_of_workspace($1), $2::jsonb)",
+            [workspace, JSON.stringify(body)],
+          )
+        : db.query("select public.upsert_world_avatar($1::jsonb)", [JSON.stringify(body)]),
     );
 
     return { avatar: { userId, ...body } };
+  });
+
+  /**
+   * Quitarse el atuendo de una organización: se vuelve al personaje base.
+   *
+   * Existe porque vestirse tiene que ser reversible. Si probar un aspecto en
+   * una organización no se pudiera deshacer, nadie probaría ninguno.
+   */
+  app.delete("/world/outfit/:workspaceId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    await withUser(userId, (db) =>
+      db.query(
+        "delete from world_outfits where organization_id = public.org_of_workspace($1)",
+        [workspaceId],
+      ),
+    );
+    // 204 aunque no hubiera nada que quitar: el resultado que pedía quien
+    // llama —no llevar atuendo aquí— se cumple igual.
+    return reply.status(204).send();
   });
 }

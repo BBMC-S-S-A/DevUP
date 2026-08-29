@@ -538,26 +538,92 @@ export function drawAvatar(
 }
 
 /** Nombre flotante. Con fondo, porque sobre un suelo claro se pierde. */
+/**
+ * El color del punto de estado.
+ *
+ * Verde, ámbar y rojo, que es el orden que todo el mundo ya lee sin
+ * explicación. El ámbar es «ocupado, pero abierto a llamadas» y por eso no
+ * es rojo: rojo significa «no me hables», y ese estado significa justo lo
+ * contrario para lo que de verdad importa.
+ */
+const COLOR_ESTADO: Record<string, string> = {
+  available: "#34d399",
+  busy_open: "#f5b53f",
+  do_not_disturb: "#fb7185",
+};
+
+/**
+ * La cartelera sobre un personaje: nombre, rol y estado.
+ *
+ * EL PUNTO NO VA SOLO. Un punto de color es invisible para quien no
+ * distingue el verde del rojo, así que el estado que interrumpe —«no
+ * molestar»— se dice además con una barra sobre el punto. Los otros dos no
+ * necesitan glifo: lo que hay que poder distinguir de un vistazo es «a este
+ * no» del resto.
+ *
+ * EL ROL VA EN SU PROPIA LÍNEA y más pequeño. En la misma línea competiría
+ * con el nombre por el ancho, y con nombres largos el cartel acabaría siendo
+ * más ancho que la sala.
+ */
 export function drawNameplate(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   name: string,
   accent: string,
+  title?: string | null,
+  presence?: string,
 ): void {
+  const rol = title?.trim() ? title.trim() : null;
+  const punto = presence && presence !== "available" ? COLOR_ESTADO[presence] : null;
+
   ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  const anchoNombre = ctx.measureText(name).width;
 
-  const width = ctx.measureText(name).width + 10;
-  const top = y - 56;
+  ctx.font = "500 8px ui-sans-serif, system-ui, sans-serif";
+  const anchoRol = rol ? ctx.measureText(rol).width : 0;
+
+  const width = Math.max(anchoNombre, anchoRol) + 12 + (punto ? 8 : 0);
+  const alto = rol ? 22 : 14;
+  const top = y - 56 - (rol ? 8 : 0);
 
   ctx.fillStyle = "rgba(10,12,16,0.78)";
-  roundRect(ctx, x - width / 2, top, width, 14, 4);
+  roundRect(ctx, x - width / 2, top, width, alto, 4);
   ctx.fill();
 
+  const desplazado = punto ? 4 : 0;
+
+  ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
   ctx.fillStyle = accent;
-  ctx.fillText(name, x, top + 7.5);
+  ctx.fillText(name, x + desplazado, top + 7.5);
+
+  if (rol) {
+    ctx.font = "500 8px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(231,235,242,0.55)";
+    ctx.fillText(rol, x + desplazado, top + 16);
+  }
+
+  if (punto) {
+    const cx = x - width / 2 + 6;
+    const cy = top + 7.5;
+    ctx.fillStyle = punto;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // La barra del «no molestar». Es lo que hace que el estado se distinga
+    // sin depender del color.
+    if (presence === "do_not_disturb") {
+      ctx.strokeStyle = "rgba(10,12,16,0.9)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 1.6, cy);
+      ctx.lineTo(cx + 1.6, cy);
+      ctx.stroke();
+    }
+  }
 }
 
 /** Rótulo de una zona, sobre su pared superior. */

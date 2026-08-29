@@ -45,6 +45,10 @@ export type Me = {
   displayName: string;
   avatarUrl: string | null;
   emailVerified: boolean;
+  /** La cartelera. Viaja con la sesión porque el selector de presencia
+   *  vive en la barra y está en pantalla siempre. */
+  presence: "available" | "busy_open" | "do_not_disturb";
+  title: string | null;
 };
 
 async function loadMe(db: Db, userId: string): Promise<Me> {
@@ -52,6 +56,7 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
     `select u.id, u.email::text as "email",
             p.display_name as "displayName",
             p.avatar_url   as "avatarUrl",
+            p.presence, p.title,
             (u.email_verified_at is not null) as "emailVerified"
        from users u
        join profiles p on p.id = u.id
