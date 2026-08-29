@@ -154,7 +154,7 @@ Costó dos días de respaldos perdidos descubrirlo, así que queda escrito.
 
 `depends_on: condition: service_healthy` ordena el arranque **solo cuando lo
 arranca Compose**. Cuando se reinicia el demonio de Docker —y en esta máquina ha
-pasado tres veces en dos días— la política `restart: unless-stopped` devuelve
+pasado varias veces, cada vez que se cierra la aplicación— la política `restart: unless-stopped` devuelve
 todos los contenedores a la vez y sin ese orden. El respaldo salía antes que
 Postgres, `pg_dump` daba «connection refused», y el bucle se dormía el intervalo
 entero: **veinticuatro horas sin copia por una carrera de treinta segundos**.

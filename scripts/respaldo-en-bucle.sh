@@ -4,7 +4,7 @@
 # EXISTE POR UN FALLO REAL, y conviene contarlo porque el bucle ingenuo parecía
 # suficiente. `depends_on: condition: service_healthy` solo ordena el arranque
 # cuando lo arranca Compose. Cuando el demonio de Docker se reinicia —y aquí lo
-# ha hecho tres veces en dos días— la política `restart: unless-stopped`
+# pasa cada vez que se cierra la aplicación de Docker Desktop— la política `restart: unless-stopped`
 # devuelve todos los contenedores a la vez, sin ese orden. El respaldo salía
 # antes que Postgres, `pg_dump` daba «connection refused», y el bucle se iba a
 # dormir el INTERVALO entero: veinticuatro horas sin copia por una carrera de

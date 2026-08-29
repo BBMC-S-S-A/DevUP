@@ -88,9 +88,28 @@ dentro, es lo único que separa «se cayó un rato» de «se perdió».
 - **Explicar los 404 del conector de GitHub** en la interfaz. Casi nunca es un
   fallo nuestro, pero lo parece.
 - **Cerrar las decisiones 0003 y 0004.** La 0003 —arquitectura de despliegue— ha
-  dejado de ser teórica: Docker Desktop se ha caído tres veces en dos días
-  llevándose producción, y ahora sabemos que además se llevaba los respaldos en
-  silencio. La pregunta ya no es si conviene un servidor de verdad, es cuándo.
+  dejado de ser teórica, y por un motivo más simple del que parecía: Docker
+  Desktop no se cae, **se para al cerrar la aplicación**, y con
+  `AutoStart: false` tampoco vuelve sola al iniciar sesión. Producción vive
+  dentro de una aplicación de escritorio atada a una sesión de usuario. Eso se
+  puede paliar hoy (§4.1) pero no se arregla del todo, porque una herramienta de
+  desarrollo no es un gestor de servicios. La pregunta ya no es si conviene un
+  servidor de verdad, es cuándo.
+
+### 4.1 Lo que sí se puede hacer hoy con Docker Desktop
+
+Dos cosas, y ninguna es código:
+
+- **Activar «Start Docker Desktop when you sign in»** (Settings → General). Hoy
+  está en `false`: después de reiniciar el ordenador, DevUP sigue caído hasta que
+  alguien abre la aplicación a mano.
+- **Minimizar en vez de salir.** Cerrar la ventana del panel deja el motor
+  corriendo en la bandeja; *Quit Docker Desktop* lo para. Es la diferencia entre
+  quitarse el panel de en medio y apagar producción.
+
+Los contenedores están todos en `restart: unless-stopped`, así que **al volver a
+abrir la aplicación se levantan solos** — no hace falta un `up -d`. Lo único que
+se rompía en cada ciclo era el respaldo, y eso ya está arreglado.
 
 ---
 
