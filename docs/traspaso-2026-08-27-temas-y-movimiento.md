@@ -1,5 +1,9 @@
 # Traspaso · 27 de agosto de 2026
 
+> **Superado por [traspaso-2026-08-29.md](traspaso-2026-08-29.md).** Su grafo da
+> por pendientes cosas que ya están en producción. Se conserva por lo que cuenta
+> del §3 —las trampas que costaron tiempo—, que sigue siendo cierto.
+
 Continúa [`traspaso-2026-08-18-fusion-y-boveda.md`](traspaso-2026-08-18-fusion-y-boveda.md).
 Existe para que quien retome no vuelva a descubrir lo que ya costó descubrir.
 

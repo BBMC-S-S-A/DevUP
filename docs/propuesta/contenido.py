@@ -116,23 +116,29 @@ BLOQUES = [
 
 ("h2", "5. Qué existe hoy"),
 ("p", "DevUP no empieza de cero. Escrito a partir del código y no de lo que prometían "
-      "los planes: hay <b>129 puntos de API</b> en 18 módulos, <b>44 tablas</b> —43 con "
+      "los planes: hay <b>134 puntos de API</b> en 18 módulos, <b>45 tablas</b> —44 con "
       "política de aislamiento; la que falta es el registro de migraciones, que no "
-      "guarda datos de nadie—, <b>21 migraciones</b>, <b>18 pantallas</b>, y <b>166 "
-      "comprobaciones de aislamiento entre organizaciones</b> en verde en cada cambio."),
+      "guarda datos de nadie—, <b>24 migraciones</b>, <b>21 pantallas</b> y <b>231 "
+      "comprobaciones automáticas</b> en verde en cada cambio: 172 de aislamiento entre "
+      "organizaciones, 13 del socket del mundo, 26 del criterio de migraciones y 20 del "
+      "diagnóstico de integraciones."),
 ("p", "De las tres promesas del producto, dos están completas y en producción: el "
       "<b>espacio de trabajo</b> —organizaciones, canales, mensajería, llamadas con "
       "voz, vídeo y pantalla compartida, grabación con consentimiento, biblioteca de "
       "archivos, tablero de tareas, búsqueda global— y el <b>control de ventas</b> "
       "—servicios, clientes, embudo, cotizaciones y objetivos—."),
-("p", "La tercera —infraestructura y agentes— está a medias. Hay bóveda de credenciales "
-      "cifrada y con rotación de su clave maestra, conector de GitHub, música compartida "
-      "por canal, un entorno de desarrollo embebido en fase inicial y, desde ahora, la "
-      "<b>vista de infraestructura</b>: entornos y despliegues del equipo en una sola "
-      "pantalla, preguntando al proveedor en vez de desplegando. Lo que no existe todavía "
-      "de esa tercera promesa son los <b>agentes</b> y las <b>integraciones guiadas</b>. "
-      "Existe además <b>DevVerse</b>, el espacio recorrible con avatares, funcional y en "
-      "beta."),
+("p", "La tercera —infraestructura— también está en pie, y es la novedad. Sobre la "
+      "bóveda de credenciales cifrada —con rotación de su clave maestra— hay ya tres "
+      "piezas desplegadas: la <b>vista de entornos y despliegues</b>, que pregunta al "
+      "proveedor en vez de desplegar; la <b>base de datos como código</b>, que lee las "
+      "migraciones del repositorio del cliente y las pasa por el criterio; y las "
+      "<b>integraciones guiadas</b>, que dicen qué se está resolviendo a mano y qué lo "
+      "ahorraría, con el archivo y la línea delante."),
+("p", "Lo que no existe todavía de esa tercera promesa son los <b>agentes</b>, y la "
+      "segunda mitad de las integraciones: hoy se diagnostica, y montar la integración "
+      "necesita credenciales del proveedor. Existe además <b>DevVerse</b>, el espacio "
+      "recorrible con avatares, con su cartelera de estados, el encuentro por cercanía y "
+      "la pizarra compartida ya funcionando."),
 ("p", "Lo que falta es lo que ocupa la segunda mitad de este documento."),
 
 ("h2", "6. Cómo se sostiene"),
@@ -280,7 +286,7 @@ BLOQUES = [
     "deje de doler.",
 ]),
 
-("h3", "D · Vista unificada de infraestructura — <i>primera versión en pie</i>"),
+("h3", "D · Infraestructura — <i>desplegada</i>"),
 ("p", "Entornos y despliegues en una sola pantalla, sobre la bóveda que ya existe. Ya se "
       "puede añadir un entorno, apuntarlo a un repositorio y ver en qué estado quedó lo "
       "último que entró, con su commit, su autor y un enlace al registro."),
@@ -291,12 +297,18 @@ BLOQUES = [
       "estados aguanta— y encender con esto los muebles de DevVerse que hoy son "
       "decorado: la pantalla de despliegue y el rack de servidores."),
 
-("h3", "Integraciones guiadas"),
-("p", "La pieza más diferenciadora del producto, y la que menos cuesta enseñar. La forma "
-      "corta es esta: «Estás guardando sesiones a mano. Supabase te da autenticación, "
-      "base de datos y almacenamiento. ¿Lo monto?» — y si la persona dice que sí, el "
-      "trabajo ocurre detrás: crear el proyecto, guardar las claves en la bóveda, "
-      "escribir el esquema, conectar el protocolo de contexto y avisar."),
+("h3", "Integraciones guiadas — <i>el diagnóstico, desplegado</i>"),
+("p", "La pieza más diferenciadora del producto. La forma corta es esta: «Estás "
+      "guardando sesiones a mano. Supabase te da autenticación, base de datos y "
+      "almacenamiento. ¿Lo monto?» — y si la persona dice que sí, el trabajo ocurre "
+      "detrás: crear el proyecto, guardar las claves en la bóveda, escribir el esquema, "
+      "conectar el protocolo de contexto y avisar."),
+("p", "<b>La primera mitad ya está.</b> DevUP lee el repositorio conectado y dice qué se "
+      "está resolviendo a mano —autenticación propia, archivos en el disco del servidor, "
+      "base de datos sin migraciones, un archivo de credenciales dentro del "
+      "repositorio—, y cada recomendación enseña el archivo y la línea donde se ve. Sin "
+      "esa prueba delante sería publicidad dentro de una herramienta de trabajo. Lo que "
+      "falta es el «¿lo monto?», que necesita credenciales del proveedor."),
 ("p", "El diagnóstico de partida está infravalorado: mucha gente no ha descartado esas "
       "herramientas, es que <b>no sabe que existen</b>. Un catálogo donde buscas lo que "
       "ya sabes que quieres no arregla eso; un producto que dice «para lo que estás "
@@ -318,13 +330,17 @@ BLOQUES = [
 ("p", "Y una regla de producto que no es negociable: <b>el agente propone y la persona "
       "aprueba</b>. El cambio se revisa dentro de DevUP antes de que salga."),
 
-("h3", "Base de datos como código"),
-("p", "Migraciones del cliente sincronizadas con su repositorio, con el mismo criterio "
-      "que ya aplicamos aquí: solo se añaden, son idempotentes, y la política de "
-      "aislamiento es parte de la migración y no un paso aparte. Hay una ventaja injusta "
-      "que conviene aprovechar: ese criterio ya existe y se aprendió a base de un fallo "
-      "silencioso que costó una migración entera encontrar. Ese criterio es el producto, "
-      "no un detalle interno."),
+("h3", "Base de datos como código — <i>desplegada</i>"),
+("p", "Las migraciones del cliente, leídas de su repositorio y pasadas por el mismo "
+      "criterio que aplicamos aquí: solo se añaden, se pueden aplicar dos veces, y la "
+      "política de aislamiento es parte de la migración y no un paso aparte. Ese criterio "
+      "es el producto, no un detalle interno: se aprendió a base de un fallo silencioso "
+      "que costó una migración entera encontrar."),
+("p", "Se lee el texto y no se ejecuta nada — ni se conecta a la base del cliente ni se "
+      "corre una sola sentencia. Y el analizador se probó contra nuestras propias "
+      "veinticuatro migraciones, que es el único banco de pruebas honesto que había: si "
+      "a las que sí cumplen el criterio les pone un error, el equivocado es el "
+      "analizador. Pasó dos veces, y las dos se corrigió el criterio."),
 
 ("h3", "Identidad propia y apertura"),
 ("p", "Identidad de DevUP y la apertura a gente de fuera del equipo. No se puede empezar "

@@ -1,5 +1,11 @@
 # Plan de desarrollo · Lo que falta
 
+> **Desfasado.** Los bloques A, B, C parcial, I y D están hechos, y además
+> la base de datos como código y las integraciones guiadas. Lo que queda de este
+> plan son los agentes, la beta y el escalado. Ver
+> [traspaso-2026-08-29.md](traspaso-2026-08-29.md) y
+> [ESTADO-DEL-PRODUCTO.md](ESTADO-DEL-PRODUCTO.md).
+
 Continúa donde termina [`ESTADO-DEL-PRODUCTO.md`](ESTADO-DEL-PRODUCTO.md), que
 dice qué hay hoy. Esto dice en qué orden hacer lo que no hay, y por qué en ese
 orden y no en otro.
