@@ -7,6 +7,7 @@ import {
   Hash,
   KanbanSquare,
   LayoutDashboard,
+  LayoutGrid,
   Loader2,
   Lock,
   LogOut,
@@ -241,6 +242,19 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   indice={0}
                 >
                   Panel
+                </ItemNav>
+              </li>
+              <li>
+                {/* La mesa va justo debajo del panel porque son la misma
+                    idea a dos escalas: el panel coloca tarjetas de un vistazo,
+                    la mesa coloca herramientas para trabajar en ellas. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/mesa`}
+                  icono={<LayoutGrid size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/mesa`}
+                  indice={1}
+                >
+                  Mesa
                 </ItemNav>
               </li>
               <li>
