@@ -116,23 +116,29 @@ BLOQUES = [
 
 ("h2", "5. Qué existe hoy"),
 ("p", "DevUP no empieza de cero. Escrito a partir del código y no de lo que prometían "
-      "los planes: hay <b>129 puntos de API</b> en 18 módulos, <b>44 tablas</b> —43 con "
+      "los planes: hay <b>134 puntos de API</b> en 18 módulos, <b>45 tablas</b> —44 con "
       "política de aislamiento; la que falta es el registro de migraciones, que no "
-      "guarda datos de nadie—, <b>21 migraciones</b>, <b>18 pantallas</b>, y <b>166 "
-      "comprobaciones de aislamiento entre organizaciones</b> en verde en cada cambio."),
+      "guarda datos de nadie—, <b>24 migraciones</b>, <b>21 pantallas</b> y <b>231 "
+      "comprobaciones automáticas</b> en verde en cada cambio: 172 de aislamiento entre "
+      "organizaciones, 13 del socket del mundo, 26 del criterio de migraciones y 20 del "
+      "diagnóstico de integraciones."),
 ("p", "De las tres promesas del producto, dos están completas y en producción: el "
       "<b>espacio de trabajo</b> —organizaciones, canales, mensajería, llamadas con "
       "voz, vídeo y pantalla compartida, grabación con consentimiento, biblioteca de "
       "archivos, tablero de tareas, búsqueda global— y el <b>control de ventas</b> "
       "—servicios, clientes, embudo, cotizaciones y objetivos—."),
-("p", "La tercera —infraestructura y agentes— está a medias. Hay bóveda de credenciales "
-      "cifrada y con rotación de su clave maestra, conector de GitHub, música compartida "
-      "por canal, un entorno de desarrollo embebido en fase inicial y, desde ahora, la "
-      "<b>vista de infraestructura</b>: entornos y despliegues del equipo en una sola "
-      "pantalla, preguntando al proveedor en vez de desplegando. Lo que no existe todavía "
-      "de esa tercera promesa son los <b>agentes</b> y las <b>integraciones guiadas</b>. "
-      "Existe además <b>DevVerse</b>, el espacio recorrible con avatares, funcional y en "
-      "beta."),
+("p", "La tercera —infraestructura— también está en pie, y es la novedad. Sobre la "
+      "bóveda de credenciales cifrada —con rotación de su clave maestra— hay ya tres "
+      "piezas desplegadas: la <b>vista de entornos y despliegues</b>, que pregunta al "
+      "proveedor en vez de desplegar; la <b>base de datos como código</b>, que lee las "
+      "migraciones del repositorio del cliente y las pasa por el criterio; y las "
+      "<b>integraciones guiadas</b>, que dicen qué se está resolviendo a mano y qué lo "
+      "ahorraría, con el archivo y la línea delante."),
+("p", "Lo que no existe todavía de esa tercera promesa son los <b>agentes</b>, y la "
+      "segunda mitad de las integraciones: hoy se diagnostica, y montar la integración "
+      "necesita credenciales del proveedor. Existe además <b>DevVerse</b>, el espacio "
+      "recorrible con avatares, con su cartelera de estados, el encuentro por cercanía y "
+      "la pizarra compartida ya funcionando."),
 ("p", "Lo que falta es lo que ocupa la segunda mitad de este documento."),
 
 ("h2", "6. Cómo se sostiene"),
@@ -280,7 +286,7 @@ BLOQUES = [
     "deje de doler.",
 ]),
 
-("h3", "D · Vista unificada de infraestructura — <i>primera versión en pie</i>"),
+("h3", "D · Infraestructura — <i>desplegada</i>"),
 ("p", "Entornos y despliegues en una sola pantalla, sobre la bóveda que ya existe. Ya se "
       "puede añadir un entorno, apuntarlo a un repositorio y ver en qué estado quedó lo "
       "último que entró, con su commit, su autor y un enlace al registro."),
@@ -291,12 +297,18 @@ BLOQUES = [
       "estados aguanta— y encender con esto los muebles de DevVerse que hoy son "
       "decorado: la pantalla de despliegue y el rack de servidores."),
 
-("h3", "Integraciones guiadas"),
-("p", "La pieza más diferenciadora del producto, y la que menos cuesta enseñar. La forma "
-      "corta es esta: «Estás guardando sesiones a mano. Supabase te da autenticación, "
-      "base de datos y almacenamiento. ¿Lo monto?» — y si la persona dice que sí, el "
-      "trabajo ocurre detrás: crear el proyecto, guardar las claves en la bóveda, "
-      "escribir el esquema, conectar el protocolo de contexto y avisar."),
+("h3", "Integraciones guiadas — <i>el diagnóstico, desplegado</i>"),
+("p", "La pieza más diferenciadora del producto. La forma corta es esta: «Estás "
+      "guardando sesiones a mano. Supabase te da autenticación, base de datos y "
+      "almacenamiento. ¿Lo monto?» — y si la persona dice que sí, el trabajo ocurre "
+      "detrás: crear el proyecto, guardar las claves en la bóveda, escribir el esquema, "
+      "conectar el protocolo de contexto y avisar."),
+("p", "<b>La primera mitad ya está.</b> DevUP lee el repositorio conectado y dice qué se "
+      "está resolviendo a mano —autenticación propia, archivos en el disco del servidor, "
+      "base de datos sin migraciones, un archivo de credenciales dentro del "
+      "repositorio—, y cada recomendación enseña el archivo y la línea donde se ve. Sin "
+      "esa prueba delante sería publicidad dentro de una herramienta de trabajo. Lo que "
+      "falta es el «¿lo monto?», que necesita credenciales del proveedor."),
 ("p", "El diagnóstico de partida está infravalorado: mucha gente no ha descartado esas "
       "herramientas, es que <b>no sabe que existen</b>. Un catálogo donde buscas lo que "
       "ya sabes que quieres no arregla eso; un producto que dice «para lo que estás "
@@ -318,13 +330,38 @@ BLOQUES = [
 ("p", "Y una regla de producto que no es negociable: <b>el agente propone y la persona "
       "aprueba</b>. El cambio se revisa dentro de DevUP antes de que salga."),
 
-("h3", "Base de datos como código"),
-("p", "Migraciones del cliente sincronizadas con su repositorio, con el mismo criterio "
-      "que ya aplicamos aquí: solo se añaden, son idempotentes, y la política de "
-      "aislamiento es parte de la migración y no un paso aparte. Hay una ventaja injusta "
-      "que conviene aprovechar: ese criterio ya existe y se aprendió a base de un fallo "
-      "silencioso que costó una migración entera encontrar. Ese criterio es el producto, "
-      "no un detalle interno."),
+("h3", "Un recopilador de contexto"),
+("p", "Notas enlazadas entre sí, con grafo, donde vive el <i>porqué</i> de las cosas. Lo que no puede ser es otra aplicación de notas que nadie rellena: ese es el final de casi todas, porque escribir la nota es trabajo extra y su beneficio llega meses después y a otra persona."),
+("p", "Lo que aquí lo hace distinto es que el contexto <b>ya existe y está disperso</b>: decisiones discutidas en canales, tareas con su conversación, repositorios con sus commits, entornos con sus despliegues. Lo que no hay es un hilo que los una. Así que la nota no se escribe, <b>se deriva</b> — es un nodo que enlaza cosas que ya pasaron, y el trabajo de la persona es confirmarla y titularla, no redactarla."),
+
+("h3", "El agente que cada equipo prefiera, por MCP"),
+("p", "Que DevUP hable por MCP con el motor agéntico que el equipo ya usa —Claude, ChatGPT, el que sea— y que ese agente genere entrevistas, proponga un roadmap, prepare reuniones y asigne tareas."),
+("p", "<b>Esto invierte una decisión anterior, y a mejor.</b> Lo previsto era guardar una clave de API del modelo en la bóveda y llamarlo nosotros, lo que nos convierte en intermediarios de un servicio que no controlamos: su factura, su elección de modelo y su responsabilidad cuando se equivoca. Al revés, DevUP es un <b>servidor</b> MCP y no un cliente de un modelo: expone herramientas —leer un canal, listar tareas, abrir un pull request, mirar un entorno— y el agente lo pone el equipo con su propia suscripción."),
+("p", "La regla que ya estaba decidida encaja sola: <b>el agente propone y la persona aprueba</b>, y esa aprobación ocurre dentro de DevUP, que es donde está el equipo. El agente vive fuera; la superficie donde se decide, dentro. Y el renglón de consumo de agente de la tabla de precios desaparece."),
+("p", "El trabajo de verdad no es el protocolo: es que cada herramienta pase por el mismo aislamiento que la API, con la identidad de una persona y bajo sus políticas. Un servidor que consulte con el rol de la aplicación se salta el aislamiento entero y le enseña a un agente los datos de todas las organizaciones."),
+
+("h3", "Un diseñador propio de bocetos y MVP, que produce código"),
+("p", "Un lienzo dentro de DevUP para hacer bocetos y MVP —como se haría en cualquier herramienta de diseño— y, cuando el diseño está listo, que la IA lo pase a código."),
+("p", "<b>La trampa, dicha antes de empezar:</b> pedirle a un modelo que convierta píxeles en código sale siempre igual de mal, y no por falta de talento del modelo — <b>la información no está ahí</b>. Un rectángulo gris con texto dentro puede ser un botón, una etiqueta o una tarjeta, y ninguna cantidad de inteligencia lo saca de la imagen con certeza. Es el mismo fallo que ya conocemos de otro sitio: lo que no se guarda no se puede adivinar después."),
+("p", "Por eso el lienzo tiene <b>dos capas</b>. Una libre —rectángulos, texto, marcos— para explorar, que es para lo que sirve un boceto. Y una semántica: cualquier cosa del lienzo se puede <b>ascender a componente</b> del sistema, que ya existe entero y está en un muestrario. Ahí es donde la IA hace lo que de verdad sabe hacer: no generar maquetación a partir de una imagen, sino <b>proponer el ascenso</b> —«esto parece un botón primario, esto una lista de tarjetas»—. Es una correspondencia difusa contra un catálogo cerrado, que es donde un modelo acierta mucho y equivocarse cuesta un clic."),
+("p", "Con el diseño ascendido, generar el código deja de ser una traducción: es imprimir un árbol de componentes que ya existen. No hay pérdida porque no hay conversión. Y un diseño hecho así <b>no puede salirse del sistema visual</b> — que es justo el problema que costó dieciséis pantallas—, además de enterarse el día que el sistema cambie, cosa que un archivo de diseño no hace nunca."),
+
+("h3", "Reorganizar la superficie por sectores"),
+("p", "Hay veintiuna pantallas y todas valen lo mismo: una lista plana en una barra. Pero un desarrollador, un diseñador, un scrum master y un product owner no usan las mismas cinco cosas ni en la misma proporción, y hoy los cuatro buscan lo suyo entre lo de los demás."),
+("p", "La pieza es <b>partir la pantalla</b>: elegir trabajar en una, dos o tres zonas y poner en cada una la herramienta que toque —el editor y el canal, el tablero y la pizarra, el diseño y su código al lado—. Y el rol es <b>un preajuste de disposición, no un muro</b>: decide qué sale primero, no qué se puede abrir. Si impide entrar a algo, lo que se ha construido es un sistema de permisos que nadie pidió."),
+("p", "Tiene precedente en casa, que es la mejor señal de que es alcanzable: el panel personal ya hace esto en pequeño —celdas y no píxeles, arrastrar y estirar, guardado por persona, colapso a una columna en pantalla estrecha—. O la partición usa esa misma primitiva, o acabaremos con dos sistemas de disposición que se parecen y no son iguales."),
+
+("h3", "Base de datos como código — <i>desplegada</i>"),
+("p", "Las migraciones del cliente, leídas de su repositorio y pasadas por el mismo "
+      "criterio que aplicamos aquí: solo se añaden, se pueden aplicar dos veces, y la "
+      "política de aislamiento es parte de la migración y no un paso aparte. Ese criterio "
+      "es el producto, no un detalle interno: se aprendió a base de un fallo silencioso "
+      "que costó una migración entera encontrar."),
+("p", "Se lee el texto y no se ejecuta nada — ni se conecta a la base del cliente ni se "
+      "corre una sola sentencia. Y el analizador se probó contra nuestras propias "
+      "veinticuatro migraciones, que es el único banco de pruebas honesto que había: si "
+      "a las que sí cumplen el criterio les pone un error, el equivocado es el "
+      "analizador. Pasó dos veces, y las dos se corrigió el criterio."),
 
 ("h3", "Identidad propia y apertura"),
 ("p", "Identidad de DevUP y la apertura a gente de fuera del equipo. No se puede empezar "
@@ -475,6 +512,17 @@ BLOQUES = [
     "Los tres ritos concretos que acuñan moneda al empezar, y el techo semanal por "
     "persona. Es media hora de conversación y define la economía entera.",
     "El tamaño definitivo del avatar y cuántos cuerpos base hay de salida.",
+    "Si la nota de contexto pertenece a la organización o al espacio de trabajo. "
+    "Cambia la política de aislamiento, y esa no se cambia después.",
+    "Si se retira la clave del modelo de la bóveda. Con DevUP como servidor MCP, "
+    "guardar una credencial de un modelo deja de tener sentido.",
+    "Qué herramientas MCP pueden escribir y cuáles no. Es la misma pregunta de qué "
+    "puede tocar un agente, y por este camino tiene una respuesta más fácil.",
+    "Si la clave del modelo para el diseño a código la ponemos nosotros. Es una "
+    "función con coste acotado, a diferencia de un agente que trabaja todo el día: "
+    "ahí sí tiene sentido incluirla y medir el consumo.",
+    "Si los roles son preajustes de disposición o permisos. Si son permisos, esto "
+    "se convierte en otro proyecto.",
 ]),
 
 ("pagebreak",),

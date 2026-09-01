@@ -3,11 +3,13 @@
 Qué hace DevUP hoy y qué le falta. Escrito a partir del código —rutas,
 migraciones y pantallas contadas una a una—, no de lo que los planes prometían.
 
-Fecha: 18 de agosto de 2026 · rama `docs/traspaso-busqueda-boveda-github-spotify`
+Fecha: 29 de agosto de 2026 · todo lo de aquí está **desplegado en producción**.
 
-**En una línea:** el espacio de trabajo y el control de ventas están completos y
-en producción; la tercera promesa —infraestructura y agentes— está empezada, con
-la bóveda y dos conectores hechos y el resto sin abrir.
+**En una línea:** las tres promesas del producto están en pie. El espacio de
+trabajo y el control de ventas, completos desde hace semanas; la tercera
+—infraestructura— tiene ya su vista de entornos y despliegues, la base de datos
+como código y las integraciones guiadas. Lo que no existe todavía de esa tercera
+promesa son los **agentes**.
 
 ---
 
@@ -15,14 +17,20 @@ la bóveda y dos conectores hechos y el resto sin abrir.
 
 | | |
 |---|---|
-| Endpoints de API | **119** en 18 módulos |
-| Tablas en base | **42**, con RLS en todas |
-| Migraciones | **20** |
-| Pantallas | **16** |
-| Comprobaciones de aislamiento | **156**, en verde |
-| Comprobaciones del socket del mundo | **13**, en verde |
-| Integración continua | `ci.yml`: tipos, migraciones, aislamiento, mundo y build |
-| Guiones de navegador | 13 en `e2e/`, **manuales** — fuera de la integración continua |
+| Endpoints de API | **134** en 18 módulos |
+| Tablas en base | **45**; 44 con política de aislamiento |
+| Migraciones | **24** |
+| Pantallas | **21** |
+| Aislamiento entre organizaciones | **172** comprobaciones, en verde |
+| Socket del mundo | **13**, en verde |
+| Criterio de migraciones | **26**, en verde |
+| Diagnóstico de integraciones | **20**, en verde |
+| Integración continua | `ci.yml`: tipos, migraciones, aislamiento, mundo, criterio, diagnóstico, idempotencia y build |
+| Guiones de navegador | **ninguno**. Es el hueco más grande que queda |
+
+> La tabla anterior decía 42 tablas «con RLS en todas». La que falta es
+> `schema_migrations`, que no guarda datos de nadie. Lo encontró el propio
+> analizador de migraciones al correrse contra este repositorio.
 
 ---
 
@@ -45,6 +53,12 @@ recuperación de contraseña.
 - **Notificaciones** con bandeja y marcado.
 - **Búsqueda global** sobre mensajes, archivos, tareas, clientes, servicios y
   oportunidades, desde un solo sitio en vez de por espacio.
+- **Paleta de comandos** con `⌘K` sobre esa misma búsqueda, desde cualquier
+  pantalla.
+- **Dos temas**, claro y oscuro, con «seguir al sistema» por defecto.
+- **Estado de presencia** con tres valores, y el del medio es el que importa:
+  *ocupado, pero abierto a llamadas*.
+- **Navegación en cajón** debajo de 768 px, compartida por los dos armazones.
 
 ### Control de ventas — completo
 
@@ -62,14 +76,40 @@ organización. Editor de escenarios.
 
 Tiene sus propios 13 casos de prueba del socket.
 
-### Infraestructura y agentes — empezada
+Y desde esta semana:
 
+- **Cartelera** sobre cada personaje con nombre, rol y estado.
+- **Acercarse abre un menú** —saludar o llamar—, y las cámaras se encienden solo
+  si los dos aceptan. Una llamada individual son dos navegadores y una conexión
+  directa, cifrada por definición.
+- **Pizarra compartida** por el canal de datos de esa misma conexión: el
+  servidor nunca ve lo que se dibuja.
+- **Atuendos por organización**: el personaje base es quién eres, el atuendo es
+  cómo vas aquí.
+
+### Infraestructura — en pie; agentes, sin abrir
+
+- **Vista de entornos y despliegues**: qué corre dónde y en qué estado quedó lo
+  último que entró, con su commit, su autor y un enlace al registro. Pregunta a
+  GitHub y **no despliega nada**: la decisión cerrada es orquestar, no competir
+  con los proveedores.
+- **Base de datos como código**: lee las migraciones del repositorio del cliente
+  y las pasa por el criterio —solo se añade, se puede aplicar dos veces, el
+  aislamiento va en la misma migración—. Eso es el producto, no un detalle
+  interno: el criterio se aprendió a base de un fallo silencioso que costó una
+  migración entera encontrar.
+- **Integraciones guiadas**: qué se está resolviendo a mano y qué lo ahorraría,
+  con la prueba delante —archivo y línea—. No es un catálogo, y esa es toda la
+  diferencia: quien no sabe que una herramienta existe no la busca.
 - **Bóveda de credenciales**: `connections` + `connection_secrets`, cifrado
-  AES-256-GCM con una clave maestra propia, separada de la de sesiones.
+  AES-256-GCM con una clave maestra propia, separada de la de sesiones, y con
+  **rotación de esa clave** en una sola transacción.
 - **Conector de GitHub**: repos con commits recientes, PRs e issues abiertas,
   estado de la última ejecución de CI, refrescado cada 10 minutos.
-- **Música compartida de Spotify**: reproducción real por canal, cola
-  compartida, y el estado repartido por el mismo socket que los mensajes.
+- **Música compartida**: reproducción real por canal y estado repartido por el
+  mismo socket que los mensajes. La cola guarda **la canción y no el enlace**
+  —su identificador internacional de grabación—, así que sobrevive al día que
+  alguien se cambie de servicio.
 - **Entorno de desarrollo embebido** (`/dev`): editor Monaco y terminal real
   sobre WebContainer. Fase 0.
 
@@ -116,34 +156,35 @@ lo dice y parece uno.
 
 ### Lo que cierra la tercera promesa
 
-- **Vista unificada de infraestructura** (S7, ~22 puntos): entornos y despliegues
-  del cliente en una sola pantalla. Es también lo que desbloquea los muebles
-  vivos que siguen sin conectar en DevVerse — la pantalla de despliegue y el
-  rack de servidores están puestos y no hacen nada.
-- **Base de datos como código** y migraciones sincronizadas con el repositorio
-  (S8–S9).
-- **Agentes** (Codex, Claude Code) sobre el entorno embebido (S10).
-- **DevUP ID** y la beta (S11–S12).
-
-Detalle en `docs/DevUP-Plan-de-Desarrollo.pdf`.
+- **Agentes** sobre el entorno embebido. Antes de escribir código hacen falta
+  dos decisiones: qué puede tocar un agente y con qué credenciales. La regla de
+  producto sí está decidida y no se negocia: **el agente propone y la persona
+  aprueba**.
+- **Montar la integración**, que es la segunda mitad de las guiadas. Hoy se
+  diagnostica; el «¿lo monto?» —crear el proyecto, guardar las claves en la
+  bóveda, escribir el esquema— necesita credenciales del proveedor.
+- **El segundo proveedor de despliegues**. La vista lee de GitHub; hasta que no
+  haya otro no se sabrá si la traducción de estados aguanta.
+- **Encender los muebles de DevVerse** con lo que ya sabe la vista de
+  infraestructura: la pantalla de despliegue y el rack de servidores siguen
+  siendo decorado.
+- **DevUP ID** y la beta.
 
 ### Calidad e infraestructura propia
 
-- **La integración continua no llega hasta el final.** `ci.yml` corre en cada
-  push y cada PR —tipos, migraciones, aislamiento entre organizaciones, sala del
-  mundo, migraciones idempotentes y build—, que es la parte difícil y está bien
-  cubierta. Lo que queda fuera son los **13 guiones de `e2e/`**, que siguen
-  lanzándose a mano: son justo los que ejercitan el navegador de punta a punta, y
-  ahí es donde se esconden los fallos que ninguna prueba de unidad ve. El bucket
-  del almacén que nunca se creaba es el ejemplo: el typecheck no podía cazarlo,
-  una subida de verdad sí.
-- **El despliegue automático está escrito pero no enchufado.**
-  `.github/workflows/deploy.yml` espera a que la integración continua termine en
-  verde y despliega en el runner autoalojado de la máquina de producción. El
-  runner está descargado en `C:\Users\Juan\actions-runner` pero **sin
-  configurar**: no hay `.runner`, ni credenciales, ni servicio. Hasta que se
-  registre, los despliegues se quedan en cola y hay que seguir lanzándolos a
-  mano.
+- **No hay una sola prueba que abra un navegador.** `ci.yml` cubre bien lo
+  difícil —tipos, migraciones, aislamiento, mundo, el criterio de migraciones, el
+  diagnóstico de integraciones, idempotencia y build— y nada de eso ejercita la
+  interfaz. Ahí es donde se esconden los fallos que ninguna prueba de tipos ve:
+  el bucket del almacén que nunca se creaba pasó meses sin detectarse porque solo
+  se manifestaba a mitad de una subida real. Hay cinco pruebas de Playwright
+  escritas en `claude/inicio-desarrollo-nu1ftu`, sin cosechar.
+- **El despliegue automático está escrito pero no enchufado.** El runner está
+  descargado y sin configurar: no hay `.runner` ni servicio. Y hay una
+  contrapartida que conviene decidir antes de registrarlo: como Docker se abre
+  solo mientras se trabaja —a propósito, es un MVP—, un despliegue con la máquina
+  apagada falla en el `docker compose up`. No rompe producción, pero el rojo
+  llega igual.
 - **Redis** para presencia y límite de peticiones, el día que haya más de una
   instancia de API. Hoy ambos viven en memoria y no sobreviven a un segundo
   proceso.
@@ -151,8 +192,11 @@ Detalle en `docs/DevUP-Plan-de-Desarrollo.pdf`.
   del servidor en vez de enviarse: funciona para probar, no para usar.
 - **TURN** para las llamadas. Sin él conectan, pero no se oye nada en NAT
   simétrico ni en buena parte de las redes móviles.
-- **Copias de seguridad.** No hay ninguna definida para Postgres ni para el
-  almacén.
+- **Llevarse las copias fuera de la máquina.** Los respaldos existen, con
+  restauración probada, y viven en el mismo disco que la base. Son 2 MB: se
+  copian a mano con un `tar` y no piden ninguna infraestructura. Lo que sí es
+  urgente y no está hecho es sacar `.env.production` de aquí — lleva la clave
+  que descifra la bóveda y existe en un solo archivo, en un solo ordenador.
 
 ### Pendientes acotados
 

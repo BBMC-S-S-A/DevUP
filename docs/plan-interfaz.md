@@ -232,6 +232,12 @@ selección viene en el §4.
 
 ## 4. El plan
 
+> **Hecho, salvo I4.** I1 (armazón de organización), I2 (marco de página y las
+> primitivas), I3 (capa de datos) e I5 (muestrario y ⌘K) están desplegados. I4
+> —partir las pantallas grandes— sigue pendiente y sigue pidiendo lo mismo que
+> decía este plan: las pruebas de navegador como red antes de mover 1.273
+> líneas. Ver [traspaso-2026-08-29.md](traspaso-2026-08-29.md).
+
 Cinco fases. La regla de orden es la misma que usa el plan A–H: **primero lo que
 abarata lo siguiente**.
 

@@ -1048,6 +1048,77 @@ async function main(): Promise<void> {
     });
     check("un DELETE de Bruno sobre el repositorio de Acme afecta a cero filas", brunoDeletedRepo === 0);
 
+    // --- La mesa de trabajo ------------------------------------------------------
+    //
+    // Es de la persona y de nadie más: ni siquiera quien administra la
+    // organización ve cómo coloca alguien sus herramientas. Y además tiene que
+    // pertenecer al espacio, o se podrían guardar disposiciones para espacios
+    // ajenos — invisibles para todos, pero con el identificador de ese espacio
+    // dentro, que ya es contar algo que no habían preguntado.
+    console.log("\nLa mesa de trabajo");
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into user_workbench_prefs (user_id, workspace_id, zonas, fracciones)
+         values ($1, $2, '[{"herramienta":"tablero","objetivo":null}]'::jsonb, '[1]'::jsonb)`,
+        [ana, acme.ws],
+      ),
+    );
+
+    check("Ana ve su mesa", (await count(ana, "user_workbench_prefs")) === 1);
+    check(
+      "Carla, del mismo espacio, NO ve la mesa de Ana",
+      (await count(carla, "user_workbench_prefs")) === 0,
+    );
+    check("Bruno tampoco", (await count(bruno, "user_workbench_prefs")) === 0);
+
+    await denied(
+      "nadie puede guardar una mesa a nombre de otra persona",
+      () =>
+        withUser(carla, (db) =>
+          db.query(
+            `insert into user_workbench_prefs (user_id, workspace_id, zonas, fracciones)
+             values ($1, $2, '[]'::jsonb, '[]'::jsonb)`,
+            [ana, acme.ws],
+          ),
+        ),
+    );
+
+    await denied(
+      "ni guardar una mesa para un espacio al que no pertenece",
+      () =>
+        withUser(bruno, (db) =>
+          db.query(
+            `insert into user_workbench_prefs (user_id, workspace_id, zonas, fracciones)
+             values ($1, $2, '[]'::jsonb, '[]'::jsonb)`,
+            [bruno, acme.ws],
+          ),
+        ),
+    );
+
+    // El tope de tres zonas lo comprueba la base y no solo el cliente: una
+    // petición hecha a mano no debería poder dejar una mesa que la pantalla no
+    // sabe pintar.
+    await denied(
+      "la base rechaza una mesa de cuatro zonas",
+      () =>
+        withUser(ana, (db) =>
+          db.query(
+            `update user_workbench_prefs
+                set zonas = '[{"h":1},{"h":2},{"h":3},{"h":4}]'::jsonb
+              where user_id = $1`,
+            [ana],
+          ),
+        ),
+    );
+
+    const carlaBorro = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("delete from user_workbench_prefs where user_id = $1", [
+        ana,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("un DELETE de Carla sobre la mesa de Ana afecta a cero filas", carlaBorro === 0);
     // --- Atuendos por organización ---------------------------------------------
     //
     // Lo que se prueba aquí es la diferencia entre la política de

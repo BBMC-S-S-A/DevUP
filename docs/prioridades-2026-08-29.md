@@ -1,5 +1,11 @@
 # Prioridades · 29 de agosto de 2026
 
+> **Escrito por la mañana; la tarde se lo comió.** El bloque I está hecho, y con
+> él la vista de infraestructura, la base de datos como código y las
+> integraciones guiadas. Lo que sigue vigente es el §2 —qué hacer hoy— y el §3.1
+> —qué se recorta por ser un MVP—. Para lo demás, ver
+> [traspaso-2026-08-29.md](traspaso-2026-08-29.md).
+
 Este documento cruza tres cosas: la **propuesta de desarrollo**
 (`DevUP-Propuesta-de-Desarrollo.pdf`), el **plan de lo que falta**
 (`plan-lo-que-falta.md`) y **lo que hoy hay de verdad en el repositorio**,

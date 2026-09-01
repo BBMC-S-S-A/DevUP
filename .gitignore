@@ -27,3 +27,12 @@ npm-debug.log*
 # Configuración local de herramientas: rutas y puertos de la máquina de cada
 # cual, no del proyecto.
 .claude/
+
+# Productos intermedios del generador de la propuesta: las fuentes se bajan del
+# paquete oficial y los PNG los dibujan logo.py y modelo3d.py. Se regeneran en
+# dos comandos, así que versionar binarios que no son nuestros no aporta nada.
+docs/propuesta/fuentes/
+docs/propuesta/package/
+docs/propuesta/*.tgz
+docs/propuesta/*.png
+docs/propuesta/__pycache__/
