@@ -330,6 +330,25 @@ BLOQUES = [
 ("p", "Y una regla de producto que no es negociable: <b>el agente propone y la persona "
       "aprueba</b>. El cambio se revisa dentro de DevUP antes de que salga."),
 
+("h3", "Un recopilador de contexto"),
+("p", "Notas enlazadas entre sí, con grafo, donde vive el <i>porqué</i> de las cosas. Lo que no puede ser es otra aplicación de notas que nadie rellena: ese es el final de casi todas, porque escribir la nota es trabajo extra y su beneficio llega meses después y a otra persona."),
+("p", "Lo que aquí lo hace distinto es que el contexto <b>ya existe y está disperso</b>: decisiones discutidas en canales, tareas con su conversación, repositorios con sus commits, entornos con sus despliegues. Lo que no hay es un hilo que los una. Así que la nota no se escribe, <b>se deriva</b> — es un nodo que enlaza cosas que ya pasaron, y el trabajo de la persona es confirmarla y titularla, no redactarla."),
+
+("h3", "El agente que cada equipo prefiera, por MCP"),
+("p", "Que DevUP hable por MCP con el motor agéntico que el equipo ya usa —Claude, ChatGPT, el que sea— y que ese agente genere entrevistas, proponga un roadmap, prepare reuniones y asigne tareas."),
+("p", "<b>Esto invierte una decisión anterior, y a mejor.</b> Lo previsto era guardar una clave de API del modelo en la bóveda y llamarlo nosotros, lo que nos convierte en intermediarios de un servicio que no controlamos: su factura, su elección de modelo y su responsabilidad cuando se equivoca. Al revés, DevUP es un <b>servidor</b> MCP y no un cliente de un modelo: expone herramientas —leer un canal, listar tareas, abrir un pull request, mirar un entorno— y el agente lo pone el equipo con su propia suscripción."),
+("p", "La regla que ya estaba decidida encaja sola: <b>el agente propone y la persona aprueba</b>, y esa aprobación ocurre dentro de DevUP, que es donde está el equipo. El agente vive fuera; la superficie donde se decide, dentro. Y el renglón de consumo de agente de la tabla de precios desaparece."),
+("p", "El trabajo de verdad no es el protocolo: es que cada herramienta pase por el mismo aislamiento que la API, con la identidad de una persona y bajo sus políticas. Un servidor que consulte con el rol de la aplicación se salta el aislamiento entero y le enseña a un agente los datos de todas las organizaciones."),
+
+("h3", "Diseñar dentro, y que el diseño sea el código"),
+("p", "Lo caro es importar de una herramienta de diseño; lo valioso es no necesitarlo. Un importador produce siempre lo mismo: capas absolutas y valores clavados que hay que reescribir enteros. El problema no es la conversión, es que un diseño en píxeles no contiene lo que el código necesita."),
+("p", "La vuelta que lo hace barato es que el lienzo dibuje <b>nuestras primitivas</b>, que ya existen todas y están en un muestrario. Si diseñar es componer esas piezas, el diseño <b>ya es</b> la estructura del componente y generar el código es imprimirlo: no hay traducción y por tanto no hay pérdida. De regalo, un diseño así no puede salirse del sistema visual — que es justo el problema que costó dieciséis pantallas."),
+
+("h3", "Reorganizar la superficie por sectores"),
+("p", "Hay veintiuna pantallas y todas valen lo mismo: una lista plana en una barra. Pero un desarrollador, un diseñador, un scrum master y un product owner no usan las mismas cinco cosas ni en la misma proporción, y hoy los cuatro buscan lo suyo entre lo de los demás."),
+("p", "La pieza es <b>partir la pantalla</b>: elegir trabajar en una, dos o tres zonas y poner en cada una la herramienta que toque —el editor y el canal, el tablero y la pizarra, el diseño y su código al lado—. Y el rol es <b>un preajuste de disposición, no un muro</b>: decide qué sale primero, no qué se puede abrir. Si impide entrar a algo, lo que se ha construido es un sistema de permisos que nadie pidió."),
+("p", "Tiene precedente en casa, que es la mejor señal de que es alcanzable: el panel personal ya hace esto en pequeño —celdas y no píxeles, arrastrar y estirar, guardado por persona, colapso a una columna en pantalla estrecha—. O la partición usa esa misma primitiva, o acabaremos con dos sistemas de disposición que se parecen y no son iguales."),
+
 ("h3", "Base de datos como código — <i>desplegada</i>"),
 ("p", "Las migraciones del cliente, leídas de su repositorio y pasadas por el mismo "
       "criterio que aplicamos aquí: solo se añaden, se pueden aplicar dos veces, y la "
@@ -491,6 +510,14 @@ BLOQUES = [
     "Los tres ritos concretos que acuñan moneda al empezar, y el techo semanal por "
     "persona. Es media hora de conversación y define la economía entera.",
     "El tamaño definitivo del avatar y cuántos cuerpos base hay de salida.",
+    "Si la nota de contexto pertenece a la organización o al espacio de trabajo. "
+    "Cambia la política de aislamiento, y esa no se cambia después.",
+    "Si se retira la clave del modelo de la bóveda. Con DevUP como servidor MCP, "
+    "guardar una credencial de un modelo deja de tener sentido.",
+    "Qué herramientas MCP pueden escribir y cuáles no. Es la misma pregunta de qué "
+    "puede tocar un agente, y por este camino tiene una respuesta más fácil.",
+    "Si los roles son preajustes de disposición o permisos. Si son permisos, esto "
+    "se convierte en otro proyecto.",
 ]),
 
 ("pagebreak",),
