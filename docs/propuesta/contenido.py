@@ -340,9 +340,11 @@ BLOQUES = [
 ("p", "La regla que ya estaba decidida encaja sola: <b>el agente propone y la persona aprueba</b>, y esa aprobación ocurre dentro de DevUP, que es donde está el equipo. El agente vive fuera; la superficie donde se decide, dentro. Y el renglón de consumo de agente de la tabla de precios desaparece."),
 ("p", "El trabajo de verdad no es el protocolo: es que cada herramienta pase por el mismo aislamiento que la API, con la identidad de una persona y bajo sus políticas. Un servidor que consulte con el rol de la aplicación se salta el aislamiento entero y le enseña a un agente los datos de todas las organizaciones."),
 
-("h3", "Diseñar dentro, y que el diseño sea el código"),
-("p", "Lo caro es importar de una herramienta de diseño; lo valioso es no necesitarlo. Un importador produce siempre lo mismo: capas absolutas y valores clavados que hay que reescribir enteros. El problema no es la conversión, es que un diseño en píxeles no contiene lo que el código necesita."),
-("p", "La vuelta que lo hace barato es que el lienzo dibuje <b>nuestras primitivas</b>, que ya existen todas y están en un muestrario. Si diseñar es componer esas piezas, el diseño <b>ya es</b> la estructura del componente y generar el código es imprimirlo: no hay traducción y por tanto no hay pérdida. De regalo, un diseño así no puede salirse del sistema visual — que es justo el problema que costó dieciséis pantallas."),
+("h3", "Un diseñador propio de bocetos y MVP, que produce código"),
+("p", "Un lienzo dentro de DevUP para hacer bocetos y MVP —como se haría en cualquier herramienta de diseño— y, cuando el diseño está listo, que la IA lo pase a código."),
+("p", "<b>La trampa, dicha antes de empezar:</b> pedirle a un modelo que convierta píxeles en código sale siempre igual de mal, y no por falta de talento del modelo — <b>la información no está ahí</b>. Un rectángulo gris con texto dentro puede ser un botón, una etiqueta o una tarjeta, y ninguna cantidad de inteligencia lo saca de la imagen con certeza. Es el mismo fallo que ya conocemos de otro sitio: lo que no se guarda no se puede adivinar después."),
+("p", "Por eso el lienzo tiene <b>dos capas</b>. Una libre —rectángulos, texto, marcos— para explorar, que es para lo que sirve un boceto. Y una semántica: cualquier cosa del lienzo se puede <b>ascender a componente</b> del sistema, que ya existe entero y está en un muestrario. Ahí es donde la IA hace lo que de verdad sabe hacer: no generar maquetación a partir de una imagen, sino <b>proponer el ascenso</b> —«esto parece un botón primario, esto una lista de tarjetas»—. Es una correspondencia difusa contra un catálogo cerrado, que es donde un modelo acierta mucho y equivocarse cuesta un clic."),
+("p", "Con el diseño ascendido, generar el código deja de ser una traducción: es imprimir un árbol de componentes que ya existen. No hay pérdida porque no hay conversión. Y un diseño hecho así <b>no puede salirse del sistema visual</b> — que es justo el problema que costó dieciséis pantallas—, además de enterarse el día que el sistema cambie, cosa que un archivo de diseño no hace nunca."),
 
 ("h3", "Reorganizar la superficie por sectores"),
 ("p", "Hay veintiuna pantallas y todas valen lo mismo: una lista plana en una barra. Pero un desarrollador, un diseñador, un scrum master y un product owner no usan las mismas cinco cosas ni en la misma proporción, y hoy los cuatro buscan lo suyo entre lo de los demás."),
@@ -516,6 +518,9 @@ BLOQUES = [
     "guardar una credencial de un modelo deja de tener sentido.",
     "Qué herramientas MCP pueden escribir y cuáles no. Es la misma pregunta de qué "
     "puede tocar un agente, y por este camino tiene una respuesta más fácil.",
+    "Si la clave del modelo para el diseño a código la ponemos nosotros. Es una "
+    "función con coste acotado, a diferencia de un agente que trabaja todo el día: "
+    "ahí sí tiene sentido incluirla y medir el consumo.",
     "Si los roles son preajustes de disposición o permisos. Si son permisos, esto "
     "se convierte en otro proyecto.",
 ]),

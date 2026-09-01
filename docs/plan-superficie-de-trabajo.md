@@ -4,10 +4,16 @@ Cuatro ideas nuevas para el plan de desarrollo, y una tarea de reorganización
 visual que las ordena. Escrito el 29 de agosto de 2026.
 
 No son cuatro ideas sueltas: **se sostienen entre sí**, y en un orden concreto.
-El recopilador de contexto es lo que hace que el agente valga algo; el agente por
-MCP es lo que hace que el diseño a código sea barato; y la reorganización visual
-es la que permite que las tres quepan sin que la aplicación se vuelva un
-cajón de sastre.
+El recopilador de contexto es lo que hace que el agente valga algo. El diseñador
+propio solo sale barato si dibuja las primitivas que ya tenemos. Y la
+reorganización visual es la que permite que las tres quepan sin que la aplicación
+se vuelva un cajón de sastre.
+
+Hay además un hilo que las recorre y conviene decirlo una vez: **lo que no se
+guarda no se puede adivinar después**. Es lo que hace que el contexto tenga que
+derivarse de lo que ya pasó en vez de escribirse, y lo que hace que un diseño
+tenga que guardar intenciones y no píxeles. Ya lo aprendimos con la cola de
+música, que guardaba el enlace de un servicio en vez de la canción.
 
 ---
 
@@ -82,36 +88,86 @@ poder romper nada, y el aislamiento se verifica con los mismos casos de
 
 ---
 
-## 3. Diseño a código
+## 3. Nuestro propio diseñador de bocetos y MVP
 
-**La idea.** Crear diseños tipo Figma dentro de DevUP y llevarlos a código, con
-ayuda del agente.
+**La idea.** Un diseñador dentro de DevUP para hacer bocetos y MVP —como se
+haría en Figma— y, cuando el diseño está listo, que la IA lo pase a código.
 
-**Lo caro es importar Figma; lo valioso es no necesitarlo.** Un importador de
-archivos de Figma es años de trabajo y produce siempre lo mismo: HTML plausible
-que no es el de nadie, con divs absolutos y valores clavados, que hay que
-reescribir entero. El problema no es la conversión: es que un diseño en píxeles
-no contiene la información que el código necesita.
+### La trampa, dicha antes de empezar
 
-**La vuelta que lo hace barato:** que el lienzo dibuje **nuestras primitivas**.
-El muestrario de `/dev/ui` ya tiene todas —botón, campo, desplegable, tarjeta,
-chip, marco de página, los tres finales de una carga—. Si diseñar es componer
-esas piezas en un lienzo, entonces el diseño **ya es** la estructura del
-componente, y generar el código es imprimirlo. No hay traducción, y por tanto no
-hay pérdida.
+Un diseñador libre produce píxeles: rectángulos, textos, posiciones. Pedirle a
+un modelo que convierta píxeles en código produce siempre lo mismo, y no por
+falta de talento del modelo: **la información no está ahí**. Un rectángulo gris
+con texto dentro puede ser un botón, una etiqueta o una tarjeta, y ninguna
+cantidad de inteligencia lo saca de la imagen con certeza. El resultado es
+capas absolutas con valores clavados, que se reescriben enteras.
 
-Lo que se gana además: un diseño así no puede salirse del sistema visual, que es
-justo el problema que este equipo tuvo dieciséis veces seguidas.
+Es exactamente el mismo fallo que ya conocemos de otro sitio: cuando la
+identidad no se guarda, adivinarla después sale mal. La cola de música guardaba
+el enlace de Spotify en vez de la canción; un diseño que guarda píxeles en vez
+de intenciones tiene el mismo problema.
 
-Lo que se pierde, y hay que decirlo: no sirve para explorar formas nuevas. Para
-eso sigue estando Figma, y está bien que así sea — esto es para diseñar
-*producto*, no para diseñar el sistema.
+### La forma de que sí funcione: el lienzo tiene dos capas
 
-**El agente encaja aquí sin esfuerzo:** con el lienzo hecho de primitivas, «hazme
-la pantalla de facturas» es una composición que un agente puede proponer y una
-persona corregir arrastrando.
+**Capa libre.** Rectángulos, texto, imágenes, marcos, capas, alineación. Para
+explorar, que es para lo que sirve un boceto. Aquí se dibuja lo que sea, sin
+reglas, y se enseña a un cliente en una reunión.
 
----
+**Capa semántica.** Cualquier cosa del lienzo se puede **ascender a
+componente**: «esto es un `Boton` primario», «esto es una `Tarjeta`», «esto es
+un `Marco de página` con su título y sus acciones». Nuestras primitivas ya
+existen todas y están en el muestrario de `/dev/ui`.
+
+**Y aquí es donde la IA hace lo que de verdad sabe hacer.** No generar
+maquetación a partir de una imagen —eso es adivinar—, sino **proponer el
+ascenso**: mirar el boceto y decir «esto de aquí parece un botón primario, esto
+una lista de tarjetas, esto un estado vacío». Eso es una correspondencia difusa
+entre lo que se ve y un catálogo cerrado, que es justo el tipo de problema donde
+un modelo acierta mucho y donde equivocarse es barato: se corrige con un clic.
+
+Con el diseño ascendido, generar el código **deja de ser una traducción**: es
+imprimir un árbol de componentes que ya existen, con nuestras clases y nuestro
+sistema visual. No hay pérdida porque no hay conversión.
+
+### Lo que se gana además, y no es pequeño
+
+Un diseño hecho así **no puede salirse del sistema visual**. Ese fue el problema
+que costó dieciséis pantallas construidas de una en una: no faltaba criterio,
+faltaba que el criterio estuviera donde se diseña.
+
+Y funciona en las dos direcciones: cuando cambie el botón, cambian todos los
+diseños que lo usan. Un archivo de Figma no se entera nunca de que el sistema
+cambió.
+
+### Sobre la API del modelo, que es una decisión aparte
+
+En el punto 2 se argumenta que DevUP **no** debe guardar una clave de un modelo:
+que el agente lo ponga el equipo, por MCP, con su propia suscripción. Aquí es
+distinto, y conviene separarlo bien porque parece lo mismo y no lo es:
+
+| | Agente por MCP | Diseño a código |
+|---|---|---|
+| Qué hace | Trabaja continuamente con los datos de la organización | Una transformación puntual de un diseño |
+| Cuánto cuesta | Sin techo: depende de cuánto lo usen | Acotado: se sabe antes de llamar |
+| Quién responde si se equivoca | El equipo, que eligió su agente | Nosotros, porque es una función del producto |
+| De quién es la clave | Del equipo | **Puede ser nuestra**, medida por uso |
+
+Una conversión de diseño a código es una función del producto con un coste
+acotado, como generar un PDF. Ahí sí tiene sentido incluir la clave y medir el
+consumo. Lo que no tiene sentido es lo otro: pagar la cuenta de un agente que
+trabaja todo el día para otro.
+
+### Primera rebanada
+
+1. **Lienzo con las primitivas**, sin capa libre todavía. Arrastrar un `Boton` y
+   una `Tarjeta` a un marco y exportar el JSX. Es poco y ya sirve para montar
+   una pantalla nueva sin escribirla.
+2. **Capa libre** encima: rectángulos, texto y marcos, para bocetar de verdad.
+3. **El ascenso asistido**, que es donde entra el modelo.
+
+En ese orden y no al revés: si se empieza por la capa libre, la tentación será
+generar código de los píxeles —que es la trampa— antes de que exista el catálogo
+al que ascender.
 
 ## 4. La reorganización visual, que es la tarea que ordena todo
 
@@ -167,20 +223,24 @@ graph TD
   MCP["2 · Servidor MCP<br/>solo lectura primero"]
   PART["4a · Partición de pantalla<br/>sobre la primitiva de celdas"]
   ROLES["4b · Preajustes por rol"]
-  LIENZO["3 · Lienzo de primitivas"]
-  CODIGO["3b · Lienzo a código"]
+  L1["3a · Lienzo de primitivas<br/>arrastrar componentes reales"]
+  L2["3b · Capa libre<br/>rectángulos, texto, marcos"]
+  L3["3c · Ascenso asistido<br/>la IA propone qué es cada cosa"]
+  CODIGO["3d · Exportar el código<br/>imprimir, no traducir"]
   AGENTE["Agente que propone<br/>y la persona aprueba"]
 
   CTX --> MCP
   MCP --> AGENTE
   PART --> ROLES
-  PART --> LIENZO
-  LIENZO --> CODIGO
-  AGENTE --> CODIGO
+  PART --> L1
+  L1 --> L2
+  L2 --> L3
+  L1 --> CODIGO
+  L3 --> CODIGO
   ROLES --> AGENTE
 
   classDef n fill:#f2ecfe,stroke:#6d28d9,color:#1a1626
-  class CTX,MCP,PART,ROLES,LIENZO,CODIGO,AGENTE n
+  class CTX,MCP,PART,ROLES,L1,L2,L3,CODIGO,AGENTE n
 ```
 
 **El contexto va primero** porque es lo que hace que el agente valga algo. Un
@@ -195,8 +255,13 @@ integración, y de paso resuelve la decisión pendiente de «con qué credencial
 **La partición va en paralelo**, porque no depende de nada de lo anterior y es lo
 único que se nota usando el producto desde el primer día.
 
-**El lienzo va al final** porque es lo más caro y porque necesita que las
-primitivas estén asentadas, que es algo que acaba de pasar.
+**El diseñador va al final, y por dentro también tiene orden.** Primero el
+lienzo de primitivas —arrastrar un botón y una tarjeta y exportar el código—,
+que ya sirve para montar una pantalla sin escribirla. Después la capa libre para
+bocetar de verdad. Y solo entonces el ascenso asistido.
+
+Al revés sería el camino corto a la trampa: con la capa libre hecha y sin
+catálogo al que ascender, la tentación es generar código de los píxeles.
 
 ---
 
@@ -208,6 +273,8 @@ primitivas estén asentadas, que es algo que acaba de pasar.
 | ¿Se retira la clave de Anthropic de la decisión 0004? | Si DevUP es servidor MCP, guardar una clave de modelo deja de tener sentido |
 | ¿Qué herramientas MCP pueden escribir, y cuáles nunca? | Es la misma pregunta de «qué puede tocar un agente», y ahora tiene una respuesta más fácil |
 | ¿Los roles son preajustes o permisos? | Recomiendo preajustes. Si son permisos, esto se convierte en otro proyecto |
+| ¿La clave del modelo para diseño a código la ponemos nosotros? | Recomiendo que sí, y medida: es una función con coste acotado, a diferencia de un agente que trabaja todo el día |
+| ¿El diseñador guarda su propio formato o solo árboles de componentes? | Decide si la capa libre es de primera clase o un andamio que desaparece al ascender |
 
 ---
 
