@@ -2,16 +2,23 @@ import { createTransport, type Transporter } from "nodemailer";
 import { env } from "../env.js";
 
 /**
- * Envío de correo.
+ * Envío de correo, por tres vías y en este orden: API HTTP, SMTP, y el
+ * registro.
  *
- * Sin `SMTP_URL` configurado no falla: escribe el correo en el registro, con
- * su enlace bien visible. Es lo que permite probar el ciclo entero de
- * invitación y de recuperación en desarrollo sin montar un servidor de correo,
- * y en producción `env.ts` ya avisa al arrancar de que no hay SMTP.
+ * POR QUÉ LA API HTTP VA PRIMERA Y ES LA DE PRODUCCIÓN. Las plataformas
+ * gestionadas gratuitas —Render, entre otras— bloquean los puertos 25, 465 y
+ * 587 de salida. SMTP allí no da un error de configuración: la conexión se
+ * queda esperando hasta agotar el tiempo. Como este módulo se traga los fallos
+ * a propósito (ver abajo), el resultado sería que las invitaciones se crean,
+ * nadie las recibe, y en pantalla todo parece correcto.
  *
- * Los enlaces son credenciales de un solo uso. Que aparezcan en el registro es
- * aceptable en una máquina de desarrollo y no lo es en producción — otra razón
- * por la que ese aviso está donde está.
+ * SMTP se queda porque es lo que usa el buzón de mentira de desarrollo, donde
+ * el ciclo entero de invitación y recuperación se prueba sin dar de alta nada.
+ *
+ * Sin ninguna de las dos, el correo se escribe en el registro con su enlace
+ * visible. Los enlaces son credenciales de un solo uso: eso es aceptable en una
+ * máquina de desarrollo y no lo es en producción, y por eso `env.ts` avisa al
+ * arrancar.
  */
 type Correo = {
   to: string;
@@ -27,32 +34,71 @@ function obtenerTransporte(): Transporter | null {
   return transporte;
 }
 
-export async function enviarCorreo(correo: Correo): Promise<void> {
-  const transporte = obtenerTransporte();
-
-  if (!transporte) {
-    console.info(
-      [
-        "",
-        "┌─ correo sin enviar (no hay SMTP configurado) ──────────────────────",
-        `│ Para:    ${correo.to}`,
-        `│ Asunto:  ${correo.subject}`,
-        "│",
-        ...correo.text.split("\n").map((l) => `│ ${l}`),
-        "└───────────────────────────────────────────────────────────────────",
-        "",
-      ].join("\n"),
-    );
-    return;
-  }
-
-  try {
-    await transporte.sendMail({
+/**
+ * Envío por API HTTP. El cuerpo es el de Resend, que es también el que aceptan
+ * varios proveedores; cambiar de uno a otro debería ser cambiar `MAIL_API_URL`.
+ */
+async function enviarPorApi(correo: Correo): Promise<void> {
+  const respuesta = await fetch(env.MAIL_API_URL, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.MAIL_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
       from: env.MAIL_FROM,
-      to: correo.to,
+      to: [correo.to],
       subject: correo.subject,
       text: correo.text,
-    });
+    }),
+    // Sin esto, un proveedor que no responde deja la petición del usuario
+    // colgada tanto como quiera: `fetch` no tiene tiempo límite por defecto.
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!respuesta.ok) {
+    // El cuerpo importa más que el código. El fallo típico al empezar es «el
+    // dominio del remitente no está verificado», y eso solo lo dice el cuerpo:
+    // el código a secas es un 403 que no orienta a nadie.
+    const detalle = await respuesta.text().catch(() => "");
+    throw new Error(`${respuesta.status} ${respuesta.statusText} · ${detalle.slice(0, 300)}`);
+  }
+}
+
+function alRegistro(correo: Correo): void {
+  console.info(
+    [
+      "",
+      "┌─ correo sin enviar (no hay correo configurado) ────────────────────",
+      `│ Para:    ${correo.to}`,
+      `│ Asunto:  ${correo.subject}`,
+      "│",
+      ...correo.text.split("\n").map((l) => `│ ${l}`),
+      "└───────────────────────────────────────────────────────────────────",
+      "",
+    ].join("\n"),
+  );
+}
+
+export async function enviarCorreo(correo: Correo): Promise<void> {
+  try {
+    if (env.MAIL_API_KEY) {
+      await enviarPorApi(correo);
+      return;
+    }
+
+    const transporte = obtenerTransporte();
+    if (transporte) {
+      await transporte.sendMail({
+        from: env.MAIL_FROM,
+        to: correo.to,
+        subject: correo.subject,
+        text: correo.text,
+      });
+      return;
+    }
+
+    alRegistro(correo);
   } catch (error) {
     // Un correo que no sale no debe tumbar la petición: la invitación ya está
     // creada y se puede reenviar. Pero tiene que verse en el registro, porque

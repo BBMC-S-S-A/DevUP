@@ -41,12 +41,94 @@ if (!existsSync(ficheroEnv)) {
 cargarEnv({ path: ficheroEnv, quiet: true });
 
 const SMTP_URL = process.env.SMTP_URL;
+const MAIL_API_KEY = process.env.MAIL_API_KEY;
+const MAIL_API_URL = process.env.MAIL_API_URL ?? "https://api.resend.com/emails";
 const MAIL_FROM = process.env.MAIL_FROM ?? "DevUP <no-reply@devup.local>";
+
+/**
+ * La vía de producción: API HTTP.
+ *
+ * Va antes que SMTP porque es el orden que sigue el mailer, y porque en las
+ * plataformas gestionadas gratuitas SMTP directamente no sale — bloquean los
+ * puertos 25, 465 y 587. Probar SMTP en local y desplegar en una de ellas es
+ * probar una cosa y ejecutar otra.
+ *
+ * Aquí basta un envío para separar las tres averías, porque el proveedor las
+ * distingue por código: no llegar, no autenticar, y autenticar pero que no
+ * acepte el mensaje.
+ */
+async function probarApi() {
+  console.log(`proveedor:     ${MAIL_API_URL}`);
+  console.log(`remitente:     ${MAIL_FROM}`);
+  console.log(`destinatario:  ${destinatario}`);
+  console.log("");
+
+  let respuesta;
+  try {
+    respuesta = await fetch(MAIL_API_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${MAIL_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: MAIL_FROM,
+        to: [destinatario],
+        subject: "Prueba de correo de DevUP",
+        text:
+          "Si lees esto, el envío por API funciona.\n\n" +
+          "Lo manda scripts/probar-correo.mjs.\n\n—\nDevUP",
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    const causa = error?.name === "TimeoutError" ? "no respondió en 15 segundos" : error?.message;
+    console.error(`✗ no se pudo llegar al proveedor: ${causa}`);
+    console.error("  Revisa MAIL_API_URL, y que esta máquina tenga salida a internet.");
+    process.exit(1);
+  }
+
+  if (respuesta.ok) {
+    console.log("✓ el proveedor aceptó el mensaje");
+    console.log("");
+    console.log("Que lo acepte no es que llegue. Mira la bandeja, y si no está,");
+    console.log("mira la carpeta de spam y el panel del proveedor: ahí se ve si");
+    console.log("rebotó después de aceptarlo.");
+    return;
+  }
+
+  const cuerpo = await respuesta.text().catch(() => "");
+  console.error(`✗ el proveedor rechazó el envío (${respuesta.status})`);
+  if (cuerpo) console.error(`  ${cuerpo.slice(0, 400)}`);
+  console.error("");
+
+  if (respuesta.status === 401) {
+    console.error("  401 es la clave: o está mal copiada, o fue revocada.");
+  } else if (respuesta.status === 403 || respuesta.status === 422) {
+    console.error(
+      "  Casi siempre es el remitente. El dominio de MAIL_FROM tiene que estar\n" +
+        "  verificado en el proveedor, con sus registros DNS puestos en Cloudflare.\n" +
+        "  Hasta entonces solo se puede enviar desde la dirección de pruebas que\n" +
+        "  ellos dan, y a veces solo a tu propia cuenta.",
+    );
+  } else if (respuesta.status === 429) {
+    console.error("  429 es cuota: la capa gratuita tiene tope diario además del mensual.");
+  }
+  process.exit(1);
+}
+
+if (MAIL_API_KEY) {
+  await probarApi();
+  process.exit(0);
+}
 
 if (!SMTP_URL) {
   console.error(
     [
-      `SMTP_URL no está puesta en ${ficheroEnv}.`,
+      `Ni MAIL_API_KEY ni SMTP_URL están puestas en ${ficheroEnv}.`,
+      "",
+      "En producción va MAIL_API_KEY: las plataformas gestionadas gratuitas",
+      "bloquean los puertos de SMTP, y allí SMTP no falla, se queda esperando.",
       "",
       "Sin ella la aplicación no falla: escribe los correos en el registro del",
       "servidor con su enlace. Sirve para desarrollar y no sirve para tener",

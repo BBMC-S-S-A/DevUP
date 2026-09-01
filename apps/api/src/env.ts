@@ -47,7 +47,12 @@ const schema = z.object({
       }
     }, "VAULT_MASTER_KEY debe ser 32 bytes codificados en base64"),
 
-  API_PORT: z.coerce.number().int().positive().default(4000),
+  // `PORT` gana si está puesto, y no es un capricho: las plataformas
+  // gestionadas —Render entre ellas— asignan el puerto en cada arranque y lo
+  // pasan así. Un proceso que escuche en otro parece sano por dentro y no
+  // recibe una sola petición desde fuera, con el balanceador devolviendo 502 y
+  // ningún error en el registro de la aplicación que apunte a la causa.
+  API_PORT: z.coerce.number().int().positive().default(Number(process.env.PORT) || 4000),
   API_HOST: z.string().default("0.0.0.0"),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
   /** Base pública de la web, para componer los enlaces de los correos. */
@@ -66,6 +71,20 @@ const schema = z.object({
   // Sin SMTP configurado, los correos se escriben en el registro con su enlace.
   // Vale para desarrollo; en producción es un aviso ruidoso al arrancar.
   SMTP_URL: z.string().optional(),
+  /**
+   * Envío por API HTTP, que es la vía de producción y no una alternativa.
+   *
+   * Render bloquea los puertos 25, 465 y 587 de salida — los de SMTP—, así que
+   * `SMTP_URL` allí no funciona por bien puesta que esté. Y el fallo es del
+   * tipo peor: la conexión se queda esperando hasta agotar el tiempo, el correo
+   * no sale, y como `enviarCorreo` no tumba la petición a propósito, la
+   * invitación se crea y nadie se entera de que no llegó.
+   *
+   * Si hay clave, manda esta vía sobre SMTP.
+   */
+  MAIL_API_KEY: z.string().optional(),
+  /** Resend por defecto. Cualquier proveedor con el mismo cuerpo sirve. */
+  MAIL_API_URL: z.string().url().default("https://api.resend.com/emails"),
   MAIL_FROM: z.string().default("DevUP <no-reply@devup.local>"),
 
   // --- Almacenamiento S3-compatible ------------------------------------------
@@ -213,10 +232,16 @@ if (env.NODE_ENV === "production") {
         "nada en NAT simétrico ni en buena parte de las redes móviles.",
     );
   }
-  if (!env.SMTP_URL) {
+  if (!env.MAIL_API_KEY && !env.SMTP_URL) {
     console.warn(
-      "[aviso] Sin SMTP configurado: las invitaciones y los correos de " +
+      "[aviso] Sin correo configurado: las invitaciones y los correos de " +
         "recuperación se escribirán en el registro en vez de enviarse.",
+    );
+  } else if (!env.MAIL_API_KEY) {
+    console.warn(
+      "[aviso] Correo por SMTP en producción. Si esto corre en una plataforma " +
+        "gestionada, comprueba que no bloquee los puertos 25/465/587: ahí SMTP " +
+        "no falla, se queda esperando, y el correo no sale sin que nadie lo note.",
     );
   }
 }

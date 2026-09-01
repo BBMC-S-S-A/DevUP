@@ -57,24 +57,40 @@ los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa
 - [ ] **1 · `.env.production` a un gestor de contraseñas.** Es el mismo punto
       del bloque A, y aquí además es el paso 1: una mudanza es cuando eso se
       pierde. *Solo Juan.*
-- [ ] **2 · Probar que la web compila y corre en Cloudflare Pages.** Es la
-      incógnita grande: si no sale, el plan cambia de forma. Va antes que todo
-      lo demás.
+- [x] ~~2 · Plano de despliegue [`render.yaml`](../render.yaml)~~ — los dos
+      servicios ya configurados. Se conecta el repositorio y crea `devup-api` y
+      `devup-web`; los secretos van con `sync: false`, o sea a mano en el panel.
+      **Cloudflare Pages ya no hace falta de entrada:** las 750 horas son una
+      bolsa compartida, y como los servicios se duermen, dos caben. Si el primer
+      mes se acerca al tope, ahí sí se mueve `web` a Pages.
+- [x] ~~El puerto: Render lo asigna en cada arranque y lo pasa en `PORT`~~. Un
+      proceso que escuche en otro parece sano y devuelve 502 desde fuera, sin un
+      solo error en el registro.
+- [x] ~~Separar dominios: no había nada que programar~~. `plugin.ts:21` ya lo
+      contemplaba — `app.hytrex.co` y `api.hytrex.co` comparten dominio
+      registrable, así que `sameSite: lax` vale tal cual. Es configuración.
+- [x] ~~Correo por API HTTP~~ — `MAIL_API_KEY` manda sobre `SMTP_URL`, SMTP se
+      queda para el buzón de mentira, y `npm run correo:probar` prueba las dos
+      vías. Comprobado contra Resend de verdad.
 - [ ] 3 · Supabase: alta, rol de aplicación **sin ser dueño de las tablas**, y
       aplicar las 25 migraciones. Después **restaurar el respaldo contando
-      filas**.
+      filas**. *Solo Juan (alta).*
 - [ ] 4 · Almacén a Supabase Storage (compatible con S3: es cambiar `endpoint`).
-- [ ] 5 · API en Render. Ojo a los tres límites: se duerme, no hay UDP, y
-      **bloquea los puertos de SMTP**.
-- [ ] 6 · **Separar dominios**: `app.hytrex.co` → Pages, `api.hytrex.co` →
-      Render. Tienen que compartir dominio raíz o las cookies de sesión pasan a
-      ser de terceros y el login falla a ratos. Revisar `APP_BASE_URL`, CORS y
-      el dominio de la cookie.
-- [ ] 7 · **Correo por API HTTP** en vez de SMTP, porque Render cierra esos
-      puertos. Toca el módulo de correo y `npm run correo:probar`.
+- [ ] 5 · Alta en Render, conectar el repositorio y pegar los secretos del
+      `.env.production`. *Solo Juan.*
+- [ ] 6 · Alta en Resend y **verificar el dominio** en Cloudflare. Sin eso solo
+      se puede enviar desde su dirección de pruebas. *Solo Juan.*
+- [ ] 7 · Apuntar `app.hytrex.co` y `api.hytrex.co` a Render. De paso se arregla
+      el apex.
 - [ ] 8 · Reubicar los respaldos: hoy son contenedores del compose, y **no
-      pueden caer en Supabase**, que es donde vive la base. *Decisión pendiente.*
+      pueden caer en Supabase**, que es donde vive la base. Recomendado: volcado
+      cifrado a un repositorio privado, que son 4,7 MB y no depende de que el
+      portátil esté encendido.
 - [ ] 9 · **Y solo entonces**, apagar el PC.
+
+**Vigilar el primer mes:** las horas de Render. Son 750 al mes para los dos
+servicios juntos, y quien las gasta sin que nadie trabaje es el tráfico de bots
+contra el dominio público, que despierta a `web`.
 
 ## Bloque B · Cerrar lo abierto
 
