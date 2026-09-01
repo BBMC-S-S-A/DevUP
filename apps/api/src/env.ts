@@ -87,6 +87,19 @@ const schema = z.object({
   MAIL_API_URL: z.string().url().default("https://api.resend.com/emails"),
   MAIL_FROM: z.string().default("DevUP <no-reply@devup.local>"),
 
+  // --- Entrar con Google ------------------------------------------------------
+  // Se crean en Google Cloud Console → Credenciales → ID de cliente de OAuth.
+  // No hace falta cuenta de facturación. Sin las tres, la ruta /auth/google
+  // devuelve 404 y la web no enseña el botón: mejor que no exista a que exista
+  // y falle a mitad del viaje de vuelta.
+  //
+  // GOOGLE_REDIRECT_URI tiene que coincidir EXACTAMENTE con la que está dada de
+  // alta en Google, carácter a carácter. Es el fallo número uno de este flujo y
+  // el error que devuelve (redirect_uri_mismatch) no dice cuál esperaba.
+  GOOGLE_CLIENT_ID: z.string().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().default(""),
+  GOOGLE_REDIRECT_URI: z.string().default(""),
+
   // --- Almacenamiento S3-compatible ------------------------------------------
   //
   // DOS DIRECCIONES PARA EL MISMO ALMACÉN, Y NO ES REDUNDANCIA.

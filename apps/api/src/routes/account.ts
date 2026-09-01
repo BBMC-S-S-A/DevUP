@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { hashPassword } from "../auth/password.js";
 import { type Db, withUser } from "../db/pool.js";
+import { googleConfigurado } from "../auth/google.js";
 import { env } from "../env.js";
 import {
   badRequest,
@@ -75,6 +76,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       // habría nadie que pudiera invitar a nadie.
       bootstrap: primera,
       requiresEmailVerification: env.REQUIRE_EMAIL_VERIFICATION,
+      // Para que la web sepa si enseñar el botón de Google. Un botón que lleva
+      // a una ruta que no existe es peor que no tener botón: la persona sale a
+      // Google y vuelve a un 404 que no puede interpretar.
+      google: googleConfigurado(),
     };
   });
 

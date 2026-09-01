@@ -84,6 +84,15 @@ los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa
       `anon` es pública por diseño. Revocado, y guardado en
       [`grants.sql`](../db/grants.sql) para que no vuelva.
 - [x] ~~Bucket `devup-files` creado, privado~~, con tope de 25 MB.
+- [x] ~~**Entrar con Google**~~ (migración `0026`) — código listo y probado, en
+      local y en Supabase. Quita el hash de contraseña de las cuentas nuevas y
+      con él la mitad de la dependencia del correo. **Respeta la puerta de las
+      invitaciones**: la comprobación se extrajo a `puertaDeAlta()` y la usan
+      las dos vías de alta, porque dos copias acaban diciendo cosas distintas.
+      `npm run test:google` — 24 comprobaciones.
+- [ ] **Crear las credenciales en Google Cloud Console** (pantalla de
+      consentimiento + ID de cliente OAuth). No pide facturación. Ojo con que
+      la URI de redirección coincida carácter a carácter. *Solo Juan.*
 - [ ] **Poner la contraseña de `devup_app`.** Es lo único que falta de la base y
       solo puede hacerlo Juan: una sentencia en el editor SQL de Supabase y la
       misma clave en `.env.production`. *Solo Juan.*

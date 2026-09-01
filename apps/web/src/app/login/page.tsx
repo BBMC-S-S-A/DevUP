@@ -3,13 +3,33 @@
 import { AlertCircle, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { ApiError, type SignupPolicy, type User, api } from "@/lib/api";
+import { API_URL, ApiError, type SignupPolicy, type User, api } from "@/lib/api";
 import { Boton } from "@/components/ui/Boton";
+
 import { Field } from "@/components/ui/Field";
 import { LogoAnimado } from "@/components/marca/LogoAnimado";
 import { Logo } from "@/components/ui/Logo";
 import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
+
+/**
+ * El logotipo de Google, en línea.
+ *
+ * Inline y no desde un CDN a propósito: una imagen externa en la pantalla de
+ * acceso es una petición a un tercero que se hace antes de que nadie haya
+ * decidido usar Google, y que además delata a cada visitante de esta pantalla.
+ * Son cuatro trazos.
+ */
+function LogoGoogle() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l-.1.3 6.5 5 .5.1c4.1-3.8 6.6-9.4 6.6-15.7" />
+      <path fill="#34A853" d="M24 46c5.9 0 10.9-1.9 14.5-5.3l-6.9-5.3c-1.8 1.3-4.3 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-.3 0-6.7 5.2-.1.3C7.9 41 15.4 46 24 46" />
+      <path fill="#FBBC05" d="M11.5 28.5c-.5-1.4-.7-2.9-.7-4.5s.3-3.1.7-4.5v-.3l-6.8-5.3-.2.1C2.9 17 2 20.4 2 24s.9 7 2.5 10z" />
+      <path fill="#EA4335" d="M24 9.9c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 3.7 29.9 2 24 2 15.4 2 7.9 7 4.5 14l7 5.5C13.3 14.2 18.2 9.9 24 9.9" />
+    </svg>
+  );
+}
 
 type Mode = "login" | "register";
 
@@ -379,6 +399,36 @@ function LoginForm() {
                 </Boton>
               )}
             </form>
+
+            {/* Entrar con Google.
+                Va FUERA del <form> a propósito: es una navegación de nivel
+                superior hacia Google, no un envío. Dentro, un clic dispararía
+                también la validación del formulario y el navegador se quejaría
+                de los campos vacíos antes de dejarnos salir.
+                Y es un <a> y no un botón con router: el viaje de OAuth necesita
+                una recarga completa para que la cookie de la ida se fije. */}
+            {policy?.google && (
+              <>
+                <div className="my-4 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-line" />
+                  <span className="text-[11px] uppercase tracking-wider text-faint">o</span>
+                  <span className="h-px flex-1 bg-line" />
+                </div>
+
+                <a
+                  href={`${API_URL}/auth/google${
+                    inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ""
+                  }`}
+                  className="toque-comodo flex w-full items-center justify-center gap-2.5
+                    rounded-lg border border-line bg-raised/60 px-4 py-2.5 text-sm font-medium
+                    text-ink transition-colors hover:border-line-strong hover:bg-raised
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--anillo-foco]"
+                >
+                  <LogoGoogle />
+                  Continuar con Google
+                </a>
+              </>
+            )}
           </Tarjeta>
 
           {!puedeRegistrarse && (
