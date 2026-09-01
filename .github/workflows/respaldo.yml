@@ -1,0 +1,134 @@
+# =============================================================================
+# DevUP · Respaldo diario de la base de datos
+#
+# POR QUÉ AQUÍ Y NO EN UN SERVICIO DE ALMACENAMIENTO. Hoy los respaldos son dos
+# contenedores del `docker-compose`, y ese compose deja de existir en cuanto la
+# base se va a Supabase y la API a Render. Todos los destinos gratuitos que
+# miramos —R2, B2— piden método de pago. GitHub Actions ya lo usamos, en
+# repositorio público no tiene tope de minutos, y no hay que dar de alta nada.
+#
+# ⚠️ EL REPOSITORIO ES PÚBLICO, Y LOS ARTEFACTOS DE UN REPOSITORIO PÚBLICO LOS
+# PUEDE DESCARGAR CUALQUIERA. Un volcado sin cifrar aquí sería publicar la base
+# de datos entera. Por eso el volcado se cifra ANTES de subirse y el trabajo se
+# niega a correr sin contraseña: no es una precaución opcional, es la condición
+# que hace viable todo lo demás.
+#
+# LO QUE SE CIFRA NO INCLUYE LA CLAVE MAESTRA. Las credenciales de terceros
+# viajan en el volcado ya cifradas con `VAULT_MASTER_KEY`, que vive en Render y
+# no aquí. Un volcado descifrado sigue sin abrir la bóveda.
+#
+# EFECTO SECUNDARIO ÚTIL: Supabase pausa los proyectos gratuitos tras una semana
+# sin actividad. Este trabajo se conecta todos los días, así que además de
+# respaldar, mantiene el proyecto despierto.
+#
+# QUÉ HAY QUE PONER EN «Settings → Secrets and variables → Actions»:
+#
+#   DATABASE_ADMIN_URL   La cadena de conexión DIRECTA de Supabase (puerto
+#                        5432, no el agrupador del 6543: `pg_dump` necesita una
+#                        sesión de verdad). Con el rol administrador, porque el
+#                        rol de la aplicación tiene RLS y volcaría cero filas
+#                        sin dar ningún error.
+#   BACKUP_PASSPHRASE    Una frase larga. **Guárdala donde no esté solo aquí:**
+#                        sin ella los respaldos no se pueden abrir, y entonces
+#                        no son respaldos.
+#
+# CÓMO SE RESTAURA UNO:
+#   gpg --decrypt --batch --passphrase "$BACKUP_PASSPHRASE" \
+#       -o devup.dump devup-AAAAMMDD-HHMMSSZ.dump.gpg
+#   pg_restore --clean --if-exists --no-owner -d "$DATABASE_ADMIN_URL" devup.dump
+# =============================================================================
+name: Respaldo
+
+on:
+  schedule:
+    # 04:00 UTC, que en Colombia son las 23:00 del día anterior: fuera de horas.
+    - cron: "0 4 * * *"
+  # Para poder lanzarlo a mano el día que se despliegue algo y se quiera una
+  # copia inmediata, sin esperar al ciclo.
+  workflow_dispatch:
+
+# Sin esto, dos ejecuciones solapadas pelean por nada. La nueva manda.
+concurrency:
+  group: respaldo
+  cancel-in-progress: false
+
+jobs:
+  base-de-datos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Comprobar que hay con qué cifrar
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
+        run: |
+          if [ -z "$DATABASE_ADMIN_URL" ]; then
+            echo "::error::Falta el secreto DATABASE_ADMIN_URL."
+            exit 1
+          fi
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::error::Falta BACKUP_PASSPHRASE. Este repositorio es público y" \
+                 "un volcado sin cifrar sería publicar la base de datos entera."
+            exit 1
+          fi
+
+      # `pg_dump` dentro de un contenedor y no con el cliente del ejecutor: la
+      # versión tiene que ser igual o mayor que la del servidor, y la del
+      # ejecutor cambia sin avisar. Anclarla aquí es que un cambio de imagen de
+      # GitHub no rompa los respaldos un martes cualquiera.
+      - name: Volcar
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
+        run: |
+          sello=$(date -u +%Y%m%d-%H%M%SZ)
+          echo "SELLO=$sello" >> "$GITHUB_ENV"
+          docker run --rm -i \
+            -e PGCONNECT_TIMEOUT=30 \
+            -v "$PWD:/salida" \
+            postgres:17-alpine \
+            pg_dump --format=custom --compress=9 --no-owner \
+                    --file="/salida/devup-$sello.dump" \
+                    "$DATABASE_ADMIN_URL"
+
+      # Que el comando termine con 0 no es que el volcado sirva. Esta es la
+      # misma comprobación que hace el script del compose, y está por lo mismo:
+      # un volcado vacío con nombre de respaldo bueno es peor que no tener
+      # respaldo, porque parece que estás cubierto.
+      - name: Comprobar que no está vacío
+        run: |
+          tamano=$(wc -c < "devup-$SELLO.dump")
+          echo "volcado: $tamano bytes"
+          if [ "$tamano" -lt 1000 ]; then
+            echo "::error::El volcado pesa $tamano bytes. Eso no puede estar bien."
+            exit 1
+          fi
+          # Y que `pg_restore` sepa leerlo, que es la pregunta de verdad: un
+          # archivo del tamaño correcto y con la cabecera corrupta pesa igual.
+          docker run --rm -v "$PWD:/salida" postgres:17-alpine \
+            pg_restore --list "/salida/devup-$SELLO.dump" > /dev/null
+          echo "el índice del volcado se lee correctamente"
+
+      - name: Cifrar
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          # La contraseña por descriptor de archivo y no en la línea de
+          # comandos: los argumentos de un proceso los ve cualquiera que mire la
+          # tabla de procesos.
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --symmetric \
+            --cipher-algo AES256 \
+            --passphrase-fd 0 \
+            --output "devup-$SELLO.dump.gpg" \
+            "devup-$SELLO.dump"
+          rm -f "devup-$SELLO.dump"
+          ls -l "devup-$SELLO.dump.gpg"
+
+      - name: Guardar
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-${{ env.SELLO }}
+          path: devup-${{ env.SELLO }}.dump.gpg
+          # 90 días es el máximo de la capa gratuita. Con una copia diaria son
+          # 90 puntos de restauración; la base son megas, no gigas.
+          retention-days: 90
+          if-no-files-found: error

@@ -35,11 +35,13 @@ Los seis en verde antes de empezar. Hoy: **179 · 13 · 26 · 20** comprobacione
 - [x] ~~Arreglar el planificador, que fallaba en silencio en cada reinicio~~
 - [x] ~~Rotación de `VAULT_MASTER_KEY` (`npm run boveda:rotar`)~~
 - [x] ~~SMTP: buzón de mentira en desarrollo y `npm run correo:probar`~~
-- [ ] **Sacar `.env.production` de la máquina** — a un gestor de contraseñas.
-      Lleva la clave que descifra la bóveda y existe en **un solo archivo, en un
-      solo ordenador**. Es lo más grave de toda la lista y cuesta un copiar y
-      pegar. *Solo Juan.*
+- Lo de copiar `.env.production` a un gestor de contraseñas **está decidido que
+  no**. Queda escrito una vez y no vuelve a la lista: `VAULT_MASTER_KEY` existe
+  en un solo archivo de un solo ordenador, así que si ese archivo se pierde, las
+  credenciales guardadas en la bóveda no se pueden volver a abrir. No hace falta
+  volver a plantearlo.
 - [ ] Llevarse la carpeta `respaldos/` de vez en cuando (`tar -czf …`). Son 2 MB.
+      *Deja de hacer falta cuando el respaldo diario de Actions esté andando.*
 - [ ] Alta de un proveedor de SMTP y pegar `SMTP_URL`. *Solo Juan.*
 - [ ] **Alta de Metered para TURN**: `METERED_APP_NAME` y `METERED_API_KEY`.
       Sigue haciendo falta. Sin tarjeta son 0,5 GB al mes —solo para probar—;
@@ -54,9 +56,6 @@ cabiendo todo en capa gratuita y **no se pierde ninguna funcionalidad**, pero
 `docker-compose.prod.yml` deja de ser la unidad de despliegue, la API se duerme a
 los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa.
 
-- [ ] **1 · `.env.production` a un gestor de contraseñas.** Es el mismo punto
-      del bloque A, y aquí además es el paso 1: una mudanza es cuando eso se
-      pierde. *Solo Juan.*
 - [x] ~~2 · Plano de despliegue [`render.yaml`](../render.yaml)~~ — los dos
       servicios ya configurados. Se conecta el repositorio y crea `devup-api` y
       `devup-web`; los secretos van con `sync: false`, o sea a mano en el panel.
@@ -82,10 +81,15 @@ los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa
       se puede enviar desde su dirección de pruebas. *Solo Juan.*
 - [ ] 7 · Apuntar `app.hytrex.co` y `api.hytrex.co` a Render. De paso se arregla
       el apex.
-- [ ] 8 · Reubicar los respaldos: hoy son contenedores del compose, y **no
-      pueden caer en Supabase**, que es donde vive la base. Recomendado: volcado
-      cifrado a un repositorio privado, que son 4,7 MB y no depende de que el
-      portátil esté encendido.
+- [x] ~~8 · Respaldo diario en [`respaldo.yml`](../.github/workflows/respaldo.yml)~~
+      — por GitHub Actions, que ya usamos y no pide dar de alta nada. **El
+      volcado se cifra antes de subirse**, porque el repositorio es público y
+      sus artefactos los descarga cualquiera. De regalo mantiene despierto el
+      proyecto de Supabase, que se pausa tras una semana sin actividad. Faltan
+      los dos secretos: `DATABASE_ADMIN_URL` y `BACKUP_PASSPHRASE`. *Solo Juan.*
+- [ ] Respaldo del **almacén de archivos**, que se quedó fuera: el volcado de
+      Actions es solo de la base. Va cuando estén los archivos en Supabase y se
+      sepa cuánto pesan.
 - [ ] 9 · **Y solo entonces**, apagar el PC.
 
 **Vigilar el primer mes:** las horas de Render. Son 750 al mes para los dos
