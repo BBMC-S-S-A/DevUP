@@ -111,9 +111,11 @@ contados antes de empezar:
 
 **No se pierde ninguna funcionalidad.** Las llamadas, DevVerse, el chat en vivo,
 la pizarra y la música siguen funcionando: todo eso necesita un proceso encendido
-con WebSockets, y Render lo es. Lo que **no** valdría es *serverless* —funciones
-de Vercel, Workers— porque ahí no hay proceso donde vivan los sockets ni el reloj
-del mundo, y eso sí costaría la mitad en tiempo real de DevUP.
+con WebSockets, y Render lo es. Son **cinco** sockets —`/ws/voice`, `/ws/files`,
+`/ws/channel`, `/ws/user` y `/ws/world`— más el reloj del mundo. Lo que **no**
+valdría es *serverless* —funciones de Vercel, Workers— porque ahí no hay proceso
+donde vivan las conexiones abiertas ni el reloj, y eso sí costaría la mitad en
+tiempo real de DevUP.
 
 Lo que sí se pierde es comodidad, en tres sitios concretos:
 

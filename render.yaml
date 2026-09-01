@@ -38,11 +38,11 @@
 
 services:
   # ---------------------------------------------------------------------------
-  # La API. Es la que tiene que estar encendida: de ella cuelgan los tres
-  # WebSockets (/ws/voice, /ws/files, /ws/world) y el reloj del mundo de
-  # DevVerse. Desde febrero de 2026 los mensajes de socket también cuentan como
-  # actividad en Render, así que una sesión de trabajo en curso no se duerme a
-  # mitad.
+  # La API. Es la que tiene que estar encendida: de ella cuelgan los cinco
+  # WebSockets —/ws/voice, /ws/files, /ws/channel, /ws/user y /ws/world— y el
+  # reloj del mundo de DevVerse. Desde febrero de 2026 los mensajes de socket
+  # también cuentan como actividad en Render, así que una sesión de trabajo en
+  # curso no se duerme a mitad.
   # ---------------------------------------------------------------------------
   - type: web
     name: devup-api
