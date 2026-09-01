@@ -1,0 +1,696 @@
+<title>Grafo vivo de DevUP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --fondo:   #EDEEF2;
+    --lienzo:  #F8F9FB;
+    --panel:   #FFFFFF;
+    --tinta:   #1B1D2A;
+    --apagado: #676B7C;
+    --tenue:   #9BA0AF;
+    --linea:   #D2D5DE;
+    --hilo:    rgba(27, 29, 42, 0.16);
+    --hilo-vivo: rgba(27, 29, 42, 0.55);
+
+    --z-rutas:       #C2621B;
+    --z-tiempo-real: #C0392F;
+    --z-conectores:  #A63D8F;
+    --z-datos:       #B07A12;
+    --z-api:         #8A6D1E;
+    --z-pantallas:   #2C63B8;
+    --z-componentes: #2C86A8;
+    --z-web-lib:     #1F8578;
+    --z-web:         #4C4FB0;
+    --z-guiones:     #6C7186;
+    --z-tablas:      #3F8A2E;
+    --z-migraciones: #6E4BB8;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fondo:   #101120;
+      --lienzo:  #14152A;
+      --panel:   #1B1D31;
+      --tinta:   #E7E8EE;
+      --apagado: #9297AA;
+      --tenue:   #6B7189;
+      --linea:   #2C2F47;
+      --hilo:    rgba(231, 232, 238, 0.14);
+      --hilo-vivo: rgba(231, 232, 238, 0.6);
+
+      --z-rutas:       #F0913F;
+      --z-tiempo-real: #EE6A5F;
+      --z-conectores:  #E77BCE;
+      --z-datos:       #EFC15A;
+      --z-api:         #D6C46B;
+      --z-pantallas:   #6BA6F0;
+      --z-componentes: #63C3E0;
+      --z-web-lib:     #4FC7B4;
+      --z-web:         #8D90EE;
+      --z-guiones:     #9AA0B6;
+      --z-tablas:      #79CC63;
+      --z-migraciones: #AE8FF0;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --fondo:   #101120;
+    --lienzo:  #14152A;
+    --panel:   #1B1D31;
+    --tinta:   #E7E8EE;
+    --apagado: #9297AA;
+    --tenue:   #6B7189;
+    --linea:   #2C2F47;
+    --hilo:    rgba(231, 232, 238, 0.14);
+    --hilo-vivo: rgba(231, 232, 238, 0.6);
+
+    --z-rutas:       #F0913F;
+    --z-tiempo-real: #EE6A5F;
+    --z-conectores:  #E77BCE;
+    --z-datos:       #EFC15A;
+    --z-api:         #D6C46B;
+    --z-pantallas:   #6BA6F0;
+    --z-componentes: #63C3E0;
+    --z-web-lib:     #4FC7B4;
+    --z-web:         #8D90EE;
+    --z-guiones:     #9AA0B6;
+    --z-tablas:      #79CC63;
+    --z-migraciones: #AE8FF0;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: "Archivo", system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .hoja {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 28px 20px 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  header { display: flex; flex-direction: column; gap: 8px; }
+
+  .marca {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--tenue);
+  }
+
+  h1 {
+    font-weight: 800;
+    font-size: clamp(28px, 4.4vw, 42px);
+    line-height: 1.03;
+    letter-spacing: -0.028em;
+    margin: 0;
+  }
+
+  .entrada {
+    color: var(--apagado);
+    max-width: 76ch;
+    margin: 0;
+    line-height: 1.55;
+    font-size: 15px;
+  }
+
+  /* --- Barra de control --------------------------------------------------- */
+
+  .barra {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .buscar {
+    flex: 1 1 220px;
+    min-width: 180px;
+    background: var(--panel);
+    border: 1px solid var(--linea);
+    border-radius: 3px;
+    color: var(--tinta);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    padding: 8px 11px;
+  }
+  .buscar::placeholder { color: var(--tenue); }
+  .buscar:focus-visible { outline: 2px solid var(--z-pantallas); outline-offset: 1px; }
+
+  .boton {
+    background: var(--panel);
+    border: 1px solid var(--linea);
+    border-radius: 3px;
+    color: var(--apagado);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 13px;
+    cursor: pointer;
+  }
+  .boton:hover { color: var(--tinta); border-color: var(--tenue); }
+  .boton:focus-visible { outline: 2px solid var(--z-pantallas); outline-offset: 1px; }
+
+  /* --- Lienzo ------------------------------------------------------------- */
+
+  .marco {
+    position: relative;
+    background: var(--lienzo);
+    border: 1px solid var(--linea);
+    border-radius: 4px;
+    overflow: hidden;
+    height: min(78vh, 760px);
+    min-height: 420px;
+  }
+
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.arrastrando { cursor: grabbing; }
+
+  .ficha {
+    position: absolute;
+    pointer-events: none;
+    background: var(--panel);
+    border: 1px solid var(--linea);
+    border-radius: 3px;
+    padding: 8px 11px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+    max-width: 320px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22);
+    opacity: 0;
+    transition: opacity 90ms linear;
+  }
+  .ficha.visible { opacity: 1; }
+  .ficha b { display: block; font-family: "Archivo", sans-serif; font-size: 13px; font-weight: 600; }
+  .ficha span { color: var(--apagado); }
+
+  .pista {
+    position: absolute;
+    left: 12px;
+    bottom: 10px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--tenue);
+    pointer-events: none;
+  }
+
+  /* --- Leyenda ------------------------------------------------------------ */
+
+  .leyenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .zona {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--panel);
+    border: 1px solid var(--linea);
+    border-radius: 999px;
+    padding: 5px 12px 5px 9px;
+    cursor: pointer;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--tinta);
+    transition: opacity 120ms linear;
+  }
+  .zona[aria-pressed="false"] { opacity: 0.35; }
+  .zona:focus-visible { outline: 2px solid var(--z-pantallas); outline-offset: 1px; }
+  .zona i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+  .zona em { font-style: normal; color: var(--tenue); font-variant-numeric: tabular-nums; }
+
+  /* --- Lectura ------------------------------------------------------------ */
+
+  .lectura {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 22px;
+    border-top: 1px solid var(--linea);
+    padding-top: 22px;
+  }
+
+  .lectura h2 {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--apagado);
+    margin: 0 0 7px;
+  }
+
+  .lectura p { margin: 0; color: var(--apagado); line-height: 1.6; font-size: 14px; }
+  .lectura strong { color: var(--tinta); font-weight: 600; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.88em;
+    color: var(--tinta);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ficha { transition: none; }
+  }
+</style>
+
+<div class="hoja">
+
+  <header>
+    <div class="marca">DevUP · 213 nodos · 643 aristas · leído del repositorio</div>
+    <h1>Grafo vivo de DevUP</h1>
+    <p class="entrada">
+      Cada archivo del código, cada tabla y cada migración es un nodo; cada
+      importación y cada consulta, un hilo. Arrastra para mover, rueda para
+      acercar, pasa por encima para ver de qué cuelga cada cosa.
+    </p>
+  </header>
+
+  <div class="barra">
+    <input class="buscar" id="buscar" type="search" placeholder="buscar un archivo, una tabla…" aria-label="Buscar un nodo">
+    <button class="boton" id="reiniciar" type="button">Recolocar</button>
+    <button class="boton" id="todo" type="button">Ver todo</button>
+  </div>
+
+  <div class="marco">
+    <canvas id="lienzo"></canvas>
+    <div class="ficha" id="ficha" role="status"></div>
+    <div class="pista">rueda para acercar · arrastra un nodo para fijarlo</div>
+  </div>
+
+  <div class="leyenda" id="leyenda"></div>
+
+  <div class="lectura">
+    <div>
+      <h2>Dónde está la gravedad</h2>
+      <p>
+        Los nodos grandes son de los que cuelga todo lo demás.
+        <strong><code>lib/api.ts</code></strong> con 46 hilos y
+        <strong><code>ui/Superficies.tsx</code></strong> con 41 son los dos
+        centros de la web: tocarlos toca media aplicación.
+      </p>
+    </div>
+    <div>
+      <h2>Las dos mitades</h2>
+      <p>
+        Se ven dos masas unidas por muy pocos hilos: la web y la API. Ese
+        estrechamiento es la frontera real del sistema, y es lo que permite
+        <strong>desplegarlas en sitios distintos</strong> sin desarmar nada.
+      </p>
+    </div>
+    <div>
+      <h2>Lo que cuelga de las tablas</h2>
+      <p>
+        Los nodos verdes son las <strong>45 tablas</strong>. Cuantos más hilos
+        llegan a una, más caro sale cambiarla — y todas llevan políticas de fila,
+        que es donde vive el aislamiento entre organizaciones.
+      </p>
+    </div>
+    <div>
+      <h2>Cómo se hizo</h2>
+      <p>
+        Recorriendo los archivos y resolviendo cada <code>import</code> como lo
+        hace el compilador. Las consultas a tablas se detectan por
+        <strong>palabra clave de SQL delante</strong>: buscar el nombre a secas
+        daría falsos positivos con <code>files</code>, <code>messages</code> o
+        <code>tags</code>.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+(function () {
+  const DATOS = {"nodos":[{"id":"apps/api/src/auth/password.ts","etiqueta":"password","zona":"api","grado":2},{"id":"apps/api/src/auth/plugin.ts","etiqueta":"plugin","zona":"api","grado":23},{"id":"apps/api/src/auth/tokens.ts","etiqueta":"tokens","zona":"api","grado":6},{"id":"apps/api/src/connectors/despliegues.ts","etiqueta":"despliegues","zona":"conectores","grado":1},{"id":"apps/api/src/connectors/github.ts","etiqueta":"github","zona":"conectores","grado":1},{"id":"apps/api/src/connectors/integraciones.test.ts","etiqueta":"integraciones.test","zona":"conectores","grado":1},{"id":"apps/api/src/connectors/integraciones.ts","etiqueta":"integraciones","zona":"conectores","grado":2},{"id":"apps/api/src/connectors/migraciones.test.ts","etiqueta":"migraciones.test","zona":"conectores","grado":1},{"id":"apps/api/src/connectors/migraciones.ts","etiqueta":"migraciones","zona":"conectores","grado":2},{"id":"apps/api/src/connectors/spotify.ts","etiqueta":"spotify","zona":"conectores","grado":4},{"id":"apps/api/src/db/isolation.test.ts","etiqueta":"isolation.test","zona":"datos","grado":33},{"id":"apps/api/src/db/migrate.ts","etiqueta":"migrate","zona":"datos","grado":0},{"id":"apps/api/src/db/pool.ts","etiqueta":"pool","zona":"datos","grado":25},{"id":"apps/api/src/env.ts","etiqueta":"env","zona":"api","grado":15},{"id":"apps/api/src/lib/http.ts","etiqueta":"http","zona":"api","grado":22},{"id":"apps/api/src/mail/mailer.ts","etiqueta":"mailer","zona":"api","grado":2},{"id":"apps/api/src/realtime/hub.ts","etiqueta":"hub","zona":"tiempo-real","grado":2},{"id":"apps/api/src/realtime/signaling.ts","etiqueta":"signaling","zona":"tiempo-real","grado":11},{"id":"apps/api/src/realtime/world.test.ts","etiqueta":"world.test","zona":"tiempo-real","grado":7},{"id":"apps/api/src/realtime/world.ts","etiqueta":"world","zona":"tiempo-real","grado":8},{"id":"apps/api/src/routes/account.ts","etiqueta":"account","zona":"rutas","grado":11},{"id":"apps/api/src/routes/announcements.ts","etiqueta":"announcements","zona":"rutas","grado":8},{"id":"apps/api/src/routes/auth.ts","etiqueta":"auth","zona":"rutas","grado":11},{"id":"apps/api/src/routes/connections.ts","etiqueta":"connections","zona":"rutas","grado":9},{"id":"apps/api/src/routes/files.ts","etiqueta":"files","zona":"rutas","grado":12},{"id":"apps/api/src/routes/github.ts","etiqueta":"github","zona":"rutas","grado":11},{"id":"apps/api/src/routes/ice.ts","etiqueta":"ice","zona":"rutas","grado":4},{"id":"apps/api/src/routes/infraestructura.ts","etiqueta":"infraestructura","zona":"rutas","grado":8},{"id":"apps/api/src/routes/messages.ts","etiqueta":"messages","zona":"rutas","grado":10},{"id":"apps/api/src/routes/notifications.ts","etiqueta":"notifications","zona":"rutas","grado":10},{"id":"apps/api/src/routes/preferences.ts","etiqueta":"preferences","zona":"rutas","grado":7},{"id":"apps/api/src/routes/recordings.ts","etiqueta":"recordings","zona":"rutas","grado":9},{"id":"apps/api/src/routes/sales.ts","etiqueta":"sales","zona":"rutas","grado":10},{"id":"apps/api/src/routes/search.ts","etiqueta":"search","zona":"rutas","grado":4},{"id":"apps/api/src/routes/spotify/conexion.ts","etiqueta":"conexion","zona":"rutas","grado":10},{"id":"apps/api/src/routes/spotify/sala.ts","etiqueta":"sala","zona":"rutas","grado":8},{"id":"apps/api/src/routes/spotify/token.ts","etiqueta":"token","zona":"rutas","grado":7},{"id":"apps/api/src/routes/spotify.ts","etiqueta":"spotify","zona":"rutas","grado":3},{"id":"apps/api/src/routes/tasks.ts","etiqueta":"tasks","zona":"rutas","grado":11},{"id":"apps/api/src/routes/workspaces.ts","etiqueta":"workspaces","zona":"rutas","grado":12},{"id":"apps/api/src/routes/world.ts","etiqueta":"world","zona":"rutas","grado":14},{"id":"apps/api/src/security/vault.ts","etiqueta":"vault","zona":"api","grado":6},{"id":"apps/api/src/server.ts","etiqueta":"server","zona":"api","grado":26},{"id":"apps/api/src/storage/s3.ts","etiqueta":"s3","zona":"api","grado":4},{"id":"apps/web/src/app/app/layout.tsx","etiqueta":"app/layout","zona":"web","grado":7},{"id":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","etiqueta":"ajustes/page","zona":"pantallas","grado":8},{"id":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","etiqueta":"base-de-datos/page","zona":"pantallas","grado":6},{"id":"apps/web/src/app/app/o/[orgId]/buscar/page.tsx","etiqueta":"buscar/page","zona":"pantallas","grado":3},{"id":"apps/web/src/app/app/o/[orgId]/dev/page.tsx","etiqueta":"dev/page","zona":"pantallas","grado":2},{"id":"apps/web/src/app/app/o/[orgId]/github/page.tsx","etiqueta":"github/page","zona":"pantallas","grado":6},{"id":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","etiqueta":"infraestructura/page","zona":"pantallas","grado":7},{"id":"apps/web/src/app/app/o/[orgId]/integraciones/page.tsx","etiqueta":"integraciones/page","zona":"pantallas","grado":5},{"id":"apps/web/src/app/app/o/[orgId]/layout.tsx","etiqueta":"[orgId]/layout","zona":"web","grado":9},{"id":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","etiqueta":"noticias/page","zona":"pantallas","grado":8},{"id":"apps/web/src/app/app/o/[orgId]/ventas/page.tsx","etiqueta":"ventas/page","zona":"pantallas","grado":5},{"id":"apps/web/src/app/app/page.tsx","etiqueta":"app/page","zona":"pantallas","grado":7},{"id":"apps/web/src/app/app/w/[workspaceId]/board/page.tsx","etiqueta":"board/page","zona":"pantallas","grado":2},{"id":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","etiqueta":"[channelId]/page","zona":"pantallas","grado":6},{"id":"apps/web/src/app/app/w/[workspaceId]/devverse/page.tsx","etiqueta":"devverse/page","zona":"pantallas","grado":1},{"id":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","etiqueta":"[workspaceId]/layout","zona":"web","grado":11},{"id":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","etiqueta":"mesa/page","zona":"pantallas","grado":10},{"id":"apps/web/src/app/app/w/[workspaceId]/page.tsx","etiqueta":"[workspaceId]/page","zona":"pantallas","grado":3},{"id":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","etiqueta":"panel/page","zona":"pantallas","grado":7},{"id":"apps/web/src/app/dev/ui/page.tsx","etiqueta":"ui/page","zona":"pantallas","grado":7},{"id":"apps/web/src/app/invitacion/page.tsx","etiqueta":"invitacion/page","zona":"pantallas","grado":5},{"id":"apps/web/src/app/layout.tsx","etiqueta":"app/layout","zona":"web","grado":3},{"id":"apps/web/src/app/login/page.tsx","etiqueta":"login/page","zona":"pantallas","grado":7},{"id":"apps/web/src/app/page.tsx","etiqueta":"app/page","zona":"pantallas","grado":2},{"id":"apps/web/src/app/recuperar/page.tsx","etiqueta":"recuperar/page","zona":"pantallas","grado":5},{"id":"apps/web/src/app/verificar/page.tsx","etiqueta":"verificar/page","zona":"pantallas","grado":3},{"id":"apps/web/src/components/chat/ChannelChat.tsx","etiqueta":"ChannelChat","zona":"componentes","grado":9},{"id":"apps/web/src/components/dashboard/DashboardWidgets.tsx","etiqueta":"DashboardWidgets","zona":"componentes","grado":4},{"id":"apps/web/src/components/dashboard/Rejilla.tsx","etiqueta":"Rejilla","zona":"componentes","grado":1},{"id":"apps/web/src/components/dev/CodeEditor.tsx","etiqueta":"CodeEditor","zona":"componentes","grado":1},{"id":"apps/web/src/components/dev/DevTerminal.tsx","etiqueta":"DevTerminal","zona":"componentes","grado":1},{"id":"apps/web/src/components/dev/DevWorkspace.tsx","etiqueta":"DevWorkspace","zona":"componentes","grado":9},{"id":"apps/web/src/components/dev/FileTree.tsx","etiqueta":"FileTree","zona":"componentes","grado":2},{"id":"apps/web/src/components/dev/IniciarProyecto.tsx","etiqueta":"IniciarProyecto","zona":"componentes","grado":4},{"id":"apps/web/src/components/dev/useWebContainer.ts","etiqueta":"useWebContainer","zona":"componentes","grado":2},{"id":"apps/web/src/components/files/FileLibrary.tsx","etiqueta":"FileLibrary","zona":"componentes","grado":12},{"id":"apps/web/src/components/files/FilePreview.tsx","etiqueta":"FilePreview","zona":"componentes","grado":7},{"id":"apps/web/src/components/files/TagBadge.tsx","etiqueta":"TagBadge","zona":"componentes","grado":4},{"id":"apps/web/src/components/files/UploadZone.tsx","etiqueta":"UploadZone","zona":"componentes","grado":5},{"id":"apps/web/src/components/marca/contorno-d.ts","etiqueta":"contorno-d","zona":"componentes","grado":1},{"id":"apps/web/src/components/marca/LogoAnimado.tsx","etiqueta":"LogoAnimado","zona":"componentes","grado":3},{"id":"apps/web/src/components/mesa/Mesa.tsx","etiqueta":"Mesa","zona":"componentes","grado":4},{"id":"apps/web/src/components/notifications/NotificationBell.tsx","etiqueta":"NotificationBell","zona":"componentes","grado":7},{"id":"apps/web/src/components/spotify/MusicaBar.tsx","etiqueta":"MusicaBar","zona":"componentes","grado":5},{"id":"apps/web/src/components/spotify/piezas.tsx","etiqueta":"piezas","zona":"componentes","grado":7},{"id":"apps/web/src/components/spotify/SpotifyWidget.tsx","etiqueta":"SpotifyWidget","zona":"componentes","grado":7},{"id":"apps/web/src/components/tasks/TaskBoard.tsx","etiqueta":"TaskBoard","zona":"componentes","grado":8},{"id":"apps/web/src/components/ui/Armazon.tsx","etiqueta":"Armazon","zona":"componentes","grado":2},{"id":"apps/web/src/components/ui/Boton.tsx","etiqueta":"Boton","zona":"componentes","grado":32},{"id":"apps/web/src/components/ui/Confirmar.tsx","etiqueta":"Confirmar","zona":"componentes","grado":13},{"id":"apps/web/src/components/ui/Field.tsx","etiqueta":"Field","zona":"componentes","grado":17},{"id":"apps/web/src/components/ui/Logo.tsx","etiqueta":"Logo","zona":"componentes","grado":6},{"id":"apps/web/src/components/ui/Pagina.tsx","etiqueta":"Pagina","zona":"componentes","grado":10},{"id":"apps/web/src/components/ui/PaletaComandos.tsx","etiqueta":"PaletaComandos","zona":"componentes","grado":5},{"id":"apps/web/src/components/ui/SelectorPresencia.tsx","etiqueta":"SelectorPresencia","zona":"componentes","grado":6},{"id":"apps/web/src/components/ui/SelectorTema.tsx","etiqueta":"SelectorTema","zona":"componentes","grado":4},{"id":"apps/web/src/components/ui/Superficies.tsx","etiqueta":"Superficies","zona":"componentes","grado":41},{"id":"apps/web/src/components/voice/ActiveCallBar.tsx","etiqueta":"ActiveCallBar","zona":"componentes","grado":5},{"id":"apps/web/src/components/voice/ParticipantTile.tsx","etiqueta":"ParticipantTile","zona":"componentes","grado":4},{"id":"apps/web/src/components/voice/VoiceRoom.tsx","etiqueta":"VoiceRoom","zona":"componentes","grado":9},{"id":"apps/web/src/components/world/AvatarEditor.tsx","etiqueta":"AvatarEditor","zona":"componentes","grado":3},{"id":"apps/web/src/components/world/Cercania.tsx","etiqueta":"Cercania","zona":"componentes","grado":5},{"id":"apps/web/src/components/world/DevVerseEntrance.tsx","etiqueta":"DevVerseEntrance","zona":"componentes","grado":1},{"id":"apps/web/src/components/world/Pizarra.tsx","etiqueta":"Pizarra","zona":"componentes","grado":3},{"id":"apps/web/src/components/world/ProximityAudio.tsx","etiqueta":"ProximityAudio","zona":"componentes","grado":3},{"id":"apps/web/src/components/world/WorldView.tsx","etiqueta":"WorldView","zona":"componentes","grado":17},{"id":"apps/web/src/components/world/ZoneEditor.tsx","etiqueta":"ZoneEditor","zona":"componentes","grado":7},{"id":"apps/web/src/lib/api.ts","etiqueta":"api","zona":"web-lib","grado":46},{"id":"apps/web/src/lib/chat/useChannelFeed.ts","etiqueta":"useChannelFeed","zona":"web-lib","grado":3},{"id":"apps/web/src/lib/datos.tsx","etiqueta":"datos","zona":"web-lib","grado":8},{"id":"apps/web/src/lib/dev/tree.ts","etiqueta":"tree","zona":"web-lib","grado":2},{"id":"apps/web/src/lib/dev/webcontainer.ts","etiqueta":"webcontainer","zona":"web-lib","grado":1},{"id":"apps/web/src/lib/files/upload.ts","etiqueta":"upload","zona":"web-lib","grado":7},{"id":"apps/web/src/lib/files/useFileFeed.ts","etiqueta":"useFileFeed","zona":"web-lib","grado":2},{"id":"apps/web/src/lib/session.tsx","etiqueta":"session","zona":"web-lib","grado":15},{"id":"apps/web/src/lib/spotify/reproductor.ts","etiqueta":"reproductor","zona":"web-lib","grado":3},{"id":"apps/web/src/lib/spotify/SpotifyProvider.tsx","etiqueta":"SpotifyProvider","zona":"web-lib","grado":7},{"id":"apps/web/src/lib/spotify/useSpotifyChannelFeed.ts","etiqueta":"useSpotifyChannelFeed","zona":"web-lib","grado":2},{"id":"apps/web/src/lib/tema.tsx","etiqueta":"tema","zona":"web-lib","grado":2},{"id":"apps/web/src/lib/view-mode.tsx","etiqueta":"view-mode","zona":"web-lib","grado":1},{"id":"apps/web/src/lib/voice/recorder.ts","etiqueta":"recorder","zona":"web-lib","grado":1},{"id":"apps/web/src/lib/voice/useElapsed.ts","etiqueta":"useElapsed","zona":"web-lib","grado":2},{"id":"apps/web/src/lib/voice/useSpeaking.ts","etiqueta":"useSpeaking","zona":"web-lib","grado":1},{"id":"apps/web/src/lib/voice/useVoiceRoom.ts","etiqueta":"useVoiceRoom","zona":"web-lib","grado":7},{"id":"apps/web/src/lib/voice/VoiceCallProvider.tsx","etiqueta":"VoiceCallProvider","zona":"web-lib","grado":6},{"id":"apps/web/src/lib/world/atlas.ts","etiqueta":"atlas","zona":"web-lib","grado":5},{"id":"apps/web/src/lib/world/furniture.ts","etiqueta":"furniture","zona":"web-lib","grado":4},{"id":"apps/web/src/lib/world/props.ts","etiqueta":"props","zona":"web-lib","grado":7},{"id":"apps/web/src/lib/world/renderer.ts","etiqueta":"renderer","zona":"web-lib","grado":6},{"id":"apps/web/src/lib/world/rooms.ts","etiqueta":"rooms","zona":"web-lib","grado":5},{"id":"apps/web/src/lib/world/scene.ts","etiqueta":"scene","zona":"web-lib","grado":6},{"id":"apps/web/src/lib/world/types.ts","etiqueta":"types","zona":"web-lib","grado":8},{"id":"apps/web/src/lib/world/useEditor.ts","etiqueta":"useEditor","zona":"web-lib","grado":6},{"id":"apps/web/src/lib/world/useLlamada.ts","etiqueta":"useLlamada","zona":"web-lib","grado":3},{"id":"apps/web/src/lib/world/useWorld.ts","etiqueta":"useWorld","zona":"web-lib","grado":6},{"id":"apps/web/src/lib/ws.ts","etiqueta":"ws","zona":"web-lib","grado":7},{"id":"scripts/md-a-pdf.mjs","etiqueta":"md-a-pdf","zona":"guiones","grado":0},{"id":"scripts/probar-correo.mjs","etiqueta":"probar-correo","zona":"guiones","grado":0},{"id":"scripts/rotar-clave-boveda.mjs","etiqueta":"rotar-clave-boveda","zona":"guiones","grado":1},{"id":"tabla:users","etiqueta":"users","zona":"tablas","grado":6},{"id":"tabla:profiles","etiqueta":"profiles","zona":"tablas","grado":14},{"id":"tabla:sessions","etiqueta":"sessions","zona":"tablas","grado":2},{"id":"tabla:organizations","etiqueta":"organizations","zona":"tablas","grado":7},{"id":"tabla:organization_members","etiqueta":"organization_members","zona":"tablas","grado":4},{"id":"tabla:workspaces","etiqueta":"workspaces","zona":"tablas","grado":7},{"id":"tabla:channels","etiqueta":"channels","zona":"tablas","grado":4},{"id":"tabla:channel_members","etiqueta":"channel_members","zona":"tablas","grado":1},{"id":"tabla:tags","etiqueta":"tags","zona":"tablas","grado":4},{"id":"tabla:files","etiqueta":"files","zona":"tablas","grado":7},{"id":"tabla:file_tags","etiqueta":"file_tags","zona":"tablas","grado":2},{"id":"tabla:call_sessions","etiqueta":"call_sessions","zona":"tablas","grado":4},{"id":"tabla:call_participants","etiqueta":"call_participants","zona":"tablas","grado":1},{"id":"tabla:task_columns","etiqueta":"task_columns","zona":"tablas","grado":4},{"id":"tabla:tasks","etiqueta":"tasks","zona":"tablas","grado":4},{"id":"tabla:task_tags","etiqueta":"task_tags","zona":"tablas","grado":2},{"id":"tabla:call_recordings","etiqueta":"call_recordings","zona":"tablas","grado":3},{"id":"tabla:call_recording_consents","etiqueta":"call_recording_consents","zona":"tablas","grado":2},{"id":"tabla:messages","etiqueta":"messages","zona":"tablas","grado":4},{"id":"tabla:channel_reads","etiqueta":"channel_reads","zona":"tablas","grado":1},{"id":"tabla:invitations","etiqueta":"invitations","zona":"tablas","grado":2},{"id":"tabla:user_tokens","etiqueta":"user_tokens","zona":"tablas","grado":1},{"id":"tabla:notifications","etiqueta":"notifications","zona":"tablas","grado":3},{"id":"tabla:world_rooms","etiqueta":"world_rooms","zona":"tablas","grado":3},{"id":"tabla:world_zones","etiqueta":"world_zones","zona":"tablas","grado":6},{"id":"tabla:world_avatars","etiqueta":"world_avatars","zona":"tablas","grado":4},{"id":"tabla:world_props","etiqueta":"world_props","zona":"tablas","grado":3},{"id":"tabla:services","etiqueta":"services","zona":"tablas","grado":3},{"id":"tabla:clients","etiqueta":"clients","zona":"tablas","grado":3},{"id":"tabla:opportunities","etiqueta":"opportunities","zona":"tablas","grado":3},{"id":"tabla:opportunity_items","etiqueta":"opportunity_items","zona":"tablas","grado":3},{"id":"tabla:goals","etiqueta":"goals","zona":"tablas","grado":3},{"id":"tabla:connections","etiqueta":"connections","zona":"tablas","grado":6},{"id":"tabla:connection_secrets","etiqueta":"connection_secrets","zona":"tablas","grado":6},{"id":"tabla:github_repos","etiqueta":"github_repos","zona":"tablas","grado":3},{"id":"tabla:github_repo_stats","etiqueta":"github_repo_stats","zona":"tablas","grado":2},{"id":"tabla:channel_listening_sessions","etiqueta":"channel_listening_sessions","zona":"tablas","grado":4},{"id":"tabla:channel_queue_tracks","etiqueta":"channel_queue_tracks","zona":"tablas","grado":4},{"id":"tabla:organization_links","etiqueta":"organization_links","zona":"tablas","grado":3},{"id":"tabla:announcements","etiqueta":"announcements","zona":"tablas","grado":3},{"id":"tabla:user_dashboard_prefs","etiqueta":"user_dashboard_prefs","zona":"tablas","grado":4},{"id":"tabla:environments","etiqueta":"environments","zona":"tablas","grado":3},{"id":"tabla:deployments","etiqueta":"deployments","zona":"tablas","grado":3},{"id":"tabla:world_outfits","etiqueta":"world_outfits","zona":"tablas","grado":3},{"id":"tabla:user_workbench_prefs","etiqueta":"user_workbench_prefs","zona":"tablas","grado":3},{"id":"migracion:0001_core.sql","etiqueta":"0001 core","zona":"migraciones","grado":9},{"id":"migracion:0002_files.sql","etiqueta":"0002 files","zona":"migraciones","grado":5},{"id":"migracion:0003_calls.sql","etiqueta":"0003 calls","zona":"migraciones","grado":4},{"id":"migracion:0004_workspaces_tasks_recordings.sql","etiqueta":"0004 workspaces tasks recordings","zona":"migraciones","grado":9},{"id":"migracion:0005_messages.sql","etiqueta":"0005 messages","zona":"migraciones","grado":4},{"id":"migracion:0006_invitations_notifications.sql","etiqueta":"0006 invitations notifications","zona":"migraciones","grado":6},{"id":"migracion:0007_world.sql","etiqueta":"0007 world","zona":"migraciones","grado":5},{"id":"migracion:0008_world_org_toggle.sql","etiqueta":"0008 world org toggle","zona":"migraciones","grado":3},{"id":"migracion:0009_world_bigger_rooms.sql","etiqueta":"0009 world bigger rooms","zona":"migraciones","grado":2},{"id":"migracion:0010_world_editor.sql","etiqueta":"0010 world editor","zona":"migraciones","grado":4},{"id":"migracion:0011_avatar_layers.sql","etiqueta":"0011 avatar layers","zona":"migraciones","grado":3},{"id":"migracion:0012_ventas.sql","etiqueta":"0012 ventas","zona":"migraciones","grado":6},{"id":"migracion:0013_objetivos.sql","etiqueta":"0013 objetivos","zona":"migraciones","grado":3},{"id":"migracion:0014_global_search.sql","etiqueta":"0014 global search","zona":"migraciones","grado":2},{"id":"migracion:0015_vault.sql","etiqueta":"0015 vault","zona":"migraciones","grado":4},{"id":"migracion:0016_github.sql","etiqueta":"0016 github","zona":"migraciones","grado":4},{"id":"migracion:0017_spotify.sql","etiqueta":"0017 spotify","zona":"migraciones","grado":4},{"id":"migracion:0018_vault_update.sql","etiqueta":"0018 vault update","zona":"migraciones","grado":2},{"id":"migracion:0019_personalizacion.sql","etiqueta":"0019 personalizacion","zona":"migraciones","grado":7},{"id":"migracion:0020_panel_rejilla.sql","etiqueta":"0020 panel rejilla","zona":"migraciones","grado":3},{"id":"migracion:0021_infraestructura.sql","etiqueta":"0021 infraestructura","zona":"migraciones","grado":4},{"id":"migracion:0022_presencia_y_rol.sql","etiqueta":"0022 presencia y rol","zona":"migraciones","grado":3},{"id":"migracion:0023_atuendos_por_organizacion.sql","etiqueta":"0023 atuendos por organizacion","zona":"migraciones","grado":3},{"id":"migracion:0024_cola_agnostica.sql","etiqueta":"0024 cola agnostica","zona":"migraciones","grado":4},{"id":"migracion:0025_mesa_de_trabajo.sql","etiqueta":"0025 mesa de trabajo","zona":"migraciones","grado":2}],"aristas":[{"de":"apps/api/src/auth/plugin.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/auth/plugin.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/auth/plugin.ts","a":"apps/api/src/auth/tokens.ts"},{"de":"apps/api/src/auth/tokens.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/connectors/integraciones.test.ts","a":"apps/api/src/connectors/integraciones.ts"},{"de":"apps/api/src/connectors/migraciones.test.ts","a":"apps/api/src/connectors/migraciones.ts"},{"de":"apps/api/src/connectors/spotify.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/db/isolation.test.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/db/isolation.test.ts","a":"apps/api/src/security/vault.ts"},{"de":"apps/api/src/db/isolation.test.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/db/pool.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/mail/mailer.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/realtime/signaling.ts","a":"apps/api/src/auth/tokens.ts"},{"de":"apps/api/src/realtime/signaling.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/realtime/signaling.ts","a":"apps/api/src/realtime/hub.ts"},{"de":"apps/api/src/realtime/world.test.ts","a":"apps/api/src/auth/tokens.ts"},{"de":"apps/api/src/realtime/world.test.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/realtime/world.test.ts","a":"apps/api/src/realtime/world.ts"},{"de":"apps/api/src/realtime/world.ts","a":"apps/api/src/auth/tokens.ts"},{"de":"apps/api/src/realtime/world.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/realtime/world.ts","a":"apps/api/src/realtime/hub.ts"},{"de":"apps/api/src/routes/account.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/account.ts","a":"apps/api/src/auth/password.ts"},{"de":"apps/api/src/routes/account.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/account.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/routes/account.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/account.ts","a":"apps/api/src/mail/mailer.ts"},{"de":"apps/api/src/routes/announcements.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/announcements.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/announcements.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/announcements.ts","a":"apps/api/src/routes/notifications.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/auth/password.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/auth/tokens.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/auth.ts","a":"apps/api/src/routes/account.ts"},{"de":"apps/api/src/routes/connections.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/connections.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/connections.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/connections.ts","a":"apps/api/src/security/vault.ts"},{"de":"apps/api/src/routes/files.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/files.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/files.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/routes/files.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/files.ts","a":"apps/api/src/realtime/signaling.ts"},{"de":"apps/api/src/routes/files.ts","a":"apps/api/src/storage/s3.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/connectors/github.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/connectors/migraciones.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/connectors/integraciones.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/github.ts","a":"apps/api/src/routes/connections.ts"},{"de":"apps/api/src/routes/ice.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/ice.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/routes/ice.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/infraestructura.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/infraestructura.ts","a":"apps/api/src/connectors/despliegues.ts"},{"de":"apps/api/src/routes/infraestructura.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/infraestructura.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/infraestructura.ts","a":"apps/api/src/routes/connections.ts"},{"de":"apps/api/src/routes/messages.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/messages.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/messages.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/messages.ts","a":"apps/api/src/realtime/signaling.ts"},{"de":"apps/api/src/routes/messages.ts","a":"apps/api/src/routes/notifications.ts"},{"de":"apps/api/src/routes/notifications.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/notifications.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/notifications.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/notifications.ts","a":"apps/api/src/realtime/signaling.ts"},{"de":"apps/api/src/routes/preferences.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/preferences.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/preferences.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/recordings.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/recordings.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/recordings.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/sales.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/sales.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/sales.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/search.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/search.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/search.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/connectors/spotify.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/security/vault.ts"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"apps/api/src/routes/spotify/token.ts"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"apps/api/src/connectors/spotify.ts"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"apps/api/src/realtime/signaling.ts"},{"de":"apps/api/src/routes/spotify/token.ts","a":"apps/api/src/connectors/spotify.ts"},{"de":"apps/api/src/routes/spotify/token.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/spotify/token.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/spotify/token.ts","a":"apps/api/src/security/vault.ts"},{"de":"apps/api/src/routes/spotify.ts","a":"apps/api/src/routes/spotify/conexion.ts"},{"de":"apps/api/src/routes/spotify.ts","a":"apps/api/src/routes/spotify/sala.ts"},{"de":"apps/api/src/routes/tasks.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/tasks.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/tasks.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/tasks.ts","a":"apps/api/src/routes/notifications.ts"},{"de":"apps/api/src/routes/workspaces.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/workspaces.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/workspaces.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/routes/workspaces.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/routes/workspaces.ts","a":"apps/api/src/storage/s3.ts"},{"de":"apps/api/src/routes/world.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/routes/world.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/routes/world.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/security/vault.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/auth/plugin.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/db/pool.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/env.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/lib/http.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/realtime/signaling.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/realtime/world.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/account.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/announcements.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/auth.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/connections.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/files.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/github.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/infraestructura.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/ice.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/messages.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/notifications.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/preferences.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/recordings.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/sales.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/search.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/spotify.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/tasks.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/world.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/routes/workspaces.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/security/vault.ts"},{"de":"apps/api/src/server.ts","a":"apps/api/src/storage/s3.ts"},{"de":"apps/api/src/storage/s3.ts","a":"apps/api/src/env.ts"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/components/marca/LogoAnimado.tsx"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/components/spotify/MusicaBar.tsx"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/components/voice/ActiveCallBar.tsx"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/lib/spotify/SpotifyProvider.tsx"},{"de":"apps/web/src/app/app/layout.tsx","a":"apps/web/src/lib/voice/VoiceCallProvider.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/lib/files/upload.ts"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ajustes/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/base-de-datos/page.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/buscar/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/buscar/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/buscar/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/dev/page.tsx","a":"apps/web/src/components/dev/DevWorkspace.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/dev/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/github/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/github/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/github/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/github/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/github/page.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/github/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/infraestructura/page.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/integraciones/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/integraciones/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/integraciones/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/integraciones/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/integraciones/page.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/notifications/NotificationBell.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/ui/PaletaComandos.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/ui/SelectorPresencia.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/ui/SelectorTema.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/ui/Armazon.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/layout.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/noticias/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ventas/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ventas/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ventas/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/o/[orgId]/ventas/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/o/[orgId]/ventas/page.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/components/notifications/NotificationBell.tsx"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/components/ui/Logo.tsx"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/page.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/board/page.tsx","a":"apps/web/src/components/tasks/TaskBoard.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/board/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","a":"apps/web/src/components/files/FileLibrary.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","a":"apps/web/src/components/chat/ChannelChat.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","a":"apps/web/src/components/spotify/SpotifyWidget.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","a":"apps/web/src/components/voice/VoiceRoom.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/c/[channelId]/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/w/[workspaceId]/devverse/page.tsx","a":"apps/web/src/components/world/WorldView.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/notifications/NotificationBell.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/Armazon.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/PaletaComandos.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/SelectorPresencia.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/SelectorTema.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/layout.tsx","a":"apps/web/src/lib/view-mode.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/chat/ChannelChat.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/dashboard/DashboardWidgets.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/files/FileLibrary.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/mesa/Mesa.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/tasks/TaskBoard.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/w/[workspaceId]/mesa/page.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/page.tsx","a":"apps/web/src/components/files/FileLibrary.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/components/dashboard/DashboardWidgets.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/components/dashboard/Rejilla.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/components/spotify/SpotifyWidget.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/app/w/[workspaceId]/panel/page.tsx","a":"apps/web/src/lib/spotify/SpotifyProvider.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/Pagina.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/SelectorPresencia.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/SelectorTema.tsx"},{"de":"apps/web/src/app/dev/ui/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/invitacion/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/invitacion/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/invitacion/page.tsx","a":"apps/web/src/components/ui/Logo.tsx"},{"de":"apps/web/src/app/invitacion/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/invitacion/page.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/layout.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/app/layout.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/layout.tsx","a":"apps/web/src/lib/tema.tsx"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/components/marca/LogoAnimado.tsx"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/components/ui/Logo.tsx"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/login/page.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/page.tsx","a":"apps/web/src/components/ui/Logo.tsx"},{"de":"apps/web/src/app/page.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/app/recuperar/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/recuperar/page.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/app/recuperar/page.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/app/recuperar/page.tsx","a":"apps/web/src/components/ui/Logo.tsx"},{"de":"apps/web/src/app/recuperar/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/app/verificar/page.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/app/verificar/page.tsx","a":"apps/web/src/components/ui/Logo.tsx"},{"de":"apps/web/src/app/verificar/page.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/lib/chat/useChannelFeed.ts"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/lib/files/upload.ts"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/components/chat/ChannelChat.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/components/dashboard/DashboardWidgets.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/dashboard/DashboardWidgets.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/lib/dev/tree.ts"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/components/dev/CodeEditor.tsx"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/components/dev/DevTerminal.tsx"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/components/dev/FileTree.tsx"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/components/dev/IniciarProyecto.tsx"},{"de":"apps/web/src/components/dev/DevWorkspace.tsx","a":"apps/web/src/components/dev/useWebContainer.ts"},{"de":"apps/web/src/components/dev/FileTree.tsx","a":"apps/web/src/lib/dev/tree.ts"},{"de":"apps/web/src/components/dev/IniciarProyecto.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/dev/IniciarProyecto.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/dev/IniciarProyecto.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/dev/useWebContainer.ts","a":"apps/web/src/lib/dev/webcontainer.ts"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/lib/files/upload.ts"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/lib/files/useFileFeed.ts"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/components/files/FilePreview.tsx"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/components/files/TagBadge.tsx"},{"de":"apps/web/src/components/files/FileLibrary.tsx","a":"apps/web/src/components/files/UploadZone.tsx"},{"de":"apps/web/src/components/files/FilePreview.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/files/FilePreview.tsx","a":"apps/web/src/lib/files/upload.ts"},{"de":"apps/web/src/components/files/FilePreview.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/files/FilePreview.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/files/FilePreview.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/components/files/FilePreview.tsx","a":"apps/web/src/components/files/TagBadge.tsx"},{"de":"apps/web/src/components/files/TagBadge.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/files/UploadZone.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/files/UploadZone.tsx","a":"apps/web/src/lib/files/upload.ts"},{"de":"apps/web/src/components/files/UploadZone.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/files/UploadZone.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/marca/LogoAnimado.tsx","a":"apps/web/src/components/marca/contorno-d.ts"},{"de":"apps/web/src/components/mesa/Mesa.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/mesa/Mesa.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/components/mesa/Mesa.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/notifications/NotificationBell.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/notifications/NotificationBell.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/notifications/NotificationBell.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/notifications/NotificationBell.tsx","a":"apps/web/src/lib/ws.ts"},{"de":"apps/web/src/components/spotify/MusicaBar.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/spotify/MusicaBar.tsx","a":"apps/web/src/lib/spotify/SpotifyProvider.tsx"},{"de":"apps/web/src/components/spotify/MusicaBar.tsx","a":"apps/web/src/lib/voice/VoiceCallProvider.tsx"},{"de":"apps/web/src/components/spotify/MusicaBar.tsx","a":"apps/web/src/components/spotify/SpotifyWidget.tsx"},{"de":"apps/web/src/components/spotify/piezas.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/spotify/piezas.tsx","a":"apps/web/src/lib/spotify/SpotifyProvider.tsx"},{"de":"apps/web/src/components/spotify/piezas.tsx","a":"apps/web/src/lib/spotify/reproductor.ts"},{"de":"apps/web/src/components/spotify/piezas.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/spotify/piezas.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/spotify/piezas.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/components/spotify/SpotifyWidget.tsx","a":"apps/web/src/lib/spotify/SpotifyProvider.tsx"},{"de":"apps/web/src/components/spotify/SpotifyWidget.tsx","a":"apps/web/src/lib/spotify/useSpotifyChannelFeed.ts"},{"de":"apps/web/src/components/spotify/SpotifyWidget.tsx","a":"apps/web/src/components/spotify/piezas.tsx"},{"de":"apps/web/src/components/tasks/TaskBoard.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/tasks/TaskBoard.tsx","a":"apps/web/src/components/files/TagBadge.tsx"},{"de":"apps/web/src/components/tasks/TaskBoard.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/tasks/TaskBoard.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/tasks/TaskBoard.tsx","a":"apps/web/src/components/ui/Confirmar.tsx"},{"de":"apps/web/src/components/tasks/TaskBoard.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/components/ui/Confirmar.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/ui/Confirmar.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/ui/Pagina.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/ui/Pagina.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/ui/PaletaComandos.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/ui/PaletaComandos.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/components/ui/PaletaComandos.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/ui/SelectorPresencia.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/ui/SelectorPresencia.tsx","a":"apps/web/src/lib/datos.tsx"},{"de":"apps/web/src/components/ui/SelectorPresencia.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/components/ui/SelectorTema.tsx","a":"apps/web/src/lib/tema.tsx"},{"de":"apps/web/src/components/ui/Superficies.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/voice/ActiveCallBar.tsx","a":"apps/web/src/components/spotify/SpotifyWidget.tsx"},{"de":"apps/web/src/components/voice/ActiveCallBar.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/voice/ActiveCallBar.tsx","a":"apps/web/src/lib/voice/useElapsed.ts"},{"de":"apps/web/src/components/voice/ActiveCallBar.tsx","a":"apps/web/src/lib/voice/VoiceCallProvider.tsx"},{"de":"apps/web/src/components/voice/ParticipantTile.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/voice/ParticipantTile.tsx","a":"apps/web/src/lib/voice/useVoiceRoom.ts"},{"de":"apps/web/src/components/voice/ParticipantTile.tsx","a":"apps/web/src/lib/voice/useSpeaking.ts"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/lib/voice/useElapsed.ts"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/lib/voice/VoiceCallProvider.tsx"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/components/ui/Field.tsx"},{"de":"apps/web/src/components/voice/VoiceRoom.tsx","a":"apps/web/src/components/voice/ParticipantTile.tsx"},{"de":"apps/web/src/components/world/AvatarEditor.tsx","a":"apps/web/src/lib/world/atlas.ts"},{"de":"apps/web/src/components/world/AvatarEditor.tsx","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/components/world/Cercania.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/world/Cercania.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/world/Cercania.tsx","a":"apps/web/src/lib/world/useLlamada.ts"},{"de":"apps/web/src/components/world/Cercania.tsx","a":"apps/web/src/components/world/Pizarra.tsx"},{"de":"apps/web/src/components/world/Pizarra.tsx","a":"apps/web/src/components/ui/Boton.tsx"},{"de":"apps/web/src/components/world/Pizarra.tsx","a":"apps/web/src/components/ui/Superficies.tsx"},{"de":"apps/web/src/components/world/ProximityAudio.tsx","a":"apps/web/src/lib/voice/useVoiceRoom.ts"},{"de":"apps/web/src/components/world/ProximityAudio.tsx","a":"apps/web/src/lib/world/useWorld.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/session.tsx"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/voice/VoiceCallProvider.tsx"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/atlas.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/renderer.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/scene.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/useWorld.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/useEditor.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/components/world/AvatarEditor.tsx"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/components/world/DevVerseEntrance.tsx"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/components/world/ZoneEditor.tsx"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/lib/world/useLlamada.ts"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/components/world/Cercania.tsx"},{"de":"apps/web/src/components/world/WorldView.tsx","a":"apps/web/src/components/world/ProximityAudio.tsx"},{"de":"apps/web/src/components/world/ZoneEditor.tsx","a":"apps/web/src/lib/world/atlas.ts"},{"de":"apps/web/src/components/world/ZoneEditor.tsx","a":"apps/web/src/lib/world/furniture.ts"},{"de":"apps/web/src/components/world/ZoneEditor.tsx","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/components/world/ZoneEditor.tsx","a":"apps/web/src/lib/world/rooms.ts"},{"de":"apps/web/src/components/world/ZoneEditor.tsx","a":"apps/web/src/lib/world/useEditor.ts"},{"de":"apps/web/src/components/world/ZoneEditor.tsx","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/lib/chat/useChannelFeed.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/chat/useChannelFeed.ts","a":"apps/web/src/lib/ws.ts"},{"de":"apps/web/src/lib/datos.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/files/upload.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/files/useFileFeed.ts","a":"apps/web/src/lib/ws.ts"},{"de":"apps/web/src/lib/session.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/spotify/reproductor.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/spotify/SpotifyProvider.tsx","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/spotify/SpotifyProvider.tsx","a":"apps/web/src/lib/spotify/reproductor.ts"},{"de":"apps/web/src/lib/spotify/useSpotifyChannelFeed.ts","a":"apps/web/src/lib/ws.ts"},{"de":"apps/web/src/lib/voice/useVoiceRoom.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/voice/useVoiceRoom.ts","a":"apps/web/src/lib/ws.ts"},{"de":"apps/web/src/lib/voice/useVoiceRoom.ts","a":"apps/web/src/lib/voice/recorder.ts"},{"de":"apps/web/src/lib/voice/useVoiceRoom.ts","a":"apps/web/src/lib/files/upload.ts"},{"de":"apps/web/src/lib/voice/VoiceCallProvider.tsx","a":"apps/web/src/lib/voice/useVoiceRoom.ts"},{"de":"apps/web/src/lib/world/furniture.ts","a":"apps/web/src/lib/world/atlas.ts"},{"de":"apps/web/src/lib/world/furniture.ts","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/lib/world/renderer.ts","a":"apps/web/src/lib/world/atlas.ts"},{"de":"apps/web/src/lib/world/renderer.ts","a":"apps/web/src/lib/world/furniture.ts"},{"de":"apps/web/src/lib/world/renderer.ts","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/lib/world/renderer.ts","a":"apps/web/src/lib/world/scene.ts"},{"de":"apps/web/src/lib/world/renderer.ts","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/lib/world/rooms.ts","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/lib/world/rooms.ts","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/lib/world/scene.ts","a":"apps/web/src/lib/world/rooms.ts"},{"de":"apps/web/src/lib/world/scene.ts","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/lib/world/scene.ts","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/lib/world/useEditor.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/world/useEditor.ts","a":"apps/web/src/lib/world/props.ts"},{"de":"apps/web/src/lib/world/useEditor.ts","a":"apps/web/src/lib/world/rooms.ts"},{"de":"apps/web/src/lib/world/useEditor.ts","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/lib/world/useLlamada.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/world/useWorld.ts","a":"apps/web/src/lib/api.ts"},{"de":"apps/web/src/lib/world/useWorld.ts","a":"apps/web/src/lib/ws.ts"},{"de":"apps/web/src/lib/world/useWorld.ts","a":"apps/web/src/lib/world/scene.ts"},{"de":"apps/web/src/lib/world/useWorld.ts","a":"apps/web/src/lib/world/types.ts"},{"de":"apps/web/src/lib/ws.ts","a":"apps/web/src/lib/api.ts"},{"de":"migracion:0001_core.sql","a":"tabla:users"},{"de":"migracion:0001_core.sql","a":"tabla:profiles"},{"de":"migracion:0001_core.sql","a":"tabla:sessions"},{"de":"migracion:0001_core.sql","a":"tabla:organizations"},{"de":"migracion:0001_core.sql","a":"tabla:organization_members"},{"de":"migracion:0001_core.sql","a":"tabla:workspaces"},{"de":"migracion:0001_core.sql","a":"tabla:channels"},{"de":"migracion:0001_core.sql","a":"tabla:channel_members"},{"de":"migracion:0002_files.sql","a":"tabla:tags"},{"de":"migracion:0002_files.sql","a":"tabla:files"},{"de":"migracion:0002_files.sql","a":"tabla:file_tags"},{"de":"migracion:0003_calls.sql","a":"tabla:call_sessions"},{"de":"migracion:0003_calls.sql","a":"tabla:call_participants"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:workspaces"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:task_columns"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:tasks"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:task_tags"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:files"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:call_recordings"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"tabla:call_recording_consents"},{"de":"migracion:0005_messages.sql","a":"tabla:messages"},{"de":"migracion:0005_messages.sql","a":"tabla:channel_reads"},{"de":"migracion:0006_invitations_notifications.sql","a":"tabla:users"},{"de":"migracion:0006_invitations_notifications.sql","a":"tabla:invitations"},{"de":"migracion:0006_invitations_notifications.sql","a":"tabla:user_tokens"},{"de":"migracion:0006_invitations_notifications.sql","a":"tabla:notifications"},{"de":"migracion:0007_world.sql","a":"tabla:world_rooms"},{"de":"migracion:0007_world.sql","a":"tabla:world_zones"},{"de":"migracion:0007_world.sql","a":"tabla:world_avatars"},{"de":"migracion:0008_world_org_toggle.sql","a":"tabla:organizations"},{"de":"migracion:0010_world_editor.sql","a":"tabla:world_zones"},{"de":"migracion:0010_world_editor.sql","a":"tabla:world_props"},{"de":"migracion:0011_avatar_layers.sql","a":"tabla:world_avatars"},{"de":"migracion:0012_ventas.sql","a":"tabla:services"},{"de":"migracion:0012_ventas.sql","a":"tabla:clients"},{"de":"migracion:0012_ventas.sql","a":"tabla:opportunities"},{"de":"migracion:0012_ventas.sql","a":"tabla:opportunity_items"},{"de":"migracion:0013_objetivos.sql","a":"tabla:goals"},{"de":"migracion:0015_vault.sql","a":"tabla:connections"},{"de":"migracion:0015_vault.sql","a":"tabla:connection_secrets"},{"de":"migracion:0016_github.sql","a":"tabla:github_repos"},{"de":"migracion:0016_github.sql","a":"tabla:github_repo_stats"},{"de":"migracion:0017_spotify.sql","a":"tabla:channel_listening_sessions"},{"de":"migracion:0017_spotify.sql","a":"tabla:channel_queue_tracks"},{"de":"migracion:0019_personalizacion.sql","a":"tabla:organizations"},{"de":"migracion:0019_personalizacion.sql","a":"tabla:organization_links"},{"de":"migracion:0019_personalizacion.sql","a":"tabla:announcements"},{"de":"migracion:0019_personalizacion.sql","a":"tabla:user_dashboard_prefs"},{"de":"migracion:0019_personalizacion.sql","a":"tabla:notifications"},{"de":"migracion:0020_panel_rejilla.sql","a":"tabla:user_dashboard_prefs"},{"de":"migracion:0021_infraestructura.sql","a":"tabla:environments"},{"de":"migracion:0021_infraestructura.sql","a":"tabla:deployments"},{"de":"migracion:0022_presencia_y_rol.sql","a":"tabla:profiles"},{"de":"migracion:0023_atuendos_por_organizacion.sql","a":"tabla:world_outfits"},{"de":"migracion:0024_cola_agnostica.sql","a":"tabla:channel_queue_tracks"},{"de":"migracion:0024_cola_agnostica.sql","a":"tabla:channel_listening_sessions"},{"de":"migracion:0025_mesa_de_trabajo.sql","a":"tabla:user_workbench_prefs"},{"de":"migracion:0002_files.sql","a":"migracion:0001_core.sql"},{"de":"migracion:0003_calls.sql","a":"migracion:0002_files.sql"},{"de":"migracion:0004_workspaces_tasks_recordings.sql","a":"migracion:0003_calls.sql"},{"de":"migracion:0005_messages.sql","a":"migracion:0004_workspaces_tasks_recordings.sql"},{"de":"migracion:0006_invitations_notifications.sql","a":"migracion:0005_messages.sql"},{"de":"migracion:0007_world.sql","a":"migracion:0006_invitations_notifications.sql"},{"de":"migracion:0008_world_org_toggle.sql","a":"migracion:0007_world.sql"},{"de":"migracion:0009_world_bigger_rooms.sql","a":"migracion:0008_world_org_toggle.sql"},{"de":"migracion:0010_world_editor.sql","a":"migracion:0009_world_bigger_rooms.sql"},{"de":"migracion:0011_avatar_layers.sql","a":"migracion:0010_world_editor.sql"},{"de":"migracion:0012_ventas.sql","a":"migracion:0011_avatar_layers.sql"},{"de":"migracion:0013_objetivos.sql","a":"migracion:0012_ventas.sql"},{"de":"migracion:0014_global_search.sql","a":"migracion:0013_objetivos.sql"},{"de":"migracion:0015_vault.sql","a":"migracion:0014_global_search.sql"},{"de":"migracion:0016_github.sql","a":"migracion:0015_vault.sql"},{"de":"migracion:0017_spotify.sql","a":"migracion:0016_github.sql"},{"de":"migracion:0018_vault_update.sql","a":"migracion:0017_spotify.sql"},{"de":"migracion:0019_personalizacion.sql","a":"migracion:0018_vault_update.sql"},{"de":"migracion:0020_panel_rejilla.sql","a":"migracion:0019_personalizacion.sql"},{"de":"migracion:0021_infraestructura.sql","a":"migracion:0020_panel_rejilla.sql"},{"de":"migracion:0022_presencia_y_rol.sql","a":"migracion:0021_infraestructura.sql"},{"de":"migracion:0023_atuendos_por_organizacion.sql","a":"migracion:0022_presencia_y_rol.sql"},{"de":"migracion:0024_cola_agnostica.sql","a":"migracion:0023_atuendos_por_organizacion.sql"},{"de":"migracion:0025_mesa_de_trabajo.sql","a":"migracion:0024_cola_agnostica.sql"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:users"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:organizations"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:organization_members"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:workspaces"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:tags"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:files"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:call_sessions"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:task_columns"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:tasks"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:messages"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:world_zones"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:world_avatars"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:world_props"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:services"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:clients"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:opportunities"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:opportunity_items"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:goals"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:connections"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:connection_secrets"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:github_repos"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:channel_listening_sessions"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:channel_queue_tracks"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:organization_links"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:announcements"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:user_dashboard_prefs"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:environments"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:deployments"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:world_outfits"},{"de":"apps/api/src/db/isolation.test.ts","a":"tabla:user_workbench_prefs"},{"de":"apps/api/src/realtime/signaling.ts","a":"tabla:profiles"},{"de":"apps/api/src/realtime/signaling.ts","a":"tabla:call_sessions"},{"de":"apps/api/src/realtime/signaling.ts","a":"tabla:call_recordings"},{"de":"apps/api/src/realtime/world.test.ts","a":"tabla:users"},{"de":"apps/api/src/realtime/world.test.ts","a":"tabla:organizations"},{"de":"apps/api/src/realtime/world.test.ts","a":"tabla:workspaces"},{"de":"apps/api/src/realtime/world.test.ts","a":"tabla:world_zones"},{"de":"apps/api/src/realtime/world.ts","a":"tabla:profiles"},{"de":"apps/api/src/realtime/world.ts","a":"tabla:world_rooms"},{"de":"apps/api/src/realtime/world.ts","a":"tabla:world_zones"},{"de":"apps/api/src/routes/account.ts","a":"tabla:users"},{"de":"apps/api/src/routes/account.ts","a":"tabla:organizations"},{"de":"apps/api/src/routes/account.ts","a":"tabla:invitations"},{"de":"apps/api/src/routes/announcements.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/announcements.ts","a":"tabla:organization_members"},{"de":"apps/api/src/routes/announcements.ts","a":"tabla:announcements"},{"de":"apps/api/src/routes/auth.ts","a":"tabla:users"},{"de":"apps/api/src/routes/auth.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/auth.ts","a":"tabla:sessions"},{"de":"apps/api/src/routes/connections.ts","a":"tabla:connections"},{"de":"apps/api/src/routes/connections.ts","a":"tabla:connection_secrets"},{"de":"apps/api/src/routes/files.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/files.ts","a":"tabla:workspaces"},{"de":"apps/api/src/routes/files.ts","a":"tabla:tags"},{"de":"apps/api/src/routes/files.ts","a":"tabla:files"},{"de":"apps/api/src/routes/files.ts","a":"tabla:file_tags"},{"de":"apps/api/src/routes/github.ts","a":"tabla:connections"},{"de":"apps/api/src/routes/github.ts","a":"tabla:github_repos"},{"de":"apps/api/src/routes/github.ts","a":"tabla:github_repo_stats"},{"de":"apps/api/src/routes/infraestructura.ts","a":"tabla:environments"},{"de":"apps/api/src/routes/infraestructura.ts","a":"tabla:deployments"},{"de":"apps/api/src/routes/messages.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/messages.ts","a":"tabla:channels"},{"de":"apps/api/src/routes/messages.ts","a":"tabla:files"},{"de":"apps/api/src/routes/messages.ts","a":"tabla:messages"},{"de":"apps/api/src/routes/notifications.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/notifications.ts","a":"tabla:notifications"},{"de":"apps/api/src/routes/preferences.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/preferences.ts","a":"tabla:user_dashboard_prefs"},{"de":"apps/api/src/routes/preferences.ts","a":"tabla:user_workbench_prefs"},{"de":"apps/api/src/routes/recordings.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/recordings.ts","a":"tabla:files"},{"de":"apps/api/src/routes/recordings.ts","a":"tabla:call_sessions"},{"de":"apps/api/src/routes/recordings.ts","a":"tabla:call_recordings"},{"de":"apps/api/src/routes/recordings.ts","a":"tabla:call_recording_consents"},{"de":"apps/api/src/routes/sales.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/sales.ts","a":"tabla:services"},{"de":"apps/api/src/routes/sales.ts","a":"tabla:clients"},{"de":"apps/api/src/routes/sales.ts","a":"tabla:opportunities"},{"de":"apps/api/src/routes/sales.ts","a":"tabla:opportunity_items"},{"de":"apps/api/src/routes/sales.ts","a":"tabla:goals"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"tabla:connections"},{"de":"apps/api/src/routes/spotify/conexion.ts","a":"tabla:connection_secrets"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"tabla:channel_listening_sessions"},{"de":"apps/api/src/routes/spotify/sala.ts","a":"tabla:channel_queue_tracks"},{"de":"apps/api/src/routes/spotify/token.ts","a":"tabla:connections"},{"de":"apps/api/src/routes/spotify/token.ts","a":"tabla:connection_secrets"},{"de":"apps/api/src/routes/tasks.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/tasks.ts","a":"tabla:workspaces"},{"de":"apps/api/src/routes/tasks.ts","a":"tabla:tags"},{"de":"apps/api/src/routes/tasks.ts","a":"tabla:task_columns"},{"de":"apps/api/src/routes/tasks.ts","a":"tabla:tasks"},{"de":"apps/api/src/routes/tasks.ts","a":"tabla:task_tags"},{"de":"apps/api/src/routes/workspaces.ts","a":"tabla:profiles"},{"de":"apps/api/src/routes/workspaces.ts","a":"tabla:organizations"},{"de":"apps/api/src/routes/workspaces.ts","a":"tabla:organization_members"},{"de":"apps/api/src/routes/workspaces.ts","a":"tabla:workspaces"},{"de":"apps/api/src/routes/workspaces.ts","a":"tabla:channels"},{"de":"apps/api/src/routes/workspaces.ts","a":"tabla:organization_links"},{"de":"apps/api/src/routes/world.ts","a":"tabla:channels"},{"de":"apps/api/src/routes/world.ts","a":"tabla:files"},{"de":"apps/api/src/routes/world.ts","a":"tabla:task_columns"},{"de":"apps/api/src/routes/world.ts","a":"tabla:tasks"},{"de":"apps/api/src/routes/world.ts","a":"tabla:messages"},{"de":"apps/api/src/routes/world.ts","a":"tabla:world_rooms"},{"de":"apps/api/src/routes/world.ts","a":"tabla:world_zones"},{"de":"apps/api/src/routes/world.ts","a":"tabla:world_avatars"},{"de":"apps/api/src/routes/world.ts","a":"tabla:world_props"},{"de":"apps/api/src/routes/world.ts","a":"tabla:world_outfits"},{"de":"scripts/rotar-clave-boveda.mjs","a":"tabla:connection_secrets"}]};
+
+  const ZONAS = [
+    ["rutas",       "rutas de la API"],
+    ["tiempo-real", "tiempo real"],
+    ["conectores",  "conectores"],
+    ["datos",       "acceso a datos"],
+    ["api",         "resto de la API"],
+    ["pantallas",   "pantallas"],
+    ["componentes", "componentes"],
+    ["web-lib",     "librería web"],
+    ["web",         "resto de la web"],
+    ["tablas",      "tablas"],
+    ["migraciones", "migraciones"],
+    ["guiones",     "guiones"],
+  ];
+
+  const lienzo = document.getElementById("lienzo");
+  const ctx = lienzo.getContext("2d");
+  const ficha = document.getElementById("ficha");
+  const marco = lienzo.parentElement;
+
+  // Los colores salen del CSS y no de aquí: así el grafo sigue el tema del
+  // lector sin que este script tenga que saber en qué tema está.
+  let color = {};
+  let colorHilo = "", colorHiloVivo = "", colorTinta = "", colorLienzo = "";
+  function leerColores() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const [z] of ZONAS) color[z] = cs.getPropertyValue("--z-" + z).trim();
+    colorHilo = cs.getPropertyValue("--hilo").trim();
+    colorHiloVivo = cs.getPropertyValue("--hilo-vivo").trim();
+    colorTinta = cs.getPropertyValue("--tinta").trim();
+    colorLienzo = cs.getPropertyValue("--lienzo").trim();
+  }
+  leerColores();
+
+  const nodos = DATOS.nodos.map((n) => ({ ...n }));
+  const porId = new Map(nodos.map((n) => [n.id, n]));
+  const aristas = DATOS.aristas
+    .filter((a) => porId.has(a.de) && porId.has(a.a))
+    .map((a) => ({ source: a.de, target: a.a }));
+
+  // Vecinos, para poder apagar todo lo demás al pasar por encima de un nodo.
+  const vecinos = new Map(nodos.map((n) => [n.id, new Set()]));
+  for (const a of DATOS.aristas) {
+    vecinos.get(a.de)?.add(a.a);
+    vecinos.get(a.a)?.add(a.de);
+  }
+
+  const radio = (n) => 3 + Math.sqrt(n.grado) * 1.5;
+
+  const apagadas = new Set();
+  let resaltado = null;
+  let buscado = "";
+
+  const visible = (n) => !apagadas.has(n.zona) &&
+    (!buscado || n.etiqueta.toLowerCase().includes(buscado) || n.id.toLowerCase().includes(buscado));
+
+  // --- Simulación ----------------------------------------------------------
+  const sim = d3.forceSimulation(nodos)
+    .force("hilo", d3.forceLink(aristas).id((d) => d.id).distance(34).strength(0.55))
+    .force("carga", d3.forceManyBody().strength(-115).distanceMax(420))
+    .force("centro", d3.forceCenter(0, 0))
+    .force("choque", d3.forceCollide().radius((d) => radio(d) + 2.5))
+    .force("x", d3.forceX(0).strength(0.045))
+    .force("y", d3.forceY(0).strength(0.045))
+    .on("tick", pintar)
+    // Cuando deja de moverse, encajarlo. Una sola vez: si se reencuadrara en
+    // cada tick, la cámara perseguiría a los nodos y marearía.
+    .on("end", () => { if (!usuarioMovio) encajar(500); });
+
+  // --- Lienzo y cámara -----------------------------------------------------
+  let ancho = 0, alto = 0, dpr = 1;
+  function medir() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    ancho = marco.clientWidth;
+    alto = marco.clientHeight;
+    lienzo.width = Math.round(ancho * dpr);
+    lienzo.height = Math.round(alto * dpr);
+    pintar();
+  }
+
+  let camara = d3.zoomIdentity;
+  const zoom = d3.zoom()
+    .scaleExtent([0.25, 6])
+    .on("zoom", (evento) => {
+      camara = evento.transform;
+      if (evento.sourceEvent) usuarioMovio = true;
+      pintar();
+    });
+  let usuarioMovio = false;
+  d3.select(lienzo).call(zoom);
+
+  function aMundo(ex, ey) {
+    const caja = lienzo.getBoundingClientRect();
+    return camara.invert([ex - caja.left - ancho / 2, ey - caja.top - alto / 2]);
+  }
+
+  /**
+   * Encajar el grafo en el lienzo.
+   *
+   * Sin esto, la simulación reparte los nodos alrededor del origen sin saber
+   * cuánto sitio hay, y con 213 nodos la mitad del grafo se queda fuera del
+   * marco. Se mide la caja real que ocupan los nodos y se ajusta la cámara a
+   * ella — que es lo que uno haría a mano con la rueda nada más abrir.
+   */
+  function encajar(duracion = 0) {
+    const puestos = nodos.filter((n) => Number.isFinite(n.x) && visible(n));
+    if (puestos.length === 0) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of puestos) {
+      const r = radio(n);
+      if (n.x - r < x0) x0 = n.x - r;
+      if (n.y - r < y0) y0 = n.y - r;
+      if (n.x + r > x1) x1 = n.x + r;
+      if (n.y + r > y1) y1 = n.y + r;
+    }
+    const margen = 34;
+    const k = Math.min(
+      6,
+      Math.max(0.25, Math.min((ancho - margen * 2) / (x1 - x0), (alto - margen * 2) / (y1 - y0))),
+    );
+    // El centro de la caja tiene que caer en el centro del lienzo, y el lienzo
+    // ya está trasladado a su propio centro antes de aplicar la cámara: por eso
+    // aquí no se suma ancho/2, solo se compensa el centro del contenido.
+    const t = d3.zoomIdentity
+      .translate(-((x0 + x1) / 2) * k, -((y0 + y1) / 2) * k)
+      .scale(k);
+    const sel = d3.select(lienzo);
+    if (duracion > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      sel.transition().duration(duracion).call(zoom.transform, t);
+    } else {
+      sel.call(zoom.transform, t);
+    }
+  }
+
+  // --- Pintado -------------------------------------------------------------
+  function pintar() {
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, ancho, alto);
+    ctx.fillStyle = colorLienzo;
+    ctx.fillRect(0, 0, ancho, alto);
+
+    ctx.translate(ancho / 2, alto / 2);
+    ctx.translate(camara.x, camara.y);
+    ctx.scale(camara.k, camara.k);
+
+    const cerca = resaltado ? vecinos.get(resaltado.id) : null;
+
+    // Hilos primero, para que los nodos queden encima.
+    ctx.lineWidth = 0.7 / camara.k;
+    for (const a of aristas) {
+      const vivo = cerca && (a.source.id === resaltado.id || a.target.id === resaltado.id);
+      if (resaltado && !vivo) continue;
+      if (!visible(a.source) || !visible(a.target)) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = vivo ? colorHiloVivo : colorHilo;
+      ctx.moveTo(a.source.x, a.source.y);
+      ctx.lineTo(a.target.x, a.target.y);
+      ctx.stroke();
+    }
+
+    // Cuando hay un nodo resaltado los demás hilos se pintan muy tenues, para
+    // no perder la forma general del grafo mientras se mira un detalle.
+    if (resaltado) {
+      ctx.globalAlpha = 0.12;
+      ctx.strokeStyle = colorHilo;
+      ctx.beginPath();
+      for (const a of aristas) {
+        if (a.source.id === resaltado.id || a.target.id === resaltado.id) continue;
+        ctx.moveTo(a.source.x, a.source.y);
+        ctx.lineTo(a.target.x, a.target.y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    for (const n of nodos) {
+      const v = visible(n);
+      const cercano = !resaltado || n === resaltado || cerca.has(n.id);
+      ctx.globalAlpha = v ? (cercano ? 1 : 0.16) : 0.07;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, radio(n), 0, Math.PI * 2);
+      ctx.fillStyle = color[n.zona] || colorTinta;
+      ctx.fill();
+      if (n === resaltado) {
+        ctx.lineWidth = 2 / camara.k;
+        ctx.strokeStyle = colorTinta;
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // Etiquetas: las de los nodos gordos siempre, y todas al acercarse — que es
+    // como se lee un grafo grande sin convertirlo en una mancha de texto.
+    const umbral = camara.k > 2.2 ? 0 : camara.k > 1.2 ? 6 : 13;
+    ctx.font = `${11 / camara.k}px "IBM Plex Mono", monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (const n of nodos) {
+      if (!visible(n)) continue;
+      const cercano = !resaltado || n === resaltado || cerca.has(n.id);
+      if (!cercano) continue;
+      if (n.grado < umbral && n !== resaltado && !(resaltado && cerca.has(n.id))) continue;
+      ctx.fillStyle = colorTinta;
+      ctx.globalAlpha = n === resaltado ? 1 : 0.72;
+      ctx.fillText(n.etiqueta, n.x, n.y + radio(n) + 3 / camara.k);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+  }
+
+  // --- Ratón ---------------------------------------------------------------
+  function nodoEn(ex, ey) {
+    const [mx, my] = aMundo(ex, ey);
+    let mejor = null, mejorD = Infinity;
+    for (const n of nodos) {
+      if (!visible(n)) continue;
+      const d = Math.hypot(n.x - mx, n.y - my);
+      const r = radio(n) + 6 / camara.k;
+      if (d < r && d < mejorD) { mejor = n; mejorD = d; }
+    }
+    return mejor;
+  }
+
+  lienzo.addEventListener("mousemove", (e) => {
+    if (arrastrado) return;
+    const n = nodoEn(e.clientX, e.clientY);
+    if (n !== resaltado) { resaltado = n; pintar(); }
+    if (n) {
+      const caja = marco.getBoundingClientRect();
+      ficha.innerHTML =
+        `<b>${escapar(n.etiqueta)}</b><span>${escapar(n.id)}</span><br><span>${n.grado} conexiones · ${escapar(n.zona)}</span>`;
+      const x = Math.min(e.clientX - caja.left + 14, caja.width - 332);
+      ficha.style.left = Math.max(8, x) + "px";
+      ficha.style.top = Math.min(e.clientY - caja.top + 14, caja.height - 80) + "px";
+      ficha.classList.add("visible");
+    } else {
+      ficha.classList.remove("visible");
+    }
+  });
+
+  lienzo.addEventListener("mouseleave", () => {
+    resaltado = null;
+    ficha.classList.remove("visible");
+    pintar();
+  });
+
+  function escapar(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // Arrastrar un nodo lo fija donde se suelte. Es lo que permite desenredar un
+  // trozo a mano sin que la simulación se lo lleve de vuelta.
+  let arrastrado = null;
+  d3.select(lienzo).call(
+    d3.drag()
+      .subject((evento) => nodoEn(evento.sourceEvent.clientX, evento.sourceEvent.clientY))
+      .on("start", (evento) => {
+        if (!evento.subject) return;
+        arrastrado = evento.subject;
+        lienzo.classList.add("arrastrando");
+        if (!evento.active) sim.alphaTarget(0.25).restart();
+        arrastrado.fx = arrastrado.x;
+        arrastrado.fy = arrastrado.y;
+      })
+      .on("drag", (evento) => {
+        if (!arrastrado) return;
+        const [mx, my] = aMundo(evento.sourceEvent.clientX, evento.sourceEvent.clientY);
+        arrastrado.fx = mx;
+        arrastrado.fy = my;
+      })
+      .on("end", (evento) => {
+        if (!evento.active) sim.alphaTarget(0);
+        arrastrado = null;
+        lienzo.classList.remove("arrastrando");
+      }),
+  );
+
+  // --- Leyenda -------------------------------------------------------------
+  const cuenta = {};
+  for (const n of nodos) cuenta[n.zona] = (cuenta[n.zona] ?? 0) + 1;
+
+  const leyenda = document.getElementById("leyenda");
+  for (const [id, nombre] of ZONAS) {
+    if (!cuenta[id]) continue;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "zona";
+    b.setAttribute("aria-pressed", "true");
+    b.innerHTML = `<i style="background:${color[id]}"></i>${nombre} <em>${cuenta[id]}</em>`;
+    b.addEventListener("click", () => {
+      const encendida = b.getAttribute("aria-pressed") === "true";
+      b.setAttribute("aria-pressed", encendida ? "false" : "true");
+      if (encendida) apagadas.add(id); else apagadas.delete(id);
+      pintar();
+    });
+    leyenda.appendChild(b);
+  }
+
+  // --- Controles -----------------------------------------------------------
+  document.getElementById("buscar").addEventListener("input", (e) => {
+    buscado = e.target.value.trim().toLowerCase();
+    pintar();
+  });
+
+  document.getElementById("reiniciar").addEventListener("click", () => {
+    for (const n of nodos) { n.fx = null; n.fy = null; }
+    usuarioMovio = false;
+    sim.alpha(0.9).restart();
+  });
+
+  document.getElementById("todo").addEventListener("click", () => {
+    apagadas.clear();
+    buscado = "";
+    document.getElementById("buscar").value = "";
+    for (const b of leyenda.children) b.setAttribute("aria-pressed", "true");
+    pintar();
+    encajar(400);
+  });
+
+  // --- Tema y tamaño -------------------------------------------------------
+  const consulta = window.matchMedia("(prefers-color-scheme: dark)");
+  consulta.addEventListener("change", () => { leerColores(); repintarLeyenda(); pintar(); });
+  new MutationObserver(() => { leerColores(); repintarLeyenda(); pintar(); })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  function repintarLeyenda() {
+    let i = 0;
+    for (const [id] of ZONAS) {
+      if (!cuenta[id]) continue;
+      const punto = leyenda.children[i]?.querySelector("i");
+      if (punto) punto.style.background = color[id];
+      i++;
+    }
+  }
+
+  new ResizeObserver(medir).observe(marco);
+  medir();
+
+  // Adelantar la simulación en frío antes del primer pintado. `sim.tick()` no
+  // dispara eventos, así que esto no pinta 200 fotogramas: coloca los nodos de
+  // golpe. Sin ello el grafo aparece amontonado en el centro y tarda ocho
+  // segundos en desplegarse, que es justo cuando alguien decide que no funciona.
+  sim.tick(220);
+  encajar(0);
+  pintar();
+})();
+</script>

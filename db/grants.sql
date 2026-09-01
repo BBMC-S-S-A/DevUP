@@ -9,6 +9,12 @@
 -- todo el aislamiento entre organizaciones desaparecería sin un solo error.
 -- =============================================================================
 
+-- El camino de búsqueda del rol, no solo el de la conexión. La API ya lo fija
+-- al conectar, pero cualquier otra cosa que entre con este rol —psql, un script
+-- suelto— no lo hace, y sin `extensions` el tipo `citext` no se resuelve en un
+-- Postgres gestionado. Fijarlo en el rol cubre las dos vías.
+alter role devup_app set search_path = public, extensions;
+
 grant usage on schema public to devup_app;
 
 grant select, insert, update, delete on all tables in schema public to devup_app;

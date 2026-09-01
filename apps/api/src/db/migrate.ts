@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import pg from "pg";
+import { CAMINO_BUSQUEDA, esBaseLocal, opcionesTls } from "./conexion.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../..");
@@ -58,13 +59,33 @@ function quoteLiteral(value: string): string {
 }
 
 async function main(): Promise<void> {
-  const client = new pg.Client({ connectionString: adminUrl });
+  const client = new pg.Client({
+    connectionString: adminUrl,
+    ssl: opcionesTls(adminUrl),
+    connectionTimeoutMillis: 15_000,
+  });
   await client.connect();
 
   try {
+    // Antes de nada, el camino de búsqueda. En Supabase las extensiones viven en
+    // el esquema `extensions`, y sin esto la 0001 se cae en la primera columna
+    // `citext` con «type citext does not exist» — un error que no menciona en
+    // ningún momento que el problema sea dónde está mirando.
+    await client.query(`set search_path to ${CAMINO_BUSQUEDA}`);
     if (reset) {
       if (process.env.NODE_ENV === "production") {
         throw new Error("--reset está desactivado con NODE_ENV=production");
+      }
+      // Y además, nunca contra una base que no sea local. `NODE_ENV` es una
+      // variable de entorno que se olvida de poner; la dirección de la base no
+      // se olvida, porque es la que decide a quién le estás borrando el
+      // esquema. En Supabase, `drop schema public cascade` no solo se lleva
+      // nuestras 45 tablas: se lleva lo que el propio Supabase tenga ahí.
+      if (!esBaseLocal(adminUrl)) {
+        throw new Error(
+          "--reset solo funciona contra una base local. DATABASE_ADMIN_URL " +
+            "apunta a una máquina remota, y esto borraría el esquema entero.",
+        );
       }
       console.log("· Borrando el esquema public y reconstruyéndolo");
       await client.query("drop schema if exists public cascade");
