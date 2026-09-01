@@ -28,12 +28,6 @@ Los seis en verde antes de empezar. Hoy: **179 · 13 · 26 · 20** comprobacione
 
 ---
 
-## Sin desplegar ahora mismo
-
-- [ ] **Desplegar la mesa de trabajo.** Producción está en `0024`; en local hay
-      `0025_mesa_de_trabajo`. El procedimiento está más abajo.
-
----
 
 ## Bloque A · Que nada se pierda
 
@@ -112,7 +106,7 @@ Los seis en verde antes de empezar. Hoy: **179 · 13 · 26 · 20** comprobacione
 
 Detalle en [`plan-superficie-de-trabajo.md`](plan-superficie-de-trabajo.md).
 
-- [x] ~~4a · Mesa de trabajo: partir la pantalla en 1, 2 o 3 zonas~~ *(sin desplegar)*
+- [x] ~~4a · Mesa de trabajo: partir la pantalla en 1, 2 o 3 zonas~~
 - [ ] **4b · Preajustes por rol.** Ahora que hay partición son cuatro
       disposiciones guardadas, no una funcionalidad nueva. **El rol es un
       preajuste, no un muro**: decide qué sale primero, no qué se puede abrir.
