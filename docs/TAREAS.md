@@ -41,33 +41,40 @@ Los seis en verde antes de empezar. Hoy: **179 · 13 · 26 · 20** comprobacione
       pegar. *Solo Juan.*
 - [ ] Llevarse la carpeta `respaldos/` de vez en cuando (`tar -czf …`). Son 2 MB.
 - [ ] Alta de un proveedor de SMTP y pegar `SMTP_URL`. *Solo Juan.*
-- [ ] ~~Alta de Metered para TURN~~ — **en pausa**: si se hace la mudanza de
-      abajo, deja de hacer falta. Una máquina con IP pública puede levantar
-      `coturn` propio, y el código ya lo soporta. Ver
-      [`plan-salir-del-portatil.md`](plan-salir-del-portatil.md) §3.
+- [ ] **Alta de Metered para TURN**: `METERED_APP_NAME` y `METERED_API_KEY`.
+      Sigue haciendo falta. Sin tarjeta son 0,5 GB al mes —solo para probar—;
+      con tarjeta, 20 GB y no cobra. `coturn` propio necesitaría una máquina con
+      IP pública, y no la hay. *Solo Juan.*
 
 ## Bloque M · Salir del portátil
 
 Plan completo en [`plan-salir-del-portatil.md`](plan-salir-del-portatil.md).
-Resumen: **cabe entero en capa gratuita, sin dejar nada fuera y sin romper
-ninguna regla** — la única condición es que el sitio corra un proceso encendido
-con WebSockets, así que serverless no vale. El orden importa y el primero no se
-salta.
+**Oracle está descartado: la cuenta no salió.** Sin una máquina propia sigue
+cabiendo todo en capa gratuita y **no se pierde ninguna funcionalidad**, pero
+`docker-compose.prod.yml` deja de ser la unidad de despliegue, la API se duerme a
+los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa.
 
 - [ ] **1 · `.env.production` a un gestor de contraseñas.** Es el mismo punto
-      del bloque A, y aquí es además el paso 1: una mudanza es cuando eso se
+      del bloque A, y aquí además es el paso 1: una mudanza es cuando eso se
       pierde. *Solo Juan.*
-- [ ] 2 · Cuenta de Oracle Always Free, región **con capacidad Ampere**, Ubuntu
-      ARM. Son 2 núcleos y 12 GB desde agosto, no los 4/24 que dice la 0003.
-      *Solo Juan.*
-- [ ] 3 · Endurecer el sistema (`ufw` solo SSH, clave, actualizaciones).
-- [ ] 4-6 · Copiar repo y `.env.production` —nunca por git—, levantar, migrar, y
-      **restaurar el último respaldo contando filas**.
-- [ ] 7 · Apuntar el túnel a la máquina nueva; de paso se arregla el apex.
-- [ ] 8 · coturn: abrir UDP, `TURN_URLS` + `TURN_SECRET`, quitar `METERED_*`.
-- [ ] 9 · Respaldos a Cloudflare R2 (10 GB gratis). Es la única pieza que **no**
-      puede quedarse en la misma máquina.
-- [ ] 10-11 · Registrar el ejecutor allí, y **solo entonces** apagar el PC.
+- [ ] **2 · Probar que la web compila y corre en Cloudflare Pages.** Es la
+      incógnita grande: si no sale, el plan cambia de forma. Va antes que todo
+      lo demás.
+- [ ] 3 · Supabase: alta, rol de aplicación **sin ser dueño de las tablas**, y
+      aplicar las 25 migraciones. Después **restaurar el respaldo contando
+      filas**.
+- [ ] 4 · Almacén a Supabase Storage (compatible con S3: es cambiar `endpoint`).
+- [ ] 5 · API en Render. Ojo a los tres límites: se duerme, no hay UDP, y
+      **bloquea los puertos de SMTP**.
+- [ ] 6 · **Separar dominios**: `app.hytrex.co` → Pages, `api.hytrex.co` →
+      Render. Tienen que compartir dominio raíz o las cookies de sesión pasan a
+      ser de terceros y el login falla a ratos. Revisar `APP_BASE_URL`, CORS y
+      el dominio de la cookie.
+- [ ] 7 · **Correo por API HTTP** en vez de SMTP, porque Render cierra esos
+      puertos. Toca el módulo de correo y `npm run correo:probar`.
+- [ ] 8 · Reubicar los respaldos: hoy son contenedores del compose, y **no
+      pueden caer en Supabase**, que es donde vive la base. *Decisión pendiente.*
+- [ ] 9 · **Y solo entonces**, apagar el PC.
 
 ## Bloque B · Cerrar lo abierto
 
