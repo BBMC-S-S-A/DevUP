@@ -48,3 +48,45 @@ end $$;
 -- El resto de funciones (las que no son SECURITY DEFINER) no necesitan trato
 -- especial: corren con los privilegios de quien llama y RLS se les aplica.
 grant execute on all functions in schema public to devup_app;
+
+-- ---------------------------------------------------------------------------
+-- Y cerrar lo que un Postgres gestionado abre por su cuenta.
+--
+-- Supabase expone el esquema `public` por su API REST y le da acceso a los
+-- roles `anon` y `authenticated`. La clave `anon` es PÚBLICA por diseño: viaja
+-- dentro del JavaScript del cliente. Tal como queda un proyecto recién creado,
+-- cualquiera con la URL del proyecto podía llamar a
+-- `public.auth_credentials('correo@de.alguien')` y recibir su hash de
+-- contraseña, o a `get_connection_secret_for_refresh()` y sacar credenciales
+-- de la bóveda. Las dos son SECURITY DEFINER — se saltan RLS a propósito,
+-- porque están pensadas para que las llame nuestra API, que comprueba antes
+-- quién pregunta. Por esa misma vía se saltaban también las políticas.
+--
+-- Comprobado en el proyecto de Supabase el 1 de septiembre de 2026: 40
+-- funciones alcanzables por `anon` y otras 40 por `authenticated`.
+--
+-- DevUP no usa esa API REST para nada: se conecta por Postgres directo con
+-- `devup_app`. Así que estos dos roles no necesitan absolutamente nada aquí.
+--
+-- Va con guarda porque en un Postgres nuestro esos roles no existen y esto se
+-- ejecuta también en desarrollo.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke usage on schema public         from anon, authenticated;
+    revoke all on all tables    in schema public from anon, authenticated;
+    revoke all on all functions in schema public from anon, authenticated;
+    revoke all on all sequences in schema public from anon, authenticated;
+
+    -- Y que la próxima migración que cree una tabla no vuelva a concederlo.
+    alter default privileges in schema public revoke all on tables    from anon, authenticated;
+    alter default privileges in schema public revoke all on functions from anon, authenticated;
+    alter default privileges in schema public revoke all on sequences from anon, authenticated;
+  end if;
+end $$;
+
+-- La tabla de control de migraciones también: no guarda datos de nadie, pero
+-- sin RLS y con el esquema expuesto le cuenta la lista entera de migraciones a
+-- quien pregunte. Sin política = deniega a todo el mundo, que es lo correcto:
+-- solo la toca el runner, y ese entra como propietario.
+alter table if exists public.schema_migrations enable row level security;

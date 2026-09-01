@@ -71,10 +71,29 @@ los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa
 - [x] ~~Correo por API HTTP~~ — `MAIL_API_KEY` manda sobre `SMTP_URL`, SMTP se
       queda para el buzón de mentira, y `npm run correo:probar` prueba las dos
       vías. Comprobado contra Resend de verdad.
-- [ ] 3 · Supabase: alta, rol de aplicación **sin ser dueño de las tablas**, y
-      aplicar las 25 migraciones. Después **restaurar el respaldo contando
-      filas**. *Solo Juan (alta).*
-- [ ] 4 · Almacén a Supabase Storage (compatible con S3: es cambiar `endpoint`).
+- [x] ~~3 · Supabase montado~~ — proyecto `anrbogqmedmdvemldjkw` (us-west-2,
+      Postgres 17.6). Las 25 migraciones aplicadas: **45 tablas, las 45 con RLS,
+      142 políticas, 53 funciones**, `devup_app` creado sin ser dueño de nada, y
+      `public.schema_migrations` relleno con los checksums que calculará el
+      runner, para que `npm run db:migrate` no intente repetirlas. Probado en
+      caliente: `devup_app` sin identidad ve **0 organizaciones y 0 usuarios**.
+- [x] ~~Cerrar el acceso que Supabase abre por defecto~~ — su API REST exponía
+      **40 funciones a `anon`** y otras 40 a `authenticated`, entre ellas
+      `auth_credentials()` (devuelve hashes de contraseña) y
+      `get_connection_secret_for_refresh()` (secretos de la bóveda). La clave
+      `anon` es pública por diseño. Revocado, y guardado en
+      [`grants.sql`](../db/grants.sql) para que no vuelva.
+- [x] ~~Bucket `devup-files` creado, privado~~, con tope de 25 MB.
+- [ ] **Poner la contraseña de `devup_app`.** Es lo único que falta de la base y
+      solo puede hacerlo Juan: una sentencia en el editor SQL de Supabase y la
+      misma clave en `.env.production`. *Solo Juan.*
+- [ ] 4 · Claves S3 del almacén (Storage → S3 Access Keys) y apuntar
+      `S3_ENDPOINT` al de Supabase. *Solo Juan.*
+- [ ] Ponerle `search_path` fijo a las seis funciones que no lo llevan
+      (`current_user_id`, `global_search`, `mark_channel_read`,
+      `touch_opportunity`, `touch_task`, `unread_counts`). Ninguna es
+      `security definer`, así que corren con los privilegios de quien llama y
+      RLS se les aplica — es higiene, no un agujero.
 - [ ] 5 · Alta en Render, conectar el repositorio y pegar los secretos del
       `.env.production`. *Solo Juan.*
 - [ ] 6 · Alta en Resend y **verificar el dominio** en Cloudflare. Sin eso solo
