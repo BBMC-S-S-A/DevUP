@@ -41,9 +41,33 @@ Los seis en verde antes de empezar. Hoy: **179 · 13 · 26 · 20** comprobacione
       pegar. *Solo Juan.*
 - [ ] Llevarse la carpeta `respaldos/` de vez en cuando (`tar -czf …`). Son 2 MB.
 - [ ] Alta de un proveedor de SMTP y pegar `SMTP_URL`. *Solo Juan.*
-- [ ] Alta de Metered para TURN: `METERED_APP_NAME` y `METERED_API_KEY`.
-      Auto-alojarlo es imposible hoy — producción no publica ni un puerto.
+- [ ] ~~Alta de Metered para TURN~~ — **en pausa**: si se hace la mudanza de
+      abajo, deja de hacer falta. Una máquina con IP pública puede levantar
+      `coturn` propio, y el código ya lo soporta. Ver
+      [`plan-salir-del-portatil.md`](plan-salir-del-portatil.md) §3.
+
+## Bloque M · Salir del portátil
+
+Plan completo en [`plan-salir-del-portatil.md`](plan-salir-del-portatil.md).
+Resumen: **cabe entero en capa gratuita, sin dejar nada fuera y sin romper
+ninguna regla** — la única condición es que el sitio corra un proceso encendido
+con WebSockets, así que serverless no vale. El orden importa y el primero no se
+salta.
+
+- [ ] **1 · `.env.production` a un gestor de contraseñas.** Es el mismo punto
+      del bloque A, y aquí es además el paso 1: una mudanza es cuando eso se
+      pierde. *Solo Juan.*
+- [ ] 2 · Cuenta de Oracle Always Free, región **con capacidad Ampere**, Ubuntu
+      ARM. Son 2 núcleos y 12 GB desde agosto, no los 4/24 que dice la 0003.
       *Solo Juan.*
+- [ ] 3 · Endurecer el sistema (`ufw` solo SSH, clave, actualizaciones).
+- [ ] 4-6 · Copiar repo y `.env.production` —nunca por git—, levantar, migrar, y
+      **restaurar el último respaldo contando filas**.
+- [ ] 7 · Apuntar el túnel a la máquina nueva; de paso se arregla el apex.
+- [ ] 8 · coturn: abrir UDP, `TURN_URLS` + `TURN_SECRET`, quitar `METERED_*`.
+- [ ] 9 · Respaldos a Cloudflare R2 (10 GB gratis). Es la única pieza que **no**
+      puede quedarse en la misma máquina.
+- [ ] 10-11 · Registrar el ejecutor allí, y **solo entonces** apagar el PC.
 
 ## Bloque B · Cerrar lo abierto
 

@@ -5,6 +5,15 @@
 distintas plataformas, qué VPS usar (con y sin coste), y qué le falta a
 [`DESPLIEGUE.md`](../DESPLIEGUE.md) para desplegar con seguridad de verdad.
 
+> **Corrección del 1 de septiembre de 2026.** Este documento dice que Oracle
+> «Always Free» da 4 núcleos ARM y 24 GB de RAM. **Desde el 18 de agosto de 2026
+> son 2 núcleos y 12 GB**, por cuenta entera, y lo que exceda esa reserva se
+> termina automáticamente. La recomendación no cambia —12 GB siguen sobrando
+> para los siete contenedores— pero el margen sí. Léelo junto a
+> [`plan-salir-del-portatil.md`](../plan-salir-del-portatil.md), que responde a
+> la variante «todo gratuito» y añade lo que aquí no estaba: que salir del
+> portátil permite **coturn propio** y por tanto quita la dependencia de Metered.
+
 ---
 
 ## Resumen para quien no vaya a leer el resto
