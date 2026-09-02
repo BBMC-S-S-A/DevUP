@@ -130,13 +130,22 @@ no hay nadie escuchando — es un mapa vacío, no un error.
       apostar por un formato en transición. En el panel: Dockerfile
       `apps/api/Dockerfile`, contexto la raíz del repo, ruta de salud
       `/health`, y `REALTIME_ENABLED=false` fijo entre las variables.
-- [ ] Nueva ruta del túnel de Cloudflare: `live.hytrex.co` → el contenedor del
-      portátil, para los sockets. `api.hytrex.co` pasa a apuntar a Railway.
-      `NEXT_PUBLIC_API_URL=https://api.hytrex.co` y
-      `NEXT_PUBLIC_WS_URL=wss://live.hytrex.co` se incrustan en el momento de
-      compilar el Worker, no al arrancar, así que un cambio después pide
-      `npm run cf:deploy` otra vez. Las cookies siguen sirviendo igual: las
-      tres comparten `hytrex.co` como dominio raíz.
+- [x] ~~El reparto se volvió tres servicios de Railway, no dos~~ — al mudar la
+      base ahí, el servidor de sockets del portátil dejó de poder alcanzarla
+      (quedó en red privada). No había forma de mantener el tiempo real en el
+      portátil sin abrir la base a internet otra vez, así que el tiempo real
+      también se mudó: **`live`**, tercer servicio, mismo Dockerfile,
+      `REALTIME_ENABLED=true`. Esto es lo que de verdad permite cerrar Docker
+      del todo — antes solo se habría podido a medias.
+- [ ] **`api.hytrex.co` y `live.hytrex.co` apuntan a Railway, pero sin
+      certificado.** El DNS está bien —confirmado propagado dos veces,
+      incluso recreando el dominio— y Railway se queda atascado en
+      `VALIDATING_OWNERSHIP` sin avanzar. No es nuestro, es de ellos. Mientras
+      tanto la web usa los dominios `*.up.railway.app` que sí tienen
+      certificado (`api-production-7b95` y `live-production-976a`); en cuanto
+      Railway emita el certificado, se cambia `NEXT_PUBLIC_API_URL`/
+      `NEXT_PUBLIC_WS_URL` a los de `hytrex.co` y `npm run cf:deploy` otra vez.
+      *Revisar el panel de Railway, o escribirles.*
 - [ ] Claves S3 de Supabase Storage (Storage → S3 Access Keys) para mudar el
       almacén de `minio`. Con esto puesto, `docker-compose.prod.yml` del
       portátil se queda solo con la instancia de tiempo real —ya no con
