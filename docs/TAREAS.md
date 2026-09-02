@@ -50,11 +50,66 @@ Los seis en verde antes de empezar. Hoy: **179 · 13 · 26 · 20** comprobacione
 
 ## Bloque M · Salir del portátil
 
-Plan completo en [`plan-salir-del-portatil.md`](plan-salir-del-portatil.md).
-**Oracle está descartado: la cuenta no salió.** Sin una máquina propia sigue
-cabiendo todo en capa gratuita y **no se pierde ninguna funcionalidad**, pero
-`docker-compose.prod.yml` deja de ser la unidad de despliegue, la API se duerme a
-los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa.
+Plan completo en [`plan-salir-del-portatil.md`](plan-salir-del-portatil.md), con
+una corrección del 1 de septiembre por la noche: el compañero de Juan propuso
+partir la API en dos en vez de meterla entera en Render, y cambia los pasos
+5-7 de más abajo. Lo de antes de esta línea —Supabase y Google— sigue en pie
+tal cual, porque la base de datos no depende de dónde corra el código.
+
+**El reparto nuevo:**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| `web` (Next.js) | **Vercel** | Ya no hay problema de WebSockets que lo descarte: si las llamadas y DevVerse viven aparte, lo que le queda a `web` es tráfico normal |
+| `api`, **solo REST** | **Railway**, 30 días | Tareas, ventas, GitHub, ajustes… nada que necesite un socket abierto. *Ver el reloj más abajo* |
+| `api`, **con los 5 sockets + DevVerse** | El portátil, en Docker, como hoy | Es la parte que de verdad necesita un proceso encendido. Sigue dependiendo de que el portátil esté prendido — **eso no cambia con este reparto**, es una decisión aceptada, no un efecto secundario |
+| Postgres + almacén | **Supabase** | Sin cambios. Ya migrado, con Google login encima |
+
+**Lo que hizo posible partir la API sin duplicar código:** una sola variable,
+`REALTIME_ENABLED`. En `false` esa instancia no registra ni un solo socket —
+`/ws/world` da 404 en vez de 101—, y en `true` (el valor por defecto, para no
+romper nada de lo que ya corre) es la API de siempre. El ticket de
+`/auth/ws-ticket` es un JWT firmado con `AUTH_SECRET`, no una entrada en
+memoria: la instancia que lo emite (Railway) y la que abre el socket (el
+portátil) no tienen que ser el mismo proceso, y `messages`/`notifications`/
+`files`/`spotify` avisan al hub tras cada escritura sin que eso rompa nada si
+no hay nadie escuchando — es un mapa vacío, no un error.
+
+- [x] ~~`REALTIME_ENABLED` en `env.ts` y `server.ts`~~ — probado en caliente:
+      con `false`, REST responde 200 y `/ws/world` da 404; con el valor por
+      defecto (`true`), el mismo socket sube a 101. Las 179 de RLS y las 13 de
+      mundo, sin cambios.
+- [ ] **`docker-compose.prod.yml` no se ha tocado, a propósito.** Hoy sigue
+      sirviendo tráfico real de producción con `web` y `api` juntos; recortarlo
+      ahora apagaría el sitio hasta que Vercel y Railway estén de verdad
+      levantados. Se recorta —fuera `web`, y luego `minio` cuando el almacén se
+      mude— en el mismo momento en que se corte el DNS hacia allí, no antes.
+- [ ] **Vercel Hobby prohíbe uso comercial** — sigue sin resolverse. Alguien
+      cobrando por escribir este código ya cuenta como comercial según sus
+      propios términos. O se paga Pro, o `web` se queda en Cloudflare Pages
+      (gratis, permite uso comercial, y ya estaba evaluado como alternativa).
+      *Decisión de Juan y su compañero.*
+- [ ] **El reloj de Railway.** Sin tarjeta da $5 de crédito que caducan a los
+      30 días (antes si se gastan); pasado eso son $5/mes con tarjeta. Anotar
+      la fecha de alta aquí en cuanto se cree, para saber cuándo hay que decidir
+      entre pagar o mudar la instancia REST a Render —`render.yaml` ya existe y
+      sigue sirviendo para esto sin cambiar nada.
+- [ ] Railway no necesita un archivo de configuración committeado: su formato
+      `railway.json`/`railway.toml` se jubila el 1 de diciembre de 2026 a favor
+      de uno nuevo, y para algo pensado para durar 30 días no vale la pena
+      apostar por un formato en transición. En el panel: Dockerfile
+      `apps/api/Dockerfile`, contexto la raíz del repo, ruta de salud
+      `/health`, y `REALTIME_ENABLED=false` fijo entre las variables.
+- [ ] Nueva ruta del túnel de Cloudflare: `live.hytrex.co` → el contenedor del
+      portátil, para los sockets. `api.hytrex.co` pasa a apuntar a Railway. En
+      el build de Vercel, `NEXT_PUBLIC_API_URL=https://api.hytrex.co` y
+      `NEXT_PUBLIC_WS_URL=wss://live.hytrex.co` — se incrustan en el momento de
+      compilar, no al arrancar, así que un cambio después pide reconstruir. Las
+      cookies siguen sirviendo igual: las tres comparten `hytrex.co` como
+      dominio raíz.
+
+Sin una máquina propia sigue cabiendo todo en capa gratuita y **no se pierde
+ninguna funcionalidad**. El orden de lo que sigue importa.
 
 - [x] ~~2 · Plano de despliegue [`render.yaml`](../render.yaml)~~ — los dos
       servicios ya configurados. Se conecta el repositorio y crea `devup-api` y
@@ -103,12 +158,16 @@ los 15 minutos, y TURN pasa a depender de un tercero sí o sí. El orden importa
       `touch_opportunity`, `touch_task`, `unread_counts`). Ninguna es
       `security definer`, así que corren con los privilegios de quien llama y
       RLS se les aplica — es higiene, no un agujero.
-- [ ] 5 · Alta en Render, conectar el repositorio y pegar los secretos del
-      `.env.production`. *Solo Juan.*
+- [ ] 5 · **Superado por el reparto nuevo de arriba.** Era «alta en Render para
+      `web` y `api` juntos»; ahora es alta en Vercel (`web`) + alta en Railway
+      (`api` con `REALTIME_ENABLED=false`) + `docker-compose.prod.yml` del
+      portátil con `REALTIME_ENABLED=true` explícito. Render se queda montado
+      y a un lado, para cuando se acaben los 30 días de Railway. *Solo Juan.*
 - [ ] 6 · Alta en Resend y **verificar el dominio** en Cloudflare. Sin eso solo
       se puede enviar desde su dirección de pruebas. *Solo Juan.*
-- [ ] 7 · Apuntar `app.hytrex.co` y `api.hytrex.co` a Render. De paso se arregla
-      el apex.
+- [ ] 7 · **También superado**: `app.hytrex.co` → Vercel, `api.hytrex.co` →
+      Railway, `live.hytrex.co` (nuevo) → el portátil. De paso se arregla el
+      apex.
 - [x] ~~8 · Respaldo diario en [`respaldo.yml`](../.github/workflows/respaldo.yml)~~
       — por GitHub Actions, que ya usamos y no pide dar de alta nada. **El
       volcado se cifra antes de subirse**, porque el repositorio es público y

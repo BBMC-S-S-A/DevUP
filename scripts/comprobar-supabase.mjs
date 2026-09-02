@@ -31,14 +31,25 @@ cargarEnv({ path: ficheroEnv, quiet: true });
 const ADMIN = process.env.DATABASE_ADMIN_URL;
 const APP = process.env.DATABASE_URL;
 
-if (!ADMIN || !APP) {
+if (!APP) {
   console.error(
-    `Faltan DATABASE_ADMIN_URL y/o DATABASE_URL en ${ficheroEnv}.\n\n` +
-      "En Supabase, la primera es la conexión DIRECTA (puerto 5432) con el rol\n" +
-      "postgres, y la segunda la de la aplicación con el rol devup_app.",
+    `Falta DATABASE_URL en ${ficheroEnv}: es la conexión de la aplicación, con el\n` +
+      "rol devup_app. Sin ella no hay nada que comprobar.",
   );
   process.exit(1);
 }
+
+/**
+ * La conexión de administrador es opcional, y no por pereza.
+ *
+ * Sirve para leer el catálogo —quién es dueño de qué, qué políticas hay— y para
+ * contar filas. Pero lo que de verdad importa, si el aislamiento funciona, se
+ * comprueba con el rol de la aplicación. Exigir la clave de `postgres` para
+ * poder ejecutar esto obligaría a tenerla a mano más veces de las necesarias, y
+ * es la clave que se salta todas las políticas.
+ */
+const sinAdmin =
+  !ADMIN || /PON_AQUI|YOUR-PASSWORD|\[[^\]]*\]/.test(ADMIN) || ADMIN.includes("@postgres:");
 
 const LOCALES = new Set(["localhost", "127.0.0.1", "::1", "postgres", "db"]);
 
@@ -101,10 +112,24 @@ async function conectar(url, quien) {
   }
 }
 
-console.log(`\nComprobando la base de ${maquina(ADMIN)} · entorno ${ficheroEnv}\n`);
+console.log(`\nComprobando la base de ${maquina(APP)} · entorno ${ficheroEnv}\n`);
 
-const admin = await conectar(ADMIN, "administrador");
+const admin = sinAdmin ? null : await conectar(ADMIN, "administrador");
 
+/** Las del catálogo. Sin administrador quedan vacías y se dice por qué. */
+let tablas = [];
+
+if (!admin) {
+  console.log(
+    "Sin DATABASE_ADMIN_URL utilizable. Se omiten las comprobaciones de catálogo\n" +
+      "—propiedad de las tablas, políticas, recuento de filas—. La prueba del\n" +
+      "aislamiento no la necesita, y es la que decide.\n",
+  );
+} else {
+  await revisarCatalogo();
+}
+
+async function revisarCatalogo() {
 // --- 1. El servidor ---------------------------------------------------------
 console.log("El servidor");
 const { rows: [ver] } = await admin.query("select version(), current_user, current_database()");
@@ -171,14 +196,14 @@ if (propias.length > 0) {
 
 // --- 3. Las políticas -------------------------------------------------------
 console.log("\nLas tablas y sus políticas");
-const { rows: tablas } = await admin.query(
+({ rows: tablas } = await admin.query(
   `select c.relname as tabla, c.relrowsecurity as rls,
           (select count(*) from pg_policies p
             where p.schemaname='public' and p.tablename=c.relname) as politicas
      from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname='public' and c.relkind='r' and c.relname <> 'schema_migrations'
     order by c.relname`,
-);
+));
 console.log(`  · ${tablas.length} tablas`);
 
 const sinRls = tablas.filter((t) => !t.rls);
@@ -201,6 +226,8 @@ sinPolitica.length === 0
         sinPolitica.map((t) => t.tabla).join(", "),
     );
 
+} // fin de revisarCatalogo
+
 // --- 4. La prueba de verdad -------------------------------------------------
 // Todo lo anterior lee metadatos. Esto pregunta a la base, con el rol real de
 // la aplicación y sin identidad puesta: si devuelve algo, el aislamiento no
@@ -216,7 +243,12 @@ quien.current_user === "devup_app"
       "si es el rol que creó las tablas, no se le aplica ninguna política",
     );
 
-const objetivo = tablas.find((t) => t.tabla === "organizations") ? "organizations" : tablas[0]?.tabla;
+// `organizations` siempre existe desde la 0001; el catálogo solo se usa como
+// respaldo por si algún día se renombra.
+const objetivo =
+  tablas.length === 0 || tablas.some((t) => t.tabla === "organizations")
+    ? "organizations"
+    : tablas[0].tabla;
 if (objetivo) {
   await app.query("begin");
   try {
@@ -239,7 +271,9 @@ if (objetivo) {
 
 // --- 5. Cuántas filas hay ---------------------------------------------------
 // Para poder comparar después de restaurar un respaldo: «arrancó» no es
-// «están los datos».
+// «están los datos». Necesita administrador: con el rol de la aplicación y sin
+// identidad, todos los recuentos darían cero y no significarían nada.
+if (admin) {
 console.log("\nFilas por tabla (las no vacías)");
 const conFilas = [];
 for (const t of tablas) {
@@ -254,7 +288,9 @@ if (conFilas.length === 0) {
   }
 }
 
-await admin.end();
+}
+
+await admin?.end();
 await app.end();
 
 console.log(

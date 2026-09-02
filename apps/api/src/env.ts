@@ -58,6 +58,30 @@ const schema = z.object({
   /** Base pública de la web, para componer los enlaces de los correos. */
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
 
+  /**
+   * Si esta instancia sirve los cinco WebSockets (voz, archivos, canal,
+   * usuario, mundo) y el reloj de DevVerse, o solo REST.
+   *
+   * VERDADERO POR DEFECTO A PROPÓSITO: así el comportamiento de hoy —una sola
+   * instancia con todo dentro— no cambia para nadie que no toque esta
+   * variable. Ponerla en `false` es una decisión explícita para una instancia
+   * concreta, nunca el resultado de olvidarla.
+   *
+   * PARA QUÉ SIRVE. Las llamadas y DevVerse necesitan un proceso encendido de
+   * verdad; el resto —tareas, ventas, GitHub, ajustes— es REST normal y cabe
+   * en cualquier sitio, incluido uno donde cada minuto conectado cuenta para
+   * la factura. Con esto en `false`, esa instancia no registra ni un solo
+   * socket y puede vivir en un alojamiento medido por uso sin que una
+   * videollamada de una hora dispare el consumo.
+   *
+   * NO HACE FALTA TOCAR NADA MÁS PARA QUE FUNCIONE PARTIDO EN DOS PROCESOS. El
+   * ticket de `/auth/ws-ticket` es un JWT firmado con AUTH_SECRET, no una
+   * entrada en memoria — lo puede verificar cualquier proceso que comparta
+   * ese secreto y la misma base, así que la instancia que emite el ticket y la
+   * que atiende el socket no tienen por qué ser la misma.
+   */
+  REALTIME_ENABLED: bool("true"),
+
   // --- Altas -----------------------------------------------------------------
   // `invite` es el valor por defecto a propósito: una instancia de equipo con
   // el registro abierto es una instancia donde entra cualquiera que encuentre
