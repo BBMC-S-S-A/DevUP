@@ -63,7 +63,8 @@ tal cual, porque la base de datos no depende de dónde corra el código.
 | `web` (Next.js) | **Vercel** | Ya no hay problema de WebSockets que lo descarte: si las llamadas y DevVerse viven aparte, lo que le queda a `web` es tráfico normal |
 | `api`, **solo REST** | **Railway**, 30 días | Tareas, ventas, GitHub, ajustes… nada que necesite un socket abierto. *Ver el reloj más abajo* |
 | `api`, **con los 5 sockets + DevVerse** | El portátil, en Docker, como hoy | Es la parte que de verdad necesita un proceso encendido. Sigue dependiendo de que el portátil esté prendido — **eso no cambia con este reparto**, es una decisión aceptada, no un efecto secundario |
-| Postgres + almacén | **Supabase** | Sin cambios. Ya migrado, con Google login encima |
+| Postgres | **Railway**, en el mismo proyecto que la API | Corregido el 2 de septiembre: estaba en Supabase, se decidió moverla junto a la API. Por red privada, sin exponerse a internet — ni falta que hace, porque va a vivir en el mismo proyecto |
+| Almacén de archivos | **Supabase Storage** | Esto sí sigue en pie: es lo único que Supabase conserva del reparto |
 
 **Lo que hizo posible partir la API sin duplicar código:** una sola variable,
 `REALTIME_ENABLED`. En `false` esa instancia no registra ni un solo socket —
@@ -160,12 +161,38 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
 - [x] ~~Correo por API HTTP~~ — `MAIL_API_KEY` manda sobre `SMTP_URL`, SMTP se
       queda para el buzón de mentira, y `npm run correo:probar` prueba las dos
       vías. Comprobado contra Resend de verdad.
-- [x] ~~3 · Supabase montado~~ — proyecto `anrbogqmedmdvemldjkw` (us-west-2,
-      Postgres 17.6). Las 25 migraciones aplicadas: **45 tablas, las 45 con RLS,
-      142 políticas, 53 funciones**, `devup_app` creado sin ser dueño de nada, y
-      `public.schema_migrations` relleno con los checksums que calculará el
-      runner, para que `npm run db:migrate` no intente repetirlas. Probado en
-      caliente: `devup_app` sin identidad ve **0 organizaciones y 0 usuarios**.
+- [x] ~~3 · Supabase montado~~ — **superado el 2 de septiembre**: se decidió
+      migrar la base a Railway (ver el bloque nuevo más abajo). El proyecto
+      `anrbogqmedmdvemldjkw` se deja tal cual, sin borrar, por si hiciera falta
+      volver — no cuesta nada dejarlo dormido.
+- [x] ~~**Base de datos migrada a Railway**~~ — proyecto `devup`
+      (`d05dd021-3636-4957-bc2f-55359f2690cf`), servicio `Postgres`
+      (`a95567fe-f176-40e9-967c-75df75df803c`), plantilla oficial
+      `ghcr.io/railwayapp-templates/postgres-ssl:18`. Las 26 migraciones
+      aplicadas con el runner de siempre —no a mano, como con Supabase—,
+      porque esta vez sí hay una conexión de administrador de verdad: **45
+      tablas, las 45 con RLS**, `devup_app` sin ser dueño de nada, aislamiento
+      probado en caliente. `citext` se instala en `public` sin más —Railway no
+      reparte las extensiones en otro esquema como Supabase—, así que no hace
+      falta ningún ajuste de `search_path`.
+      **Cómo se llega a esta base sin exponerla a internet**: `railway connect
+      Postgres --tunnel-only`, un túnel por SSH autenticado con la cuenta de
+      Railway. No hay ningún proxy TCP público — más cerrado que Supabase, que
+      sí tiene que aceptar conexiones desde cualquier sitio.
+      **Un aviso para quien lea esto después**: al rotar la contraseña con
+      prisa, un script de generarla falló en silencio y `alter role ... password
+      ''` la dejó vacía en los dos roles durante unos minutos. Se detectó
+      comprobando `pg_authid.rolpassword` directamente —no dando por buena la
+      ausencia de un error— y se corrigió antes de seguir. La ventana de
+      riesgo real fue mínima: nada más estaba conectado a esa base todavía, y
+      el túnel de `railway connect` de todos modos se autentica con la cuenta,
+      no con la contraseña de Postgres. Aun así, verificar el hash en el
+      catálogo después de cualquier `alter role` —no solo el código de
+      salida— queda como lección.
+      **Pendiente:** el respaldo diario cifrado (`respaldo.yml`) todavía
+      apunta a Supabase. Hay que rehacerlo contra Railway, y como esta base no
+      tiene proxy público, el propio flujo de GitHub Actions va a necesitar el
+      mismo túnel por SSH que se usó aquí, no una conexión directa.
 - [x] ~~Cerrar el acceso que Supabase abre por defecto~~ — su API REST exponía
       **40 funciones a `anon`** y otras 40 a `authenticated`, entre ellas
       `auth_credentials()` (devuelve hashes de contraseña) y
