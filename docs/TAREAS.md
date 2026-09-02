@@ -145,6 +145,19 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       invitaciones**: la comprobación se extrajo a `puertaDeAlta()` y la usan
       las dos vías de alta, porque dos copias acaban diciendo cosas distintas.
       `npm run test:google` — 24 comprobaciones.
+- [x] ~~**Registro abierto, no solo Hytrex**~~ — `SIGNUP_MODE=open` en
+      `.env.production` y en `render.yaml`. DevUP es multiorganización por
+      diseño: cualquiera se da de alta, con o sin cuenta de Google de Hytrex, y
+      quien no trae invitación aterriza sin organización, en la pantalla que ya
+      se abre sola para crear la suya (`NewOrganization`, `apps/web/src/app/app/page.tsx`
+      — no había que construirla, ya existía). Entrar a Hytrex específicamente
+      sigue exigiendo su invitación, igual que antes.
+      **Encontré un fallo real al revisarlo:** `puertaDeAlta()` trataba
+      `SIGNUP_MODE=open` como «no mirar ninguna invitación», así que alguien
+      invitado a Hytrex que se registrara con el registro ya abierto entraba
+      igual, pero SIN unirse — la invitación se escribía para nada. Arreglado:
+      con token, se valida y se canjea siempre, sea cual sea el modo.
+      `npm run test:puerta` — 4 comprobaciones, contra la base local de verdad.
 - [ ] **Crear las credenciales en Google Cloud Console** (pantalla de
       consentimiento + ID de cliente OAuth). No pide facturación. Ojo con que
       la URI de redirección coincida carácter a carácter. *Solo Juan.*

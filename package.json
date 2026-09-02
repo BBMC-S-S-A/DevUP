@@ -27,7 +27,8 @@
     "boveda:rotar": "node scripts/rotar-clave-boveda.mjs",
     "respaldo:almacen": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-almacen sh scripts/respaldo-almacen.sh",
     "supabase:comprobar": "node scripts/comprobar-supabase.mjs",
-    "test:google": "npm run test:google --workspace apps/api"
+    "test:google": "npm run test:google --workspace apps/api",
+    "test:puerta": "npm run test:puerta --workspace apps/api"
   },
   "engines": {
     "node": ">=20.11"

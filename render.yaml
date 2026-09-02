@@ -121,8 +121,13 @@ services:
         value: https://app.hytrex.co
       - key: COOKIE_SECURE
         value: "true"
+      # Abierto a propósito: DevUP admite cualquier cuenta de Google, no solo
+      # las de Hytrex. Lo que sigue cerrado es entrar a UNA organización
+      # concreta — eso lo decide la invitación de esa organización, no esta
+      # variable. Quien se registra sin invitación aterriza sin organización,
+      # a crear la suya.
       - key: SIGNUP_MODE
-        value: invite
+        value: open
 
   # ---------------------------------------------------------------------------
   # La web. Es la que se puede sacrificar si las horas aprietan: Cloudflare
