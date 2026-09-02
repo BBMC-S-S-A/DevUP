@@ -185,6 +185,29 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       Compose valida el archivo entero aunque solo se le pida `api`. Restaurada
       con un valor de relleno; los datos de esa base (ya sin uso) siguieron
       intactos, se comprobó contando filas antes y después.
+- [x] ~~`hytrex.co` no llegaba porque el DNS tenía dos A viejas de Hostinger, y
+      además faltaba en el propio túnel la regla que dice a dónde va ese
+      tráfico~~. Arreglado con un token de Cloudflare con permiso de DNS —
+      confirmado leyendo los registros antes de tocar nada, no adivinando— y
+      luego uno de Cloudflare Tunnel para la regla de entrada. **`hytrex.co` es
+      para la landing page, que todavía no existe** — no es de DevUP, así que
+      la regla que lo mandaba a `web:3000` se deshizo en el mismo tramo: quedó
+      otra vez en 404, tal como estaba de fábrica, sin la página aparcada de
+      Hostinger porque esos dos registros ya se habían borrado. **La puerta de
+      entrada de verdad es `devup.hytrex.co`** — probado de punta a punta,
+      hasta la pantalla real de "Iniciar sesión con Google".
+      De camino salió otro fallo: la CORS de la API solo dejaba pasar
+      `devup.hytrex.co`, así que mientras `hytrex.co` estuvo mal enrutado a
+      DevUP, la propia pantalla de acceso no podía ni preguntarle a la API si
+      Google estaba activado. Y la imagen de `web` tampoco se había
+      reconstruido en toda la sesión — el botón de Google llevaba escrito rato
+      sin llegar a producción, exactamente como le pasó a `api`.
+- [x] ~~Las 5 cuentas de la base local de antes de Supabase, decisión
+      tomada~~: **se abandonan, nadie las migra.** Como `SIGNUP_MODE=open`,
+      cualquiera vuelve a entrar con "Crear cuenta" o con Google y arma su
+      organización desde cero — la pantalla ya existe para eso
+      (`NewOrganization`, `apps/web/src/app/app/page.tsx`). No hay ninguna
+      migración de datos pendiente por esto.
 - [ ] 4 · Claves S3 del almacén (Storage → S3 Access Keys) y apuntar
       `S3_ENDPOINT` al de Supabase. *Solo Juan.*
 - [ ] Ponerle `search_path` fijo a las seis funciones que no lo llevan
@@ -297,13 +320,16 @@ Detalle en [`plan-superficie-de-trabajo.md`](plan-superficie-de-trabajo.md).
 
 ## Otras cosas pendientes
 
-- [ ] **`hytrex.co` no llega a DevUP** — devuelve la página aparcada de
-      Hostinger. `api.hytrex.co` sí está bien enrutado. Se arregla en Cloudflare.
-      *Solo Juan.* **Sigue siendo esto** (comprobado de nuevo en el navegador
-      el 2 de septiembre): es la única pieza que falta para ver el botón de
-      Google de verdad en el sitio. El contenedor `web` ya lo sirve bien —
-      probado por dentro de la red de Docker, sin pasar por el dominio— así que
-      en cuanto se arregle esto en Cloudflare no hace falta desplegar nada más.
+- [x] ~~`hytrex.co` no llegaba a DevUP~~ — resuelto, y **no de la forma en que
+      esta lista lo daba por hecho**: no era que `hytrex.co` debiera apuntar a
+      DevUP, es que **`hytrex.co` es de la landing page** (todavía sin hacer) y
+      DevUP vive en `devup.hytrex.co`. Detalle en el bloque de Google, más
+      arriba. `hytrex.co` se dejó en 404 —sin la página aparcada de Hostinger,
+      porque sus dos registros ya se borraron— hasta que haya algo real que
+      poner ahí.
+- [ ] **Hacer la landing page de `hytrex.co`.** Hoy da 404. `gestion.hytrex.co`
+      e `insumos.hytrex.co` ya apuntan a proyectos de Vercel — comprobar si
+      alguno de los dos es esto, o si hace falta uno nuevo.
 - [ ] **Registrar el ejecutor** (`config.cmd` + token). Ojo: con Docker cerrado,
       un despliegue automático falla en el `docker compose up`. No rompe
       producción, pero el rojo llega igual. *Solo Juan.*
