@@ -42,3 +42,8 @@ docs/propuesta/__pycache__/
 
 # Copias de seguridad que hago yo mismo antes de tocar secretos; nunca al repo.
 .env.*.antes-*
+
+# Salida del adaptador de Cloudflare (OpenNext), se genera con cada build.
+.open-next
+.wrangler
+apps/web/.dev.vars

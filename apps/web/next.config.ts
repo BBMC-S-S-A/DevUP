@@ -2,6 +2,7 @@ import { config as loadEnv } from "dotenv";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
 // Un solo .env en la raíz del monorepo, compartido por la API y la web. Next
 // solo mira su propio directorio, así que lo cargamos a mano antes de que se
@@ -13,7 +14,14 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Salida autocontenida para la imagen de Docker: node_modules entero en una
   // imagen de producción son cientos de megas que no hacen falta.
-  output: "standalone",
+  //
+  // CONDICIONADA A PROPÓSITO. El adaptador de Cloudflare (OpenNext) tropieza
+  // con `standalone` — hay un error de empaquetado de OpenTelemetry documentado
+  // en su propio repositorio con exactamente esta combinación—, porque espera
+  // la salida normal de `.next` y no la ya recortada para Docker. `BUILD_DOCKER`
+  // solo se pone en el `Dockerfile`; el build de Cloudflare no la lleva, así
+  // que cae en el valor por defecto de Next y ninguno de los dos se pisa.
+  output: process.env.BUILD_DOCKER === "true" ? "standalone" : undefined,
   eslint: { ignoreDuringBuilds: true },
   // Declaradas explícitamente para que Next las inserte en el bundle del
   // cliente; con solo process.env no está garantizado al venir de fuera de
@@ -57,4 +65,23 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Función y no el objeto a secas, solo para poder mirar `phase`.
+ *
+ * `initOpenNextCloudflareForDev()` intenta lanzar el binario de `workerd`
+ * —el runtime real de Cloudflare— para que `next dev` hable con bindings
+ * locales. Eso está bien en un `next dev` de verdad y es un desastre en
+ * cualquier `next build`: dentro de la imagen de Docker (`node:22-alpine`)
+ * ese binario no está instalado —su script de postinstalación no corre ahí—,
+ * y el build entero se caía con `spawn workerd ENOENT`. `PHASE_DEVELOPMENT_SERVER`
+ * es la única señal de Next.js pensada exactamente para esto: distinguir
+ * "esto es el servidor de desarrollo" de "esto es una compilación", sin
+ * adivinar por variables de entorno que cambian según quién lo invoque.
+ */
+export default async function config(phase: string): Promise<NextConfig> {
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    const { initOpenNextCloudflareForDev } = await import("@opennextjs/cloudflare");
+    initOpenNextCloudflareForDev();
+  }
+  return nextConfig;
+}

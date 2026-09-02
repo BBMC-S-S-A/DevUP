@@ -1,0 +1,29 @@
+{
+  // Plano de despliegue de la web en Cloudflare Workers, vía el adaptador
+  // OpenNext. No es Cloudflare Pages: Cloudflare recomienda Workers para
+  // Next.js desde finales de 2025 — Pages usa un runtime de Edge recortado
+  // que no soporta ISR ni el streaming completo; Workers da Node.js entero.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "devup-web",
+  // Fecha del comportamiento de la plataforma que se congela para este
+  // Worker. No hay que tocarla salvo que se quiera adoptar un cambio de
+  // compatibilidad más reciente a propósito.
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": [
+    // Sin esto, cualquier import de un paquete que use APIs de Node (varios
+    // de los que ya usa el proyecto) falla al construir el Worker.
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "devup-web"
+    }
+  ]
+}
