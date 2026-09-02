@@ -174,6 +174,22 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       migrar la base a Railway (ver el bloque nuevo más abajo). El proyecto
       `anrbogqmedmdvemldjkw` se deja tal cual, sin borrar, por si hiciera falta
       volver — no cuesta nada dejarlo dormido.
+- [ ] **`api.hytrex.co` y `live.hytrex.co` siguen sin certificado propio en
+      Railway** — atascados en "validando propiedad" con el DNS ya correcto.
+      Mientras tanto, `app.hytrex.co` y `devup.hytrex.co` apuntan directo a
+      `api-production-7b95.up.railway.app` / `live-production-976a.up.railway.app`
+      (los dominios que Railway da gratis y que sí funcionan). Cuando el
+      certificado por fin emita, hay que: 1) volver
+      `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` a los dominios bonitos y
+      reconstruir los dos frentes, 2) devolver `GOOGLE_REDIRECT_URI` a
+      `https://api.hytrex.co/auth/google/callback` en el servicio `api` de
+      Railway. *Revisar el panel de Railway cada tanto; si sigue atascado
+      mucho más tiempo, contactar a su soporte.*
+- [ ] **Añadir en Google Cloud Console** la URI de redirección
+      `https://api-production-7b95.up.railway.app/auth/google/callback` —la
+      que se está usando *ahora mismo* mientras el dominio bonito no funciona.
+      Sin esto, Google rechaza el callback con `redirect_uri_mismatch`.
+      *Solo Juan.*
 - [x] ~~**Base de datos migrada a Railway**~~ — proyecto `devup`
       (`d05dd021-3636-4957-bc2f-55359f2690cf`), servicio `Postgres`
       (`a95567fe-f176-40e9-967c-75df75df803c`), plantilla oficial
@@ -465,3 +481,27 @@ repositorio**: con `cd docs/propuesta` la ruta del volumen sale duplicada.
   que eran del criterio y no de ellas.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
+- **Un dominio personalizado de Railway puede quedarse atascado en "validando
+  propiedad" con el DNS ya perfecto.** Le pasó a `api.hytrex.co` y a
+  `live.hytrex.co` a la vez: DNS confirmado por dos resolutores, y aun así el
+  panel decía «Waiting for DNS update». `customDomainIssueCertificate` (forzar
+  la reemisión) no lo arregló tampoco en el momento. La salida que funcionó:
+  **apuntar `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` al dominio que Railway
+  da por defecto** (`*.up.railway.app`, que sí funciona desde el primer
+  minuto) en vez de esperar al dominio bonito. Y como esas variables se
+  incrustan al compilar, cambiar de uno a otro pide reconstruir **los dos**
+  frentes —`npm run cf:deploy` y el `docker compose build web`—, no solo
+  cambiar una variable de entorno en caliente.
+- **Ese mismo atasco rompe Google en silencio, no con un error visible.** El
+  botón desaparece porque `/auth/signup-policy` falla y el código atrapa el
+  fallo con `.catch(() => setPolicy(null))` — nadie ve un error, la pantalla
+  simplemente parece no tener la función. Y si solo se arregla la URL del
+  frontend, el login **empieza** bien pero se corta al volver: Google redirige
+  a `GOOGLE_REDIRECT_URI`, que seguía siendo el dominio roto. Las dos partes
+  —a dónde llama el frontend y a dónde redirige Google al terminar— tienen que
+  apuntar al mismo sitio que funciona de verdad.
+- **Cientos de intentos de conexión seguidos desde la misma IP, mientras se
+  depura, pueden hacer que Cloudflare empiece a cortar esa IP en concreto** —
+  no el sitio para todo el mundo. Se manifiesta igual que un fallo real
+  (`ECONNRESET` en el saludo TLS) y el diagnóstico correcto es simple y fácil
+  de saltarse: pedirle a otra persona, desde otra red, que abra la misma URL.
