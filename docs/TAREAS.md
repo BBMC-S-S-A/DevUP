@@ -158,12 +158,33 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       igual, pero SIN unirse — la invitación se escribía para nada. Arreglado:
       con token, se valida y se canjea siempre, sea cual sea el modo.
       `npm run test:puerta` — 4 comprobaciones, contra la base local de verdad.
-- [ ] **Crear las credenciales en Google Cloud Console** (pantalla de
-      consentimiento + ID de cliente OAuth). No pide facturación. Ojo con que
-      la URI de redirección coincida carácter a carácter. *Solo Juan.*
-- [ ] **Poner la contraseña de `devup_app`.** Es lo único que falta de la base y
-      solo puede hacerlo Juan: una sentencia en el editor SQL de Supabase y la
-      misma clave en `.env.production`. *Solo Juan.*
+- [x] ~~Crear las credenciales en Google Cloud Console~~ — hechas, registradas
+      dos URIs en el mismo cliente (`https://api.hytrex.co/auth/google/callback`
+      y la de localhost). Probado en producción de verdad: `/auth/google`
+      redirige a la pantalla real de Google con todos los parámetros
+      correctos.
+- [x] ~~Poner la contraseña de `devup_app`~~ — puesta y rotada.
+- [x] ~~**Producción reconstruida y puesta al día**~~ — `docker compose build
+      api` + `up -d api`. El contenedor llevaba **6 horas corriendo código de
+      antes de esta sesión entera**: `up -d` sin `build` no reconstruye nada,
+      así que Supabase, Google y el reparto REST/tiempo real llevaban todo este
+      rato sin llegar a producción por más que se editara `.env.production`.
+      Al reconstruir salió a la luz un problema real que llevaba tiempo
+      escondido: **`SELF_SIGNED_CERT_IN_CHAIN` en cada consulta a Supabase**
+      (500 en `/auth/signup-policy` y, por extensión, en casi cualquier ruta).
+      El agrupador de Supabase firma con una CA propia
+      (`Supabase Root 2021 CA`, autofirmada) que Node no trae en su lista
+      pública. Arreglado sacando esa CA de su propio saludo TLS y guardándola
+      como [`db/supabase-root-ca.pem`](../db/supabase-root-ca.pem) — el
+      Dockerfile ya copia `db/` a la imagen, así que funciona igual en
+      cualquier sitio donde se despliegue después (Railway incluido) con solo
+      `DATABASE_SSL_CA=db/supabase-root-ca.pem`. Verificado con una conexión
+      real y `rejectUnauthorized: true` antes de tocar el contenedor otra vez.
+      De paso: recrear `api` arrastró también a `postgres` porque
+      `POSTGRES_PASSWORD` se había dejado comentada al mudarnos a Supabase —
+      Compose valida el archivo entero aunque solo se le pida `api`. Restaurada
+      con un valor de relleno; los datos de esa base (ya sin uso) siguieron
+      intactos, se comprobó contando filas antes y después.
 - [ ] 4 · Claves S3 del almacén (Storage → S3 Access Keys) y apuntar
       `S3_ENDPOINT` al de Supabase. *Solo Juan.*
 - [ ] Ponerle `search_path` fijo a las seis funciones que no lo llevan
@@ -278,7 +299,11 @@ Detalle en [`plan-superficie-de-trabajo.md`](plan-superficie-de-trabajo.md).
 
 - [ ] **`hytrex.co` no llega a DevUP** — devuelve la página aparcada de
       Hostinger. `api.hytrex.co` sí está bien enrutado. Se arregla en Cloudflare.
-      *Solo Juan.*
+      *Solo Juan.* **Sigue siendo esto** (comprobado de nuevo en el navegador
+      el 2 de septiembre): es la única pieza que falta para ver el botón de
+      Google de verdad en el sitio. El contenedor `web` ya lo sirve bien —
+      probado por dentro de la red de Docker, sin pasar por el dominio— así que
+      en cuanto se arregle esto en Cloudflare no hace falta desplegar nada más.
 - [ ] **Registrar el ejecutor** (`config.cmd` + token). Ojo: con Docker cerrado,
       un despliegue automático falla en el `docker compose up`. No rompe
       producción, pero el rojo llega igual. *Solo Juan.*
