@@ -17,12 +17,11 @@ export const REFRESH_COOKIE = "devup_refresh";
 const baseCookie = {
   httpOnly: true,
   secure: env.COOKIE_SECURE,
-  // Lax vale mientras la web y la API compartan dominio registrable —
-  // localhost:3000 y localhost:4000 lo comparten, y app.devup.io con
-  // api.devup.io también. Si algún día viven en dominios distintos, esto
-  // tiene que pasar a 'none' y COOKIE_SECURE a true, o el navegador dejará
-  // de mandar la sesión sin decir por qué.
-  sameSite: "lax",
+  // Ver el porqué de esta variable en env.ts. Se lee de env y no se deja fija
+  // en 'lax' porque el día que la web y la API vuelvan a compartir dominio
+  // registrable, cambiar esto tiene que ser una variable de entorno, no un
+  // redeploy de código.
+  sameSite: env.COOKIE_SAME_SITE,
   path: "/",
 } as const;
 

@@ -31,6 +31,24 @@ const schema = z.object({
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_TTL: z.string().default("30d"),
   COOKIE_SECURE: bool("false"),
+  /**
+   * `lax` por defecto: vale mientras la web y la API compartan dominio
+   * registrable (`app.hytrex.co` y `api.hytrex.co`, o `localhost:3000` y
+   * `localhost:4000`). Ahí es la opción correcta, no una concesión — sigue
+   * mandando la cookie en las peticiones normales del sitio y la niega en las
+   * que vienen de fuera.
+   *
+   * Poner `none` es para el caso contrario: la web y la API en dominios
+   * registrables **distintos** de verdad (hoy, mientras `api.hytrex.co`
+   * espera su certificado en Railway y todo pasa por `*.up.railway.app`). Con
+   * `lax` ahí, el navegador pone la cookie al volver de Google —es una
+   * navegación de nivel superior— pero la calla en cuanto el sitio hace su
+   * primer `fetch` a la API para preguntar «¿quién soy», que es una petición
+   * entre sitios distintos: el login parece completarse y un instante después
+   * rebota a `/login`, sin ningún error que lo explique. `none` exige
+   * `COOKIE_SECURE=true`, que ya es obligatorio en producción de todos modos.
+   */
+  COOKIE_SAME_SITE: z.enum(["lax", "none"]).default("lax"),
 
   // Cifra lo que guarda la bóveda de credenciales (connection_secrets): el
   // token de GitHub de una organización, el de Spotify de una persona. AES-256
