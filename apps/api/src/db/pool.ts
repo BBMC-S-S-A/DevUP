@@ -1,5 +1,6 @@
 import pg from "pg";
 import { env } from "../env.js";
+import { CAMINO_BUSQUEDA, opcionesTls } from "./conexion.js";
 
 /**
  * Acceso a Postgres.
@@ -16,9 +17,22 @@ import { env } from "../env.js";
  */
 export const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
+  ssl: opcionesTls(env.DATABASE_URL),
   max: 10,
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
+  // Diez segundos y no cinco: con la base en la misma máquina, cinco sobraban.
+  // Contra una gestionada gratuita hay arranques en frío —Supabase despierta el
+  // proyecto tras una semana parado— y cinco segundos convierten ese despertar
+  // en un error de conexión que parece que la base no existe.
+  connectionTimeoutMillis: 10_000,
+});
+
+// El camino de búsqueda se fija por conexión, no por consulta: en un Postgres
+// gestionado las extensiones no están en `public`, y `citext` —el tipo de la
+// columna de correo— deja de resolverse. Aquí, y no en `withUser`, porque es
+// propiedad de la conexión y no de la transacción.
+pool.on("connect", (client) => {
+  void client.query(`set search_path to ${CAMINO_BUSQUEDA}`);
 });
 
 pool.on("error", (error) => {

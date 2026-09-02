@@ -36,3 +36,9 @@ docs/propuesta/package/
 docs/propuesta/*.tgz
 docs/propuesta/*.png
 docs/propuesta/__pycache__/
+
+# Vista previa temporal de artefactos, no forma parte del proyecto.
+.grafo-preview.html
+
+# Copias de seguridad que hago yo mismo antes de tocar secretos; nunca al repo.
+.env.*.antes-*

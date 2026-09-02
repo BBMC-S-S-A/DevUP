@@ -1,0 +1,156 @@
+# =============================================================================
+# DevUP · Plano de despliegue en Render
+#
+# QUÉ ES ESTO: un «Blueprint». Se conecta el repositorio en Render y este
+# archivo crea los dos servicios ya configurados, en vez de rellenar
+# formularios a mano y descubrir a la tercera que faltaba una variable.
+#
+# POR QUÉ RENDER Y NO OTRO: es el único sitio gratuito que (a) no pide tarjeta,
+# (b) corre un proceso encendido de verdad con WebSockets, y (c) cuando se
+# acaba la cuota **para el servicio**, no factura. Ese tercer punto es el
+# criterio, no el precio: con una tarjeta dada de alta, un límite deja de ser
+# un tope y pasa a ser una factura sorpresa.
+#
+# LAS 750 HORAS SON UN PRESUPUESTO COMPARTIDO, NO DOS PLAZAS. Render regala 750
+# horas de instancia al mes por espacio de trabajo, y aquí hay dos servicios.
+# Un mes son ~730 horas, así que dos servicios encendidos todo el rato NO
+# caben. Sí caben porque los servicios gratuitos se duermen a los 15 minutos
+# sin tráfico: en horario de trabajo, dos servicios gastan del orden de 350
+# horas al mes. **Hay que mirarlo el primer mes.** Si se acerca al tope, la
+# salida es mover `web` a Cloudflare Pages, que también es gratis y no consume
+# de esta bolsa.
+#
+# LO QUE NO ESTÁ AQUÍ Y ES DELIBERADO:
+#
+# - **Postgres.** Render tiene una base gratuita, pero **la borra a los 30
+#   días**. Va en Supabase, que no caduca ni pide tarjeta. `DATABASE_URL`
+#   apunta allí.
+# - **El almacén de archivos.** Igual: Supabase Storage habla S3, así que es
+#   cambiar `S3_ENDPOINT` y las claves.
+# - **Los respaldos.** Hoy son contenedores del `docker-compose`. Aquí no hay
+#   dónde ponerlos; van aparte y NO pueden caer en Supabase, que es justo lo
+#   que se está respaldando.
+#
+# NINGÚN SECRETO VIVE EN ESTE ARCHIVO. Todo lo sensible lleva `sync: false`,
+# que significa «lo escribe una persona en el panel de Render y no se sincroniza
+# desde el repositorio». El repositorio es público.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # La API. Es la que tiene que estar encendida: de ella cuelgan los cinco
+  # WebSockets —/ws/voice, /ws/files, /ws/channel, /ws/user y /ws/world— y el
+  # reloj del mundo de DevVerse. Desde febrero de 2026 los mensajes de socket
+  # también cuentan como actividad en Render, así que una sesión de trabajo en
+  # curso no se duerme a mitad.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: devup-api
+    runtime: docker
+    plan: free
+    # Ohio es de las regiones gratuitas la más cercana a Latinoamérica. Las dos
+    # van juntas por costumbre, no por necesidad: los servicios gratuitos no
+    # pueden hablarse por la red privada, así que se ven por internet igual.
+    region: ohio
+    dockerfilePath: ./apps/api/Dockerfile
+    # El contexto es la raíz del monorepo, no la carpeta de la API: el
+    # Dockerfile copia el package-lock.json compartido.
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Render asigna el puerto en cada arranque y lo pasa en PORT. `env.ts` lo
+      # respeta; no hay que fijar API_PORT.
+
+      # --- Lo que se escribe en el panel ---------------------------------------
+      # Todo esto sale del `.env.production` que hoy vive en el portátil.
+      - key: DATABASE_URL # el de Supabase, con el rol de aplicación
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: VAULT_MASTER_KEY # la que descifra la bóveda. Sin copia, no hay vuelta
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_REDIRECT_URI
+        sync: false
+
+      # --- Correo ---------------------------------------------------------------
+      # OJO: Render **bloquea los puertos 25, 465 y 587 de salida**, que son los
+      # de SMTP. `SMTP_URL` no funciona aquí por mucho que esté bien puesta, y
+      # falla en silencio. Hay que enviar por la API HTTP del proveedor.
+      - key: MAIL_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+      # --- Llamadas -------------------------------------------------------------
+      # Sin TURN las llamadas conectan igual salvo en NAT simétrico, y la
+      # interfaz ya lo avisa en pantalla (`turnConfigured: false`). `coturn`
+      # propio necesitaría UDP, y aquí no lo hay.
+      - key: METERED_APP_NAME
+        sync: false
+      - key: METERED_API_KEY
+        sync: false
+
+      # --- Dominios -------------------------------------------------------------
+      # `web` y `api` TIENEN que colgar del mismo dominio raíz. Con
+      # app.hytrex.co y api.hytrex.co, la cookie de sesión sigue siendo de
+      # primera parte y `sameSite: lax` vale tal cual. Si `web` se quedara en un
+      # `.onrender.com`, serían dominios distintos, la cookie pasaría a ser de
+      # terceros y el login fallaría a ratos en Chrome y Safari — sin ningún
+      # error que lo explique.
+      - key: WEB_ORIGIN
+        value: https://app.hytrex.co
+      - key: APP_BASE_URL
+        value: https://app.hytrex.co
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: SIGNUP_MODE
+        value: invite
+
+  # ---------------------------------------------------------------------------
+  # La web. Es la que se puede sacrificar si las horas aprietan: Cloudflare
+  # Pages la aloja gratis y sin consumir de la bolsa de Render.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: devup-web
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ESTAS DOS SE INCRUSTAN EN EL BUNDLE DURANTE EL BUILD, no al arrancar.
+      # Render convierte sus variables en argumentos de build de Docker, y el
+      # Dockerfile ya las declara como ARG. Cambiarlas obliga a reconstruir:
+      # tocarlas y reiniciar no hace nada, y es un rato perdido buscando por qué
+      # la web sigue llamando a la dirección vieja.
+      #
+      # Por eso mismo aquí van con valor literal y no `sync: false`: no son
+      # secretas —acaban en el JavaScript que descarga el navegador— y tienen
+      # que estar disponibles en el build.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.hytrex.co
+      - key: NEXT_PUBLIC_WS_URL
+        value: wss://api.hytrex.co

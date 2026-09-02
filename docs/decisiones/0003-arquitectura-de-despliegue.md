@@ -5,6 +5,25 @@
 distintas plataformas, qué VPS usar (con y sin coste), y qué le falta a
 [`DESPLIEGUE.md`](../DESPLIEGUE.md) para desplegar con seguridad de verdad.
 
+> **Corrección del 1 de septiembre de 2026. La recomendación de VPS de este
+> documento ya no es aplicable**, por dos motivos distintos:
+>
+> - **Oracle «Always Free» está descartado**: la cuenta no salió adelante. Y,
+>   además, desde el 18 de agosto de 2026 da **2 núcleos y 12 GB**, no los 4 y 24
+>   que se dicen aquí.
+> - **No hay presupuesto**: Hetzner y Vultr quedan fuera por la premisa de que
+>   todo tiene que ser gratuito.
+>
+> Sin máquina propia, `docker-compose.prod.yml` deja de ser la unidad de
+> despliegue y la §1.3 de este documento —separar `web` y `api` en plataformas
+> distintas, con el problema de cookies entre dominios— **deja de ser una
+> optimización futura y pasa a ser obligatoria**. El plan vigente está en
+> [`plan-salir-del-portatil.md`](../plan-salir-del-portatil.md).
+>
+> Lo que **sí** sigue vigente de aquí: no migrar a microservicios, el análisis de
+> cookies de la §1.3, y que el rol de aplicación no sea dueño de las tablas
+> tampoco en un Postgres gestionado.
+
 ---
 
 ## Resumen para quien no vaya a leer el resto

@@ -95,7 +95,12 @@ await app.register(rateLimit, {
   }),
 });
 
-await app.register(websocket, { options: { maxPayload: 256 * 1024 } });
+// Solo si esta instancia sirve tiempo real. Registrar el plugin sin ninguna
+// ruta que lo use no rompe nada, pero tampoco aporta: es la señal más directa
+// de que esta instancia es «de las ligeras».
+if (env.REALTIME_ENABLED) {
+  await app.register(websocket, { options: { maxPayload: 256 * 1024 } });
+}
 await app.register(authPlugin);
 
 app.setErrorHandler((error: FastifyError, request, reply) => {
@@ -152,8 +157,17 @@ await app.register(salesRoutes);
 await app.register(searchRoutes);
 await app.register(spotifyRoutes);
 await app.register(worldRoutes);
-await app.register(signalingRoutes);
-await app.register(worldSocketRoutes);
+
+// Los cinco WebSockets y el reloj de DevVerse, solo en la instancia que los
+// sirve. El resto de rutas de arriba —incluidas messages, notifications,
+// files y spotify, que avisan al hub tras cada escritura— no dependen de
+// esto: avisar a un hub sin nadie escuchando es una vuelta sobre un mapa
+// vacío, no un error. Lo único que se pierde sin esta instancia es el
+// empujón en vivo; la escritura en la base ya ocurrió por REST.
+if (env.REALTIME_ENABLED) {
+  await app.register(signalingRoutes);
+  await app.register(worldSocketRoutes);
+}
 
 /**
  * Barrendero de subidas abandonadas.
