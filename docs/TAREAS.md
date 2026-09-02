@@ -84,11 +84,28 @@ no hay nadie escuchando — es un mapa vacío, no un error.
       ahora apagaría el sitio hasta que Vercel y Railway estén de verdad
       levantados. Se recorta —fuera `web`, y luego `minio` cuando el almacén se
       mude— en el mismo momento en que se corte el DNS hacia allí, no antes.
-- [ ] **Vercel Hobby prohíbe uso comercial** — sigue sin resolverse. Alguien
-      cobrando por escribir este código ya cuenta como comercial según sus
-      propios términos. O se paga Pro, o `web` se queda en Cloudflare Pages
-      (gratis, permite uso comercial, y ya estaba evaluado como alternativa).
-      *Decisión de Juan y su compañero.*
+- [x] ~~Vercel Hobby prohíbe uso comercial~~ — resuelto: **ni Vercel ni
+      Cloudflare Pages**. Cloudflare recomienda **Workers con el adaptador
+      OpenNext** para Next.js desde finales de 2025 — Pages usa un runtime de
+      Edge recortado sin ISR ni streaming completo. Mismo resultado que se
+      pedía —gratis, sin restricción de uso comercial— con la herramienta que
+      Cloudflare de verdad sostiene hoy.
+      **Montado y probado de verdad**, no solo instalado:
+      `apps/web/wrangler.jsonc` + `open-next.config.ts`, `npm run cf:deploy`.
+      `output: "standalone"` (para Docker) rompía el build de OpenNext —hay un
+      error de OpenTelemetry documentado con exactamente esa combinación—, así
+      que ahora es condicional a `BUILD_DOCKER=true`, que solo pone el
+      `Dockerfile`. Y `initOpenNextCloudflareForDev()` se caía dentro de Docker
+      con `spawn workerd ENOENT` — solo sirve para `next dev` y no está
+      pensado para correr en ningún build; movido detrás de
+      `PHASE_DEVELOPMENT_SERVER`. Verificado con las cuatro pruebas que
+      importan: `next build` normal, el build de OpenNext, **la imagen de
+      Docker reconstruida y arrancada** (para no romper lo que hoy sigue en
+      producción), y el sitio sirviendo `/login` y rutas dinámicas bajo
+      `wrangler dev` — el runtime real de Cloudflare en local.
+      **Falta el único paso que no puedo dar yo**: un token de Cloudflare con
+      permiso de **Account → Cloudflare Workers Scripts → Edit** para
+      desplegarlo de verdad. *Solo Juan.*
 - [ ] **El reloj de Railway.** Sin tarjeta da $5 de crédito que caducan a los
       30 días (antes si se gastan); pasado eso son $5/mes con tarjeta. Anotar
       la fecha de alta aquí en cuanto se cree, para saber cuándo hay que decidir
@@ -101,12 +118,17 @@ no hay nadie escuchando — es un mapa vacío, no un error.
       `apps/api/Dockerfile`, contexto la raíz del repo, ruta de salud
       `/health`, y `REALTIME_ENABLED=false` fijo entre las variables.
 - [ ] Nueva ruta del túnel de Cloudflare: `live.hytrex.co` → el contenedor del
-      portátil, para los sockets. `api.hytrex.co` pasa a apuntar a Railway. En
-      el build de Vercel, `NEXT_PUBLIC_API_URL=https://api.hytrex.co` y
-      `NEXT_PUBLIC_WS_URL=wss://live.hytrex.co` — se incrustan en el momento de
-      compilar, no al arrancar, así que un cambio después pide reconstruir. Las
-      cookies siguen sirviendo igual: las tres comparten `hytrex.co` como
-      dominio raíz.
+      portátil, para los sockets. `api.hytrex.co` pasa a apuntar a Railway.
+      `NEXT_PUBLIC_API_URL=https://api.hytrex.co` y
+      `NEXT_PUBLIC_WS_URL=wss://live.hytrex.co` se incrustan en el momento de
+      compilar el Worker, no al arrancar, así que un cambio después pide
+      `npm run cf:deploy` otra vez. Las cookies siguen sirviendo igual: las
+      tres comparten `hytrex.co` como dominio raíz.
+- [ ] Claves S3 de Supabase Storage (Storage → S3 Access Keys) para mudar el
+      almacén de `minio`. Con esto puesto, `docker-compose.prod.yml` del
+      portátil se queda solo con la instancia de tiempo real —ya no con
+      `web`, `postgres` ni `minio`— y es la última pieza para que apagar el
+      PC no se lleve por delante los archivos subidos. *Solo Juan.*
 
 Sin una máquina propia sigue cabiendo todo en capa gratuita y **no se pierde
 ninguna funcionalidad**. El orden de lo que sigue importa.
