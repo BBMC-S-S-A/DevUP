@@ -103,9 +103,21 @@ no hay nadie escuchando — es un mapa vacío, no un error.
       Docker reconstruida y arrancada** (para no romper lo que hoy sigue en
       producción), y el sitio sirviendo `/login` y rutas dinámicas bajo
       `wrangler dev` — el runtime real de Cloudflare en local.
-      **Falta el único paso que no puedo dar yo**: un token de Cloudflare con
-      permiso de **Account → Cloudflare Workers Scripts → Edit** para
-      desplegarlo de verdad. *Solo Juan.*
+- [x] ~~**Desplegado de verdad, en `app.hytrex.co`**~~ — con el token que dio
+      Juan (permiso de Cloudflare Workers Scripts). El dominio personalizado
+      se creó por API en el mismo paso que subir el Worker —DNS y certificado
+      incluidos—, y `WEB_ORIGIN` se amplió para que la API acepte ese origen.
+      Probado en el navegador de verdad: formulario, botón de Google, sin
+      ningún error de CORS. **Es la primera pieza que corre fuera del
+      portátil.** Apunta a `api.hytrex.co`, que hoy sigue siendo la instancia
+      completa (con tiempo real) — cuando Railway se encargue de la parte REST
+      y `live.hytrex.co` de los sockets, esto se redespliega con las URLs
+      nuevas y ya.
+      *Nota:* el enlace `workers.dev` que da Cloudflare por defecto no
+      respondió desde esta máquina —ni por curl, ni por Node, ni en el
+      navegador—, aunque el DNS resuelve bien; probablemente algo en esta red
+      bloquea ese dominio. No importa: el destino real siempre fue
+      `app.hytrex.co`, y ese sí funciona.
 - [ ] **El reloj de Railway.** Sin tarjeta da $5 de crédito que caducan a los
       30 días (antes si se gastan); pasado eso son $5/mes con tarjeta. Anotar
       la fecha de alta aquí en cuanto se cree, para saber cuándo hay que decidir
