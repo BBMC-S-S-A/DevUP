@@ -146,8 +146,15 @@ export function Companero() {
     const teclas = { izq: false, der: false, arr: false, aba: false };
     const dichos = new Set<string>();
 
+    // `lienzo` y no `document.documentElement`: `--acento` se define en
+    // `.landing`, que es un DESCENDIENTE del `<html>`, y una custom property
+    // no sube por el árbol — solo baja. Leerla del elemento raíz siempre daba
+    // cadena vacía, así que esto llevaba devolviendo el valor de repuesto
+    // desde siempre, sin que se notara porque el valor de repuesto era
+    // plausible. Con el lienzo, que sí está dentro de `.landing`, se lee el
+    // valor real y de paso responde solo al tema (claro/oscuro).
     const acento = () =>
-      getComputedStyle(document.documentElement).getPropertyValue("--acento").trim() || "#0400aa";
+      getComputedStyle(lienzo).getPropertyValue("--acento").trim() || "#a78bfa";
 
     function medir() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);

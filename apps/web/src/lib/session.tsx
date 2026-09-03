@@ -15,7 +15,9 @@ import { type User, api } from "./api";
 type SessionState = {
   user: User | null;
   loading: boolean;
-  refresh: () => Promise<void>;
+  /** Devuelve a quién encontró, para que quien acaba de entrar sepa si de
+   *  verdad hay sesión antes de navegar — ver el comentario en login/page.tsx. */
+  refresh: () => Promise<User | null>;
   signOut: () => Promise<void>;
 };
 
@@ -30,10 +32,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       const { user } = await api.get<{ user: User }>("/auth/me");
       setUser(user);
+      return user;
     } catch {
       // 401 aquí es lo normal cuando nadie ha entrado todavía: no es un error
       // que haya que enseñar, es el estado «sin sesión».
       setUser(null);
+      return null;
     } finally {
       setLoading(false);
     }

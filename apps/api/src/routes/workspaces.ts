@@ -107,9 +107,14 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     return withUser(userId, async (db) => {
+      // `presence` va en la misma fila que nombre y avatar: si ya se puede ver
+      // quién es alguien en esta lista, verle el estado que él mismo puso no
+      // abre ninguna puerta nueva. Antes solo se leía en `/auth/me` —de uno
+      // mismo—; el panel personal lo necesita de los demás para "quién está".
       const { rows } = await db.query(
         `select m.user_id as "userId", m.role, m.created_at as "joinedAt",
-                p.display_name as "displayName", p.avatar_url as "avatarUrl"
+                p.display_name as "displayName", p.avatar_url as "avatarUrl",
+                p.presence
            from organization_members m
            join profiles p on p.id = m.user_id
           where m.organization_id = $1

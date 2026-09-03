@@ -473,10 +473,58 @@ h3 {
   box-shadow: inset 0 1px 0 var(--brillo-canto);
 }
 
+/* `.capa` cuando no hay nada opaco detrás que la sostenga —una rejilla de
+ * tarjetas directamente sobre la atmósfera, sin panel padre—: sin
+ * `backdrop-filter` (regla 1) el vidrio no tiene relieve propio, así que hace
+ * falta la sombra proyectada de `--sombra-panel` para que se lea como algo que
+ * flota y no como un recorte pegado en la pantalla.
+ *
+ * Va en una clase y no en línea a propósito: ya son tres pantallas
+ * —panel personal, mesa de trabajo, tablero— con el mismo valor exacto de
+ * sombra, y repetirlo en línea en cada una es la misma cadena de texto
+ * pudiendo desincronizarse en tres sitios. Con la clase declarada DESPUÉS de
+ * `.capa` y ANTES de `.panel-vivo`, el orden de la cascada ya hace lo que
+ * antes había que forzar en línea: cuando las dos se combinan, gana el brillo
+ * de `.panel-vivo` sin necesidad de ningún truco, igual que lleva pasando
+ * siempre con `.panel` + `.panel-vivo`.
+ */
+.capa-flotante {
+  background: var(--vidrio);
+  border: 1px solid var(--canto);
+  box-shadow: var(--sombra-panel), inset 0 1px 0 var(--brillo-canto);
+}
+
 /* Un panel que está pasando algo ahora mismo. Ver regla 2 de la cabecera. */
 .panel-vivo {
   border-color: color-mix(in oklab, var(--c-accent) 45%, transparent);
   box-shadow: var(--halo-accent), inset 0 1px 0 var(--brillo-canto);
+}
+
+/* `.capa` con un tono semántico PERMANENTE, no "algo pasando ahora" —esa
+ * semántica sigue siendo de `.panel-vivo`, ver regla 2 de la cabecera—. Nacen
+ * para el embudo de ventas: una venta ganada o a punto de vencer significa
+ * algo por sí sola, con independencia de si alguien la está mirando en este
+ * instante. Sustituyen a `.capa`, no se combinan con ella —las dos fijan
+ * `background`/`border` y pelearían por lo mismo—, así que cada tarjeta lleva
+ * una sola de las tres.
+ */
+.capa-tono-vivo {
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--c-live) 16%, transparent),
+    transparent
+  ), var(--vidrio);
+  border: 1px solid color-mix(in oklab, var(--c-live) 30%, transparent);
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
+}
+.capa-tono-aviso {
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--c-warn) 16%, transparent),
+    transparent
+  ), var(--vidrio);
+  border: 1px solid color-mix(in oklab, var(--c-warn) 30%, transparent);
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
 }
 
 /* Rejilla técnica de fondo. Sin animación: una rejilla que deriva despacio en
