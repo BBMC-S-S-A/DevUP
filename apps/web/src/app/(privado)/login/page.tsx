@@ -52,12 +52,6 @@ const MODULOS = [
   { nombre: "Ventas", nota: "embudo" },
 ];
 
-/* La luz de la cabina: el foco azul arriba a la izquierda repite el de
-   `body::before`, para que el acceso y la aplicación estén iluminados igual. */
-const LUZ_MARCA =
-  "radial-gradient(38rem 30rem at 10% 4%, rgb(124 58 237 / 0.16), transparent 62%)," +
-  "radial-gradient(30rem 24rem at 92% 98%, rgb(62 224 245 / 0.09), transparent 60%)";
-
 /** El escalonado vive en CSS (`--retraso` de globals.css); esto solo lo escribe. */
 const retraso = (ms: number) => ({ "--retraso": `${ms}ms` }) as React.CSSProperties;
 
@@ -196,13 +190,13 @@ function LoginForm() {
   return (
     <main className="grid min-h-[100svh] lg:grid-cols-2">
       {/* Panel de marca. Oculto en móvil: en una pantalla pequeña es la
-          mitad del sitio gastada en algo que no ayuda a entrar. */}
-      <aside className="relative hidden overflow-hidden border-r border-line bg-surface lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="rejilla pointer-events-none absolute inset-0" />
-        <div className="pointer-events-none absolute inset-0" style={{ background: LUZ_MARCA }} />
-        {/* El panel se apaga contra su canto derecho para que el formulario no
-            tenga que competir con la marca por la atención. */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-40 bg-gradient-to-r from-transparent to-canvas/70" />
+          mitad del sitio gastada en algo que no ayuda a entrar.
+          Sin fondo propio: el mock (SalaAcceso) es una sola atmósfera
+          continua bajo las dos mitades, y esta ya llega gratis desde
+          `body::before` — pintar aquí un `bg-surface` opaco encima la
+          taparía justo donde nace, igual que le pasaba al panel y a la
+          mesa antes de dejarlos flotar. */}
+      <aside className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12">
 
         <div className="filo-luz relative pb-6 devup-entrada" style={retraso(0)}>
           <div className="flex items-center gap-3">
@@ -249,17 +243,20 @@ function LoginForm() {
         </div>
 
         <div className="relative max-w-md">
+          {/* `capa-flotante`, calcado de las dos tarjetas de vidrio del mock
+              ("Voz cifrada" / "Cada empresa, aislada"): van directas sobre la
+              atmósfera, sin ningún cristal padre que las contenga, así que
+              les hace falta su propia sombra para leerse como algo que flota
+              y no como un recorte pegado — el mismo motivo que ya documenta
+              `.capa-flotante` en globals.css. */}
           <ul
-            className="devup-entrada grid grid-cols-2 gap-x-8 gap-y-2.5"
+            className="devup-entrada grid grid-cols-2 gap-2.5"
             style={retraso(260)}
           >
             {MODULOS.map((modulo) => (
-              <li key={modulo.nombre} className="flex items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full bg-accent/70" />
-                <span className="font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  {modulo.nombre}
-                </span>
-                <span className="ml-auto font-mono text-[10px] text-faint">{modulo.nota}</span>
+              <li key={modulo.nombre} className="capa-flotante flex flex-col gap-1 rounded-xl px-3.5 py-3">
+                <span className="text-[13px] font-medium text-ink">{modulo.nombre}</span>
+                <span className="font-mono text-[10px] text-faint">{modulo.nota}</span>
               </li>
             ))}
           </ul>
@@ -273,12 +270,10 @@ function LoginForm() {
         </div>
       </aside>
 
-      {/* Panel de formulario */}
+      {/* Panel de formulario. Sin rejilla técnica ni fondo propio: el mock no
+          lleva más textura que la atmósfera, y esa ya llega sola desde
+          `body::before` en cualquier ancho, móvil incluido. */}
       <div className="relative grid place-items-center overflow-hidden px-6 py-12">
-        {/* Sin panel de marca al lado, el móvil se quedaba con un formulario
-            flotando en negro; la rejilla le devuelve el suelo. */}
-        <div className="rejilla pointer-events-none absolute inset-0 lg:hidden" />
-
         <div className="relative w-full max-w-sm">
           <div
             className="devup-entrada mb-6 flex items-center gap-3 lg:hidden"
@@ -292,8 +287,11 @@ function LoginForm() {
           </div>
 
           {/* El formulario llega después de la marca: primero se enciende la
-              pantalla, luego aparece lo que hay que rellenar. */}
-          <Tarjeta className="devup-entrada p-6" style={retraso(340)}>
+              pantalla, luego aparece lo que hay que rellenar. `flotante`
+              porque, igual que las tarjetas de arriba, va directo sobre la
+              atmósfera y no dentro de una página con fondo propio — es el
+              cristal denso del mock, no el material opaco de una lista. */}
+          <Tarjeta flotante className="devup-entrada p-6" style={retraso(340)}>
             <div className="mb-5">
               <Rotulo>{inviteToken ? "Invitación" : "Acceso"}</Rotulo>
               <h1 className="mt-1.5 text-xl font-semibold tracking-tight">
