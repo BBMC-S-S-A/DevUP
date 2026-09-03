@@ -25,6 +25,7 @@ import {
   type CSSProperties,
 } from "react";
 import { type FileRecord, type Tag, api } from "@/lib/api";
+import { retraso } from "@/lib/animacion";
 import { formatBytes, kindOf } from "@/lib/files/upload";
 import { useFileFeed } from "@/lib/files/useFileFeed";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
@@ -60,9 +61,8 @@ function extensionDe(nombre: string): string {
 }
 
 /** Escalón de entrada topado: el archivo 40 no debe entrar 1,6 s tarde. */
-function retraso(indice: number): CSSProperties {
-  return { "--retraso": `${Math.min(indice, 8) * 40}ms` } as CSSProperties;
-}
+// `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`, y el paso
+// va explícito porque aquí siempre fue 40 ms y no los 35 de la barra.
 
 export function FileLibrary({
   workspaceId,
@@ -276,7 +276,7 @@ export function FileLibrary({
       ) : vista === "rejilla" ? (
         <ul className={REJILLA}>
           {files.map((file, indice) => (
-            <li key={file.id} className="devup-entrada" style={retraso(indice)}>
+            <li key={file.id} className="devup-entrada" style={retraso(indice, 40)}>
               <TarjetaArchivo file={file} onAbrir={() => setPreview(file)} />
             </li>
           ))}
@@ -293,7 +293,7 @@ export function FileLibrary({
           </div>
           <ul className="divide-y divide-line/70">
             {files.map((file, indice) => (
-              <li key={file.id} className="devup-entrada" style={retraso(indice)}>
+              <li key={file.id} className="devup-entrada" style={retraso(indice, 40)}>
                 <FilaArchivo file={file} onAbrir={() => setPreview(file)} />
               </li>
             ))}

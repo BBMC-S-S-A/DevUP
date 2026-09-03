@@ -24,7 +24,9 @@ import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
+import { ItemNav } from "@/components/ui/ItemNav";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
+import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
 
 /**
@@ -47,9 +49,7 @@ import { useSession } from "@/lib/session";
  * barra convierte el salto de dos pasos en uno.
  */
 
-function retraso(indice: number): CSSProperties {
-  return { "--retraso": `${Math.min(indice, 8) * 35}ms` } as CSSProperties;
-}
+// `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`.
 
 export default function OrgLayout({ children }: { children: ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();
@@ -337,37 +337,4 @@ function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }
   );
 }
 
-function ItemNav({
-  href,
-  icono,
-  activo,
-  indice,
-  children,
-}: {
-  href: string;
-  icono: ReactNode;
-  activo: boolean;
-  indice: number;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={activo ? "page" : undefined}
-      style={retraso(indice)}
-      className={`devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5 pl-3
-        pr-2 text-[13px] ${
-          activo ? "bg-accent-soft/70 text-ink" : "text-muted hover:bg-raised/70 hover:text-ink"
-        }`}
-    >
-      {activo && (
-        <span
-          aria-hidden
-          className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-accent"
-        />
-      )}
-      <span className={`shrink-0 ${activo ? "text-accent" : "text-faint"}`}>{icono}</span>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-    </Link>
-  );
-}
+// `ItemNav` vivía aquí duplicado. Ahora es de `@/components/ui/ItemNav`.

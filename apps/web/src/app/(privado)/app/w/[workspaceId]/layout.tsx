@@ -29,19 +29,13 @@ import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { ItemNav } from "@/components/ui/ItemNav";
+import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
 
-/**
- * Retraso del escalonado de entrada.
- *
- * El índice se topa a propósito: sin tope, en un workspace con cuarenta canales
- * el último entraría segundo y medio después del primero y la barra parecería
- * rota, no coreografiada.
- */
-function retraso(indice: number): CSSProperties {
-  return { "--retraso": `${Math.min(indice, 8) * 35}ms` } as CSSProperties;
-}
+// `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`, donde está
+// también el porqué del tope del índice.
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -385,63 +379,7 @@ function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }
   );
 }
 
-/**
- * Una fila de la barra.
- *
- * Los tres estados son los que ya distinguía la barra anterior y siguen
- * significando lo mismo: activo, con algo pendiente, y en reposo. El activo se
- * marca con un listón de acento a la izquierda en vez de con más brillo —el
- * halo está reservado a lo que está pasando ahora mismo (regla 2 del sistema),
- * y «estoy aquí» no es un evento, es una posición.
- */
-function ItemNav({
-  href,
-  icono,
-  activo,
-  indice,
-  resaltado = false,
-  onClick,
-  sufijo,
-  children,
-}: {
-  href: string;
-  icono: ReactNode;
-  activo: boolean;
-  indice: number;
-  /** Tiene pendientes: se lee más fuerte sin llegar a marcarse como activo. */
-  resaltado?: boolean;
-  onClick?: () => void;
-  sufijo?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      aria-current={activo ? "page" : undefined}
-      style={retraso(indice)}
-      className={`devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5 pl-3 pr-2 text-[13px] ${
-        activo
-          ? "bg-accent-soft/70 text-ink"
-          : resaltado
-            ? "font-medium text-ink hover:bg-raised/70"
-            : "text-muted hover:bg-raised/70 hover:text-ink"
-      }`}
-    >
-      {activo && (
-        <span
-          aria-hidden
-          className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-accent"
-        />
-      )}
-      <span className={`shrink-0 ${activo ? "text-accent" : resaltado ? "text-muted" : "text-faint"}`}>
-        {icono}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      {sufijo}
-    </Link>
-  );
-}
+// `ItemNav` vivía aquí duplicado. Ahora es de `@/components/ui/ItemNav`.
 
 function ChannelGroup({
   title,
