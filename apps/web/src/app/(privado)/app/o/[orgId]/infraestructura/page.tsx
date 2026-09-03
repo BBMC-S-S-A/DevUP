@@ -18,9 +18,9 @@ import { useConfirmar } from "@/components/ui/Confirmar";
 import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { useOrgId } from "@/lib/workspace-context";
 import type { Connection, Entorno, EstadoDespliegue } from "@/lib/api";
 import { api, invalidar, useMutacion, useRecurso } from "@/lib/datos";
-import { useParams } from "next/navigation";
 
 /**
  * La vista unificada de infraestructura.
@@ -74,7 +74,7 @@ function hace(iso: string | null): string {
 }
 
 export default function InfraestructuraPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
   const [creando, setCreando] = useState(false);
 
   const entornos = useRecurso<{ environments: Entorno[] }>(

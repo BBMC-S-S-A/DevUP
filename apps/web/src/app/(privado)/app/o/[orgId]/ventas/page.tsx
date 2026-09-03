@@ -12,12 +12,12 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { useOrgId } from "@/lib/workspace-context";
 import { ApiError, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { tinte } from "@/lib/tinte";
@@ -146,7 +146,7 @@ const retraso = (indice: number, paso = 55): React.CSSProperties =>
   ({ "--retraso": `${Math.min(indice, 8) * paso}ms` }) as React.CSSProperties;
 
 export default function SalesPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
 
   const [deals, setDeals] = useState<Opportunity[]>([]);
   const [clients, setClients] = useState<Client[]>([]);

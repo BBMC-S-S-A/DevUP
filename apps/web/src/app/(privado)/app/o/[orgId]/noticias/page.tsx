@@ -1,10 +1,10 @@
 "use client";
 
 import { Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
-import { useParams } from "next/navigation";
 import { useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { useOrgId } from "@/lib/workspace-context";
 import { retraso } from "@/lib/animacion";
 import { AreaTexto, Entrada } from "@/components/ui/Field";
 import { Dialogo, EstadoVacio, Tarjeta } from "@/components/ui/Superficies";
@@ -29,7 +29,7 @@ import { Fallo, Pagina } from "@/components/ui/Pagina";
  */
 export default function AnnouncementsPage() {
   const confirmar = useConfirmar();
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
   const { user } = useSession();
 
   const [editando, setEditando] = useState<Announcement | null>(null);

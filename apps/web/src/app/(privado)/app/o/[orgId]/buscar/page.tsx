@@ -15,11 +15,12 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { ApiError, type SearchResult, api } from "@/lib/api";
+import { useOrgId } from "@/lib/workspace-context";
 
 /**
  * Búsqueda global (S6): mensajes, archivos, tareas, clientes, servicios y
@@ -91,7 +92,7 @@ export default function BuscarPage() {
 }
 
 function Buscador() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
   const params = useSearchParams();
 
   const [q, setQ] = useState(params.get("q") ?? "");
