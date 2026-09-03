@@ -1,12 +1,12 @@
 "use client";
 
 import { CircleAlert, CircleCheck, Database, TriangleAlert } from "lucide-react";
-import { useParams } from "next/navigation";
 import { useState } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { Desplegable } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { useOrgId } from "@/lib/workspace-context";
 import type { GithubRepo } from "@/lib/api";
 import { useRecurso } from "@/lib/datos";
 
@@ -56,7 +56,7 @@ const REGLAS: Record<Hallazgo["regla"], string> = {
 };
 
 export default function BaseDeDatosPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
   const [repoId, setRepoId] = useState("");
 
   const repos = useRecurso<{ repos: GithubRepo[] }>(`/organizations/${orgId}/github/repos`);

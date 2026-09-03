@@ -34,6 +34,7 @@ import { ItemNav } from "@/components/ui/ItemNav";
 import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
+import { WorkspaceProvider } from "@/lib/workspace-context";
 
 // `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`, donde está
 // también el porqué del tope del índice.
@@ -165,7 +166,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   if (inOffice) {
     return (
       <div className="relative h-[100svh]">
-        {children}
+        <WorkspaceProvider workspace={workspace}>{children}</WorkspaceProvider>
         <button
           type="button"
           onClick={() => {
@@ -230,9 +231,11 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
           {/* Buscar es de la organización entera, no de este workspace, así que
               va fuera del grupo y con forma de campo: la caja dice «aquí se
-              busca» antes de leer la palabra. */}
+              busca» antes de leer la palabra. La URL sí es la del workspace
+              -mismo motivo que el resto de NavegacionOrganizacion-: abrir el
+              buscador no debe cambiar de armazón. */}
           <Link
-            href={`/app/o/${workspace.organizationId}/buscar`}
+            href={`/app/w/${workspaceId}/buscar`}
             style={retraso(0)}
             className="devup-entrada presionable flex h-9 items-center gap-2 rounded-xl border border-line
               bg-canvas/50 px-2.5 text-[13px] text-muted
@@ -332,6 +335,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               <div className="capa space-y-0.5 rounded-2xl p-1.5">
                 <NavegacionOrganizacion
                   orgId={workspace.organizationId}
+                  workspaceId={workspaceId}
                   pathname={pathname}
                   puedeAjustar={rolOrganizacion === "owner" || rolOrganizacion === "admin"}
                   indiceInicial={4}
@@ -407,8 +411,8 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         </>
       }
     >
-      {children}
-      <PaletaComandos orgId={workspace.organizationId} />
+      <WorkspaceProvider workspace={workspace}>{children}</WorkspaceProvider>
+      <PaletaComandos orgId={workspace.organizationId} workspaceId={workspaceId} />
     </Armazon>
   );
 }

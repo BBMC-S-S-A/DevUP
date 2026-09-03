@@ -18,12 +18,12 @@ import {
   Unplug,
   XCircle,
 } from "lucide-react";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { useOrgId } from "@/lib/workspace-context";
 import { ApiError, type Connection, type GithubRepo, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Pagina } from "@/components/ui/Pagina";
@@ -63,7 +63,7 @@ function semaforo(conclusion: string | null): Semaforo {
 
 export default function GithubPage() {
   const confirmar = useConfirmar();
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
 
   const [connection, setConnection] = useState<Connection | null | undefined>(undefined);
   const [repos, setRepos] = useState<GithubRepo[]>([]);

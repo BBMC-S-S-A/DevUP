@@ -14,7 +14,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
@@ -28,6 +27,7 @@ import {
   ApiError,
   api,
 } from "@/lib/api";
+import { useOrgId } from "@/lib/workspace-context";
 import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -51,7 +51,7 @@ const ROLES: Record<OrganizationMember["role"], string> = {
  * de `/organizations/:orgId/members` y se usa para decidir qué enseñar.
  */
 export default function OrganizationSettingsPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const orgId = useOrgId();
   const { user } = useSession();
 
   const [members, setMembers] = useState<OrganizationMember[] | null>(null);

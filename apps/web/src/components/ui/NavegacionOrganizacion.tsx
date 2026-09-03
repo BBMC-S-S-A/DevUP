@@ -18,19 +18,31 @@ import { retraso } from "@/lib/animacion";
  * `indiceInicial` deja que quien llama decida dónde continúa el escalonado:
  * en el armazón de organización esta sección abre la barra: empieza en 0. En
  * el del workspace va después de «Espacio», así que sigue contando desde ahí.
+ *
+ * `workspaceId`, cuando se pasa, cambia a DÓNDE llevan estos enlaces —a
+ * `/app/w/[workspaceId]/ventas` en vez de `/app/o/[orgId]/ventas`— para que
+ * abrir Ventas desde un workspace no cambie de armazón: sigue siendo
+ * `WorkspaceLayout` el que pinta la barra, con `useOrgId` resolviendo la
+ * organización desde el `WorkspaceProvider` en vez de la URL. `/dev` es la
+ * excepción a propósito: ya es una salida deliberada a pantalla completa
+ * -el entorno embebido lo exige, ver el comentario de más abajo- así que no
+ * hay barra de la que "salirse" y da igual desde dónde se entre.
  */
 export function NavegacionOrganizacion({
   orgId,
+  workspaceId,
   pathname,
   puedeAjustar,
   indiceInicial = 0,
 }: {
   orgId: string;
+  workspaceId?: string;
   pathname: string;
   puedeAjustar: boolean;
   indiceInicial?: number;
 }) {
-  const base = `/app/o/${orgId}`;
+  const base = workspaceId ? `/app/w/${workspaceId}` : `/app/o/${orgId}`;
+  const baseDev = `/app/o/${orgId}`;
   const pantallas = [
     { href: `${base}/ventas`, icono: <Target size={14} />, texto: "Ventas" },
     { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
@@ -60,7 +72,7 @@ export function NavegacionOrganizacion({
           WebContainer no arranca. Es el fallo menos evidente de este archivo,
           así que va anotado aquí y en docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md. */}
       <a
-        href={`${base}/dev`}
+        href={`${baseDev}/dev`}
         style={retraso(indiceInicial + pantallas.length)}
         className="devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5
           pl-3 pr-2 text-[13px] text-muted hover:bg-raised/70 hover:text-ink"

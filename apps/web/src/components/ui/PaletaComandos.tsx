@@ -55,7 +55,7 @@ const NOMBRES: Record<SearchResult["entity"], string> = {
   opportunity: "Venta",
 };
 
-function destino(orgId: string, r: SearchResult): string {
+function destino(orgId: string, workspaceId: string | undefined, r: SearchResult): string {
   switch (r.entity) {
     case "message":
       return r.workspaceId && r.channelId
@@ -66,11 +66,21 @@ function destino(orgId: string, r: SearchResult): string {
     case "task":
       return r.workspaceId ? `/app/w/${r.workspaceId}/board` : "/app";
     default:
-      return `/app/o/${orgId}/ventas`;
+      // Ventas no es de ningún workspace en concreto, pero si se está mirando
+      // desde uno, entrar ahí no debe cambiar de armazón — mismo motivo que
+      // `NavegacionOrganizacion`.
+      return workspaceId ? `/app/w/${workspaceId}/ventas` : `/app/o/${orgId}/ventas`;
   }
 }
 
-export function PaletaComandos({ orgId }: { orgId: string }) {
+export function PaletaComandos({
+  orgId,
+  workspaceId,
+}: {
+  orgId: string;
+  /** Cuando se abre desde dentro de un workspace, para no salir de su armazón. */
+  workspaceId?: string;
+}) {
   const router = useRouter();
   const [abierta, setAbierta] = useState(false);
   const [q, setQ] = useState("");
@@ -129,9 +139,9 @@ export function PaletaComandos({ orgId }: { orgId: string }) {
   const ir = useCallback(
     (r: SearchResult) => {
       setAbierta(false);
-      router.push(destino(orgId, r));
+      router.push(destino(orgId, workspaceId, r));
     },
-    [orgId, router],
+    [orgId, workspaceId, router],
   );
 
   if (!abierta) return null;
@@ -234,7 +244,8 @@ export function PaletaComandos({ orgId }: { orgId: string }) {
             type="button"
             onClick={() => {
               setAbierta(false);
-              router.push(`/app/o/${orgId}/buscar?q=${encodeURIComponent(q.trim())}`);
+              const base = workspaceId ? `/app/w/${workspaceId}` : `/app/o/${orgId}`;
+              router.push(`${base}/buscar?q=${encodeURIComponent(q.trim())}`);
             }}
             className="presionable inline-flex items-center gap-1 text-[11px] text-accent hover:underline"
           >
