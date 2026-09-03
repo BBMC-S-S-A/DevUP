@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { retraso } from "@/lib/animacion";
 import { AreaTexto, Entrada } from "@/components/ui/Field";
 import { Dialogo, EstadoVacio, Tarjeta } from "@/components/ui/Superficies";
 import type { Announcement, OrganizationMember } from "@/lib/api";
@@ -13,9 +14,8 @@ import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Fallo, Pagina } from "@/components/ui/Pagina";
 
-function retraso(indice: number): CSSProperties {
-  return { "--retraso": `${Math.min(indice, 8) * 40}ms` } as CSSProperties;
-}
+// `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`, y el paso va
+// explícito porque aquí siempre fue 40 ms y no los 35 de la barra.
 
 /**
  * El sistema de noticias.
@@ -156,7 +156,7 @@ function NoticiaCard({
   onBorrar: () => void;
 }) {
   return (
-    <Tarjeta className="devup-entrada p-4" style={retraso(indice)}>
+    <Tarjeta className="devup-entrada p-4" style={retraso(indice, 40)}>
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-ink">{noticia.title}</h2>
