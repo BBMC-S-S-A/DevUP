@@ -106,8 +106,12 @@ function MaquinaDeEscribir() {
 function LoginForm() {
   const params = useSearchParams();
   const inviteToken = params.get("invite");
+  // La landing enlaza aquí con `?modo=registro` desde «Empezar gratis». Sin
+  // esto, quien pulsa un botón que dice «gratis» aterriza en un formulario de
+  // acceso y tiene que darse cuenta solo de que hay una pestaña al lado.
+  const pideRegistro = params.get("modo") === "registro";
 
-  const [mode, setMode] = useState<Mode>(inviteToken ? "register" : "login");
+  const [mode, setMode] = useState<Mode>(inviteToken || pideRegistro ? "register" : "login");
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");

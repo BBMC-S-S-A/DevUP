@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Chakra_Petch, JetBrains_Mono, Sora } from "next/font/google";
 import type { ReactNode } from "react";
-import { Toaster } from "sonner";
-import { ProveedorConfirmar } from "@/components/ui/Confirmar";
-import { SessionProvider } from "@/lib/session";
 import { GUION_TEMA, TemaProvider } from "@/lib/tema";
 import "./globals.css";
 
@@ -37,9 +34,15 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+/**
+ * Solo lo que comparten TODAS las rutas. El título y la descripción de verdad
+ * los pone cada grupo: la landing habla al que todavía no conoce el producto y
+ * `/app` habla al que ya está dentro, y son dos mensajes distintos.
+ */
 export const metadata: Metadata = {
-  title: "DevUP",
-  description: "Centro de mando para la operación comercial y la infraestructura técnica",
+  title: { default: "DevUP", template: "%s · DevUP" },
+  description: "El gestor del desarrollo del proyecto.",
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -61,24 +64,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: GUION_TEMA }} />
       </head>
       <body className="min-h-[100svh] bg-canvas text-ink antialiased">
-        <TemaProvider>
-          <SessionProvider>
-            <ProveedorConfirmar>{children}</ProveedorConfirmar>
-          </SessionProvider>
-        </TemaProvider>
-        {/* Los avisos siguen al tema en vez de quedarse oscuros: un toast negro
-            sobre una interfaz clara se lee como un error del navegador. */}
-        <Toaster
-          theme="system"
-          position="bottom-right"
-          toastOptions={{
-            classNames: {
-              toast: "!bg-elevated/90 !backdrop-blur-xl !border-line-strong !text-ink !font-sans",
-              description: "!text-muted",
-              actionButton: "!bg-accent !text-canvas",
-            },
-          }}
-        />
+        <TemaProvider>{children}</TemaProvider>
       </body>
     </html>
   );
