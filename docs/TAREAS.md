@@ -306,8 +306,10 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       (`api` con `REALTIME_ENABLED=false`) + `docker-compose.prod.yml` del
       portátil con `REALTIME_ENABLED=true` explícito. Render se queda montado
       y a un lado, para cuando se acaben los 30 días de Railway. *Solo Juan.*
-- [ ] 6 · Alta en Resend y **verificar el dominio** en Cloudflare. Sin eso solo
-      se puede enviar desde su dirección de pruebas. *Solo Juan.*
+- [x] ~~6 · Alta en Resend y verificar el dominio en Cloudflare~~ — hecho:
+      dominio `hytrex.co` verificado, `MAIL_API_KEY` puesto en `api` y `live`
+      de Railway. Probado con una invitación real a `juan.bonilla@hytrex.co`:
+      sin error en el registro, que es como `enviarCorreo` reporta el éxito.
 - [ ] 7 · **También superado**: `app.hytrex.co` → Vercel, `api.hytrex.co` →
       Railway, `live.hytrex.co` (nuevo) → el portátil. De paso se arregla el
       apex.
