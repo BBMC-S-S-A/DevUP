@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 
 /**
  * Campo de formulario. Lo usan el acceso, la invitación y la recuperación.
@@ -14,6 +15,7 @@ export function Field({
   value,
   onChange,
   hint,
+  type,
   ...props
 }: {
   label: string;
@@ -21,22 +23,44 @@ export function Field({
   onChange: (value: string) => void;
   hint?: string;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value">) {
+  // Solo la contraseña necesita el ojo: es el único campo donde escribir a
+  // ciegas cuesta algo (una errata no se ve hasta que el envío falla), y
+  // enseñarlo en cualquier otro tipo de campo no tendría nada que alternar.
+  const esContrasena = type === "password";
+  const [visible, setVisible] = useState(false);
+
   return (
     <label className="block">
       <span className="mb-1.5 block font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
         {label}
       </span>
-      <input
-        {...props}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-line bg-canvas/60 px-3.5 text-sm outline-none
-          transition-[border-color,box-shadow,background-color] duration-200
-          placeholder:text-faint
-          hover:border-line-strong
-          focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]
-          disabled:opacity-60"
-      />
+      <span className="relative block">
+        <input
+          {...props}
+          type={esContrasena && visible ? "text" : type}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={`h-11 w-full rounded-xl border border-line bg-canvas/60 px-3.5 text-sm outline-none
+            transition-[border-color,box-shadow,background-color] duration-200
+            placeholder:text-faint
+            hover:border-line-strong
+            focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]
+            disabled:opacity-60
+            ${esContrasena ? "pr-10" : ""}`}
+        />
+        {esContrasena && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setVisible((v) => !v)}
+            aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+            className="presionable absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center
+              justify-center rounded-lg text-faint hover:text-muted"
+          >
+            {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        )}
+      </span>
       {hint && <span className="mt-1.5 block text-xs text-faint">{hint}</span>}
     </label>
   );
