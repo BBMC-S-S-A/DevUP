@@ -20,11 +20,12 @@ import {
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { ApiError, type Channel, type Workspace, api } from "@/lib/api";
+import { ApiError, type Channel, type Organization, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
+import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
@@ -47,6 +48,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [rolOrganizacion, setRolOrganizacion] = useState<Organization["role"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -64,6 +66,25 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [workspaceId]);
+
+  // Para «Ajustes» de la sección de organización: no hay ruta para pedir una
+  // sola (mismo motivo que en el armazón de organización), así que se pide la
+  // lista y se busca la que corresponde a este workspace.
+  useEffect(() => {
+    if (!workspace) return;
+    let vigente = true;
+    api
+      .get<{ organizations: Organization[] }>("/organizations")
+      .then(({ organizations }) => {
+        if (!vigente) return;
+        const mia = organizations.find((o) => o.id === workspace.organizationId);
+        setRolOrganizacion(mia?.role ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, [workspace]);
 
   const loadUnread = useCallback(async () => {
     const { unread } = await api
@@ -293,6 +314,31 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               </li>
             </ul>
           </div>
+
+          {/* La organización, dentro del mismo armazón. Antes había que salir
+              del workspace —«← Workspaces», elegir la organización, y ahí sí
+              aparecía Ventas o Infraestructura—: dos saltos para algo que se
+              usa a diario. Ahora es una sección más de esta misma barra, y el
+              rol para «Ajustes» se pide aparte porque no hay ruta para una
+              organización sola (mismo motivo que el armazón de organización). */}
+          {rolOrganizacion && (
+            <div>
+              <GrupoRotulo titulo="Organización" />
+              {/* `div` y no `ul`: `NavegacionOrganizacion` no envuelve sus
+                  destinos en `<li>` —los mismos elementos van también sueltos
+                  en el armazón de organización—, así que un `<ul>` aquí
+                  dejaría hijos que no son `<li>` directamente dentro de una
+                  lista. */}
+              <div className="capa space-y-0.5 rounded-2xl p-1.5">
+                <NavegacionOrganizacion
+                  orgId={workspace.organizationId}
+                  pathname={pathname}
+                  puedeAjustar={rolOrganizacion === "owner" || rolOrganizacion === "admin"}
+                  indiceInicial={4}
+                />
+              </div>
+            </div>
+          )}
 
           {text.length > 0 && (
             <ChannelGroup

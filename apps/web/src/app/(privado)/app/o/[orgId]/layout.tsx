@@ -1,24 +1,12 @@
 "use client";
 
-import {
-  ArrowLeft,
-  Code2,
-  Database,
-  Github,
-  Lightbulb,
-  LogOut,
-  Megaphone,
-  Search,
-  Server,
-  Settings,
-  Target,
-  UserRound,
-} from "lucide-react";
+import { ArrowLeft, LogOut, Search, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BotonIcono } from "@/components/ui/Boton";
+import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
@@ -139,15 +127,6 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
   const puedeAjustar = organizacion.role === "owner" || organizacion.role === "admin";
   const base = `/app/o/${orgId}`;
 
-  const pantallas = [
-    { href: `${base}/ventas`, icono: <Target size={14} />, texto: "Ventas" },
-    { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
-    { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
-    { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
-    { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
-    { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
-  ];
-
   return (
     <Armazon titulo={organizacion.name} barra={
       <>
@@ -208,46 +187,12 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
                 agrupa lo que se puede pulsar, y meter el título ahí lo haría
                 parecer una fila más de la lista. */}
             <div className="capa space-y-0.5 rounded-2xl p-1.5">
-            {pantallas.map((p, i) => (
-              <ItemNav
-                key={p.href}
-                href={p.href}
-                icono={p.icono}
-                indice={i + 1}
-                activo={pathname === p.href}
-              >
-                {p.texto}
-              </ItemNav>
-            ))}
-
-            {/* NAVEGACIÓN DURA, Y NO <Link>. El entorno embebido necesita que la
-                página se sirva con sus cabeceras de aislamiento, y una
-                navegación de cliente no vuelve a pedirla al servidor: se
-                quedaría sin ellas y WebContainer no arranca. Es el fallo menos
-                evidente de este archivo, así que va anotado aquí y en
-                docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md. */}
-            <a
-              href={`${base}/dev`}
-              style={retraso(4)}
-              className="devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5
-                pl-3 pr-2 text-[13px] text-muted hover:bg-raised/70 hover:text-ink"
-            >
-              <span className="shrink-0 text-faint">
-                <Code2 size={14} />
-              </span>
-              <span className="min-w-0 flex-1 truncate">Entorno de desarrollo</span>
-            </a>
-
-            {puedeAjustar && (
-              <ItemNav
-                href={`${base}/ajustes`}
-                icono={<Settings size={14} />}
-                indice={5}
-                activo={pathname === `${base}/ajustes`}
-              >
-                Ajustes
-              </ItemNav>
-            )}
+              <NavegacionOrganizacion
+                orgId={orgId}
+                pathname={pathname}
+                puedeAjustar={puedeAjustar}
+                indiceInicial={1}
+              />
             </div>
           </div>
 
