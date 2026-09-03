@@ -47,3 +47,4 @@ docs/propuesta/__pycache__/
 .open-next
 .wrangler
 apps/web/.dev.vars
+design/

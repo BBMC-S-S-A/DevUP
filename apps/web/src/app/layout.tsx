@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Chakra_Petch, JetBrains_Mono, Sora } from "next/font/google";
+import { Chakra_Petch, JetBrains_Mono, Outfit } from "next/font/google";
 import type { ReactNode } from "react";
 import { GUION_TEMA, TemaProvider } from "@/lib/tema";
 import "./globals.css";
@@ -22,7 +22,21 @@ const display = Chakra_Petch({
   display: "swap",
 });
 
-const sans = Sora({
+/**
+ * Outfit y no Sora, que es lo que había.
+ *
+ * Sora tiene un contraste alto y unas terminaciones marcadas que sostenían
+ * bien la estética de panel de instrumentos. La dirección nueva apoya el
+ * carácter en el MATERIAL —el vidrio sobre la atmósfera— y no en la letra, así
+ * que una sans más neutra y de formas redondas deja de competir con él. En
+ * párrafos largos además se lee con menos esfuerzo.
+ *
+ * Se cambia SOLO esta. `--fuente-display` (Chakra Petch, los rótulos en
+ * mayúsculas) y `--fuente-mono` (las cifras) se quedan: ahí la letra hace un
+ * trabajo de información, no de estilo, y cambiarlas sería mover algo que la
+ * dirección no pedía.
+ */
+const sans = Outfit({
   subsets: ["latin", "latin-ext"],
   variable: "--fuente-sans",
   display: "swap",

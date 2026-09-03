@@ -138,15 +138,23 @@
  * dos temas se reconozcan como el mismo producto. Aquí la jerarquía sube con la
  * luz: cada nivel es un paso más claro que el de debajo.
  *
- * Contrastes sobre #100e18:
- *   ink #ece9f5    15.4:1
- *   muted #9b93ad   6.9:1
- *   faint #837b96   4.9:1
- *   accent #a78bfa  8.1:1
+ * Contrastes MEDIDOS EN EL PEOR CASO, que ya no es la superficie plana: es el
+ * vidrio sobre el centro de una luz de la atmósfera, que es lo más claro que
+ * llega a haber detrás de un texto.
+ *
+ *                    sobre #100e18    sobre vidrio+luz
+ *   ink #ece9f5          15.4:1            14.1:1
+ *   muted #9b93ad         6.9:1             5.7:1
+ *   faint #8b83a0         5.3:1             4.7:1   <- era #837b96 y caia a 4,2
+ *   accent #a78bfa        8.1:1             7.0:1
+ *
+ * `faint` se aclaro al subir la atmosfera. Con el valor anterior el texto
+ * terciario sobre una luz quedaba en 4,2:1, por debajo del minimo AA de 4,5, y
+ * a ojo no se notaba: de ahi que esto se mida y no se opine.
  * -------------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"])  {
-    --c-canvas: #08070c;
+    --c-canvas: #0a0713;
     --c-surface: #100e18;
     --c-raised: #17141f;
     --c-elevated: #1f1a2b;
@@ -154,7 +162,7 @@
     --c-line-strong: #362d47;
     --c-ink: #ece9f5;
     --c-muted: #9b93ad;
-    --c-faint: #837b96;
+    --c-faint: #8b83a0;
     --c-accent: #a78bfa;
     --c-accent-bright: #c4b5fd;
     --c-accent-soft: #241a3d;
@@ -170,19 +178,25 @@
     --sombra-panel: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
     --sombra-dialogo: 0 32px 80px -16px rgb(0 0 0 / 0.8), 0 4px 16px rgb(0 0 0 / 0.5);
   
-    --vidrio: rgb(16 14 24 / 0.72);
+    /* Dos capas, y las dos hacen falta: la base oscura ATENÚA la atmósfera que
+       hay debajo —sin ella, el texto tenue sobre el centro de una luz baja a
+       3,1:1 de contraste, medido— y el velo blanco es lo que lo hace leer como
+       vidrio y no como un agujero. */
+    --vidrio: linear-gradient(rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.05)),
+      rgb(10 8 18 / 0.62);
     --vidrio-denso: rgb(10 9 16 / 0.86);
-    --canto: rgb(255 255 255 / 0.06);
-    --brillo-canto: rgb(255 255 255 / 0.06);
+    --canto: rgb(255 255 255 / 0.09);
+    --brillo-canto: rgb(255 255 255 / 0.07);
     --panel-fondo: linear-gradient(180deg, var(--c-surface), rgb(10 9 16 / 0.9));
     --rejilla-linea: rgb(255 255 255 / 0.025);
-    --atmosfera: radial-gradient(60rem 40rem at 8% -10%, rgb(167 139 250 / 0.12), transparent 60%),
-      radial-gradient(50rem 36rem at 100% 105%, rgb(77 216 240 / 0.06), transparent 60%);
+    --atmosfera: radial-gradient(52rem 34rem at 12% -6%, rgb(139 92 246 / 0.20), transparent 62%),
+      radial-gradient(40rem 30rem at 88% 104%, rgb(34 211 238 / 0.13), transparent 60%),
+      radial-gradient(30rem 24rem at 62% 42%, rgb(236 72 153 / 0.10), transparent 62%);
   }
 }
 
 :root[data-tema="oscuro"]  {
-  --c-canvas: #08070c;
+  --c-canvas: #0a0713;
   --c-surface: #100e18;
   --c-raised: #17141f;
   --c-elevated: #1f1a2b;
@@ -190,7 +204,7 @@
   --c-line-strong: #362d47;
   --c-ink: #ece9f5;
   --c-muted: #9b93ad;
-  --c-faint: #837b96;
+  --c-faint: #8b83a0;
   --c-accent: #a78bfa;
   --c-accent-bright: #c4b5fd;
   --c-accent-soft: #241a3d;
@@ -206,14 +220,20 @@
   --sombra-panel: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
   --sombra-dialogo: 0 32px 80px -16px rgb(0 0 0 / 0.8), 0 4px 16px rgb(0 0 0 / 0.5);
 
-  --vidrio: rgb(16 14 24 / 0.72);
+  /* Dos capas, y las dos hacen falta: la base oscura ATENÚA la atmósfera que
+       hay debajo —sin ella, el texto tenue sobre el centro de una luz baja a
+       3,1:1 de contraste, medido— y el velo blanco es lo que lo hace leer como
+       vidrio y no como un agujero. */
+    --vidrio: linear-gradient(rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.05)),
+      rgb(10 8 18 / 0.62);
   --vidrio-denso: rgb(10 9 16 / 0.86);
-  --canto: rgb(255 255 255 / 0.06);
-  --brillo-canto: rgb(255 255 255 / 0.06);
+  --canto: rgb(255 255 255 / 0.09);
+  --brillo-canto: rgb(255 255 255 / 0.07);
   --panel-fondo: linear-gradient(180deg, var(--c-surface), rgb(10 9 16 / 0.9));
   --rejilla-linea: rgb(255 255 255 / 0.025);
-  --atmosfera: radial-gradient(60rem 40rem at 8% -10%, rgb(167 139 250 / 0.12), transparent 60%),
-    radial-gradient(50rem 36rem at 100% 105%, rgb(77 216 240 / 0.06), transparent 60%);
+  --atmosfera: radial-gradient(52rem 34rem at 12% -6%, rgb(139 92 246 / 0.20), transparent 62%),
+    radial-gradient(40rem 30rem at 88% 104%, rgb(34 211 238 / 0.13), transparent 60%),
+    radial-gradient(30rem 24rem at 62% 42%, rgb(236 72 153 / 0.10), transparent 62%);
 }
 
 
@@ -252,6 +272,16 @@
     0 0 24px -4px color-mix(in oklab, var(--c-accent) 45%, transparent);
   --halo-live: 0 0 0 1px color-mix(in oklab, var(--c-live) 40%, transparent),
     0 0 24px -4px color-mix(in oklab, var(--c-live) 45%, transparent);
+
+  /* El acento nunca es plano.
+   *
+   * Un botón primario de color liso sobre esta atmósfera se lee como un
+   * recorte pegado encima; con el degradado y su sombra proyectada del mismo
+   * violeta, se lee como una pieza que está ahí y da luz. Es la firma de la
+   * dirección: si algo es LA acción de la pantalla, usa estos dos. Si hay dos
+   * elementos con esto a la vista, uno de los dos no era la acción principal. */
+  --acento-gradiente: linear-gradient(140deg, var(--c-accent-bright), var(--c-accent));
+  --sombra-acento: 0 12px 30px -10px color-mix(in oklab, var(--c-accent) 85%, transparent);
 }
 
 html,
