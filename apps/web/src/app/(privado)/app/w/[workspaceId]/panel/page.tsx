@@ -206,30 +206,15 @@ export default function PanelPage() {
             // justo el ejemplo que da la propia regla.
             const sonando = id === "spotify" && Boolean(sesion?.isPlaying);
             return (
-              // `capa` y no `panel`: el panel es opaco y tapa la atmósfera,
-              // y en esta dirección las tarjetas flotan SOBRE ella — es lo que
-              // las hace leer como material y no como recortes pegados. Sin
-              // `backdrop-filter`, que es una rejilla de tarjetas y la regla 1
-              // de globals.css lo prohíbe ahí; la sombra proyectada es la que
-              // las levanta.
-              // La sombra Y el borde de «vivo» van EN LÍNEA y no como clase
-              // (`.panel-vivo`). `.capa` se define en globals.css fuera de toda
-              // capa CSS y las utilidades de Tailwind van dentro de una: en la
-              // cascada gana lo no-capado sin importar la especificidad, así
-              // que un `[box-shadow:...]` o `[border-color:...]` aquí se
-              // pierde en silencio. Ya pasó hoy con `position: fixed` y está
-              // anotado en las trampas de LO-QUE-HAY-Y-LO-QUE-FALTA — aquí se
-              // evita desde el principio calculando ambos valores en línea.
+              // `capa-flotante` y no `panel`: el panel es opaco y tapa la
+              // atmósfera, y en esta dirección las tarjetas flotan SOBRE ella
+              // — es lo que las hace leer como material y no como recortes
+              // pegados. La combinación con `panel-vivo` cuando `sonando` es
+              // cierto se resuelve por orden de la cascada, no en línea: ver
+              // el comentario de `.capa-flotante` en globals.css.
               <div
-                className="capa flex h-full min-h-0 flex-col overflow-hidden rounded-2xl transition-[box-shadow,border-color] duration-200"
-                style={{
-                  borderColor: sonando
-                    ? "color-mix(in oklab, var(--c-accent) 45%, transparent)"
-                    : undefined,
-                  boxShadow: sonando
-                    ? "var(--halo-accent), inset 0 1px 0 var(--brillo-canto)"
-                    : "var(--sombra-panel), inset 0 1px 0 var(--brillo-canto)",
-                }}
+                className={`capa-flotante flex h-full min-h-0 flex-col overflow-hidden rounded-2xl
+                  transition-[box-shadow,border-color] duration-200 ${sonando ? "panel-vivo" : ""}`}
               >
                 <div className="flex shrink-0 items-center gap-2 border-b border-line/70 bg-raised/20 px-3.5 py-2.5">
                   <Icono size={14} className="shrink-0 text-muted" />

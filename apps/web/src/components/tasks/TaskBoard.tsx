@@ -180,8 +180,16 @@ export function TaskBoard({
             const sobrevolada = dropTarget === column.id;
 
             return (
+              // `flotante`: el tablero se escribió (a18d42f) antes de que
+              // existieran los tokens de Sala y se quedó con el material
+              // opaco de siempre, que corta la atmósfera justo donde empieza
+              // cada columna. El resto de la composición del mock —el punto
+              // de estado por columna, el contador en mono, la barra de
+              // carga— ya es la de aquí, no la del mock: no hacía falta
+              // rehacerla, solo dejarla flotar.
               <Tarjeta
                 key={column.id}
+                flotante
                 viva={sobrevolada}
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -293,7 +301,15 @@ export function TaskBoard({
                           // mientras se arrastra (el botón sigue :active) y
                           // pelearía con el levantado, que es la señal que
                           // importa aquí.
-                          className={`panel block w-full cursor-grab rounded-xl p-2.5 text-left
+                          // `capa` y no `panel`: esta tarjeta va DENTRO de la
+                          // columna, que ya es `capa-flotante` — lleva la
+                          // sombra que la levanta sobre la atmósfera. Repetirla
+                          // aquí apilaría dos sombras iguales sin necesidad;
+                          // `.capa` es justo el material pensado para ir
+                          // anidado dentro de otro cristal (ver su comentario
+                          // en globals.css), y de paso es el mismo que ya usa
+                          // el propio menú lateral para sus entradas (Armazon).
+                          className={`capa block w-full cursor-grab rounded-xl p-2.5 text-left
                             transition-[transform,opacity,filter] duration-[var(--dur-hover)] ease-[var(--ease-out)]
                             hover:brightness-125 active:cursor-grabbing motion-reduce:transition-none
                             ${viajando ? "panel-vivo scale-[1.03] opacity-45" : ""}`}
@@ -403,7 +419,11 @@ function TableroEsqueleto() {
       {[0, 1, 2].map((indice) => (
         <div
           key={indice}
-          className="panel devup-entrada flex h-full w-[19rem] shrink-0 flex-col gap-2 rounded-2xl p-3"
+          // El mismo material que la columna real (`capa-flotante`): si el
+          // esqueleto fuera opaco y la columna real translúcida, el tablero
+          // cambiaría de material al llegar los datos y la pantalla se
+          // sentiría como que "acaba de aparecer algo distinto".
+          className="capa-flotante devup-entrada flex h-full w-[19rem] shrink-0 flex-col gap-2 rounded-2xl p-3"
           style={{ "--retraso": `${indice * 70}ms` } as CSSProperties}
         >
           <div className="devup-esqueleto h-3 w-24 rounded" />

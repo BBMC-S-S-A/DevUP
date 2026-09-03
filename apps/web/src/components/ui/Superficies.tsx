@@ -15,6 +15,7 @@ import { BotonIcono } from "./Boton";
 export function Tarjeta({
   viva = false,
   elevable = false,
+  flotante = false,
   className = "",
   children,
   ...props
@@ -23,12 +24,20 @@ export function Tarjeta({
   viva?: boolean;
   /** Se levanta al pasar el puntero. Solo si la tarjeta entera es pulsable. */
   elevable?: boolean;
+  /**
+   * `capa-flotante` en vez de `panel`: para tarjetas que van directamente
+   * sobre la atmósfera y no dentro de una página con fondo propio —el tablero,
+   * la mesa—. `false` por defecto a propósito: es el material opaco el que
+   * evita repintar en listas largas (ver el comentario de `.capa` en
+   * globals.css), y la mayoría de quien usa `Tarjeta` sigue siendo eso.
+   */
+  flotante?: boolean;
   children: ReactNode;
 } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       {...props}
-      className={`panel rounded-2xl ${viva ? "panel-vivo" : ""} ${elevable ? "elevable" : ""} ${className}`}
+      className={`${flotante ? "capa-flotante" : "panel"} rounded-2xl ${viva ? "panel-vivo" : ""} ${elevable ? "elevable" : ""} ${className}`}
     >
       {children}
     </div>

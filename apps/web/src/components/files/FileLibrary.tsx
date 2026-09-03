@@ -282,7 +282,12 @@ export function FileLibrary({
           ))}
         </ul>
       ) : (
-        <div className="panel overflow-hidden rounded-2xl">
+        // `capa-flotante` y no `panel`: esta biblioteca se escribió (b0360a5,
+        // el 13 de agosto) antes de que existieran los tokens de Sala y se
+        // quedó opaca, cortando la atmósfera. La composición del mock de la
+        // biblioteca ya es la de la vista en rejilla de aquí abajo —tarjeta,
+        // etiqueta, tamaño en mono, autor—; no hacía falta rehacerla.
+        <div className="capa-flotante overflow-hidden rounded-2xl">
           {/* Cabecera de columnas: en modo lista los números están para
               compararse, y sin rótulo encima no se sabe qué se compara. */}
           <div className="hidden items-center gap-3 border-b border-line px-3 py-2 sm:flex">
@@ -326,8 +331,14 @@ function TarjetaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => vo
       // `elevable` y no `presionable`: la tarjeta entera es el botón, y en
       // globals.css el levantado del hover gana al hundido del pulsado, así que
       // poner las dos deja la pulsación sin respuesta.
-      className="panel elevable group flex h-full w-full flex-col rounded-2xl p-2.5 text-left
-        hover:border-line-strong hover:shadow-[var(--sombra-panel)]"
+      // `capa-flotante` y no `panel` (mismo motivo que el envoltorio de la
+      // lista, arriba). Se quita `hover:shadow-[var(--sombra-panel)]`: esa
+      // sombra ya la pone `capa-flotante` en reposo, así que la utilidad de
+      // Tailwind quedaría compitiendo con una clase sin capa por la misma
+      // propiedad y perdería en silencio — la trampa de siempre, evitada antes
+      // de que pase en vez de después.
+      className="capa-flotante elevable group flex h-full w-full flex-col rounded-2xl p-2.5 text-left
+        hover:border-line-strong"
     >
       <span
         className={`relative grid h-24 place-items-center overflow-hidden rounded-xl border ${tipo.pozo}`}
@@ -404,9 +415,13 @@ function FilaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => void 
 function Esqueleto({ vista }: { vista: "rejilla" | "lista" }) {
   const huecos = Array.from({ length: vista === "rejilla" ? 10 : 6 }, (_, i) => i);
 
+  // El mismo material que la versión ya cargada (`capa-flotante`): si el
+  // esqueleto fuera opaco, la biblioteca cambiaría de material al llegar los
+  // archivos y la pantalla se sentiría como que "acaba de aparecer algo
+  // distinto" en vez de haberse llenado.
   if (vista === "lista") {
     return (
-      <div className="panel divide-y divide-line/70 overflow-hidden rounded-2xl">
+      <div className="capa-flotante divide-y divide-line/70 overflow-hidden rounded-2xl">
         {huecos.map((i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-2.5">
             <span className="devup-esqueleto size-4 rounded" />
@@ -421,7 +436,7 @@ function Esqueleto({ vista }: { vista: "rejilla" | "lista" }) {
   return (
     <div className={REJILLA} aria-hidden>
       {huecos.map((i) => (
-        <div key={i} className="panel rounded-2xl p-2.5">
+        <div key={i} className="capa-flotante rounded-2xl p-2.5">
           <span className="devup-esqueleto block h-24 rounded-xl" />
           <span className="devup-esqueleto mt-2.5 block h-3 w-4/5 rounded" />
           <span className="devup-esqueleto mt-2 block h-2.5 w-1/2 rounded" />
