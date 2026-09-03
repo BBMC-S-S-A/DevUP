@@ -1,0 +1,164 @@
+# Despliegue de producción entera: API, tiempo real y web.
+#
+# POR QUÉ ESTO Y NO LA VÍA NATIVA DE RAILWAY. Railway puede desplegar solo al
+# conectarle el repositorio, y se intentó: la conexión quedó grabada pero
+# Railway no puede LEER el repo («GitHub Repo not found»), porque la app de
+# GitHub de la organización está en una versión anterior de sus permisos y
+# aceptar los nuevos exige al propietario de `BBMC-S-S-A`, que es otra persona.
+# Esto no depende de nadie: con dos secretos del repositorio, despliega.
+#
+# Si algún día Railway sí lee el repo, los dos pasos de `railway up` se borran
+# y la web se queda sola aquí.
+#
+# SUSTITUYE al `deploy.yml` original, que corría en un runner autoalojado en el
+# portátil de Juan y levantaba `docker-compose.prod.yml`. Producción salió del
+# portátil el 3 de septiembre de 2026, así que ese workflow apuntaba a algo que
+# ya no era producción.
+#
+# NO DISPARA CON CADA PUSH: espera a que CI termine y solo sigue si terminó en
+# verde. Desplegar sin esa comprobación significaría que un fallo de
+# aislamiento entre organizaciones podría llegar a producción con el mismo
+# commit que lo introduce.
+name: Desplegar
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: ["claude/sales-control-workspace-platform-i99syv"]
+  # Para desplegar a mano: después de correr una migración, o al cambiar las
+  # direcciones de la API (que se incrustan al compilar la web).
+  workflow_dispatch:
+
+concurrency:
+  # Un despliegue a medias no se pisa con el siguiente.
+  group: desplegar-produccion
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # En un `workflow_run`, `checkout` trae la rama por defecto y no el
+          # commit que disparó el workflow. Hace falta explícito.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          # Dos commits para poder comparar qué cambió (ver el paso siguiente).
+          fetch-depth: 2
+
+      # LA MIGRACIÓN NO SE APLICA SOLA, Y ESE ES EL PELIGRO.
+      #
+      # Aplicarla desde aquí no es trivial: la base vive en la red privada de
+      # Railway y desde fuera hace falta un túnel. Pero desplegar código nuevo
+      # que llama a una función que la migración todavía no creó rompe
+      # producción — pasó el 3 de septiembre con la 0027.
+      #
+      # Así que si el commit trae una migración, este workflow PARA. Se corre
+      # la migración a mano (ver docs/PLAN-DE-PRODUCCION.md) y luego se lanza
+      # esto con «Run workflow». Preferimos un despliegue que no ocurre a uno
+      # que ocurre en el orden equivocado.
+      - name: Parar si hay una migración sin aplicar
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          if git diff --name-only HEAD~1 HEAD -- db/migrations/ | grep -q .; then
+            echo "::error::Este commit trae una migración nueva:"
+            git diff --name-only HEAD~1 HEAD -- db/migrations/
+            echo "::error::Aplícala a mano contra Railway (docs/PLAN-DE-PRODUCCION.md) y luego lanza este workflow con 'Run workflow'. Desplegar antes de migrar rompe producción."
+            exit 1
+          fi
+          echo "Sin migraciones nuevas: se puede desplegar."
+
+      - name: Ver qué credenciales hay
+        id: creds
+        env:
+          RW: ${{ secrets.RAILWAY_API_TOKEN }}
+          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$RW" ]; then echo "railway=si" >> "$GITHUB_OUTPUT"; else
+            echo "railway=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sin RAILWAY_API_TOKEN: no se despliegan api ni live."
+          fi
+          if [ -n "$CF" ]; then echo "cloudflare=si" >> "$GITHUB_OUTPUT"; else
+            echo "cloudflare=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sin CLOUDFLARE_API_TOKEN: no se despliega la web."
+          fi
+
+      # --- API y tiempo real -------------------------------------------------
+      #
+      # Son el MISMO código con `REALTIME_ENABLED` distinto, así que se
+      # despliegan los dos desde el mismo repositorio. En serie y no en
+      # paralelo: comparten base de datos, y dos arranques simultáneos
+      # preparando el bucket o leyendo el esquema se estorban sin motivo.
+      #
+      # `--ci` espera la construcción y devuelve error si falla; con
+      # `--detach` el paso saldría en verde aunque la imagen no compilara.
+      - name: Desplegar api
+        if: steps.creds.outputs.railway == 'si'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          npm i -g @railway/cli
+          railway up --ci \
+            --project d05dd021-3636-4957-bc2f-55359f2690cf \
+            --environment production \
+            --service api
+
+      - name: Desplegar tiempo real
+        if: steps.creds.outputs.railway == 'si'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          railway up --ci \
+            --project d05dd021-3636-4957-bc2f-55359f2690cf \
+            --environment production \
+            --service live
+
+      # --- Web ---------------------------------------------------------------
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.cloudflare == 'si'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar
+        if: steps.creds.outputs.cloudflare == 'si'
+        run: npm ci
+
+      - name: Construir y desplegar la web
+        if: steps.creds.outputs.cloudflare == 'si'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Variables del repositorio y no secretos: son direcciones públicas, y
+          # tenerlas a la vista permite cambiarlas sin editar este archivo. Los
+          # valores por defecto son los `*.up.railway.app` de ahora; cuando los
+          # dominios propios funcionen, se cambian en Settings → Variables.
+          #
+          # SE INCRUSTAN AL COMPILAR: cambiarlas obliga a volver a lanzar esto.
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api-production-7b95.up.railway.app' }}
+          NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || 'wss://live-production-976a.up.railway.app' }}
+        working-directory: apps/web
+        run: npm run cf:deploy
+
+      # --- Comprobar que lo desplegado responde ------------------------------
+      #
+      # Un despliegue que sale en verde y deja producción caída es peor que uno
+      # que falla: nadie va a mirar. `/auth/signup-policy` y no `/health`
+      # porque health no toca la base — el 3 de septiembre la API estuvo
+      # devolviendo 500 en todo mientras health seguía en 200.
+      - name: Comprobar que producción responde
+        run: |
+          fallos=0
+          for u in \
+            "https://api-production-7b95.up.railway.app/auth/signup-policy" \
+            "https://live-production-976a.up.railway.app/health" \
+            "https://devup.hytrex.co/"
+          do
+            c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$u" || echo 000)
+            echo "$c  $u"
+            [ "$c" = "200" ] || fallos=$((fallos+1))
+          done
+          [ "$fallos" -eq 0 ] || { echo "::error::$fallos comprobacion(es) no dieron 200"; exit 1; }
