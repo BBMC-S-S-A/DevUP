@@ -441,6 +441,22 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
    * título del vídeo: si alguien añadió «Radiohead – Creep», eso es lo que la
    * sala debe leer, no «Creep (Official Video) [HD] 4K REMASTERED».
    */
+  /**
+   * Decir por qué no sonó, una vez por fallo.
+   *
+   * El caso frecuente es un vídeo que el titular de los derechos bloqueó fuera
+   * de YouTube: la búsqueda lo daba por incrustable y solo se descubre al
+   * ponerlo. Sin este aviso, la canción se salta sola y parece que el botón no
+   * hizo nada.
+   */
+  const ultimoFalloYt = useRef<string | null>(null);
+  useEffect(() => {
+    const fallo = youtube.estado.fallo;
+    if (!fallo || fallo === ultimoFalloYt.current) return;
+    ultimoFalloYt.current = fallo;
+    toast.error("No se pudo reproducir en YouTube", { description: fallo });
+  }, [youtube.estado.fallo]);
+
   const ultimoPublicadoYt = useRef("");
   useEffect(() => {
     const sala = canalRef.current;

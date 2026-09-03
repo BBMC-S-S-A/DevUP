@@ -203,9 +203,23 @@ export function useYoutubePlayer(nodo: HTMLDivElement | null, alTerminar?: () =>
                 duracionMs: Math.round((player.current?.getDuration() ?? 0) * 1000),
               }));
             },
+            /**
+             * Un vídeo que no se puede poner no debe dejar la cola muerta.
+             *
+             * Y pasa más de lo que parece: `videoEmbeddable=true` en la
+             * búsqueda NO basta, porque el titular de los derechos puede
+             * bloquear la reproducción fuera de YouTube para un sitio
+             * concreto, y eso solo se sabe al intentarlo. Sin esto, la música
+             * se para en seco con un cartel de YouTube y la siguiente canción
+             * no llega nunca.
+             *
+             * Se avisa igual que si hubiera terminado: quien escucha prefiere
+             * que suene lo siguiente a quedarse en silencio.
+             */
             onError: (evento: { data: number }) => {
               if (!vivo) return;
               setEstado((e) => ({ ...e, fallo: explicarError(evento.data), reproduciendo: false }));
+              terminar.current?.();
             },
           },
         });
