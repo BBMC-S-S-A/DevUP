@@ -61,6 +61,19 @@ function semaforo(conclusion: string | null): Semaforo {
   return { Icono: Loader2, gira: true, texto: "en curso", color: "var(--color-accent)" };
 }
 
+/**
+ * Un 404 al leer un repositorio casi nunca es un fallo de DevUP: el mensaje
+ * crudo («GitHub respondió 404 para …», de `connectors/github.ts`) es solo lo
+ * que devolvió la API, y se lee como una avería propia si se deja así. Casi
+ * siempre es el token de alcance fino sin ese repositorio autorizado, o la
+ * organización de GitHub bloqueando tokens de alcance fino sin aprobar — algo
+ * que se arregla del lado de GitHub, no aquí.
+ */
+function pistaGithub404(mensaje: string): string | null {
+  if (!/respondió 404/.test(mensaje)) return null;
+  return "Casi siempre es que el token de acceso fino no tiene este repositorio autorizado, o que la organización de GitHub bloquea tokens de alcance fino sin aprobar (del lado de GitHub: Settings → Third-party access). No suele ser un fallo de DevUP.";
+}
+
 export default function GithubPage() {
   const confirmar = useConfirmar();
   const { orgId } = useParams<{ orgId: string }>();
@@ -245,7 +258,16 @@ export default function GithubPage() {
  * todo lo que hay alrededor está viejo. Como texto rojo suelto se lee igual que
  * cualquier otra línea; con cinta de peligro al canto, no.
  */
-function Averia({ titulo, detalle }: { titulo: string; detalle: string }) {
+function Averia({
+  titulo,
+  detalle,
+  pista,
+}: {
+  titulo: string;
+  detalle: string;
+  /** Explicación en prosa normal, aparte del mensaje crudo — ver `pistaGithub404`. */
+  pista?: string | null;
+}) {
   return (
     <div className="relative overflow-hidden rounded-xl border border-danger/30 bg-danger/[0.07] py-2.5 pl-5 pr-3">
       <span
@@ -267,6 +289,9 @@ function Averia({ titulo, detalle }: { titulo: string; detalle: string }) {
           <p className="mt-1 break-words font-mono text-[11px] leading-relaxed text-danger/90">
             {detalle}
           </p>
+          {/* En prosa normal y en el tono de fuera de la avería, no del rojo:
+              esto no es el error, es la explicación de por qué no es nuestro. */}
+          {pista && <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{pista}</p>}
         </div>
       </div>
     </div>
@@ -548,7 +573,11 @@ function RepoCard({
 
         {repo.lastError && (
           <div className="mt-3">
-            <Averia titulo="Avería de lectura" detalle={repo.lastError} />
+            <Averia
+              titulo="Avería de lectura"
+              detalle={repo.lastError}
+              pista={pistaGithub404(repo.lastError)}
+            />
           </div>
         )}
       </div>
