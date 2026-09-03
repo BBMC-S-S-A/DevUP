@@ -53,7 +53,7 @@ el cálculo: el coste de esta propuesta es el mundo, no las dos vistas.
 
 ## 2. Lo primero que hay que descartar: ¿choca con la regla permanente?
 
-La regla permanente de producto (`CONTEXTO-COMPLETO.md` §2) dice:
+La regla permanente de producto dice:
 
 > Si una funcionalidad exige que DevUP mantenga un proceso corriendo, un puerto
 > abierto o un disco montado **en nombre del cliente**, está fuera de alcance
@@ -211,7 +211,7 @@ acabar abandonando una.
 
 ## 6. Seguridad, y la trampa que este proyecto ya conoce
 
-`CONTINUAR-AQUI.md` avisa de un fallo que ya se cometió una vez:
+Hay un fallo que ya se cometió una vez:
 
 > Un workspace personal no se protege con una columna. `can_access_channel` y
 > la política de `files` miraban la organización, no el workspace.

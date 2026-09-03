@@ -1,7 +1,7 @@
 -- =============================================================================
 -- DevUP · 0011 · Más capas de avatar
 --
--- Ver docs/plan-mundo-y-plataforma.md §5.2.
+-- Ver docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md.
 --
 -- Con complexión, pelo y dos colores de ropa, dieciocho personas en una
 -- oficina empiezan a repetirse. Gafas, barba, gorro y calzado multiplican las

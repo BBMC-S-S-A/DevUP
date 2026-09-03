@@ -31,7 +31,7 @@ import { Pagina } from "@/components/ui/Pagina";
 /**
  * Conector de GitHub (S7, primera pieza). Un token de acceso personal de
  * alcance fino por organización — no una GitHub App con OAuth, ver §5.1 de
- * docs/plan-conectores-busqueda-e-interfaz.md — y los repositorios que se
+ * y los repositorios que se
  * conecten con él. Las estadísticas las refresca el barrendero del servidor
  * cada diez minutos; el botón de refrescar solo adelanta esa espera.
  *

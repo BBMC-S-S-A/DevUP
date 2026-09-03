@@ -221,7 +221,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
                 navegación de cliente no vuelve a pedirla al servidor: se
                 quedaría sin ellas y WebContainer no arranca. Es el fallo menos
                 evidente de este archivo, así que va anotado aquí y en
-                ESTADO-DEL-PRODUCTO.md. */}
+                docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md. */}
             <a
               href={`${base}/dev`}
               style={retraso(4)}

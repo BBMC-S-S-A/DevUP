@@ -49,7 +49,7 @@ jobs:
         run: docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 
       - name: Migrar
-        # El mismo comando de docs/DESPLIEGUE.md: el compilado en dist/, no
+        # El compilado en dist/, no
         # tsx contra el código fuente — la imagen de producción no lo lleva.
         run: docker compose --env-file .env.production -f docker-compose.prod.yml exec -T api node apps/api/dist/db/migrate.js
 

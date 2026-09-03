@@ -10,11 +10,18 @@ con etiquetas, búsqueda y previsualización, un **tablero de tareas** por
 workspace, **mensajería de texto** en tiempo real con hilos y no leídos, y
 **altas por invitación** con notificaciones.
 
-Documentación:
-- [`docs/CONTEXTO-COMPLETO.md`](docs/CONTEXTO-COMPLETO.md) — decisiones, motivos
-  y trampas conocidas. Léelo antes de tocar el esquema.
-- [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) — lista de comprobación antes de
-  exponerlo a internet.
+Documentación. **Son dos, y son estos dos** — antes había veinte y se
+contradecían entre sí, que es peor que no tener ninguno:
+
+- [`docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md`](docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md) —
+  qué funciona hoy, qué falta y las trampas que ya costaron horas. Léelo antes
+  de tocar el esquema.
+- [`docs/PLAN-DE-PRODUCCION.md`](docs/PLAN-DE-PRODUCCION.md) — cómo se trabaja,
+  cómo se despliega y en qué orden va lo que falta.
+
+Aparte, y por otro motivo:
+- [`docs/decisiones/`](docs/decisiones/) — el **porqué** de lo caro de
+  revertir. El código las cita por ruta; no envejecen.
 - [`docs/TURN.md`](docs/TURN.md) — lo único que separa la voz de funcionar
   fuera de una red local.
 

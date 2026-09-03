@@ -26,7 +26,7 @@ import { api, useRecurso } from "@/lib/datos";
  * ES EL PRIMER PASO DE LA REORGANIZACIÓN POR SECTORES, y va antes que los
  * preajustes por rol a propósito: sin partición, un preajuste es un orden de
  * menú. Con partición, un rol es una disposición guardada — cuatro filas en una
- * tabla, no una funcionalidad nueva. Ver docs/plan-superficie-de-trabajo.md §4.
+ * tabla, no una funcionalidad nueva.
  *
  * EL CATÁLOGO SON COMPONENTES QUE YA EXISTEN. No hay ninguna herramienta escrita
  * para esto: el chat, el tablero y los archivos ya eran componentes

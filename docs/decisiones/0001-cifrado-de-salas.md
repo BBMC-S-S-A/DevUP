@@ -1,7 +1,7 @@
 # 0001 · Cifrado de las salas y cómo se graba
 
 **Estado:** decidido · **Fecha:** agosto de 2026 · **Sustituye a:** la decisión
-abierta de §5.5 de `CONTEXTO-COMPLETO.md`
+abierta
 
 ---
 

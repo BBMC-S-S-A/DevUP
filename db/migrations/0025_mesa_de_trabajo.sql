@@ -4,7 +4,7 @@
 -- Partir la pantalla en una, dos o tres zonas y poner en cada una la
 -- herramienta que toque: el canal y el tablero, los archivos y el canal, lo que
 -- haga falta. Primer paso de la reorganización por sectores — ver
--- docs/plan-superficie-de-trabajo.md §4.
+-- Ver docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md.
 --
 -- POR ESPACIO DE TRABAJO Y NO POR PERSONA A SECAS, que es la diferencia con el
 -- panel de 0019. Aquel guarda una preferencia que vale en todas partes —qué

@@ -13,7 +13,7 @@
 // filtro de red bloqueara un dominio entero— el documento sale igual con la
 // pila del sistema en vez de salir sin maquetar.
 //
-//   node scripts/md-a-pdf.mjs docs/prioridades-2026-08-29.md
+//   node scripts/md-a-pdf.mjs docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md
 
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
