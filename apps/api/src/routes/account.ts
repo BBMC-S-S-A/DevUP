@@ -134,13 +134,11 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         return rows[0]!;
       });
 
+      const url = `${env.APP_BASE_URL}/invitacion?token=${token}`;
+
       await enviarCorreo({
         to: body.email,
-        ...plantillas.invitacion(
-          contexto.org,
-          contexto.quien,
-          `${env.APP_BASE_URL}/invitacion?token=${token}`,
-        ),
+        ...plantillas.invitacion(contexto.org, contexto.quien, url),
       });
 
       // Si la persona ya tiene cuenta, además le suena la campana dentro.
@@ -161,7 +159,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
           .catch(() => {});
       });
 
-      return reply.status(201).send({ sent: true });
+      // El enlace va también en la respuesta, no solo en el correo: mientras
+      // el dominio de envío no esté verificado, es la única vía fiable para
+      // que quien invita se lo pueda mandar por su cuenta.
+      return reply.status(201).send({ sent: true, url });
     },
   );
 
