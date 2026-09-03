@@ -3,7 +3,8 @@
 import { Loader2, Volume2, Users, Shirt, Pencil, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, type Workspace, api } from "@/lib/api";
+import { useRecurso } from "@/lib/datos";
 import { useSession } from "@/lib/session";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { TILE } from "@/lib/world/atlas";
@@ -19,6 +20,7 @@ import { DevVerseEntrance } from "./DevVerseEntrance";
 import { ZoneEditor } from "./ZoneEditor";
 import { useLlamada } from "@/lib/world/useLlamada";
 import { LlamadaEntrante, MenuCercania, PanelLlamada } from "./Cercania";
+import { PanelTablero } from "./PanelTablero";
 import { ProximityAudio } from "./ProximityAudio";
 
 /**
@@ -53,6 +55,12 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const { user } = useSession();
   const { joinChannel, leaveChannel, activeChannelId, room } = useVoiceCall();
+
+  // Solo para el tablero embebido: `TaskBoard` lo necesita y nada más aquí lo
+  // pedía hasta ahora. Cacheado por `useRecurso`, así que abrir y cerrar el
+  // panel varias veces no vuelve a pedirlo.
+  const workspaceInfo = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
+  const organizationId = workspaceInfo.datos?.workspace.organizationId ?? "";
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<Input>({ up: false, down: false, left: false, right: false });
@@ -240,6 +248,12 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         }
       }
 
+      if (event.code === "Escape" && tableroAbiertoRef.current) {
+        event.preventDefault();
+        setTableroAbierto(false);
+        return;
+      }
+
       // Editando no se camina. Con las dos cosas a la vez, colocar un mueble
       // con la W pulsada manda al avatar contra la pared del fondo.
       if (editorActiveRef.current) {
@@ -260,6 +274,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         const current = actionRef.current;
         if (current.kind === "sit") sitRef.current(current.seat);
         else if (current.kind === "stand") sitRef.current(null);
+        else if (current.kind === "board") setTableroAbierto(true);
         else router.push(current.href);
         return;
       }
@@ -367,11 +382,11 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         audibleRadius: AUDIBLE_RADIUS,
       });
 
-      // Solo se toca el estado si el rótulo cambia: llamar a setAction en
-      // cada fotograma sería un renderizado de React sesenta veces por
-      // segundo para escribir el mismo texto.
+      // Solo se toca el estado si la acción cambia de verdad: llamar a
+      // setAction en cada fotograma sería un renderizado de React sesenta
+      // veces por segundo. Por clave y no por rótulo — ver `claveDeAccion`.
       const next = findActionRef.current();
-      if (next?.label !== actionRef.current?.label) setAction(next);
+      if (claveDeAccion(next) !== claveDeAccion(actionRef.current)) setAction(next);
 
       frame = requestAnimationFrame(loop);
     };
@@ -425,30 +440,48 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
    * de esas cosas: la de la vista profesional, la misma que usa quien nunca
    * abrió la oficina. Es lo que impide que acaben siendo dos productos, y es
    * también lo que hace que el mueble no sea un adorno con un número encima.
-   */
-  /**
-   * Qué se puede hacer aquí de pie.
    *
-   * EL PUENTE ENTRE LAS DOS VISTAS. Pulsar E delante de la pizarra abre el
-   * tablero; delante de la estantería, la biblioteca. No una versión del mundo
-   * de esas cosas: la de la vista profesional, la misma que usa quien nunca
-   * abrió la oficina. Es lo que impide que acaben siendo dos productos.
+   * EL TABLERO NO NAVEGA — SE ABRE ENCIMA. A diferencia de la biblioteca o de
+   * un canal, `board` no lleva `href`: pulsar E activa `tableroAbierto` y
+   * `PanelTablero` flota sobre el mundo, igual que la pizarra de una llamada.
+   * Salir de DevVerse para ver cuatro tarjetas era el propio problema que
+   * `EL PUENTE ENTRE LAS DOS VISTAS` decía evitar.
    *
    * SE CALCULA EN EL BUCLE, NO EN UN MEMO. La posición vive en una referencia
    * mutable —cambia sin renderizar—, así que un `useMemo` sobre la sala se
    * calculaba una vez al cruzar la puerta y no volvía a mirar: el aviso no
    * aparecía nunca por muy pegado a la pizarra que estuvieras. Aquí se
-   * recorre por fotograma pero solo se toca el estado cuando el rótulo
-   * cambia, que es unas pocas veces por minuto.
+   * recorre por fotograma pero solo se toca el estado cuando la acción
+   * cambia de verdad, que es unas pocas veces por minuto.
    */
   type Action =
     | { kind: "link"; label: string; href: string }
+    | { kind: "board"; label: string }
     | { kind: "sit"; label: string; seat: { x: number; y: number; facing: "n" | "s" | "e" | "o" } }
     | { kind: "stand"; label: string };
+
+  /**
+   * Una clave que distingue dos acciones de verdad distintas, no solo su
+   * rótulo. EL BUG QUE ESTO ARREGLA: todas las sillas ofrecen el mismo
+   * "Sentarse", así que comparar por rótulo (como se hacía antes) nunca veía
+   * cambio al moverse de una silla a otra — `action` se quedaba con el
+   * `seat` de la primera silla que se activó, y pulsar E sentaba siempre ahí
+   * sin importar cuál estuviera más cerca.
+   */
+  function claveDeAccion(a: Action | null): string {
+    if (!a) return "";
+    if (a.kind === "sit") return `sit:${a.seat.x}:${a.seat.y}`;
+    if (a.kind === "link") return `link:${a.href}`;
+    return a.kind;
+  }
 
   const [action, setAction] = useState<Action | null>(null);
   const actionRef = useRef(action);
   actionRef.current = action;
+
+  const [tableroAbierto, setTableroAbierto] = useState(false);
+  const tableroAbiertoRef = useRef(tableroAbierto);
+  tableroAbiertoRef.current = tableroAbierto;
 
   const findAction = useCallback((): Action | null => {
     if (!scene || editor.active) return null;
@@ -483,7 +516,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       if (distance > bestDistance) continue;
 
       if (piece.kind === "whiteboard" || piece.kind === "flipchart") {
-        best = { kind: "link", label: "Ver el tablero", href: `/app/w/${workspaceId}/board` };
+        best = { kind: "board", label: "Ver el tablero" };
         bestDistance = distance;
       } else if (piece.kind === "bookshelf") {
         best = { kind: "link", label: "Abrir la biblioteca", href: `/app/w/${workspaceId}` };
@@ -726,6 +759,16 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         enviarPorCanal={llamada.enviarPorCanal}
         escucharCanal={llamada.escucharCanal}
       />
+
+      {tableroAbierto && (
+        <div className="pointer-events-auto fixed inset-6 z-50 md:inset-12">
+          <PanelTablero
+            workspaceId={workspaceId}
+            organizationId={organizationId}
+            onCerrar={() => setTableroAbierto(false)}
+          />
+        </div>
+      )}
 
       {editor.active && editingZone && <ZoneEditor zone={editingZone} editor={editor} />}
 
