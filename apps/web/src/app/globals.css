@@ -500,6 +500,33 @@ h3 {
   box-shadow: var(--halo-accent), inset 0 1px 0 var(--brillo-canto);
 }
 
+/* `.capa` con un tono semántico PERMANENTE, no "algo pasando ahora" —esa
+ * semántica sigue siendo de `.panel-vivo`, ver regla 2 de la cabecera—. Nacen
+ * para el embudo de ventas: una venta ganada o a punto de vencer significa
+ * algo por sí sola, con independencia de si alguien la está mirando en este
+ * instante. Sustituyen a `.capa`, no se combinan con ella —las dos fijan
+ * `background`/`border` y pelearían por lo mismo—, así que cada tarjeta lleva
+ * una sola de las tres.
+ */
+.capa-tono-vivo {
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--c-live) 16%, transparent),
+    transparent
+  ), var(--vidrio);
+  border: 1px solid color-mix(in oklab, var(--c-live) 30%, transparent);
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
+}
+.capa-tono-aviso {
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--c-warn) 16%, transparent),
+    transparent
+  ), var(--vidrio);
+  border: 1px solid color-mix(in oklab, var(--c-warn) 30%, transparent);
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
+}
+
 /* Rejilla técnica de fondo. Sin animación: una rejilla que deriva despacio en
    pantalla completa es justo el tipo de movimiento periférico que marea. */
 .rejilla {

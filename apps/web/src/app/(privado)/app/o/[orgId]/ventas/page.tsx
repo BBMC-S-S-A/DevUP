@@ -20,6 +20,7 @@ import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { tinte } from "@/lib/tinte";
 
 /**
  * El embudo de ventas.
@@ -34,11 +35,16 @@ import { useConfirmar } from "@/components/ui/Confirmar";
  * Convertirlos antes es cómo se acaba con una suma que no cuadra por un
  * céntimo.
  *
- * Visualmente es la pantalla más densa de la aplicación, así que el color se
- * raciona: cada etapa tiene el suyo y solo lo gasta en el filo superior de su
- * columna y en el lavado de su cabecera. El halo del acento queda reservado
- * para la única cosa que pasa «ahora mismo» aquí — la columna sobre la que se
- * está soltando una tarjeta.
+ * Visualmente es la pantalla más densa de la aplicación, y hasta hoy el color
+ * se racionaba: cada etapa lo gastaba solo en el filo superior de su columna y
+ * en el lavado de su cabecera, nunca en la tarjeta. El mock de la dirección
+ * Sala (SalaVentas) pinta la venta entera cuando la etapa ya dice algo por sí
+ * sola —verde de punta a punta en «Ganada», ámbar en la que vence pronto— y
+ * Juan pidió fidelidad literal a esos mocks, así que aquí se hace la
+ * excepción: no es jerarquía inventada, son los dos casos que el propio mock
+ * señala, y los dos ya tenían su dato real detrás (`stage`, `expectedClose`).
+ * El halo del acento se queda donde estaba, para la columna sobre la que se
+ * está soltando una tarjeta ahora mismo.
  */
 
 type Stage = "lead" | "qualified" | "proposal" | "won" | "lost";
@@ -115,6 +121,20 @@ const money = (cents: number): string =>
 
 const fecha = (iso: string): string =>
   new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+
+/**
+ * Cuántos días faltan hasta una fecha de cierre esperada, contra el mismo
+ * «hoy» para todo el tablero. Negativo si ya pasó.
+ *
+ * El mock (SalaVentas) tiñe de ámbar una venta abierta que «vence en 3 días»;
+ * tres es el umbral que usa ese ejemplo y el que se conserva aquí.
+ */
+const DIAS_URGENCIA = 3;
+function diasParaCerrar(expectedClose: string, hoy: Date): number {
+  const cierre = new Date(expectedClose);
+  const msPorDia = 1000 * 60 * 60 * 24;
+  return Math.round((cierre.getTime() - hoy.getTime()) / msPorDia);
+}
 
 /**
  * Escalón de entrada de una lista. El índice va topado a propósito: en un
@@ -206,6 +226,9 @@ export default function SalesPage() {
   const open = openDeals.reduce((sum, deal) => sum + deal.amountCents, 0);
   const won = totals.get("won")!.cents;
   const wonCount = totals.get("won")!.count;
+  // Un solo «hoy» para todo el tablero: si cada tarjeta pidiera la hora, dos
+  // ventas a un milisegundo de la medianoche podrían leer días distintos.
+  const hoy = new Date();
 
   if (loading) return <EsqueletoEmbudo />;
 
@@ -371,7 +394,9 @@ export default function SalesPage() {
                 setDragging(null);
               }}
               style={retraso(index, 50)}
-              className={`panel devup-entrada relative flex w-64 shrink-0 flex-col overflow-hidden rounded-2xl
+              // `capa-flotante` y no `panel`: esta pantalla se escribió (ad20a86,
+              // 2 de septiembre) antes de que existieran los tokens de Sala.
+              className={`capa-flotante devup-entrada relative flex w-64 shrink-0 flex-col overflow-hidden rounded-2xl
                 transition-[box-shadow,border-color] duration-200 ${activa ? "panel-vivo" : ""}`}
             >
               {/* El filo de la etapa. Es lo que identifica la columna de un
@@ -408,52 +433,78 @@ export default function SalesPage() {
               <div className="flex min-h-28 flex-1 flex-col gap-2 p-2">
                 {deals
                   .filter((deal) => deal.stage === stage.id)
-                  .map((deal) => (
-                    <article
-                      key={deal.id}
-                      draggable
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`${deal.title} — ${deal.clientName}, ${money(deal.amountCents)}`}
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData("text/plain", deal.id);
-                        setDragging(deal.id);
-                      }}
-                      onDragEnd={() => {
-                        setDragging(null);
-                        setSobreEtapa(null);
-                      }}
-                      onClick={() => setSelectedDeal(deal)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedDeal(deal);
-                        }
-                      }}
-                      // `elevable` y no `presionable`: hundir la tarjeta al bajar
-                      // el dedo pelea con la imagen fantasma del arrastre, que
-                      // se captura en ese mismo instante.
-                      className={`elevable cursor-grab rounded-xl border border-line bg-raised p-2.5
-                        hover:border-line-strong hover:bg-elevated active:cursor-grabbing
-                        ${dragging === deal.id ? "opacity-40" : ""}`}
-                    >
-                      <p className="text-xs font-medium leading-snug">{deal.title}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted">{deal.clientName}</p>
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs font-medium tabular-nums text-ink">
-                          {money(deal.amountCents)}
-                        </span>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          {deal.expectedClose && (
-                            <span className="font-mono text-[10px] tabular-nums text-faint">
-                              {fecha(deal.expectedClose)}
+                  .map((deal) => {
+                    // Ver el comentario de la cabecera: ganada y a punto de
+                    // vencer son los dos únicos casos donde SalaVentas tiñe la
+                    // tarjeta entera, y los dos con un dato real detrás.
+                    const restan =
+                      deal.expectedClose && stage.id !== "won" && stage.id !== "lost"
+                        ? diasParaCerrar(deal.expectedClose, hoy)
+                        : null;
+                    const urgente = restan !== null && restan <= DIAS_URGENCIA;
+                    const material =
+                      stage.id === "won"
+                        ? "capa-tono-vivo"
+                        : urgente
+                          ? "capa-tono-aviso"
+                          : "capa";
+
+                    return (
+                      <article
+                        key={deal.id}
+                        draggable
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${deal.title} — ${deal.clientName}, ${money(deal.amountCents)}`}
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData("text/plain", deal.id);
+                          setDragging(deal.id);
+                        }}
+                        onDragEnd={() => {
+                          setDragging(null);
+                          setSobreEtapa(null);
+                        }}
+                        onClick={() => setSelectedDeal(deal)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedDeal(deal);
+                          }
+                        }}
+                        // `elevable` y no `presionable`: hundir la tarjeta al
+                        // bajar el dedo pelea con la imagen fantasma del
+                        // arrastre, que se captura en ese mismo instante. Sin
+                        // `hover:border-line-strong`: `.capa`/`.capa-tono-*`
+                        // fijan el borde fuera de toda capa CSS y una utilidad
+                        // de Tailwind ahí perdería en silencio — la elevación
+                        // de `elevable` ya es la señal de hover.
+                        className={`${material} elevable cursor-grab rounded-xl p-2.5
+                          transition-[transform,box-shadow] duration-200
+                          active:cursor-grabbing ${dragging === deal.id ? "opacity-40" : ""}`}
+                      >
+                        <p className="text-xs font-medium leading-snug">{deal.title}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted">{deal.clientName}</p>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs font-medium tabular-nums text-ink">
+                            {money(deal.amountCents)}
+                          </span>
+                          {urgente && (
+                            <span className="font-mono text-[10px] font-medium tabular-nums text-warn">
+                              vence en {Math.max(restan!, 0)} día{restan === 1 ? "" : "s"}
                             </span>
                           )}
-                          {deal.ownerName && <Inicial nombre={deal.ownerName} />}
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {!urgente && deal.expectedClose && (
+                              <span className="font-mono text-[10px] tabular-nums text-faint">
+                                {fecha(deal.expectedClose)}
+                              </span>
+                            )}
+                            {deal.ownerName && <Inicial nombre={deal.ownerName} />}
+                          </div>
                         </div>
-                      </div>
-                    </article>
-                  ))}
+                      </article>
+                    );
+                  })}
 
                 {total.count === 0 && (
                   <div
@@ -556,12 +607,19 @@ function Aviso({ children }: { children: React.ReactNode }) {
  * letras y no le disputa el sitio al importe, que es lo que se viene a leer en
  * esta tarjeta.
  */
+/**
+ * El color sale de `tinte()`, el mismo hash de nombre que usa la sala de voz:
+ * en el mock (SalaVentas) cada responsable tiene un color propio y estable, no
+ * el gris uniforme que había aquí. `text-canvas`, no `text-muted`: es el mismo
+ * texto oscuro que ya usa la sala de voz sobre el mismo degradado claro.
+ */
 function Inicial({ nombre }: { nombre: string }) {
   return (
     <span title={nombre} className="shrink-0">
       <span
         aria-hidden
-        className="grid size-5 place-items-center rounded-full border border-line-strong bg-elevated font-display text-[9px] font-semibold uppercase text-muted"
+        style={{ backgroundImage: tinte(nombre) }}
+        className="grid size-5 place-items-center rounded-full font-display text-[9px] font-semibold uppercase text-canvas"
       >
         {nombre.trim().charAt(0) || "?"}
       </span>
@@ -594,7 +652,7 @@ function EsqueletoEmbudo() {
         {STAGES.map((stage, index) => (
           <div
             key={stage.id}
-            className="panel devup-entrada w-64 shrink-0 rounded-2xl p-3"
+            className="capa-flotante devup-entrada w-64 shrink-0 rounded-2xl p-3"
             style={retraso(index, 50)}
           >
             <div className="devup-esqueleto h-3 w-20 rounded" />

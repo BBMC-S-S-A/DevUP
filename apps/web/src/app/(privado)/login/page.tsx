@@ -154,8 +154,26 @@ function LoginForm() {
       } else {
         await api.post<{ user: User }>("/auth/login", { email, password });
       }
-      await refresh();
-      router.replace("/app");
+
+      // `refresh()` no siempre encuentra sesión en el primer intento: entre
+      // que el navegador aplica la cookie que acaba de llegar y que esta
+      // misma pestaña hace la siguiente petición hay una rendija de tiempo,
+      // rara pero real. Antes se navegaba a `/app` sin comprobar nada, y el
+      // guarda de sesión de ahí devolvía a quien acababa de entrar otra vez
+      // al acceso — que es exactamente lo que se sentía como «hay que darle
+      // entrar dos veces». Un reintento corto basta: si la sesión de verdad
+      // no cuajó, un segundo intento no lo va a arreglar y hay que decirlo.
+      let quienEntro = await refresh();
+      if (!quienEntro) {
+        await new Promise((resuelve) => setTimeout(resuelve, 400));
+        quienEntro = await refresh();
+      }
+
+      if (quienEntro) {
+        router.replace("/app");
+      } else {
+        setError("la sesión no llegó a confirmarse — inténtalo otra vez");
+      }
     } catch (caught) {
       setError(
         caught instanceof ApiError ? caught.message : "no se pudo conectar con el servidor",

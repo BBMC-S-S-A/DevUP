@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { Mic, MicOff } from "lucide-react";
+import { tinte } from "@/lib/tinte";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
 import { HiddenAudio } from "./ParticipantTile";
 
@@ -25,27 +26,9 @@ import { HiddenAudio } from "./ParticipantTile";
  * en otra parte de la pantalla.
  */
 
-/** Un color estable por persona, del mismo sitio que el resto del tema. */
-const TINTES = [
-  "linear-gradient(150deg, var(--c-accent-bright), var(--c-accent))",
-  "linear-gradient(150deg, var(--c-cyan), color-mix(in oklab, var(--c-cyan) 55%, #000))",
-  "linear-gradient(150deg, var(--c-violet), color-mix(in oklab, var(--c-violet) 55%, #000))",
-  "linear-gradient(150deg, var(--c-warn), color-mix(in oklab, var(--c-warn) 55%, #000))",
-  "linear-gradient(150deg, var(--c-live), color-mix(in oklab, var(--c-live) 55%, #000))",
-] as const;
-
-/**
- * El tinte sale del nombre y no de la posición en la lista.
- *
- * Por la posición, entrar o salir alguien de la sala le cambia el color a todos
- * los demás — y el color de una persona es justo lo que se usa para
- * reconocerla sin leer.
- */
-function tinte(nombre: string): string {
-  let suma = 0;
-  for (let i = 0; i < nombre.length; i += 1) suma = (suma * 31 + nombre.charCodeAt(i)) >>> 0;
-  return TINTES[suma % TINTES.length]!;
-}
+// `tinte` vive en @/lib/tinte: el embudo de ventas necesita el mismo color
+// estable por persona para sus avatares, y era o compartirlo o dejar que las
+// dos copias divergieran el día que cambie la paleta.
 
 function iniciales(nombre: string): string {
   return (
