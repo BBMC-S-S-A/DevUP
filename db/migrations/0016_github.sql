@@ -3,7 +3,7 @@
 --
 -- Primer conector real sobre la bóveda de 0015. Se conecta con un token de
 -- acceso personal de alcance fino, pegado por un administrador — no una
--- GitHub App con OAuth. Ver §5.1 de docs/plan-conectores-busqueda-e-interfaz.md
+-- GitHub App con OAuth.
 -- para el motivo: coincide con BYOI (el cliente trae su credencial) y no
 -- exige registrar nada en GitHub para "ver estadísticas".
 --

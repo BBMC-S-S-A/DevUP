@@ -43,6 +43,7 @@ import {
 } from "@/lib/api";
 import { type Ponible } from "@/lib/spotify/SpotifyProvider";
 import { reloj, type Playlist, type useSpotifyPlayer } from "@/lib/spotify/reproductor";
+import { esDeYoutube } from "@/lib/youtube/reproductor";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Rotulo } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -553,29 +554,65 @@ export function Buscador({
   const [consulta, setConsulta] = useState("");
   const [resultados, setResultados] = useState<SpotifyTrack[]>([]);
   const [buscando, setBuscando] = useState(false);
+  const [fuente, setFuente] = useState<"spotify" | "youtube">("spotify");
+  const [hayYoutube, setHayYoutube] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  // Solo se ofrece YouTube si la instancia tiene clave. Un conmutador que
+  // lleva a un buscador sin configurar se escribe, no devuelve nada, y no hay
+  // forma de saber por qué.
+  useEffect(() => {
+    void api
+      .get<{ configured: boolean }>("/youtube/policy")
+      .then((p) => setHayYoutube(p.configured))
+      .catch(() => setHayYoutube(false));
+  }, []);
 
   // Se busca cuando se deja de escribir, no en cada tecla: una petición por
-  // letra desperdicia la mitad antes de que la palabra esté completa.
+  // letra desperdicia la mitad antes de que la palabra esté completa. Con
+  // YouTube importa el doble: cada búsqueda cuesta 100 de las 10.000 unidades
+  // diarias, así que una por tecla se comería la cuota en una tarde.
   useEffect(() => {
     if (consulta.trim().length === 0) {
       setResultados([]);
+      setAviso(null);
       return;
     }
     const temporizador = setTimeout(async () => {
       setBuscando(true);
+      setAviso(null);
       try {
-        const { tracks } = await api.get<{ tracks: SpotifyTrack[] }>(
-          `/spotify/search?q=${encodeURIComponent(consulta)}`,
-        );
+        // Un enlace pegado no se busca: se resuelve. Cuesta una unidad de
+        // cuota en vez de cien, y es el camino que sigue funcionando cuando
+        // la búsqueda se agota por hoy.
+        const pegado = /youtu\.?be/.test(consulta) && /https?:\/\//.test(consulta.trim());
+        if (pegado) {
+          const { track } = await api.get<{ track: SpotifyTrack | null }>(
+            `/youtube/resolver?url=${encodeURIComponent(consulta.trim())}`,
+          );
+          setResultados(track ? [track] : []);
+          if (!track) setAviso("ese vídeo no existe o su dueño no permite reproducirlo fuera de YouTube.");
+          return;
+        }
+
+        const ruta =
+          fuente === "youtube"
+            ? `/youtube/search?q=${encodeURIComponent(consulta)}`
+            : `/spotify/search?q=${encodeURIComponent(consulta)}`;
+        const { tracks } = await api.get<{ tracks: SpotifyTrack[] }>(ruta);
         setResultados(tracks);
-      } catch {
+      } catch (fallo) {
         setResultados([]);
+        // El mensaje del servidor importa: el de cuota agotada explica que
+        // pegando el enlace se sigue pudiendo, y tragárselo dejaría a la
+        // persona pensando que está roto.
+        setAviso(fallo instanceof ApiError ? fallo.message : null);
       } finally {
         setBuscando(false);
       }
     }, 350);
     return () => clearTimeout(temporizador);
-  }, [consulta]);
+  }, [consulta, fuente]);
 
   const anadir = async (pista: SpotifyTrack) => {
     try {
@@ -599,13 +636,38 @@ export function Buscador({
 
   return (
     <div className="pt-2">
+      {/* De dónde se busca. Solo aparece si hay dos sitios donde buscar: un
+          conmutador con una sola opción es un adorno que ocupa. */}
+      {hayYoutube && (
+        <div className="mb-2 flex items-center gap-1">
+          {(["spotify", "youtube"] as const).map((opcion) => (
+            <button
+              key={opcion}
+              type="button"
+              onClick={() => setFuente(opcion)}
+              className={`presionable rounded-lg px-2 py-1 font-display text-[10px] font-semibold
+                uppercase tracking-[0.12em] transition-colors ${
+                  fuente === opcion
+                    ? "bg-raised text-ink"
+                    : "text-faint hover:text-muted"
+                }`}
+            >
+              {opcion === "spotify" ? "Spotify" : "YouTube"}
+            </button>
+          ))}
+          <span className="ml-auto pr-1 text-[10px] text-faint">o pega un enlace</span>
+        </div>
+      )}
+
       <div className="relative mb-2">
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
         <input
           autoFocus
           value={consulta}
           onChange={(evento) => setConsulta(evento.target.value)}
-          placeholder="Canción, artista o álbum…"
+          placeholder={
+            fuente === "youtube" ? "Buscar en YouTube o pegar enlace…" : "Canción, artista o álbum…"
+          }
           className="h-9 w-full rounded-xl border border-line bg-canvas/60 pl-8 pr-8 text-xs outline-none
             transition-[border-color,box-shadow] duration-200 placeholder:text-faint
             focus:border-accent/60 focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
@@ -618,7 +680,13 @@ export function Buscador({
         )}
       </div>
 
-      {resultados.length === 0 && consulta.trim().length > 0 && !buscando && (
+      {aviso && (
+        <p className="mb-2 rounded-lg border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11px] leading-relaxed text-warn">
+          {aviso}
+        </p>
+      )}
+
+      {resultados.length === 0 && consulta.trim().length > 0 && !buscando && !aviso && (
         <p className="px-1 py-4 text-center text-xs text-faint">Nada encontrado.</p>
       )}
 
@@ -642,10 +710,17 @@ export function Buscador({
               <span className="block truncate text-[10px] text-faint">{pista.artist}</span>
             </span>
             <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
-              {reloj(pista.durationMs)}
+              {/* «en vivo» y no 0:00 para lo que no tiene duración: las radios
+                  de YouTube emiten sin parar, y un cero ahí parece un fallo. */}
+              {pista.durationMs === null ? "en vivo" : reloj(pista.durationMs)}
             </span>
 
-            {puedeReproducir && (
+            {/* YouTube no depende de que Spotify esté conectado ni de tener
+                Premium — que es exactamente el motivo de haberlo añadido. Sin
+                esta excepción, quien no tenga Spotify vería resultados de
+                YouTube que solo puede encolar y nunca poner, que es la mitad
+                inútil de la función. */}
+            {(puedeReproducir || esDeYoutube(pista.uri)) && (
               <BotonIcono
                 etiqueta={`Reproducir ${pista.name} ahora`}
                 onClick={() =>

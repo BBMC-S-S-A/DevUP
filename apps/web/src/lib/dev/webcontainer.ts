@@ -5,7 +5,7 @@ import { WebContainer } from "@webcontainer/api";
  * navegador vía WebAssembly. Es la pieza que resuelve el terminal con shell
  * real sin que DevUP tenga que alojar cómputo de ningún cliente — sigue
  * viviendo en la máquina de quien lo usa, igual que ya vive ahí el WebRTC de
- * las llamadas (ver docs/decisiones/0003-arquitectura-de-despliegue.md).
+ * las llamadas.
  *
  * Candado a nivel de módulo, no solo en el hook que lo llama: React 19 en
  * modo estricto invoca los efectos dos veces en desarrollo, y `WebContainer`

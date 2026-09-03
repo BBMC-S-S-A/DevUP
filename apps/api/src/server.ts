@@ -25,6 +25,7 @@ import { recordingRoutes } from "./routes/recordings.js";
 import { salesRoutes } from "./routes/sales.js";
 import { searchRoutes } from "./routes/search.js";
 import { spotifyRoutes } from "./routes/spotify.js";
+import { youtubeRoutes } from "./routes/youtube.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { worldRoutes } from "./routes/world.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
@@ -156,6 +157,7 @@ await app.register(recordingRoutes);
 await app.register(salesRoutes);
 await app.register(searchRoutes);
 await app.register(spotifyRoutes);
+await app.register(youtubeRoutes);
 await app.register(worldRoutes);
 
 // Los cinco WebSockets y el reloj de DevVerse, solo en la instancia que los

@@ -16,7 +16,7 @@
 --      hacía, se perdía — y con él la única forma de volver a entrar sin
 --      reautorizar. La conexión se moría sola y sin rastro.
 --
--- Es el mismo patrón que §9 de CONTEXTO-COMPLETO.md llama el fallo más
+-- Es el mismo patrón que ya nos costó una vez: el fallo más
 -- peligroso de esta arquitectura: la política que no está no da error, solo
 -- devuelve o escribe de menos.
 -- =============================================================================

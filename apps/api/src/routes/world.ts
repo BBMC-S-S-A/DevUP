@@ -143,7 +143,7 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Lo que los muebles tienen que mostrar.
    *
-   * Ver docs/plan-mundo-y-plataforma.md §6: un mueble no decora, proyecta algo
+   * Un mueble no decora, proyecta algo
    * que ya es cierto. La pizarra muestra el tablero, la estantería cuenta los
    * archivos del canal, el monitor se enciende si hay actividad reciente.
    *

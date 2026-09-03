@@ -5,7 +5,7 @@
  * este archivo y no repasar la maquetación — que importa, porque hoy los
  * importes son BANDAS RECOMENDADAS y no tarifa cerrada.
  *
- * De dónde salen las bandas (ver `docs/plan-planes-y-precios.md`):
+ * De dónde salen las bandas:
  *   · 22 entrevistas con la técnica de Van Westendorp situaron el óptimo para
  *     equipos técnicos entre 10 y 14 USD, y el 68 % de los decisores aceptó
  *     24 USD sin negociar.

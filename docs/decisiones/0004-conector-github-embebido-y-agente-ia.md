@@ -83,7 +83,7 @@ renderizado de terceros conviene revisar esa política antes, no después).
 
 Esto **no es una funcionalidad nueva fuera de alcance** — es exactamente lo
 que la semana 10 del plan de 12 semanas ya prevé: *"Tarea asignada a un
-agente, ejecutada, aprobada y fusionada"*. `CONTINUAR-AQUI.md` lo pone en
+agente, ejecutada, aprobada y fusionada"*. Está en
 "S8–S12" como lo siguiente después de terminar la vista de infraestructura
 (S7). Esta propuesta es adelantar una semilla de esa pieza, con el mismo
 criterio que ya usaron para la vista inmersiva (`0002`): entrar con lo
@@ -120,7 +120,7 @@ Justo como con la oficina inmersiva: la semilla se puede tirar sin dolor si
 nadie la usa, y si engancha, ahí se justifica construir el flujo completo
 de "tarea → agente → PR → aprobación" que S10 describe — que si acaso
 necesita la misma pieza de bóveda que un futuro GitHub con OAuth para abrir
-PRs automáticos (ver `plan-conectores-busqueda-e-interfaz.md` §5.1).
+PRs automáticos.
 
 **4. Modelo por defecto:** `claude-opus-5` para tareas de desarrollo reales
 — es el modelo recomendado por defecto salvo que se priorice explícitamente
@@ -149,7 +149,7 @@ igual que ya hace el conector de GitHub.
   literalmente el alcance de S10 completo, no de la semilla. Construirlo ya
   exigiría decidir permisos, aprobación humana obligatoria y probablemente
   una GitHub App con OAuth en vez del token de acceso personal actual (el
-  propio `plan-conectores-busqueda-e-interfaz.md` ya lo anticipa).
+  plan original ya lo anticipaba).
 - **Créditos de Anthropic pagados por DevUP** — rompe BYOI de la misma
   manera que alojar la base de datos de un cliente rompería la promesa de
   "no alojamos infraestructura ajena".

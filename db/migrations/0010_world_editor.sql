@@ -1,7 +1,7 @@
 -- =============================================================================
 -- DevUP · 0010 · El editor de la oficina
 --
--- Ver docs/plan-mundo-y-plataforma.md, §4.
+-- Ver docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md.
 --
 -- Hasta ahora el mobiliario se deducía del nombre del canal y no se guardaba:
 -- «música» salía con piano y «desarrollo» con escritorios. Eso sigue siendo el

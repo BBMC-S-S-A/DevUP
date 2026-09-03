@@ -110,7 +110,7 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
     return withUser(userId, async (db) => {
       // jsonb quiere el texto ya serializado, no el array de JS tal cual — el
       // mismo tropiezo que ya costó una migración entera en `github_repos`
-      // (ver 0016 y la trampa correspondiente en docs/CONTINUAR-AQUI.md).
+      // (ver la migración 0016).
       const { rows } = await db.query<{
         widgets: Widget[];
         spotifyMode: "boton" | "expandido";

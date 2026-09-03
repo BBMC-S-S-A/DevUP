@@ -198,6 +198,21 @@ const schema = z.object({
   SPOTIFY_CLIENT_SECRET: z.string().default(""),
   /** Tiene que coincidir carácter a carácter con lo registrado en el panel de Spotify. */
   SPOTIFY_REDIRECT_URI: z.string().default(""),
+
+  // --- Música compartida (YouTube) --------------------------------------------
+  /**
+   * La segunda fuente, y la que no tiene lista blanca.
+   *
+   * Spotify solo admite cinco cuentas dadas de alta a mano mientras su app
+   * está en modo desarrollo, y salir de ahí exige ser una organización con
+   * 250.000 usuarios activos al mes. YouTube no pide nada de eso: quien se
+   * registre hoy puede oír música. Por eso conviven las dos en vez de
+   * sustituirse.
+   *
+   * Vacía por defecto: sin ella, la búsqueda de YouTube contesta que no está
+   * configurada, y pegar un enlace tampoco funciona. Nada más se rompe.
+   */
+  YOUTUBE_API_KEY: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);

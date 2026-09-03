@@ -15,6 +15,7 @@
     "test:migraciones": "tsx src/connectors/migraciones.test.ts",
     "test:world": "tsx src/realtime/world.test.ts",
     "test:google": "tsx src/auth/google.test.ts",
+    "test:youtube": "tsx src/connectors/youtube.test.ts",
     "test:puerta": "tsx src/routes/auth.puerta.test.ts"
   },
   "dependencies": {

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
  * El guía: un habitante de DevVerse que acompaña la visita.
  *
  * POR QUÉ ESTÁ AQUÍ Y NO EN LA PORTADA. Estaba decidido —§3.1 de
- * `docs/vision-y-mvp.md`— que DevVerse no podía abrir la página: la categoría
+ * que DevVerse no podía abrir la página: la categoría
  * de oficinas virtuales no sostuvo un negocio para nadie y todas fracasaron
  * prometiendo «vente aquí a estar». Como acompañante, el mundo aparece desde el
  * primer segundo sin ser la promesa.
@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
  * ES EL AVATAR DE VERDAD, no una mascota nueva: mismas proporciones que
  * `drawAvatar` en `lib/world/atlas.ts` —cuerpo de 16 px, cabeza de 12 × 14, dos
  * fases de paso, brazos que balancean al contrario que las piernas— y con
- * `imageSmoothingEnabled = false`, que es la línea que `docs/direccion-de-arte.md`
+ * `imageSmoothingEnabled = false`, que es la línea que la dirección de arte
  * marca como imprescindible. El día que lleguen los sprites renderizados en 3D,
  * esto los hereda cambiando el cuerpo de `dibujar`.
  *

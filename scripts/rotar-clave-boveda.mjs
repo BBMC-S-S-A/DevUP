@@ -1,6 +1,6 @@
 // Rota VAULT_MASTER_KEY: descifra con la vieja, vuelve a cifrar con la nueva.
 //
-// POR QUÉ EXISTE. Hasta ahora `docs/RESPALDOS.md` decía que esto «no puede
+// POR QUÉ EXISTE. Hasta ahora la documentación decía que esto «no puede
 // hacerlo un script» y que, mientras no existiera, la clave no se cambia nunca.
 // Eso convertía una credencial normal en una que no se puede rotar aunque se
 // filtre, que es la peor propiedad que puede tener una clave maestra. Esto lo
