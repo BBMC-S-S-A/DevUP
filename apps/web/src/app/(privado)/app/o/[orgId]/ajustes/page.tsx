@@ -3,6 +3,8 @@
 import {
   ArrowLeft,
   Building2,
+  Check,
+  Copy,
   ImagePlus,
   Link2,
   Loader2,
@@ -22,6 +24,7 @@ import {
   type OrganizationLink,
   type OrganizationMember,
   type PendingInvitation,
+  type Workspace,
   ApiError,
   api,
 } from "@/lib/api";
@@ -305,12 +308,27 @@ function Invitar({ orgId }: { orgId: string }) {
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<"member" | "admin">("member");
   const [busy, setBusy] = useState(false);
+  // Mientras el dominio de correo no esté verificado, el enlace es la vía
+  // fiable: se enseña aquí para que quien invita lo mande por su cuenta,
+  // en vez de confiar en que el correo llegue.
+  const [enlace, setEnlace] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
+  // Vacío = toda la organización. Los personales no salen: a un workspace
+  // personal no se invita a nadie, es de una sola persona por definición.
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [compartidos, setCompartidos] = useState<Workspace[]>([]);
 
   const cargar = useCallback(async () => {
-    const { invitations } = await api
-      .get<{ invitations: PendingInvitation[] }>(`/organizations/${orgId}/invitations`)
-      .catch(() => ({ invitations: [] }));
+    const [{ invitations }, { workspaces }] = await Promise.all([
+      api
+        .get<{ invitations: PendingInvitation[] }>(`/organizations/${orgId}/invitations`)
+        .catch(() => ({ invitations: [] })),
+      api
+        .get<{ workspaces: Workspace[] }>(`/organizations/${orgId}/workspaces`)
+        .catch(() => ({ workspaces: [] })),
+    ]);
     setPendientes(invitations.filter((i) => !i.acceptedAt));
+    setCompartidos(workspaces.filter((w) => w.visibility === "shared"));
   }, [orgId]);
 
   useEffect(() => {
@@ -332,8 +350,13 @@ function Invitar({ orgId }: { orgId: string }) {
           event.preventDefault();
           setBusy(true);
           try {
-            await api.post(`/organizations/${orgId}/invitations`, { email, role: rol });
-            toast.success(`Invitación enviada a ${email}`);
+            const { url } = await api.post<{ sent: boolean; url: string }>(
+              `/organizations/${orgId}/invitations`,
+              { email, role: rol, workspaceId: workspaceId || null },
+            );
+            setEnlace(url);
+            setCopiado(false);
+            toast.success(`Invitación creada para ${email}`);
             setEmail("");
             await cargar();
           } catch (caught) {
@@ -364,13 +387,57 @@ function Invitar({ orgId }: { orgId: string }) {
             Administrador
           </option>
         </Desplegable>
+        {compartidos.length > 0 && (
+          <Desplegable
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.target.value)}
+            aria-label="A dónde entra"
+          >
+            <option className="bg-surface" value="">
+              Toda la organización
+            </option>
+            {compartidos.map((workspace) => (
+              <option className="bg-surface" key={workspace.id} value={workspace.id}>
+                Solo «{workspace.name}»
+              </option>
+            ))}
+          </Desplegable>
+        )}
         <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
         </Boton>
-        <Boton type="button" variante="fantasma" onClick={() => setAbierto(false)}>
+        <Boton
+          type="button"
+          variante="fantasma"
+          onClick={() => {
+            setAbierto(false);
+            setEnlace(null);
+          }}
+        >
           Cerrar
         </Boton>
       </form>
+
+      {enlace && (
+        <div className="devup-entrada mt-3 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent-soft/30 px-2.5 py-2">
+          <Link2 size={13} className="shrink-0 text-accent" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
+            {enlace}
+          </span>
+          <button
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(enlace);
+              setCopiado(true);
+              toast.success("Enlace copiado");
+            }}
+            className="presionable flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-accent hover:bg-accent/10"
+          >
+            {copiado ? <Check size={12} /> : <Copy size={12} />}
+            {copiado ? "Copiado" : "Copiar"}
+          </button>
+        </div>
+      )}
 
       {pendientes.length > 0 && (
         <ul className="mt-3 space-y-1">
@@ -383,6 +450,7 @@ function Invitar({ orgId }: { orgId: string }) {
               <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
                 {invitacion.email}
               </span>
+              {invitacion.workspaceName && <Chip tono="accent">{invitacion.workspaceName}</Chip>}
               <Chip>{invitacion.role}</Chip>
               <button
                 type="button"

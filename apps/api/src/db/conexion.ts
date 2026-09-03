@@ -22,17 +22,43 @@ import type { ConnectionOptions } from "node:tls";
 
 const LOCALES = new Set(["localhost", "127.0.0.1", "::1", "postgres", "db"]);
 
-function esLocal(url: string): boolean {
+/**
+ * Redes privadas de un proveedor: la conexión no sale de su infraestructura.
+ *
+ * Hoy solo Railway (`*.railway.internal`), que es una malla cifrada entre los
+ * servicios de un mismo proyecto — el tráfico no toca internet.
+ */
+const SUFIJOS_PRIVADOS = [".railway.internal"];
+
+function maquina(url: string): string | null {
   try {
     // `postgresql://` no lo entiende `new URL` en todas las versiones; se
     // normaliza a http solo para leer el nombre de máquina.
-    const host = new URL(url.replace(/^postgres(ql)?:\/\//, "http://")).hostname;
-    return LOCALES.has(host);
+    return new URL(url.replace(/^postgres(ql)?:\/\//, "http://")).hostname;
   } catch {
-    // Si no se puede leer, se trata como remota: equivocarse hacia cifrar es
-    // gratis, y hacia no cifrar no lo es.
-    return false;
+    return null;
   }
+}
+
+function esLocal(url: string): boolean {
+  const host = maquina(url);
+  // Si no se puede leer, se trata como remota: equivocarse hacia cifrar es
+  // gratis, y hacia no cifrar no lo es.
+  return host !== null && LOCALES.has(host);
+}
+
+/**
+ * Si la base está en la red privada del proveedor.
+ *
+ * SEPARADA DE `esBaseLocal` A PROPÓSITO, y no es un detalle: `esBaseLocal`
+ * es lo que autoriza `--reset`, que borra el esquema entero. Meter aquí a
+ * Railway habría convertido su base de producción en un blanco válido para
+ * ese comando. Son dos preguntas distintas —«¿hace falta verificar el
+ * certificado?» y «¿se puede borrar esto?»— y comparten cero respuestas.
+ */
+function esRedPrivada(url: string): boolean {
+  const host = maquina(url);
+  return host !== null && SUFIJOS_PRIVADOS.some((s) => host.endsWith(s));
 }
 
 /** Si la base está en esta misma máquina. Lo usa también el guardia de --reset. */
@@ -42,6 +68,26 @@ export function esBaseLocal(url: string): boolean {
 
 export function opcionesTls(url: string): ConnectionOptions | undefined {
   if (esLocal(url)) return undefined;
+
+  /**
+   * Red privada del proveedor: sin TLS, y es la decisión correcta aquí.
+   *
+   * La imagen de Postgres de Railway genera su certificado al arrancar —de ahí
+   * su variable `SSL_CERT_DAYS`—, así que **es autofirmado y distinto en cada
+   * despliegue**. Fijarlo como hicimos con la CA de Supabase no es una opción:
+   * se rompería en el siguiente deploy de la base, y a las tres de la mañana.
+   *
+   * Lo que queda es elegir entre cifrar sin verificar —que protege del que
+   * mira pero no del que se interpone— o no cifrar, sobre una malla privada
+   * donde el tráfico ya va cifrado entre servicios del mismo proyecto y no
+   * sale de la infraestructura de Railway. Se elige lo segundo porque es
+   * honesto: `rejectUnauthorized: false` deja el código con pinta de estar
+   * verificando algo cuando no verifica nada.
+   *
+   * Si algún día Railway publica una CA estable para esto, va en
+   * `DATABASE_SSL_CA` y esta rama se borra.
+   */
+  if (esRedPrivada(url)) return undefined;
 
   if (process.env.DATABASE_SSL_INSECURE === "true") {
     console.warn(

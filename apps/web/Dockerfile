@@ -22,6 +22,9 @@ ARG NEXT_PUBLIC_WS_URL=ws://localhost:4000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_TELEMETRY_DISABLED=1
+# Le dice a next.config.ts que sí queremos la salida `standalone`. El build de
+# Cloudflare no la lleva a propósito — ver el porqué en next.config.ts.
+ENV BUILD_DOCKER=true
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./

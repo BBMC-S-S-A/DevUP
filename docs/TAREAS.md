@@ -63,7 +63,8 @@ tal cual, porque la base de datos no depende de dónde corra el código.
 | `web` (Next.js) | **Vercel** | Ya no hay problema de WebSockets que lo descarte: si las llamadas y DevVerse viven aparte, lo que le queda a `web` es tráfico normal |
 | `api`, **solo REST** | **Railway**, 30 días | Tareas, ventas, GitHub, ajustes… nada que necesite un socket abierto. *Ver el reloj más abajo* |
 | `api`, **con los 5 sockets + DevVerse** | El portátil, en Docker, como hoy | Es la parte que de verdad necesita un proceso encendido. Sigue dependiendo de que el portátil esté prendido — **eso no cambia con este reparto**, es una decisión aceptada, no un efecto secundario |
-| Postgres + almacén | **Supabase** | Sin cambios. Ya migrado, con Google login encima |
+| Postgres | **Railway**, en el mismo proyecto que la API | Corregido el 2 de septiembre: estaba en Supabase, se decidió moverla junto a la API. Por red privada, sin exponerse a internet — ni falta que hace, porque va a vivir en el mismo proyecto |
+| Almacén de archivos | **Supabase Storage** | Esto sí sigue en pie: es lo único que Supabase conserva del reparto |
 
 **Lo que hizo posible partir la API sin duplicar código:** una sola variable,
 `REALTIME_ENABLED`. En `false` esa instancia no registra ni un solo socket —
@@ -84,11 +85,40 @@ no hay nadie escuchando — es un mapa vacío, no un error.
       ahora apagaría el sitio hasta que Vercel y Railway estén de verdad
       levantados. Se recorta —fuera `web`, y luego `minio` cuando el almacén se
       mude— en el mismo momento en que se corte el DNS hacia allí, no antes.
-- [ ] **Vercel Hobby prohíbe uso comercial** — sigue sin resolverse. Alguien
-      cobrando por escribir este código ya cuenta como comercial según sus
-      propios términos. O se paga Pro, o `web` se queda en Cloudflare Pages
-      (gratis, permite uso comercial, y ya estaba evaluado como alternativa).
-      *Decisión de Juan y su compañero.*
+- [x] ~~Vercel Hobby prohíbe uso comercial~~ — resuelto: **ni Vercel ni
+      Cloudflare Pages**. Cloudflare recomienda **Workers con el adaptador
+      OpenNext** para Next.js desde finales de 2025 — Pages usa un runtime de
+      Edge recortado sin ISR ni streaming completo. Mismo resultado que se
+      pedía —gratis, sin restricción de uso comercial— con la herramienta que
+      Cloudflare de verdad sostiene hoy.
+      **Montado y probado de verdad**, no solo instalado:
+      `apps/web/wrangler.jsonc` + `open-next.config.ts`, `npm run cf:deploy`.
+      `output: "standalone"` (para Docker) rompía el build de OpenNext —hay un
+      error de OpenTelemetry documentado con exactamente esa combinación—, así
+      que ahora es condicional a `BUILD_DOCKER=true`, que solo pone el
+      `Dockerfile`. Y `initOpenNextCloudflareForDev()` se caía dentro de Docker
+      con `spawn workerd ENOENT` — solo sirve para `next dev` y no está
+      pensado para correr en ningún build; movido detrás de
+      `PHASE_DEVELOPMENT_SERVER`. Verificado con las cuatro pruebas que
+      importan: `next build` normal, el build de OpenNext, **la imagen de
+      Docker reconstruida y arrancada** (para no romper lo que hoy sigue en
+      producción), y el sitio sirviendo `/login` y rutas dinámicas bajo
+      `wrangler dev` — el runtime real de Cloudflare en local.
+- [x] ~~**Desplegado de verdad, en `app.hytrex.co`**~~ — con el token que dio
+      Juan (permiso de Cloudflare Workers Scripts). El dominio personalizado
+      se creó por API en el mismo paso que subir el Worker —DNS y certificado
+      incluidos—, y `WEB_ORIGIN` se amplió para que la API acepte ese origen.
+      Probado en el navegador de verdad: formulario, botón de Google, sin
+      ningún error de CORS. **Es la primera pieza que corre fuera del
+      portátil.** Apunta a `api.hytrex.co`, que hoy sigue siendo la instancia
+      completa (con tiempo real) — cuando Railway se encargue de la parte REST
+      y `live.hytrex.co` de los sockets, esto se redespliega con las URLs
+      nuevas y ya.
+      *Nota:* el enlace `workers.dev` que da Cloudflare por defecto no
+      respondió desde esta máquina —ni por curl, ni por Node, ni en el
+      navegador—, aunque el DNS resuelve bien; probablemente algo en esta red
+      bloquea ese dominio. No importa: el destino real siempre fue
+      `app.hytrex.co`, y ese sí funciona.
 - [ ] **El reloj de Railway.** Sin tarjeta da $5 de crédito que caducan a los
       30 días (antes si se gastan); pasado eso son $5/mes con tarjeta. Anotar
       la fecha de alta aquí en cuanto se cree, para saber cuándo hay que decidir
@@ -100,13 +130,27 @@ no hay nadie escuchando — es un mapa vacío, no un error.
       apostar por un formato en transición. En el panel: Dockerfile
       `apps/api/Dockerfile`, contexto la raíz del repo, ruta de salud
       `/health`, y `REALTIME_ENABLED=false` fijo entre las variables.
-- [ ] Nueva ruta del túnel de Cloudflare: `live.hytrex.co` → el contenedor del
-      portátil, para los sockets. `api.hytrex.co` pasa a apuntar a Railway. En
-      el build de Vercel, `NEXT_PUBLIC_API_URL=https://api.hytrex.co` y
-      `NEXT_PUBLIC_WS_URL=wss://live.hytrex.co` — se incrustan en el momento de
-      compilar, no al arrancar, así que un cambio después pide reconstruir. Las
-      cookies siguen sirviendo igual: las tres comparten `hytrex.co` como
-      dominio raíz.
+- [x] ~~El reparto se volvió tres servicios de Railway, no dos~~ — al mudar la
+      base ahí, el servidor de sockets del portátil dejó de poder alcanzarla
+      (quedó en red privada). No había forma de mantener el tiempo real en el
+      portátil sin abrir la base a internet otra vez, así que el tiempo real
+      también se mudó: **`live`**, tercer servicio, mismo Dockerfile,
+      `REALTIME_ENABLED=true`. Esto es lo que de verdad permite cerrar Docker
+      del todo — antes solo se habría podido a medias.
+- [ ] **`api.hytrex.co` y `live.hytrex.co` apuntan a Railway, pero sin
+      certificado.** El DNS está bien —confirmado propagado dos veces,
+      incluso recreando el dominio— y Railway se queda atascado en
+      `VALIDATING_OWNERSHIP` sin avanzar. No es nuestro, es de ellos. Mientras
+      tanto la web usa los dominios `*.up.railway.app` que sí tienen
+      certificado (`api-production-7b95` y `live-production-976a`); en cuanto
+      Railway emita el certificado, se cambia `NEXT_PUBLIC_API_URL`/
+      `NEXT_PUBLIC_WS_URL` a los de `hytrex.co` y `npm run cf:deploy` otra vez.
+      *Revisar el panel de Railway, o escribirles.*
+- [ ] Claves S3 de Supabase Storage (Storage → S3 Access Keys) para mudar el
+      almacén de `minio`. Con esto puesto, `docker-compose.prod.yml` del
+      portátil se queda solo con la instancia de tiempo real —ya no con
+      `web`, `postgres` ni `minio`— y es la última pieza para que apagar el
+      PC no se lleve por delante los archivos subidos. *Solo Juan.*
 
 Sin una máquina propia sigue cabiendo todo en capa gratuita y **no se pierde
 ninguna funcionalidad**. El orden de lo que sigue importa.
@@ -126,12 +170,54 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
 - [x] ~~Correo por API HTTP~~ — `MAIL_API_KEY` manda sobre `SMTP_URL`, SMTP se
       queda para el buzón de mentira, y `npm run correo:probar` prueba las dos
       vías. Comprobado contra Resend de verdad.
-- [x] ~~3 · Supabase montado~~ — proyecto `anrbogqmedmdvemldjkw` (us-west-2,
-      Postgres 17.6). Las 25 migraciones aplicadas: **45 tablas, las 45 con RLS,
-      142 políticas, 53 funciones**, `devup_app` creado sin ser dueño de nada, y
-      `public.schema_migrations` relleno con los checksums que calculará el
-      runner, para que `npm run db:migrate` no intente repetirlas. Probado en
-      caliente: `devup_app` sin identidad ve **0 organizaciones y 0 usuarios**.
+- [x] ~~3 · Supabase montado~~ — **superado el 2 de septiembre**: se decidió
+      migrar la base a Railway (ver el bloque nuevo más abajo). El proyecto
+      `anrbogqmedmdvemldjkw` se deja tal cual, sin borrar, por si hiciera falta
+      volver — no cuesta nada dejarlo dormido.
+- [ ] **`api.hytrex.co` y `live.hytrex.co` siguen sin certificado propio en
+      Railway** — atascados en "validando propiedad" con el DNS ya correcto.
+      Mientras tanto, `app.hytrex.co` y `devup.hytrex.co` apuntan directo a
+      `api-production-7b95.up.railway.app` / `live-production-976a.up.railway.app`
+      (los dominios que Railway da gratis y que sí funcionan). Cuando el
+      certificado por fin emita, hay que: 1) volver
+      `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` a los dominios bonitos y
+      reconstruir los dos frentes, 2) devolver `GOOGLE_REDIRECT_URI` a
+      `https://api.hytrex.co/auth/google/callback` en el servicio `api` de
+      Railway. *Revisar el panel de Railway cada tanto; si sigue atascado
+      mucho más tiempo, contactar a su soporte.*
+- [ ] **Añadir en Google Cloud Console** la URI de redirección
+      `https://api-production-7b95.up.railway.app/auth/google/callback` —la
+      que se está usando *ahora mismo* mientras el dominio bonito no funciona.
+      Sin esto, Google rechaza el callback con `redirect_uri_mismatch`.
+      *Solo Juan.*
+- [x] ~~**Base de datos migrada a Railway**~~ — proyecto `devup`
+      (`d05dd021-3636-4957-bc2f-55359f2690cf`), servicio `Postgres`
+      (`a95567fe-f176-40e9-967c-75df75df803c`), plantilla oficial
+      `ghcr.io/railwayapp-templates/postgres-ssl:18`. Las 26 migraciones
+      aplicadas con el runner de siempre —no a mano, como con Supabase—,
+      porque esta vez sí hay una conexión de administrador de verdad: **45
+      tablas, las 45 con RLS**, `devup_app` sin ser dueño de nada, aislamiento
+      probado en caliente. `citext` se instala en `public` sin más —Railway no
+      reparte las extensiones en otro esquema como Supabase—, así que no hace
+      falta ningún ajuste de `search_path`.
+      **Cómo se llega a esta base sin exponerla a internet**: `railway connect
+      Postgres --tunnel-only`, un túnel por SSH autenticado con la cuenta de
+      Railway. No hay ningún proxy TCP público — más cerrado que Supabase, que
+      sí tiene que aceptar conexiones desde cualquier sitio.
+      **Un aviso para quien lea esto después**: al rotar la contraseña con
+      prisa, un script de generarla falló en silencio y `alter role ... password
+      ''` la dejó vacía en los dos roles durante unos minutos. Se detectó
+      comprobando `pg_authid.rolpassword` directamente —no dando por buena la
+      ausencia de un error— y se corrigió antes de seguir. La ventana de
+      riesgo real fue mínima: nada más estaba conectado a esa base todavía, y
+      el túnel de `railway connect` de todos modos se autentica con la cuenta,
+      no con la contraseña de Postgres. Aun así, verificar el hash en el
+      catálogo después de cualquier `alter role` —no solo el código de
+      salida— queda como lección.
+      **Pendiente:** el respaldo diario cifrado (`respaldo.yml`) todavía
+      apunta a Supabase. Hay que rehacerlo contra Railway, y como esta base no
+      tiene proxy público, el propio flujo de GitHub Actions va a necesitar el
+      mismo túnel por SSH que se usó aquí, no una conexión directa.
 - [x] ~~Cerrar el acceso que Supabase abre por defecto~~ — su API REST exponía
       **40 funciones a `anon`** y otras 40 a `authenticated`, entre ellas
       `auth_credentials()` (devuelve hashes de contraseña) y
@@ -145,12 +231,69 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       invitaciones**: la comprobación se extrajo a `puertaDeAlta()` y la usan
       las dos vías de alta, porque dos copias acaban diciendo cosas distintas.
       `npm run test:google` — 24 comprobaciones.
-- [ ] **Crear las credenciales en Google Cloud Console** (pantalla de
-      consentimiento + ID de cliente OAuth). No pide facturación. Ojo con que
-      la URI de redirección coincida carácter a carácter. *Solo Juan.*
-- [ ] **Poner la contraseña de `devup_app`.** Es lo único que falta de la base y
-      solo puede hacerlo Juan: una sentencia en el editor SQL de Supabase y la
-      misma clave en `.env.production`. *Solo Juan.*
+- [x] ~~**Registro abierto, no solo Hytrex**~~ — `SIGNUP_MODE=open` en
+      `.env.production` y en `render.yaml`. DevUP es multiorganización por
+      diseño: cualquiera se da de alta, con o sin cuenta de Google de Hytrex, y
+      quien no trae invitación aterriza sin organización, en la pantalla que ya
+      se abre sola para crear la suya (`NewOrganization`, `apps/web/src/app/app/page.tsx`
+      — no había que construirla, ya existía). Entrar a Hytrex específicamente
+      sigue exigiendo su invitación, igual que antes.
+      **Encontré un fallo real al revisarlo:** `puertaDeAlta()` trataba
+      `SIGNUP_MODE=open` como «no mirar ninguna invitación», así que alguien
+      invitado a Hytrex que se registrara con el registro ya abierto entraba
+      igual, pero SIN unirse — la invitación se escribía para nada. Arreglado:
+      con token, se valida y se canjea siempre, sea cual sea el modo.
+      `npm run test:puerta` — 4 comprobaciones, contra la base local de verdad.
+- [x] ~~Crear las credenciales en Google Cloud Console~~ — hechas, registradas
+      dos URIs en el mismo cliente (`https://api.hytrex.co/auth/google/callback`
+      y la de localhost). Probado en producción de verdad: `/auth/google`
+      redirige a la pantalla real de Google con todos los parámetros
+      correctos.
+- [x] ~~Poner la contraseña de `devup_app`~~ — puesta y rotada.
+- [x] ~~**Producción reconstruida y puesta al día**~~ — `docker compose build
+      api` + `up -d api`. El contenedor llevaba **6 horas corriendo código de
+      antes de esta sesión entera**: `up -d` sin `build` no reconstruye nada,
+      así que Supabase, Google y el reparto REST/tiempo real llevaban todo este
+      rato sin llegar a producción por más que se editara `.env.production`.
+      Al reconstruir salió a la luz un problema real que llevaba tiempo
+      escondido: **`SELF_SIGNED_CERT_IN_CHAIN` en cada consulta a Supabase**
+      (500 en `/auth/signup-policy` y, por extensión, en casi cualquier ruta).
+      El agrupador de Supabase firma con una CA propia
+      (`Supabase Root 2021 CA`, autofirmada) que Node no trae en su lista
+      pública. Arreglado sacando esa CA de su propio saludo TLS y guardándola
+      como [`db/supabase-root-ca.pem`](../db/supabase-root-ca.pem) — el
+      Dockerfile ya copia `db/` a la imagen, así que funciona igual en
+      cualquier sitio donde se despliegue después (Railway incluido) con solo
+      `DATABASE_SSL_CA=db/supabase-root-ca.pem`. Verificado con una conexión
+      real y `rejectUnauthorized: true` antes de tocar el contenedor otra vez.
+      De paso: recrear `api` arrastró también a `postgres` porque
+      `POSTGRES_PASSWORD` se había dejado comentada al mudarnos a Supabase —
+      Compose valida el archivo entero aunque solo se le pida `api`. Restaurada
+      con un valor de relleno; los datos de esa base (ya sin uso) siguieron
+      intactos, se comprobó contando filas antes y después.
+- [x] ~~`hytrex.co` no llegaba porque el DNS tenía dos A viejas de Hostinger, y
+      además faltaba en el propio túnel la regla que dice a dónde va ese
+      tráfico~~. Arreglado con un token de Cloudflare con permiso de DNS —
+      confirmado leyendo los registros antes de tocar nada, no adivinando— y
+      luego uno de Cloudflare Tunnel para la regla de entrada. **`hytrex.co` es
+      para la landing page, que todavía no existe** — no es de DevUP, así que
+      la regla que lo mandaba a `web:3000` se deshizo en el mismo tramo: quedó
+      otra vez en 404, tal como estaba de fábrica, sin la página aparcada de
+      Hostinger porque esos dos registros ya se habían borrado. **La puerta de
+      entrada de verdad es `devup.hytrex.co`** — probado de punta a punta,
+      hasta la pantalla real de "Iniciar sesión con Google".
+      De camino salió otro fallo: la CORS de la API solo dejaba pasar
+      `devup.hytrex.co`, así que mientras `hytrex.co` estuvo mal enrutado a
+      DevUP, la propia pantalla de acceso no podía ni preguntarle a la API si
+      Google estaba activado. Y la imagen de `web` tampoco se había
+      reconstruido en toda la sesión — el botón de Google llevaba escrito rato
+      sin llegar a producción, exactamente como le pasó a `api`.
+- [x] ~~Las 5 cuentas de la base local de antes de Supabase, decisión
+      tomada~~: **se abandonan, nadie las migra.** Como `SIGNUP_MODE=open`,
+      cualquiera vuelve a entrar con "Crear cuenta" o con Google y arma su
+      organización desde cero — la pantalla ya existe para eso
+      (`NewOrganization`, `apps/web/src/app/app/page.tsx`). No hay ninguna
+      migración de datos pendiente por esto.
 - [ ] 4 · Claves S3 del almacén (Storage → S3 Access Keys) y apuntar
       `S3_ENDPOINT` al de Supabase. *Solo Juan.*
 - [ ] Ponerle `search_path` fijo a las seis funciones que no lo llevan
@@ -163,8 +306,10 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       (`api` con `REALTIME_ENABLED=false`) + `docker-compose.prod.yml` del
       portátil con `REALTIME_ENABLED=true` explícito. Render se queda montado
       y a un lado, para cuando se acaben los 30 días de Railway. *Solo Juan.*
-- [ ] 6 · Alta en Resend y **verificar el dominio** en Cloudflare. Sin eso solo
-      se puede enviar desde su dirección de pruebas. *Solo Juan.*
+- [x] ~~6 · Alta en Resend y verificar el dominio en Cloudflare~~ — hecho:
+      dominio `hytrex.co` verificado, `MAIL_API_KEY` puesto en `api` y `live`
+      de Railway. Probado con una invitación real a `juan.bonilla@hytrex.co`:
+      sin error en el registro, que es como `enviarCorreo` reporta el éxito.
 - [ ] 7 · **También superado**: `app.hytrex.co` → Vercel, `api.hytrex.co` →
       Railway, `live.hytrex.co` (nuevo) → el portátil. De paso se arregla el
       apex.
@@ -263,9 +408,16 @@ Detalle en [`plan-superficie-de-trabajo.md`](plan-superficie-de-trabajo.md).
 
 ## Otras cosas pendientes
 
-- [ ] **`hytrex.co` no llega a DevUP** — devuelve la página aparcada de
-      Hostinger. `api.hytrex.co` sí está bien enrutado. Se arregla en Cloudflare.
-      *Solo Juan.*
+- [x] ~~`hytrex.co` no llegaba a DevUP~~ — resuelto, y **no de la forma en que
+      esta lista lo daba por hecho**: no era que `hytrex.co` debiera apuntar a
+      DevUP, es que **`hytrex.co` es de la landing page** (todavía sin hacer) y
+      DevUP vive en `devup.hytrex.co`. Detalle en el bloque de Google, más
+      arriba. `hytrex.co` se dejó en 404 —sin la página aparcada de Hostinger,
+      porque sus dos registros ya se borraron— hasta que haya algo real que
+      poner ahí.
+- [ ] **Hacer la landing page de `hytrex.co`.** Hoy da 404. `gestion.hytrex.co`
+      e `insumos.hytrex.co` ya apuntan a proyectos de Vercel — comprobar si
+      alguno de los dos es esto, o si hace falta uno nuevo.
 - [ ] **Registrar el ejecutor** (`config.cmd` + token). Ojo: con Docker cerrado,
       un despliegue automático falla en el `docker compose up`. No rompe
       producción, pero el rojo llega igual. *Solo Juan.*
@@ -331,3 +483,27 @@ repositorio**: con `cd docs/propuesta` la ruta del volumen sale duplicada.
   que eran del criterio y no de ellas.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
+- **Un dominio personalizado de Railway puede quedarse atascado en "validando
+  propiedad" con el DNS ya perfecto.** Le pasó a `api.hytrex.co` y a
+  `live.hytrex.co` a la vez: DNS confirmado por dos resolutores, y aun así el
+  panel decía «Waiting for DNS update». `customDomainIssueCertificate` (forzar
+  la reemisión) no lo arregló tampoco en el momento. La salida que funcionó:
+  **apuntar `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` al dominio que Railway
+  da por defecto** (`*.up.railway.app`, que sí funciona desde el primer
+  minuto) en vez de esperar al dominio bonito. Y como esas variables se
+  incrustan al compilar, cambiar de uno a otro pide reconstruir **los dos**
+  frentes —`npm run cf:deploy` y el `docker compose build web`—, no solo
+  cambiar una variable de entorno en caliente.
+- **Ese mismo atasco rompe Google en silencio, no con un error visible.** El
+  botón desaparece porque `/auth/signup-policy` falla y el código atrapa el
+  fallo con `.catch(() => setPolicy(null))` — nadie ve un error, la pantalla
+  simplemente parece no tener la función. Y si solo se arregla la URL del
+  frontend, el login **empieza** bien pero se corta al volver: Google redirige
+  a `GOOGLE_REDIRECT_URI`, que seguía siendo el dominio roto. Las dos partes
+  —a dónde llama el frontend y a dónde redirige Google al terminar— tienen que
+  apuntar al mismo sitio que funciona de verdad.
+- **Cientos de intentos de conexión seguidos desde la misma IP, mientras se
+  depura, pueden hacer que Cloudflare empiece a cortar esa IP en concreto** —
+  no el sitio para todo el mundo. Se manifiesta igual que un fallo real
+  (`ECONNRESET` en el saludo TLS) y el diagnóstico correcto es simple y fácil
+  de saltarse: pedirle a otra persona, desde otra red, que abra la misma URL.

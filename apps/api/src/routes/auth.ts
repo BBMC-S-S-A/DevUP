@@ -103,8 +103,17 @@ async function openSession(
  * esto, y el que se olvide convierte una instancia de equipo en una donde entra
  * cualquiera que tenga una cuenta de Google. Una sola copia es la única forma
  * de que las dos digan siempre lo mismo.
+ *
+ * `SIGNUP_MODE=open` Y UNA INVITACIÓN NO SON EXCLUYENTES. Son dos preguntas
+ * distintas: «¿puede esta persona tener una cuenta?» la responde `SIGNUP_MODE`,
+ * y «¿entra a MI organización?» la responde la invitación. Con el registro
+ * abierto, cualquiera puede darse de alta y aterriza sin organización, a crear
+ * la suya — pero si trae un token, es porque alguien lo invitó a una concreta,
+ * y ese token se canjea igual: si `SIGNUP_MODE=open` lo saltara, quien invitas
+ * tú a tu organización se registraría como un desconocido más, flotando sin
+ * ella, y la invitación se habría escrito para nada.
  */
-async function puertaDeAlta(
+export async function puertaDeAlta(
   db: Db,
   email: string,
   inviteToken?: string,
@@ -112,14 +121,21 @@ async function puertaDeAlta(
   const { rows: conteo } = await db.query<{ user_count: string }>("select public.user_count()");
   const esPrimera = Number(conteo[0]!.user_count) === 0;
 
-  // La primera cuenta siempre puede entrar: si no, no habría nadie que pudiera
-  // invitar a nadie y la instancia quedaría cerrada para siempre.
-  if (env.SIGNUP_MODE === "open" || esPrimera) return null;
+  // La primera cuenta siempre puede entrar y sin invitación que canjear: no
+  // existe todavía ninguna organización desde la que alguien pudiera haberla
+  // emitido. Si no fuera así, no habría nadie que pudiera invitar a nadie y la
+  // instancia quedaría cerrada para siempre.
+  if (esPrimera) return null;
 
   if (!inviteToken) {
+    // Sin token, la pregunta es solo «¿admite esta instancia altas sueltas?».
+    if (env.SIGNUP_MODE === "open") return null;
     throw forbidden("esta instancia solo admite altas por invitación");
   }
 
+  // Con token, se valida y se canjea SIEMPRE, sea cual sea SIGNUP_MODE: es la
+  // única manera de que una invitación a una organización concreta siga
+  // significando algo cuando el registro general está abierto.
   const { rows: invitaciones } = await db.query<{
     email: string;
     expired: boolean;
