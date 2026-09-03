@@ -483,6 +483,23 @@ repositorio**: con `cd docs/propuesta` la ruta del volumen sale duplicada.
   que eran del criterio y no de ellas.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
+- **`db:migrate` cambia la contraseña de `devup_app`, y la saca de
+  `DATABASE_URL`.** Al migrar la base de Railway por el túnel se le pasaron las
+  dos variables apuntando al superusuario —cómodo, y mal—: `migrate.ts` hace
+  `alter role devup_app login password <la de DATABASE_URL>`, así que le puso al
+  rol de la aplicación la contraseña de `postgres`. La API quedó respondiendo
+  500 en toda ruta que tocara la base, mientras `/health` seguía en 200 porque
+  no la toca. **Al migrar contra un entorno remoto, `DATABASE_ADMIN_URL` va al
+  superusuario y `DATABASE_URL` a `devup_app`, con su contraseña de verdad.**
+  Y para diagnosticarlo: el mensaje real no está en el texto del registro
+  —«error no controlado»— sino en el campo `err` de la entrada estructurada,
+  que en la API de Railway se pide con `deploymentLogs { attributes }`.
+- **Una política de SELECT que llama a una función que vuelve a consultar la
+  misma tabla rompe `insert ... returning`.** Postgres aplica la política de
+  SELECT también a la fila recién insertada, y la función no la ve todavía. Sale
+  «new row violates row-level security policy», que apunta a otro sitio. Las
+  políticas de una tabla se escriben sobre las columnas de su propia fila; la
+  función auxiliar es para las tablas que cuelgan de ella. Lo cazó `test:rls`.
 - **Un dominio personalizado de Railway puede quedarse atascado en "validando
   propiedad" con el DNS ya perfecto.** Le pasó a `api.hytrex.co` y a
   `live.hytrex.co` a la vez: DNS confirmado por dos resolutores, y aun así el
