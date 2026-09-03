@@ -159,9 +159,17 @@ export function useYoutubePlayer(
           height: "100%",
           width: "100%",
           playerVars: {
-            // Sin controles propios: los del widget son los que mandan, y dos
-            // juegos de botones que dicen cosas distintas es peor que uno.
-            controls: 0,
+            /**
+             * CON los controles de YouTube, no con los del widget.
+             *
+             * El transporte del widget habla con el SDK de Spotify, y hacerle
+             * entender dos reproductores es una reescritura de `Transporte`
+             * que no hace falta para que esto sirva: el panel de vídeo ya trae
+             * play, pausa, barra y volumen que funcionan. Además el iframe
+             * tiene que verse igualmente por los términos de YouTube, así que
+             * enseñar sus controles no cuesta sitio — lo cuesta esconderlos.
+             */
+            controls: 1,
             // En iPhone, sin esto el vídeo se abre a pantalla completa y saca
             // a la persona de la aplicación en cuanto le da a reproducir.
             playsinline: 1,

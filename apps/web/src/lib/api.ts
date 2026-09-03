@@ -328,12 +328,24 @@ export type GithubTreeEntry = {
   size?: number;
 };
 
+/**
+ * Una canción buscable, venga de donde venga.
+ *
+ * El nombre dice Spotify por historia: hoy YouTube devuelve exactamente esta
+ * misma forma, y por eso la lista de resultados no sabe —ni necesita saber— de
+ * qué buscador salió cada fila. Lo que distingue la fuente es el prefijo de
+ * `uri`: `spotify:track:...` o `youtube:VIDEO_ID`.
+ */
 export type SpotifyTrack = {
   uri: string;
   name: string;
   artist: string;
   imageUrl: string | null;
-  durationMs: number;
+  /**
+   * Null cuando no se sabe. Pasa con los directos de YouTube —una radio en
+   * emisión continua no tiene duración— y con algún vídeo suelto.
+   */
+  durationMs: number | null;
   isrc: string | null;
 };
 

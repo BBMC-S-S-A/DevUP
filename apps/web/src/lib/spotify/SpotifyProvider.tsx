@@ -11,6 +11,7 @@ import {
 } from "react";
 import { api, type SpotifyQueueTrack, type SpotifySession } from "../api";
 import { useSpotifyPlayer } from "./reproductor";
+import { esDeYoutube, useYoutubePlayer } from "../youtube/reproductor";
 import { toast } from "sonner";
 
 /**
@@ -89,6 +90,10 @@ type Valor = {
   quitar: (id: string) => Promise<void>;
   /** Cierra la sesión de Spotify de esta cuenta. */
   desconectar: () => Promise<void>;
+  /** La segunda fuente: estado y controles del reproductor de YouTube. */
+  youtube: ReturnType<typeof useYoutubePlayer>;
+  /** Lo que suena por YouTube, con el nombre que traía la cola. */
+  pistaYt: SpotifyQueueTrack | null;
 };
 
 const Contexto = createContext<Valor | null>(null);
@@ -115,6 +120,21 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
   const alCambiarPista = useRef<(uri: string) => void>(() => {});
   const player = useSpotifyPlayer(cuenta?.connected ?? false, (uri) => alCambiarPista.current(uri));
+
+  /**
+   * La segunda fuente. Vive aquí y no en el widget por el mismo motivo que la
+   * de Spotify: si se montara dentro del widget, irse al tablero cortaría la
+   * música. Ver la cabecera de este archivo.
+   *
+   * `pistaYt` guarda el nombre y la carátula que traía la cola, porque el
+   * reproductor de YouTube solo sabe el título del vídeo — y lo que el resto
+   * de la sala tiene que ver es lo que se encoló, no lo que YouTube llame a
+   * ese vídeo.
+   */
+  const contenedorYt = useRef<HTMLDivElement | null>(null);
+  const [pistaYt, setPistaYt] = useState<SpotifyQueueTrack | null>(null);
+  const siguienteDeLaCola = useRef<() => void>(() => {});
+  const youtube = useYoutubePlayer(contenedorYt, () => siguienteDeLaCola.current());
 
   useEffect(() => {
     void api
@@ -260,6 +280,31 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       enCurso.current = true;
       setPoniendo(true);
       try {
+        /**
+         * La bifurcación entre las dos fuentes, y es lo único que hay.
+         *
+         * El prefijo del `trackUri` ya dice de dónde salió la pista, así que
+         * no hace falta ni una columna nueva ni preguntarle a nadie: si es de
+         * YouTube la pone su reproductor, y si no sigue el camino de Spotify
+         * de siempre, intacto.
+         */
+        if (esDeYoutube(pista.trackUri)) {
+          youtube.poner(pista.trackUri!);
+          setPistaYt({
+            id: pista.id ?? "",
+            isrc: pista.isrc ?? null,
+            trackUri: pista.trackUri!,
+            trackName: pista.trackName,
+            trackArtist: pista.trackArtist,
+            trackImageUrl: null,
+            durationMs: null,
+            addedBy: null,
+          } as SpotifyQueueTrack);
+          if (pista.id) await quitar(pista.id);
+          return;
+        }
+
+        // De aquí abajo, Spotify como siempre.
         // Una pista puede venir sin dirección de Spotify —la añadió alguien
         // desde otro servicio— y entonces hay que preguntar por su ISRC. Si
         // tampoco está en este catálogo, no se puede poner y se dice: dejarlo
@@ -283,7 +328,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         setPoniendo(false);
       }
     },
-    [reproducirUri, quitar, sincronizarConSpotify, direccionAqui],
+    [reproducirUri, quitar, sincronizarConSpotify, direccionAqui, youtube],
   );
 
   const encolar = useCallback(
@@ -326,6 +371,28 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   };
 
   /**
+   * Encadenar en YouTube, que no tiene cola propia.
+   *
+   * Spotify sí la tiene: se le entregan las canciones por adelantado y él
+   * encadena solo, y por eso allí basta con enterarse del cambio de pista.
+   * Aquí el vídeo simplemente termina, así que hay que ir a buscar el
+   * siguiente de la cola compartida y ponerlo.
+   *
+   * Va por referencia y no por dependencia del hook porque quien lo llama es
+   * un evento del iframe: una función creada en un renderizado anterior vería
+   * la cola de aquel momento, que es justo el caso que importa —alguien
+   * añadiendo algo mientras suena—.
+   */
+  siguienteDeLaCola.current = () => {
+    const siguiente = colaRef.current[0];
+    if (!siguiente) {
+      setPistaYt(null);
+      return;
+    }
+    void poner(siguiente).catch(() => {});
+  };
+
+  /**
    * Publicar al resto de la sala qué suena. Solo al cambiar de canción o de play
    * a pausa: en cada tic del contador serían cuatro escrituras por segundo y por
    * persona.
@@ -356,6 +423,40 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.estado.pista, player.estado.reproduciendo]);
 
+  /**
+   * Lo mismo para YouTube. La sala ve «qué suena» sin tener que saber de qué
+   * servicio salió: es la misma tabla y los mismos campos, y por eso quien no
+   * tenga Spotify puede seguir la música del resto igualmente.
+   *
+   * El nombre y el artista salen de `pistaYt` —lo que se encoló— y no del
+   * título del vídeo: si alguien añadió «Radiohead – Creep», eso es lo que la
+   * sala debe leer, no «Creep (Official Video) [HD] 4K REMASTERED».
+   */
+  const ultimoPublicadoYt = useRef("");
+  useEffect(() => {
+    const sala = canalRef.current;
+    if (!sala || !pistaYt || !youtube.estado.videoId) return;
+
+    const firma = `${sala}:${pistaYt.trackUri}:${youtube.estado.reproduciendo}`;
+    if (firma === ultimoPublicadoYt.current) return;
+    ultimoPublicadoYt.current = firma;
+
+    void api
+      .post(`/channels/${sala}/spotify/session`, {
+        trackUri: pistaYt.trackUri,
+        trackName: pistaYt.trackName,
+        trackArtist: pistaYt.trackArtist,
+        trackImageUrl: pistaYt.trackImageUrl,
+        durationMs: youtube.estado.duracionMs || null,
+        positionMs: Math.round(youtube.estado.posicionMs),
+        isPlaying: youtube.estado.reproduciendo,
+      })
+      .catch(() => {});
+    // Igual que arriba: la posición viaja en el cuerpo pero no como
+    // dependencia, o se publicaría dos veces por segundo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pistaYt, youtube.estado.videoId, youtube.estado.reproduciendo]);
+
   const valor: Valor = {
     player,
     cuenta,
@@ -369,9 +470,50 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
     encolar,
     quitar,
     desconectar,
+    youtube,
+    pistaYt,
   };
 
-  return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
+  return (
+    <Contexto.Provider value={valor}>
+      {children}
+      <PanelYoutube contenedor={contenedorYt} visible={youtube.estado.videoId !== null} />
+    </Contexto.Provider>
+  );
+}
+
+/**
+ * El vídeo, en una esquina y a la vista.
+ *
+ * TIENE QUE VERSE, y no es una decisión de diseño: los términos de YouTube
+ * exigen que su reproductor esté visible y sin tapar. Esconderlo detrás de una
+ * carátula para dejar solo el sonido quedaría más bonito y es exactamente lo
+ * que hacían los bots de música que Google cerró en 2021 — con la clave de la
+ * API de por medio, no compensa.
+ *
+ * El contenedor se monta SIEMPRE, aunque no haya vídeo: el reproductor se
+ * engancha a ese nodo al arrancar, y si el nodo apareciera y desapareciera con
+ * cada canción habría que volver a montarlo cada vez. Lo que cambia es si se
+ * ve, no si existe.
+ */
+function PanelYoutube({
+  contenedor,
+  visible,
+}: {
+  contenedor: React.RefObject<HTMLDivElement | null>;
+  visible: boolean;
+}) {
+  return (
+    <div
+      className={`fixed bottom-4 right-4 z-40 overflow-hidden rounded-xl border border-line
+        bg-black shadow-[0_8px_32px_-8px_rgb(0_0_0/0.7)] transition-opacity duration-200
+        ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      style={{ width: 256, height: 144 }}
+      aria-hidden={!visible}
+    >
+      <div ref={contenedor} className="size-full" />
+    </div>
+  );
 }
 
 export function useSpotify(): Valor {
