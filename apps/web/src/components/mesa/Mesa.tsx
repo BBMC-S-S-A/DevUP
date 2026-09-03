@@ -154,8 +154,19 @@ export function Mesa({
   if (zonas.length === 0) return null;
 
   const marco = (zona: Zona, i: number) => (
+    // `capa` y no `panel`: esta sección se escribió antes de que existieran
+    // los tokens de la dirección Sala (c40270b, 31 de agosto) y se quedó con
+    // el material opaco de siempre. `panel` corta la atmósfera en seco justo
+    // donde empieza cada zona; `capa` la deja pasar, igual que ya se hizo con
+    // las tarjetas del panel personal (e7e81bf). Aquí no hay mock que discutir
+    // —la mesa parte la pantalla en zonas reales, no en columnas fijas—, así
+    // que el cambio es solo de material.
+    // La sombra va EN LÍNEA por la misma trampa de siempre: `.capa` vive fuera
+    // de toda capa CSS y las utilidades de Tailwind dentro de una, así que un
+    // `[box-shadow:...]` aquí perdería en silencio.
     <section
-      className="panel flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl"
+      className="capa flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl"
+      style={{ boxShadow: "var(--sombra-panel), inset 0 1px 0 var(--brillo-canto)" }}
       aria-label={catalogo[zona.herramienta]?.titulo ?? zona.herramienta}
     >
       <header className="filo-luz flex shrink-0 items-center gap-2 px-2.5 py-1.5">

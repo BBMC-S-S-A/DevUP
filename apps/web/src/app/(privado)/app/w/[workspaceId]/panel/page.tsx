@@ -20,9 +20,10 @@ import {
 } from "@/components/dashboard/Rejilla";
 import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { BotonIcono } from "@/components/ui/Boton";
-import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
+import { EstadoVacio } from "@/components/ui/Superficies";
 import { type DashboardPrefs, type DashboardWidget, type Workspace, ApiError, api } from "@/lib/api";
 import { useSpotify } from "@/lib/spotify/SpotifyProvider";
+import { useSession } from "@/lib/session";
 
 /**
  * El panel personal.
@@ -51,9 +52,18 @@ const ALTO_NATURAL: Record<DashboardWidget, number> = {
   enlaces: 2,
 };
 
+/** «Buenos días» / «Buenas tardes» / «Buenas noches», según la hora local. */
+function saludo(): string {
+  const hora = new Date().getHours();
+  if (hora < 12) return "Buenos días";
+  if (hora < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
 export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
-  const { canal } = useSpotify();
+  const { canal, sesion } = useSpotify();
+  const { user } = useSession();
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [prefs, setPrefs] = useState<DashboardPrefs | null>(null);
@@ -158,12 +168,19 @@ export default function PanelPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
+      {/* Del mock se toma la composición del saludo, no su rejilla fija: esta
+          es la parte que es verdad para cualquiera, tenga los widgets que
+          tenga — el mock de tres columnas fijas ("te espera" / "infraestructura"
+          / "quién está") habría significado sustituir un panel configurable por
+          una pantalla estática, y eso no se hizo (ver e7e81bf). */}
       <header className="mb-6">
-        <Rotulo className="block">Panel</Rotulo>
-        <h1 className="mt-1 text-xl font-semibold">Tu panel</h1>
+        <h1 className="text-xl font-semibold tracking-tight">
+          {saludo()}
+          {user ? `, ${user.displayName.split(" ")[0]}` : ""}
+        </h1>
         <p className="mt-1 text-xs text-faint">
-          Arrastra cada tarjeta por su asa para colocarla, y estírala por la esquina de abajo a la
-          derecha para darle el tamaño que quieras. Es tuyo — nadie más en la organización lo ve así.
+          {new Date().toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}
+          {" · "}arrastra las tarjetas para acomodarlas — nadie más en la organización ve tu panel así
         </p>
       </header>
 
@@ -181,6 +198,13 @@ export default function PanelPage() {
         >
           {(id) => {
             const { titulo, icono: Icono } = CATALOGO_WIDGETS[id];
+            // Regla 2 de la cabecera de globals.css: «el brillo señala estado,
+            // no jerarquía [...] hay alguien hablando, algo sonando, una
+            // llamada abierta». La sala de voz y el tablero ya la aplican con
+            // `.panel-vivo`; el panel personal todavía no tenía ningún widget
+            // que se encendiera cuando de verdad pasa algo, y «algo sonando» es
+            // justo el ejemplo que da la propia regla.
+            const sonando = id === "spotify" && Boolean(sesion?.isPlaying);
             return (
               // `capa` y no `panel`: el panel es opaco y tapa la atmósfera,
               // y en esta dirección las tarjetas flotan SOBRE ella — es lo que
@@ -188,16 +212,23 @@ export default function PanelPage() {
               // `backdrop-filter`, que es una rejilla de tarjetas y la regla 1
               // de globals.css lo prohíbe ahí; la sombra proyectada es la que
               // las levanta.
-              // La sombra va EN LÍNEA y no como clase de Tailwind. `.capa` se
-              // define en globals.css fuera de toda capa CSS y las utilidades
-              // de Tailwind van dentro de una: en la cascada gana lo no-capado
-              // sin importar la especificidad, así que un `[box-shadow:...]`
-              // aquí se pierde en silencio. Ya pasó hoy con `position: fixed`
-              // y está anotado en las trampas de LO-QUE-HAY-Y-LO-QUE-FALTA.
+              // La sombra Y el borde de «vivo» van EN LÍNEA y no como clase
+              // (`.panel-vivo`). `.capa` se define en globals.css fuera de toda
+              // capa CSS y las utilidades de Tailwind van dentro de una: en la
+              // cascada gana lo no-capado sin importar la especificidad, así
+              // que un `[box-shadow:...]` o `[border-color:...]` aquí se
+              // pierde en silencio. Ya pasó hoy con `position: fixed` y está
+              // anotado en las trampas de LO-QUE-HAY-Y-LO-QUE-FALTA — aquí se
+              // evita desde el principio calculando ambos valores en línea.
               <div
-                className="capa flex h-full min-h-0 flex-col overflow-hidden rounded-2xl"
+                className="capa flex h-full min-h-0 flex-col overflow-hidden rounded-2xl transition-[box-shadow,border-color] duration-200"
                 style={{
-                  boxShadow: "var(--sombra-panel), inset 0 1px 0 var(--brillo-canto)",
+                  borderColor: sonando
+                    ? "color-mix(in oklab, var(--c-accent) 45%, transparent)"
+                    : undefined,
+                  boxShadow: sonando
+                    ? "var(--halo-accent), inset 0 1px 0 var(--brillo-canto)"
+                    : "var(--sombra-panel), inset 0 1px 0 var(--brillo-canto)",
                 }}
               >
                 <div className="flex shrink-0 items-center gap-2 border-b border-line/70 bg-raised/20 px-3.5 py-2.5">
