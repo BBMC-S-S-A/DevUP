@@ -440,7 +440,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         });
 
         setSessionCookies(reply, tokens.accessToken, tokens.refreshToken);
-        return reply.redirect(env.APP_BASE_URL);
+        // `/app` y no la base a secas: desde que la landing vive en la raíz,
+        // `APP_BASE_URL` por sí solo es la portada pública, no el producto.
+        // El acceso por correo ya hace `router.replace("/app")` en el cliente
+        // tras entrar (login/page.tsx); a este viaje, que termina en el
+        // servidor y no en React, le faltaba el mismo destino.
+        return reply.redirect(`${env.APP_BASE_URL}/app`);
       } catch (fallo) {
         if (fallo instanceof HttpError) return volverAlLogin(reply, fallo.message);
         request.log.error({ err: fallo }, "falló la entrada con Google");
