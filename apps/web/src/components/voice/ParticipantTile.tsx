@@ -31,7 +31,10 @@ const HALO_HABLANDO: CSSProperties = { boxShadow: "var(--halo-live)" };
  * son streams sin audio; la voz vive aparte). Sin esto, tener las dos vías
  * encendidas duplicaría el audio si cada recuadro reprodujera el suyo.
  */
-function HiddenAudio({ stream }: { stream: MediaStream | null }) {
+// Exportado para que `SalaEspacial` reproduzca el audio igual: el elemento
+// <audio> tiene que existir en el árbol o no se oye a nadie, y duplicarlo en
+// dos sitios es tener dos formas de que deje de oírse.
+export function HiddenAudio({ stream }: { stream: MediaStream | null }) {
   const media = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {

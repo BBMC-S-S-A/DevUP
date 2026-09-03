@@ -21,9 +21,15 @@ type Tamano = "sm" | "md";
 const VARIANTES: Record<Variante, string> = {
   // El degradado sutil hace que el relleno lea como una superficie iluminada y
   // no como un rectángulo plano de color.
+  //
+  // Va por los tokens `--acento-gradiente` y `--sombra-acento` en vez de por
+  // clases sueltas: son la firma de la dirección y tienen que poder cambiarse
+  // en un sitio. La diagonal (140°) y no de arriba abajo, porque sobre la
+  // atmósfera —que entra por la esquina superior izquierda— un degradado
+  // vertical va a contrapelo de la luz de la página.
   primario:
-    "bg-gradient-to-b from-accent-bright to-accent text-canvas font-medium " +
-    "shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)] " +
+    "[background:var(--acento-gradiente)] text-canvas font-medium " +
+    "[box-shadow:0_1px_0_rgb(255_255_255/0.25)_inset,var(--sombra-acento)] " +
     "hover:brightness-110",
   secundario:
     "border border-line bg-raised/60 text-ink hover:border-line-strong hover:bg-raised",

@@ -202,8 +202,12 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             Buscar
           </Link>
 
-          <div className="space-y-0.5">
+          <div>
             <GrupoRotulo titulo="Organización" />
+            {/* El rótulo va FUERA de la capa y los destinos dentro: la capa
+                agrupa lo que se puede pulsar, y meter el título ahí lo haría
+                parecer una fila más de la lista. */}
+            <div className="capa space-y-0.5 rounded-2xl p-1.5">
             {pantallas.map((p, i) => (
               <ItemNav
                 key={p.href}
@@ -244,6 +248,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
                 Ajustes
               </ItemNav>
             )}
+            </div>
           </div>
 
           <div className="space-y-0.5">
