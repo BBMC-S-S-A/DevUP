@@ -67,6 +67,9 @@ async function main(): Promise<void> {
   const ana = await mkUser("ana");
   const bruno = await mkUser("bruno");
   const carla = await mkUser("carla");
+  // Diego entra invitado a UN workspace, no a la organización entera: es el
+  // caso que separa «estás en el equipo» de «ves todo lo del equipo».
+  const diego = await mkUser("diego");
 
   try {
     // --- Montaje: cada uno crea su mundo -----------------------------------
@@ -1554,6 +1557,86 @@ async function main(): Promise<void> {
     check("y sigue apagada", !(await worldEnabled(ana)));
     await setImmersive(ana, true);
     check("al encenderla vuelve todo como estaba", await worldEnabled(carla));
+
+    // --- Invitaciones por workspace (0027) ----------------------------------
+    //
+    // Un workspace compartido lo veía cualquiera de la organización. Ahora
+    // depende de cómo entró cada cual: quien fue invitado a toda la
+    // organización sigue viéndolos todos; quien fue invitado a un workspace
+    // concreto ve ese y ninguno más. Se prueba contra la política de RLS
+    // —qué filas devuelve un `select`— y no contra la función auxiliar, que es
+    // lo que de verdad protege a la tabla.
+    console.log("\nInvitaciones por workspace");
+
+    const workspacesVisibles = (quien: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ id: string }>(
+          "select id from workspaces where organization_id = $1",
+          [acme.org],
+        );
+        return rows.map((r) => r.id);
+      });
+
+    const plataforma = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "insert into workspaces (organization_id, name, created_by) values ($1,$2,$3) returning id",
+        [acme.org, "Plataforma", ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const tokenDiego = `hash-invitacion-diego-${suffix}`;
+    await withUser(ana, (db) =>
+      db.query("select public.create_invitation($1,$2,$3,$4,$5,$6)", [
+        acme.org,
+        `diego-${suffix}@devup.test`,
+        "member",
+        tokenDiego,
+        new Date(Date.now() + 86_400_000).toISOString(),
+        plataforma,
+      ]),
+    );
+    await withUser(diego, (db) =>
+      db.query("select public.accept_invitation($1,$2)", [tokenDiego, diego]),
+    );
+
+    const deDiego = await workspacesVisibles(diego);
+    check("Diego ve el workspace al que le invitaron", deDiego.includes(plataforma));
+    check(
+      "y no ve el otro workspace compartido de la misma organización",
+      !deDiego.includes(acme.ws),
+    );
+    check("ni el workspace personal de Ana", !deDiego.includes(acme.soloWs));
+
+    const deCarla = await workspacesVisibles(carla);
+    check(
+      "Carla, que entró a toda la organización, sí ve los dos compartidos",
+      deCarla.includes(plataforma) && deCarla.includes(acme.ws),
+    );
+
+    // El contenido va detrás del workspace: si el canal siguiera visible, la
+    // frontera sería de pantalla y no de base de datos.
+    check(
+      "Diego tampoco ve los canales del workspace que no es suyo",
+      (await withUser(diego, async (db) => {
+        const { rows } = await db.query<{ n: string }>(
+          "select count(*)::text as n from channels where workspace_id = $1",
+          [acme.ws],
+        );
+        return Number(rows[0]!.n);
+      })) === 0,
+    );
+
+    await denied(
+      "y no puede meterse solo en un workspace ajeno",
+      () =>
+        withUser(diego, (db) =>
+          db.query("insert into workspace_members (workspace_id, user_id) values ($1,$2)", [
+            acme.ws,
+            diego,
+          ]),
+        ),
+    );
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

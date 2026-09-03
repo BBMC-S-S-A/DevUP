@@ -25,11 +25,18 @@ create table if not exists public.workspace_members (
   primary key (workspace_id, user_id)
 );
 
-insert into public.workspace_members (workspace_id, user_id)
-select w.id, m.user_id
-from public.workspaces w
-join public.organization_members m on m.organization_id = w.organization_id
-on conflict do nothing;
+-- Quien entra «a toda la organización» sigue viendo todos los workspaces
+-- compartidos, incluidos los que se creen después. Quien entra invitado a un
+-- workspace concreto, no: solo ve aquel al que le invitaron.
+--
+-- Hace falta la columna porque «no está en ningún workspace_members» es
+-- ambiguo: no distingue a quien tiene acceso a todo de quien todavía no tiene
+-- acceso a nada. Sin ella, una invitación a toda la organización metía a la
+-- persona en una organización donde no veía ni un solo workspace.
+--
+-- `default true` es lo que deja intacto a todo el mundo que ya estaba dentro.
+alter table public.organization_members
+  add column if not exists all_workspaces boolean not null default true;
 
 -- ---------------------------------------------------------------------------
 -- Acceso a workspace: dueño, o administrador de la organización, o —si es
@@ -58,9 +65,12 @@ as $$
         or public.is_org_admin(w.organization_id)
         or (
           w.visibility = 'shared'
-          and exists (
-            select 1 from public.workspace_members wm
-            where wm.workspace_id = w.id and wm.user_id = public.current_user_id()
+          and (
+            m.all_workspaces
+            or exists (
+              select 1 from public.workspace_members wm
+              where wm.workspace_id = w.id and wm.user_id = public.current_user_id()
+            )
           )
         )
       )
@@ -91,9 +101,39 @@ as $$
   );
 $$;
 
+-- La misma regla que `can_access_workspace`, pero escrita sobre las columnas de
+-- la propia fila EN VEZ DE llamando a la función. No es duplicación por
+-- descuido: en un `insert ... returning`, Postgres aplica también la política
+-- de SELECT a la fila recién creada, y la función haría un `select` sobre
+-- `workspaces` que todavía no la ve —el comando no ve lo que él mismo acaba de
+-- insertar—. Crear un workspace fallaba con «new row violates row-level
+-- security policy», que no apunta ni de lejos a la causa. Lo detectó
+-- `test:rls`; si alguien "simplifica" esto a `can_access_workspace(id)`, ese
+-- test vuelve a ponerse rojo, y por eso está.
 drop policy if exists workspaces_select on public.workspaces;
 create policy workspaces_select on public.workspaces for select
-  using (public.can_access_workspace(id));
+  using (
+    public.is_org_member(organization_id)
+    and (
+      created_by = public.current_user_id()
+      or public.is_org_admin(organization_id)
+      or (
+        visibility = 'shared'
+        and (
+          exists (
+            select 1 from public.organization_members m
+            where m.organization_id = workspaces.organization_id
+              and m.user_id = public.current_user_id()
+              and m.all_workspaces
+          )
+          or exists (
+            select 1 from public.workspace_members wm
+            where wm.workspace_id = id and wm.user_id = public.current_user_id()
+          )
+        )
+      )
+    )
+  );
 
 alter table public.workspace_members enable row level security;
 
@@ -126,7 +166,7 @@ alter table public.invitations
 -- siempre de sí mismo" —que es como trata NULL un índice único normal—, o
 -- reinvitar a alguien a la organización entera dejaría dos enlaces vivos.
 drop index if exists invitations_one_open_per_email;
-create unique index invitations_one_open_per_target
+create unique index if not exists invitations_one_open_per_target
   on public.invitations (organization_id, email, workspace_id) nulls not distinct
   where accepted_at is null;
 
@@ -173,9 +213,20 @@ begin
 
     if exists (
       select 1
-      from public.workspace_members wm
-      join public.users u on u.id = wm.user_id
-      where wm.workspace_id = _workspace and u.email = _email
+      from public.users u
+      where u.email = _email
+        and (
+          exists (
+            select 1 from public.workspace_members wm
+            where wm.workspace_id = _workspace and wm.user_id = u.id
+          )
+          -- O ya entró a toda la organización, y entonces ese workspace ya lo
+          -- ve: invitarle otra vez no le daría nada.
+          or exists (
+            select 1 from public.organization_members m
+            where m.organization_id = _org and m.user_id = u.id and m.all_workspaces
+          )
+        )
     ) then
       raise exception 'esa persona ya tiene acceso a ese workspace' using errcode = '23505';
     end if;
@@ -251,8 +302,12 @@ begin
     raise exception 'la invitación no es válida o ha caducado' using errcode = 'P0002';
   end if;
 
-  insert into public.organization_members (organization_id, user_id, role)
-  values (_invitation.organization_id, _user, _invitation.role)
+  -- Invitación a un workspace concreto: entra a la organización, pero sin
+  -- acceso general a los demás workspaces. A toda la organización: acceso
+  -- general, como siempre.
+  insert into public.organization_members (organization_id, user_id, role, all_workspaces)
+  values (_invitation.organization_id, _user, _invitation.role,
+          _invitation.workspace_id is null)
   on conflict (organization_id, user_id) do nothing;
 
   if _invitation.workspace_id is not null then
