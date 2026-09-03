@@ -132,10 +132,10 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
    * de la sala tiene que ver es lo que se encoló, no lo que YouTube llame a
    * ese vídeo.
    */
-  const contenedorYt = useRef<HTMLDivElement | null>(null);
+  const [nodoYt, setNodoYt] = useState<HTMLDivElement | null>(null);
   const [pistaYt, setPistaYt] = useState<SpotifyQueueTrack | null>(null);
   const siguienteDeLaCola = useRef<() => void>(() => {});
-  const youtube = useYoutubePlayer(contenedorYt, () => siguienteDeLaCola.current());
+  const youtube = useYoutubePlayer(nodoYt, () => siguienteDeLaCola.current());
 
   useEffect(() => {
     void api
@@ -486,7 +486,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   return (
     <Contexto.Provider value={valor}>
       {children}
-      <PanelYoutube contenedor={contenedorYt} visible={youtube.estado.videoId !== null} />
+      <PanelYoutube alMontar={setNodoYt} visible={youtube.estado.videoId !== null} />
     </Contexto.Provider>
   );
 }
@@ -506,10 +506,10 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
  * ve, no si existe.
  */
 function PanelYoutube({
-  contenedor,
+  alMontar,
   visible,
 }: {
-  contenedor: React.RefObject<HTMLDivElement | null>;
+  alMontar: (nodo: HTMLDivElement | null) => void;
   visible: boolean;
 }) {
   // Montado en el body por un portal, y no donde cae en el árbol.
@@ -531,7 +531,7 @@ function PanelYoutube({
       style={{ width: 256, height: 144 }}
       aria-hidden={!visible}
     >
-      <div ref={contenedor} className="size-full" />
+      <div ref={alMontar} className="size-full" />
     </div>,
     document.body,
   );

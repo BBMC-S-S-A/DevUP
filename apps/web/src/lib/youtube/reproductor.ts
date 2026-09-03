@@ -129,15 +129,17 @@ function explicarError(codigo: number): string {
 }
 
 /**
- * @param contenedor  Dónde montar el iframe. Lo pone el widget, y tiene que
- *                    estar visible: ver la cabecera del archivo.
+ * @param nodo  Dónde montar el iframe, y tiene que estar visible: ver la
+ *              cabecera del archivo. Es el NODO, no un `ref`, a propósito: el
+ *              panel se monta en un portal que no existe en el primer
+ *              renderizado, y un objeto `ref` nunca cambia de identidad — así
+ *              que el efecto se ejecutaba una vez, con `null`, y no se
+ *              reintentaba jamás. Pasando el nodo, aparecer es un cambio de
+ *              dependencia y el efecto vuelve a correr solo.
  * @param alTerminar  Se llama cuando el vídeo acaba, para encadenar la cola.
  *                    Es el equivalente al cambio de pista del SDK de Spotify.
  */
-export function useYoutubePlayer(
-  contenedor: React.RefObject<HTMLDivElement | null>,
-  alTerminar?: () => void,
-) {
+export function useYoutubePlayer(nodo: HTMLDivElement | null, alTerminar?: () => void) {
   const [estado, setEstado] = useState<EstadoYoutube>(ESTADO_INICIAL);
   const player = useRef<ReproductorYt | null>(null);
   const pendiente = useRef<string | null>(null);
@@ -146,16 +148,15 @@ export function useYoutubePlayer(
 
   // --- Montaje ----------------------------------------------------------------
   useEffect(() => {
-    const el = contenedor.current;
-    if (!el) return;
+    if (!nodo) return;
     let vivo = true;
 
     void (async () => {
       try {
         await cargarApi();
-        if (!vivo || !window.YT?.Player || !contenedor.current) return;
+        if (!vivo || !window.YT?.Player) return;
 
-        player.current = new window.YT.Player(contenedor.current, {
+        player.current = new window.YT.Player(nodo, {
           height: "100%",
           width: "100%",
           playerVars: {
@@ -227,7 +228,7 @@ export function useYoutubePlayer(
       }
       player.current = null;
     };
-  }, [contenedor]);
+  }, [nodo]);
 
   // --- La posición, preguntando -----------------------------------------------
   //
