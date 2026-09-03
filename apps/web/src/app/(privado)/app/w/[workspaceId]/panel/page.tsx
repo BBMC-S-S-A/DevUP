@@ -1,56 +1,61 @@
 "use client";
 
-import { LayoutDashboard, Music, TriangleAlert, X } from "lucide-react";
+import {
+  AtSign,
+  CalendarClock,
+  ClipboardList,
+  Megaphone,
+  Music,
+  Rocket,
+  Server,
+  TriangleAlert,
+  UserPlus,
+} from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import {
-  AnadirWidget,
-  CATALOGO_WIDGETS,
-  EnlacesWidget,
-  NoticiasWidget,
-  NotificacionesWidget,
-} from "@/components/dashboard/DashboardWidgets";
-import {
-  COLUMNAS,
-  Rejilla,
-  disposicionPorDefecto,
-  type Casilla,
-  type Disposicion,
-} from "@/components/dashboard/Rejilla";
 import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
-import { BotonIcono } from "@/components/ui/Boton";
-import { EstadoVacio } from "@/components/ui/Superficies";
-import { type DashboardPrefs, type DashboardWidget, type Workspace, ApiError, api } from "@/lib/api";
-import { useSpotify } from "@/lib/spotify/SpotifyProvider";
+import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
+import {
+  type Despliegue,
+  type Entorno,
+  type EstadoDespliegue,
+  type Notification,
+  type OrganizationMember,
+  type Presencia,
+  type Workspace,
+} from "@/lib/api";
+import { useRecurso } from "@/lib/datos";
 import { useSession } from "@/lib/session";
+import { useSpotify } from "@/lib/spotify/SpotifyProvider";
+import { tinte } from "@/lib/tinte";
 
 /**
  * El panel personal.
  *
- * «Personal» en dos sentidos a la vez: vive por persona (`/me/dashboard`, no
- * por organización) y se lee por dispositivo con la misma sesión, así que quien
- * lo coloca en el portátil lo encuentra igual en el escritorio. Ningún compañero
- * puede ver ni tocar el de otro — ver 0019, `user_dashboard_prefs`.
+ * ANTES ERA UNA REJILLA CONFIGURABLE, y el mock (SalaPanel) proponía en su
+ * lugar una composición fija en tres columnas. La primera pasada de la
+ * dirección Sala trasladó el material a esa rejilla pero conservó la
+ * composición (e7e81bf), razonando que sustituir algo configurable por una
+ * pantalla estática sería peor que no tocarla. Juan pidió después fidelidad
+ * literal a los mocks, así que esta es la segunda pasada: la composición de
+ * SalaPanel, con datos reales detrás de cada columna en vez de la rejilla que
+ * cada quien se armaba.
  *
- * Es una rejilla, no una lista: cada tarjeta va donde se la ponga y con el
- * tamaño que se le dé. La mecánica del arrastre vive en `Rejilla`; aquí solo
- * queda qué se pinta dentro de cada celda y qué se guarda.
- */
-
-/**
- * Cuántas filas ocupa cada widget cuando nadie ha dicho lo contrario.
+ * LAS TRES COLUMNAS Y DE DÓNDE SALE CADA UNA:
+ *  - «Te espera»: notificaciones sin leer (`/notifications`) y ventas abiertas
+ *    que vencen pronto (`/organizations/:id/pipeline`, el mismo umbral de tres
+ *    días que ya usa el embudo). No hay menciones de PR ni de commits porque
+ *    no existe ese dato en el producto — el mock lo dibuja, aquí no se inventa.
+ *  - «Infraestructura»: los entornos reales (`/organizations/:id/environments`),
+ *    los mismos que ve la pantalla de infraestructura.
+ *  - «Quién está»: los miembros de la organización con su presencia
+ *    (`/organizations/:id/members`), que hasta hoy solo se leía de uno mismo
+ *    en `/auth/me` — se amplió el SELECT para que la propia fila ya la trajera.
  *
- * No es un capricho de diseño: un widget con menos alto del que su contenido
- * necesita nace con barra de desplazamiento, y eso en un panel se lee como que
- * está roto. Estos son los altos con los que cada uno se ve entero.
+ * LO QUE SE RETIRÓ: la rejilla arrastrable, `/me/dashboard` y el catálogo de
+ * widgets. El endpoint y la tabla siguen en pie por si hace falta volver atrás,
+ * pero nada del frontend los llama ya.
  */
-const ALTO_NATURAL: Record<DashboardWidget, number> = {
-  spotify: 4,
-  noticias: 3,
-  notificaciones: 3,
-  enlaces: 2,
-};
 
 /** «Buenos días» / «Buenas tardes» / «Buenas noches», según la hora local. */
 function saludo(): string {
@@ -60,225 +65,345 @@ function saludo(): string {
   return "Buenas noches";
 }
 
+/** «hace 4 min», igual que en la pantalla de infraestructura. */
+function hace(iso: string | null): string {
+  if (!iso) return "sin desplegar todavía";
+  const segundos = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (segundos < 60) return "hace un momento";
+  const minutos = Math.round(segundos / 60);
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+  const dias = Math.round(horas / 24);
+  return dias === 1 ? "ayer" : `hace ${dias} días`;
+}
+
+const ESTADO_TONO: Record<EstadoDespliegue, { color: string; label: string }> = {
+  pending: { color: "var(--c-faint)", label: "en cola" },
+  running: { color: "var(--c-accent)", label: "desplegando" },
+  success: { color: "var(--c-live)", label: "en pie" },
+  failure: { color: "var(--c-danger)", label: "falló" },
+  cancelled: { color: "var(--c-warn)", label: "cancelado" },
+};
+
+const PRESENCIA: Record<Presencia, { color: string; label: string }> = {
+  available: { color: "var(--c-live)", label: "disponible" },
+  busy_open: { color: "var(--c-warn)", label: "ocupado" },
+  do_not_disturb: { color: "var(--c-danger)", label: "no molestar" },
+};
+
+/** Días que faltan para una fecha, contra un único «hoy» por pantalla. */
+function diasRestantes(iso: string, hoy: Date): number {
+  const msPorDia = 1000 * 60 * 60 * 24;
+  return Math.round((new Date(iso).getTime() - hoy.getTime()) / msPorDia);
+}
+
+const UMBRAL_URGENCIA = 3;
+
+type Venta = {
+  id: string;
+  title: string;
+  clientName: string;
+  amountCents: number;
+  expectedClose: string | null;
+  stage: string;
+};
+
+type Espera =
+  | { tipo: "venta"; id: string; dias: number; titulo: string; subtitulo: string }
+  | { tipo: "notificacion"; id: string; kind: Notification["kind"]; titulo: string; subtitulo: string; link: string };
+
+const ICONO_NOTIFICACION: Record<Notification["kind"], typeof AtSign> = {
+  mention: AtSign,
+  task_assigned: ClipboardList,
+  invitation: UserPlus,
+  recording: Rocket,
+  announcement: Megaphone,
+};
+
+const money = (cents: number): string =>
+  new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
+    cents / 100,
+  );
+
 export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { canal, sesion } = useSpotify();
   const { user } = useSession();
 
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [prefs, setPrefs] = useState<DashboardPrefs | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const espacio = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
+  const orgId = espacio.datos?.workspace.organizationId ?? null;
 
-  useEffect(() => {
-    void Promise.all([
-      api.get<{ workspace: Workspace }>(`/workspaces/${workspaceId}`),
-      api.get<DashboardPrefs>("/me/dashboard"),
-    ])
-      .then(([{ workspace }, prefs]) => {
-        setWorkspace(workspace);
-        setPrefs(prefs);
-      })
-      .catch((caught) =>
-        setError(caught instanceof ApiError ? caught.message : "no se pudo cargar el panel"),
-      );
-  }, [workspaceId]);
-
-  /** Optimista siempre: nada aquí es tan importante como para hacer esperar a un
-   *  arrastre a que el servidor confirme. Si falla, un aviso basta. */
-  const guardar = useCallback(async (siguiente: DashboardPrefs) => {
-    setPrefs(siguiente);
-    try {
-      await api.put("/me/dashboard", siguiente);
-    } catch {
-      toast.error("No se pudo guardar la disposición del panel");
-    }
-  }, []);
-
-  /**
-   * La disposición efectiva. Si nunca se ha colocado nada a mano, se deriva del
-   * orden guardado en vez de dejar el panel vacío: quien viene de la versión en
-   * columna encuentra sus widgets en el mismo orden de lectura, ya repartidos en
-   * dos columnas.
-   */
-  const disposicion = useMemo<Disposicion<DashboardWidget>>(() => {
-    if (!prefs) return {};
-    const guardada = prefs.layout ?? {};
-    const faltan = prefs.widgets.filter((id) => !guardada[id]);
-    if (faltan.length === 0) return guardada;
-
-    // Los que ya tenían sitio lo conservan; los que no, se colocan debajo.
-    const usadas = Object.values(guardada) as Casilla[];
-    const primeraLibre = usadas.reduce((max, c) => Math.max(max, c.y + c.h), 0);
-    const nuevos = disposicionPorDefecto(faltan, (id) => ALTO_NATURAL[id]);
-    for (const casilla of Object.values(nuevos) as Casilla[]) casilla.y += primeraLibre;
-    return { ...guardada, ...nuevos };
-  }, [prefs]);
-
-  const quitar = (id: DashboardWidget) => {
-    if (!prefs) return;
-    // La casilla se va con el widget: si vuelve a añadirse, se coloca de nuevo
-    // en un hueco libre en vez de reaparecer donde estaba y pisar a otro.
-    const layout = { ...(prefs.layout ?? {}) };
-    delete layout[id];
-    void guardar({ ...prefs, widgets: prefs.widgets.filter((w) => w !== id), layout });
-  };
-
-  const anadir = (id: DashboardWidget) => {
-    if (!prefs) return;
-    const usadas = Object.values(disposicion) as Casilla[];
-    const abajo = usadas.reduce((max, c) => Math.max(max, c.y + c.h), 0);
-    void guardar({
-      ...prefs,
-      widgets: [...prefs.widgets, id],
-      layout: {
-        ...disposicion,
-        [id]: { x: 0, y: abajo, w: 2, h: ALTO_NATURAL[id] },
-      },
-    });
-  };
-
-  const ponerModoSpotify = (modo: "boton" | "expandido") => {
-    if (!prefs) return;
-    void guardar({ ...prefs, spotifyMode: modo, layout: disposicion });
-  };
-
-  if (error) {
-    return (
-      <div className="grid min-h-[60svh] place-items-center px-6">
-        <EstadoVacio icono={<TriangleAlert size={20} className="text-danger" />} titulo={error} />
-      </div>
-    );
-  }
-
-  if (!workspace || !prefs) {
-    return (
-      <div className="mx-auto max-w-6xl px-6 py-8">
-        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${COLUMNAS}, 1fr)` }}>
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="devup-esqueleto col-span-2 h-60 rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const ocultos = (Object.keys(CATALOGO_WIDGETS) as DashboardWidget[]).filter(
-    (id) => !prefs.widgets.includes(id),
+  const notis = useRecurso<{ notifications: Notification[] }>("/notifications?unreadOnly=true&limit=6");
+  const ventas = useRecurso<{ opportunities: Venta[] }>(
+    orgId ? `/organizations/${orgId}/pipeline` : null,
+  );
+  const entornos = useRecurso<{ environments: Entorno[] }>(
+    orgId ? `/organizations/${orgId}/environments` : null,
+  );
+  const miembros = useRecurso<{ members: OrganizationMember[] }>(
+    orgId ? `/organizations/${orgId}/members` : null,
   );
 
+  if (espacio.error) {
+    return (
+      <div className="grid min-h-[60svh] place-items-center px-6">
+        <EstadoVacio icono={<TriangleAlert size={20} className="text-danger" />} titulo={espacio.error} />
+      </div>
+    );
+  }
+
+  if (espacio.cargando || !espacio.datos) return <EsqueletoPanel />;
+
+  const hoy = new Date();
+
+  // Ventas abiertas a punto de vencer, la más urgente primero.
+  const ventasUrgentes: Espera[] = (ventas.datos?.opportunities ?? [])
+    .filter((v) => v.stage !== "won" && v.stage !== "lost" && v.expectedClose)
+    .map((v) => ({ ...v, dias: diasRestantes(v.expectedClose!, hoy) }))
+    .filter((v) => v.dias <= UMBRAL_URGENCIA)
+    .sort((a, b) => a.dias - b.dias)
+    .map((v) => ({
+      tipo: "venta" as const,
+      id: v.id,
+      dias: v.dias,
+      titulo: v.title,
+      subtitulo: `${v.clientName} · ${money(v.amountCents)}`,
+    }));
+
+  const avisos: Espera[] = (notis.datos?.notifications ?? []).map((n) => ({
+    tipo: "notificacion" as const,
+    id: n.id,
+    kind: n.kind,
+    titulo: n.title,
+    subtitulo: n.body,
+    link: n.link,
+  }));
+
+  const espera = [...ventasUrgentes, ...avisos].slice(0, 5);
+
+  const lista = entornos.datos?.environments ?? [];
+  const todoEnPie = lista.length > 0 && lista.every((e) => e.ultimo?.state !== "failure");
+  const ultimoDespliegue = lista
+    .map((e) => e.ultimo)
+    .filter((d): d is Despliegue => d !== null)
+    .sort((a, b) => new Date(b.startedAt ?? 0).getTime() - new Date(a.startedAt ?? 0).getTime())[0];
+
+  const listaMiembros = miembros.datos?.members ?? [];
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      {/* Del mock se toma la composición del saludo, no su rejilla fija: esta
-          es la parte que es verdad para cualquiera, tenga los widgets que
-          tenga — el mock de tres columnas fijas ("te espera" / "infraestructura"
-          / "quién está") habría significado sustituir un panel configurable por
-          una pantalla estática, y eso no se hizo (ver e7e81bf). */}
-      <header className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">
-          {saludo()}
-          {user ? `, ${user.displayName.split(" ")[0]}` : ""}
-        </h1>
-        <p className="mt-1 text-xs text-faint">
-          {new Date().toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}
-          {" · "}arrastra las tarjetas para acomodarlas — nadie más en la organización ve tu panel así
-        </p>
+    <div className="mx-auto flex h-full min-h-0 max-w-[100rem] flex-col gap-4 px-6 py-6">
+      <header className="flex flex-wrap items-end gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">
+            {saludo()}
+            {user ? `, ${user.displayName.split(" ")[0]}` : ""}
+          </h1>
+          <p className="mt-1 text-xs text-faint">
+            {new Date().toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}
+            {" · "}
+            {espera.length === 0
+              ? "nada pendiente"
+              : `${espera.length} ${espera.length === 1 ? "cosa te espera" : "cosas te esperan"}`}
+          </p>
+        </div>
       </header>
 
-      {prefs.widgets.length === 0 ? (
-        <EstadoVacio
-          icono={<LayoutDashboard size={20} />}
-          titulo="Sin widgets"
-          pista="Añade alguno de la lista de abajo para empezar a personalizar tu panel."
-        />
-      ) : (
-        <Rejilla
-          orden={prefs.widgets}
-          disposicion={disposicion}
-          onCambiar={(siguiente) => void guardar({ ...prefs, layout: siguiente })}
-        >
-          {(id) => {
-            const { titulo, icono: Icono } = CATALOGO_WIDGETS[id];
-            // Regla 2 de la cabecera de globals.css: «el brillo señala estado,
-            // no jerarquía [...] hay alguien hablando, algo sonando, una
-            // llamada abierta». La sala de voz y el tablero ya la aplican con
-            // `.panel-vivo`; el panel personal todavía no tenía ningún widget
-            // que se encendiera cuando de verdad pasa algo, y «algo sonando» es
-            // justo el ejemplo que da la propia regla.
-            const sonando = id === "spotify" && Boolean(sesion?.isPlaying);
-            return (
-              // `capa-flotante` y no `panel`: el panel es opaco y tapa la
-              // atmósfera, y en esta dirección las tarjetas flotan SOBRE ella
-              // — es lo que las hace leer como material y no como recortes
-              // pegados. La combinación con `panel-vivo` cuando `sonando` es
-              // cierto se resuelve por orden de la cascada, no en línea: ver
-              // el comentario de `.capa-flotante` en globals.css.
-              <div
-                className={`capa-flotante flex h-full min-h-0 flex-col overflow-hidden rounded-2xl
-                  transition-[box-shadow,border-color] duration-200 ${sonando ? "panel-vivo" : ""}`}
-              >
-                <div className="flex shrink-0 items-center gap-2 border-b border-line/70 bg-raised/20 px-3.5 py-2.5">
-                  <Icono size={14} className="shrink-0 text-muted" />
-                  <span className="min-w-0 flex-1 truncate text-xs font-semibold">{titulo}</span>
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_21rem]">
+        {/* Te espera */}
+        <section className="capa-flotante flex min-h-0 flex-col gap-3.5 rounded-2xl p-4">
+          <div className="flex shrink-0 items-center gap-2">
+            <Rotulo>Te espera</Rotulo>
+            <span className="ml-auto font-mono text-[11px] text-faint">{espera.length}</span>
+          </div>
 
-                  {/* El único widget con más de una forma de pintarse: el resto
-                      no necesita elegir modo, así que el selector solo aparece
-                      aquí y no como un ajuste general del panel. */}
-                  {id === "spotify" && (
-                    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-line bg-canvas/60 p-0.5">
-                      {(["boton", "expandido"] as const).map((modo) => (
-                        <button
-                          key={modo}
-                          type="button"
-                          onClick={() => ponerModoSpotify(modo)}
-                          aria-pressed={prefs.spotifyMode === modo}
-                          className={`presionable rounded-md px-2 py-1 font-display text-[9px] font-semibold uppercase tracking-wider
-                            ${
-                              prefs.spotifyMode === modo
-                                ? "bg-accent-soft text-accent"
-                                : "text-faint hover:text-muted"
-                            }`}
-                        >
-                          {modo === "boton" ? "Botón" : "Expandido"}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <BotonIcono
-                    etiqueta={`Quitar ${titulo} del panel`}
-                    onClick={() => quitar(id)}
-                    className="!size-6"
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
+            {espera.length === 0 ? (
+              <p className="mt-2 text-xs leading-relaxed text-faint">
+                Nada de esto lo anotó nadie: se deduce de lo que pasó, y ahora mismo no pasa nada
+                urgente.
+              </p>
+            ) : (
+              espera.map((item) =>
+                item.tipo === "venta" ? (
+                  <div
+                    key={`venta-${item.id}`}
+                    className="rounded-xl border border-warn/30 bg-gradient-to-br from-warn/15 to-transparent p-3"
                   >
-                    <X size={12} />
-                  </BotonIcono>
-                </div>
+                    <div className="flex items-center gap-2">
+                      <CalendarClock size={12} className="shrink-0 text-warn" />
+                      <Rotulo className="!text-warn">
+                        vence en {Math.max(item.dias, 0)} día{item.dias === 1 ? "" : "s"}
+                      </Rotulo>
+                    </div>
+                    <p className="mt-1.5 text-sm font-medium text-ink">{item.titulo}</p>
+                    <p className="mt-0.5 text-xs text-faint">{item.subtitulo}</p>
+                  </div>
+                ) : (
+                  <Link
+                    key={`noti-${item.id}`}
+                    href={item.link || "#"}
+                    className="presionable block rounded-xl bg-raised/40 p-3 hover:bg-raised/70"
+                  >
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const Icono = ICONO_NOTIFICACION[item.kind];
+                        return <Icono size={12} className="shrink-0 text-accent" />;
+                      })()}
+                      <Rotulo>{item.titulo}</Rotulo>
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-xs text-muted">{item.subtitulo}</p>
+                  </Link>
+                ),
+              )
+            )}
+          </div>
+        </section>
 
-                {/* El cuerpo se desplaza por dentro: una tarjeta más pequeña que
-                    su contenido no debe desbordar la celda ni estirar la rejilla. */}
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {id === "spotify" &&
-                    (canal ? (
-                      <SpotifyWidget channelId={canal} variante={prefs.spotifyMode} />
-                    ) : (
-                      <div className="px-4 py-6 text-center">
-                        <Music size={18} className="mx-auto mb-2 text-faint" />
-                        <p className="text-[11px] leading-relaxed text-faint">
-                          Entra a un canal de voz para compartir música aquí.
-                        </p>
-                      </div>
-                    ))}
-                  {id === "noticias" && <NoticiasWidget organizationId={workspace.organizationId} />}
-                  {id === "notificaciones" && <NotificacionesWidget />}
-                  {id === "enlaces" && <EnlacesWidget organizationId={workspace.organizationId} />}
-                </div>
+        {/* Infraestructura */}
+        <section className="capa-flotante flex min-h-0 flex-col gap-3.5 rounded-2xl p-4">
+          <div className="flex shrink-0 items-center gap-2">
+            <Rotulo>Infraestructura</Rotulo>
+            {lista.length > 0 && (
+              <span
+                className="ml-auto flex items-center gap-1.5 text-[11px]"
+                style={{ color: todoEnPie ? "var(--c-live)" : "var(--c-danger)" }}
+              >
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{
+                    background: "currentColor",
+                    boxShadow: `0 0 8px ${todoEnPie ? "var(--c-live)" : "var(--c-danger)"}`,
+                  }}
+                />
+                {todoEnPie ? "todo en pie" : "algo falló"}
+              </span>
+            )}
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+            {lista.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+                <Server size={18} className="text-faint" />
+                <p className="text-xs text-faint">
+                  Sin entornos conectados todavía. Se configuran en Infraestructura.
+                </p>
               </div>
-            );
-          }}
-        </Rejilla>
-      )}
+            ) : (
+              lista.map((entorno) => {
+                const estado = entorno.ultimo ? ESTADO_TONO[entorno.ultimo.state] : ESTADO_TONO.pending;
+                return (
+                  <div
+                    key={entorno.id}
+                    className="flex items-center gap-2.5 rounded-xl bg-raised/30 px-3 py-2"
+                  >
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ background: estado.color }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-xs">{entorno.name}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-faint">{estado.label}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
 
-      <div className="mt-5">
-        <AnadirWidget ocultos={ocultos} onAnadir={anadir} />
+          {ultimoDespliegue && (
+            <div className="shrink-0 rounded-xl border border-accent/20 bg-gradient-to-br from-accent-soft/60 to-transparent p-3">
+              <Rotulo className="!text-accent">Último despliegue</Rotulo>
+              <p className="mt-1 truncate text-xs text-ink">
+                {ultimoDespliegue.commitMessage ?? "sin mensaje de commit"}
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-faint">
+                {hace(ultimoDespliegue.startedAt)}
+                {ultimoDespliegue.author ? ` · ${ultimoDespliegue.author}` : ""}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* Quién está + música */}
+        <div className="flex min-h-0 flex-col gap-4">
+          <section className="capa-flotante flex shrink-0 flex-col gap-3 rounded-2xl p-4">
+            <div className="flex items-center gap-2">
+              <Rotulo>Quién está</Rotulo>
+              <span className="ml-auto font-mono text-[11px] text-faint">{listaMiembros.length}</span>
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              {listaMiembros.length === 0 ? (
+                <p className="text-xs text-faint">Sin compañeros todavía en esta organización.</p>
+              ) : (
+                listaMiembros.slice(0, 5).map((miembro) => {
+                  const p = PRESENCIA[miembro.presence];
+                  return (
+                    <div key={miembro.userId} className="flex items-center gap-2.5">
+                      <span
+                        aria-hidden
+                        style={{ backgroundImage: tinte(miembro.displayName) }}
+                        className="grid size-7 shrink-0 place-items-center rounded-full font-display text-[11px] font-semibold text-canvas"
+                      >
+                        {miembro.displayName.trim().charAt(0).toUpperCase() || "?"}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs">{miembro.displayName}</span>
+                      <span
+                        aria-hidden
+                        className="size-1.5 shrink-0 rounded-full"
+                        style={{ background: p.color, boxShadow: `0 0 7px ${p.color}` }}
+                        title={p.label}
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section
+            className="capa-flotante flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl transition-[box-shadow,border-color] duration-200"
+            style={
+              sesion?.isPlaying
+                ? {
+                    borderColor: "color-mix(in oklab, var(--c-accent) 45%, transparent)",
+                    boxShadow: "var(--halo-accent), inset 0 1px 0 var(--brillo-canto)",
+                  }
+                : undefined
+            }
+          >
+            <div className="flex shrink-0 items-center gap-2 border-b border-line/70 px-4 py-2.5">
+              <Music size={13} className="shrink-0 text-muted" />
+              <Rotulo>Suena en la sala</Rotulo>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {canal ? (
+                <SpotifyWidget channelId={canal} variante="expandido" />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
+                  <Music size={18} className="text-faint" />
+                  <p className="text-[11px] leading-relaxed text-faint">
+                    Entra a un canal de voz para compartir música aquí.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EsqueletoPanel() {
+  return (
+    <div className="mx-auto max-w-[100rem] px-6 py-6">
+      <div className="devup-esqueleto h-7 w-56 rounded-lg" />
+      <div className="devup-esqueleto mt-2 h-3.5 w-72 rounded" />
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_21rem]">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="devup-esqueleto h-96 rounded-2xl" />
+        ))}
       </div>
     </div>
   );

@@ -1,33 +1,10 @@
 "use client";
 
-import { AtSign, Bell, Link2, Mail, Megaphone, Music, Plus, Radio, SquareCheck } from "lucide-react";
+import { AtSign, Bell, Link2, Mail, Megaphone, Radio, SquareCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  type Announcement,
-  type DashboardWidget,
-  type Notification,
-  type OrganizationLink,
-  api,
-} from "@/lib/api";
+import { type Announcement, type Notification, type OrganizationLink, api } from "@/lib/api";
 import { Rotulo } from "@/components/ui/Superficies";
-
-/**
- * El catálogo de widgets del panel.
- *
- * Vive en el cliente y no en la base de datos a propósito (ver preferences.ts
- * en la API): añadir un widget nuevo el día de mañana es una entrada más
- * aquí y un componente, no una migración.
- */
-export const CATALOGO_WIDGETS: Record<
-  DashboardWidget,
-  { titulo: string; icono: typeof Music; descripcion: string }
-> = {
-  spotify: { titulo: "Spotify", icono: Music, descripcion: "Lo que suena en la sala" },
-  noticias: { titulo: "Noticias", icono: Megaphone, descripcion: "Lo último publicado" },
-  notificaciones: { titulo: "Notificaciones", icono: Bell, descripcion: "Tu bandeja" },
-  enlaces: { titulo: "Enlaces", icono: Link2, descripcion: "Los fijados por la organización" },
-};
 
 const ICONOS_NOTIFICACION = {
   mention: AtSign,
@@ -165,38 +142,5 @@ export function EnlacesWidget({ organizationId }: { organizationId: string }) {
         </ul>
       )}
     </CuerpoWidget>
-  );
-}
-
-/** El renglón para volver a añadir un widget que se había quitado del panel. */
-export function AnadirWidget({
-  ocultos,
-  onAnadir,
-}: {
-  ocultos: DashboardWidget[];
-  onAnadir: (id: DashboardWidget) => void;
-}) {
-  if (ocultos.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 pt-1">
-      <Rotulo>Añadir al panel</Rotulo>
-      {ocultos.map((id) => {
-        const { titulo, icono: Icono } = CATALOGO_WIDGETS[id];
-        return (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onAnadir(id)}
-            className="presionable inline-flex items-center gap-1.5 rounded-lg border border-dashed border-line
-              px-2.5 py-1.5 text-[11px] text-faint hover:border-line-strong hover:text-muted"
-          >
-            <Plus size={11} />
-            <Icono size={12} />
-            {titulo}
-          </button>
-        );
-      })}
-    </div>
   );
 }
