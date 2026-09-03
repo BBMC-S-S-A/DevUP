@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { api, type SpotifyQueueTrack, type SpotifySession } from "../api";
 import { useSpotifyPlayer } from "./reproductor";
 import { esDeYoutube, useYoutubePlayer } from "../youtube/reproductor";
@@ -511,7 +512,18 @@ function PanelYoutube({
   contenedor: React.RefObject<HTMLDivElement | null>;
   visible: boolean;
 }) {
-  return (
+  // Montado en el body por un portal, y no donde cae en el árbol.
+  //
+  // `position: fixed` se mide contra el ancestro más cercano que tenga
+  // `transform`, `filter` o `contain` — y este árbol tiene varios, que es
+  // justo lo que hacen las animaciones de entrada. El panel acababa a 1.600
+  // píxeles del borde superior, fuera de la pantalla, con el CSS correcto y
+  // sin ningún error. Colgarlo del body lo saca de esa cadena.
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+  if (!montado) return null;
+
+  return createPortal(
     <div
       className={`fixed bottom-4 right-4 z-40 overflow-hidden rounded-xl border border-line
         bg-black shadow-[0_8px_32px_-8px_rgb(0_0_0/0.7)] transition-opacity duration-200
@@ -520,7 +532,8 @@ function PanelYoutube({
       aria-hidden={!visible}
     >
       <div ref={contenedor} className="size-full" />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
