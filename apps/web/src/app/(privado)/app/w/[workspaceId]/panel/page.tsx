@@ -182,8 +182,25 @@ export default function PanelPage() {
           {(id) => {
             const { titulo, icono: Icono } = CATALOGO_WIDGETS[id];
             return (
-              <div className="panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl">
-                <div className="flex shrink-0 items-center gap-2 border-b border-line/70 bg-raised/30 px-3.5 py-2.5">
+              // `capa` y no `panel`: el panel es opaco y tapa la atmósfera,
+              // y en esta dirección las tarjetas flotan SOBRE ella — es lo que
+              // las hace leer como material y no como recortes pegados. Sin
+              // `backdrop-filter`, que es una rejilla de tarjetas y la regla 1
+              // de globals.css lo prohíbe ahí; la sombra proyectada es la que
+              // las levanta.
+              // La sombra va EN LÍNEA y no como clase de Tailwind. `.capa` se
+              // define en globals.css fuera de toda capa CSS y las utilidades
+              // de Tailwind van dentro de una: en la cascada gana lo no-capado
+              // sin importar la especificidad, así que un `[box-shadow:...]`
+              // aquí se pierde en silencio. Ya pasó hoy con `position: fixed`
+              // y está anotado en las trampas de LO-QUE-HAY-Y-LO-QUE-FALTA.
+              <div
+                className="capa flex h-full min-h-0 flex-col overflow-hidden rounded-2xl"
+                style={{
+                  boxShadow: "var(--sombra-panel), inset 0 1px 0 var(--brillo-canto)",
+                }}
+              >
+                <div className="flex shrink-0 items-center gap-2 border-b border-line/70 bg-raised/20 px-3.5 py-2.5">
                   <Icono size={14} className="shrink-0 text-muted" />
                   <span className="min-w-0 flex-1 truncate text-xs font-semibold">{titulo}</span>
 
