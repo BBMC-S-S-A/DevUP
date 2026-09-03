@@ -116,10 +116,14 @@ const pie = "\n\n—\nDevUP";
 type Plantilla = { subject: string; text: string };
 
 export const plantillas = {
-  invitacion: (organizacion: string, quien: string, enlace: string): Plantilla => ({
-    subject: `${quien} te ha invitado a ${organizacion} en DevUP`,
+  invitacion: (organizacion: string, quien: string, enlace: string, workspace?: string | null): Plantilla => ({
+    subject: workspace
+      ? `${quien} te ha invitado al workspace «${workspace}» en DevUP`
+      : `${quien} te ha invitado a ${organizacion} en DevUP`,
     text:
-      `${quien} te ha invitado a unirte a ${organizacion}.\n\n` +
+      (workspace
+        ? `${quien} te ha invitado al workspace «${workspace}», dentro de ${organizacion}.\n\n`
+        : `${quien} te ha invitado a unirte a ${organizacion}.\n\n`) +
       `Entra aquí para aceptar:\n${enlace}\n\n` +
       `El enlace caduca en 7 días. Si no esperabas esto, ignóralo: sin abrirlo ` +
       `no pasa nada.${pie}`,

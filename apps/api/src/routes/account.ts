@@ -89,8 +89,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
 
     const invitacion = await withUser(null, async (db) => {
       const { rows } = await db.query(
-        `select organization_name as "organizationName", email, role,
-                invited_by_name as "invitedByName", expired, accepted
+        `select organization_name as "organizationName", workspace_name as "workspaceName",
+                email, role, invited_by_name as "invitedByName", expired, accepted
            from public.invitation_by_token($1)`,
         [hashToken(token)],
       );
@@ -109,7 +109,14 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       const userId = requireUser(request);
       const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
       const body = parseBody(
-        z.object({ email: correo, role: z.enum(["admin", "member"]).default("member") }),
+        z.object({
+          email: correo,
+          role: z.enum(["admin", "member"]).default("member"),
+          // Ausente o null: invitación a toda la organización, como siempre.
+          // Con un id, la persona solo entra a ese workspace (y a la
+          // organización, que un workspace no existe sin ella).
+          workspaceId: uuid.nullish(),
+        }),
         request.body,
       );
 
@@ -117,19 +124,22 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
 
       const contexto = await withUser(userId, async (db) => {
         // create_invitation comprueba dentro que quien llama es administrador.
-        await db.query("select public.create_invitation($1,$2,$3,$4,$5)", [
+        await db.query("select public.create_invitation($1,$2,$3,$4,$5,$6)", [
           orgId,
           body.email,
           body.role,
           hash,
           new Date(Date.now() + CADUCIDAD.invitacion).toISOString(),
+          body.workspaceId ?? null,
         ]);
 
-        const { rows } = await db.query<{ org: string; quien: string }>(
-          `select o.name as org, coalesce(p.display_name, 'alguien') as quien
+        const { rows } = await db.query<{ org: string; quien: string; workspace: string | null }>(
+          `select o.name as org, coalesce(p.display_name, 'alguien') as quien,
+                  w.name as workspace
              from organizations o, profiles p
+             left join workspaces w on w.id = $3
             where o.id = $1 and p.id = $2`,
-          [orgId, userId],
+          [orgId, userId, body.workspaceId ?? null],
         );
         return rows[0]!;
       });
@@ -138,7 +148,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
 
       await enviarCorreo({
         to: body.email,
-        ...plantillas.invitacion(contexto.org, contexto.quien, url),
+        ...plantillas.invitacion(contexto.org, contexto.quien, url, contexto.workspace),
       });
 
       // Si la persona ya tiene cuenta, además le suena la campana dentro.
@@ -174,10 +184,13 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
       return withUser(userId, async (db) => {
         const { rows } = await db.query(
-          `select id, email, role, created_at as "createdAt", expires_at as "expiresAt",
-                  accepted_at as "acceptedAt"
-             from invitations where organization_id = $1
-            order by created_at desc`,
+          `select i.id, i.email, i.role, i.workspace_id as "workspaceId", w.name as "workspaceName",
+                  i.created_at as "createdAt", i.expires_at as "expiresAt",
+                  i.accepted_at as "acceptedAt"
+             from invitations i
+             left join workspaces w on w.id = i.workspace_id
+            where i.organization_id = $1
+            order by i.created_at desc`,
           [orgId],
         );
         return { invitations: rows };

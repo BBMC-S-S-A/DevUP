@@ -155,8 +155,12 @@ function Invitacion() {
     <Marco
       rotulo="Invitación"
       icono={<Building2 size={19} />}
-      titulo={invitation.organizationName}
-      subtitulo={`${invitation.invitedByName} te ha invitado`}
+      titulo={invitation.workspaceName ?? invitation.organizationName}
+      subtitulo={
+        invitation.workspaceName
+          ? `${invitation.invitedByName} te ha invitado, dentro de ${invitation.organizationName}`
+          : `${invitation.invitedByName} te ha invitado`
+      }
       chip={<Chip tono="accent">{ROLES[invitation.role] ?? invitation.role}</Chip>}
     >
       {/* La ficha de datos: a quién va dirigida y con qué rango. En mono porque
@@ -186,7 +190,7 @@ function Invitacion() {
             icono={<Building2 size={15} />}
             onClick={() => void aceptar()}
           >
-            {busy ? "Entrando…" : `Unirme a ${invitation.organizationName}`}
+            {busy ? "Entrando…" : `Unirme a ${invitation.workspaceName ?? invitation.organizationName}`}
           </Boton>
         ) : (
           // Aceptarla con otra cuenta metería a quien no toca en la

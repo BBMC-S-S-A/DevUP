@@ -136,6 +136,7 @@ export type SignupPolicy = {
 
 export type Invitation = {
   organizationName: string;
+  workspaceName: string | null;
   email: string;
   role: "owner" | "admin" | "member";
   invitedByName: string;
@@ -147,6 +148,8 @@ export type PendingInvitation = {
   id: string;
   email: string;
   role: string;
+  workspaceId: string | null;
+  workspaceName: string | null;
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;

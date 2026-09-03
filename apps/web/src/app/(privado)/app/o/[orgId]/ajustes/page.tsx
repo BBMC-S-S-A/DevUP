@@ -24,6 +24,7 @@ import {
   type OrganizationLink,
   type OrganizationMember,
   type PendingInvitation,
+  type Workspace,
   ApiError,
   api,
 } from "@/lib/api";
@@ -312,12 +313,22 @@ function Invitar({ orgId }: { orgId: string }) {
   // en vez de confiar en que el correo llegue.
   const [enlace, setEnlace] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  // Vacío = toda la organización. Los personales no salen: a un workspace
+  // personal no se invita a nadie, es de una sola persona por definición.
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [compartidos, setCompartidos] = useState<Workspace[]>([]);
 
   const cargar = useCallback(async () => {
-    const { invitations } = await api
-      .get<{ invitations: PendingInvitation[] }>(`/organizations/${orgId}/invitations`)
-      .catch(() => ({ invitations: [] }));
+    const [{ invitations }, { workspaces }] = await Promise.all([
+      api
+        .get<{ invitations: PendingInvitation[] }>(`/organizations/${orgId}/invitations`)
+        .catch(() => ({ invitations: [] })),
+      api
+        .get<{ workspaces: Workspace[] }>(`/organizations/${orgId}/workspaces`)
+        .catch(() => ({ workspaces: [] })),
+    ]);
     setPendientes(invitations.filter((i) => !i.acceptedAt));
+    setCompartidos(workspaces.filter((w) => w.visibility === "shared"));
   }, [orgId]);
 
   useEffect(() => {
@@ -341,7 +352,7 @@ function Invitar({ orgId }: { orgId: string }) {
           try {
             const { url } = await api.post<{ sent: boolean; url: string }>(
               `/organizations/${orgId}/invitations`,
-              { email, role: rol },
+              { email, role: rol, workspaceId: workspaceId || null },
             );
             setEnlace(url);
             setCopiado(false);
@@ -376,6 +387,22 @@ function Invitar({ orgId }: { orgId: string }) {
             Administrador
           </option>
         </Desplegable>
+        {compartidos.length > 0 && (
+          <Desplegable
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.target.value)}
+            aria-label="A dónde entra"
+          >
+            <option className="bg-surface" value="">
+              Toda la organización
+            </option>
+            {compartidos.map((workspace) => (
+              <option className="bg-surface" key={workspace.id} value={workspace.id}>
+                Solo «{workspace.name}»
+              </option>
+            ))}
+          </Desplegable>
+        )}
         <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
         </Boton>
@@ -423,6 +450,7 @@ function Invitar({ orgId }: { orgId: string }) {
               <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
                 {invitacion.email}
               </span>
+              {invitacion.workspaceName && <Chip tono="accent">{invitacion.workspaceName}</Chip>}
               <Chip>{invitacion.role}</Chip>
               <button
                 type="button"
