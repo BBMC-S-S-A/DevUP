@@ -676,6 +676,41 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
 }
 
 /** Milisegundos a `m:ss`. Vive aquí porque lo usan el reproductor y la cola. */
+/**
+ * Traduce un fallo de Spotify a algo que le sirva a quien lo está viendo.
+ *
+ * NO sustituye al mensaje técnico de `llamarSpotify`, que se mantiene intacto
+ * —los reintentos lo reconocen por texto y ahí es donde está el detalle que
+ * hace falta para depurar—. Esto es solo la capa de arriba: lo que se enseña.
+ *
+ * El caso que importa es el primero. La app de Spotify está en «modo
+ * desarrollo», que solo admite CINCO cuentas y hay que darlas de alta a mano en
+ * su panel. Salir de ahí (Extended Quota Mode) exige, desde mayo de 2025, ser
+ * una organización con 250.000 usuarios activos al mes: no es algo que se
+ * arregle configurando. Sin traducir, quien acaba de registrarse leía «check
+ * your settings on developer.spotify.com/dashboard», que le manda a arreglar un
+ * panel que no es suyo y al que no tiene acceso.
+ */
+export function explicarFalloSpotify(fallo: unknown): string | undefined {
+  if (!(fallo instanceof Error)) return undefined;
+
+  if (/not registered for this application/i.test(fallo.message)) {
+    return (
+      "Esta cuenta de Spotify no está dada de alta en la aplicación. Spotify " +
+      "solo permite cinco cuentas mientras la integración está en pruebas, y " +
+      "hay que añadirlas a mano. Pídeselo a quien administra DevUP."
+    );
+  }
+
+  // Reproducir por el SDK web es cosa de Premium, y el mensaje de Spotify para
+  // esto es igual de opaco que el anterior.
+  if (/premium/i.test(fallo.message)) {
+    return "Spotify solo deja reproducir desde otra aplicación con una cuenta Premium.";
+  }
+
+  return fallo.message;
+}
+
 export function reloj(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "0:00";
   const total = Math.floor(ms / 1000);

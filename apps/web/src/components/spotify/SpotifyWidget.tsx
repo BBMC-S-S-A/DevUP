@@ -4,6 +4,7 @@ import { Loader2, Music } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSpotify, type Ponible } from "@/lib/spotify/SpotifyProvider";
+import { explicarFalloSpotify } from "@/lib/spotify/reproductor";
 import { useSpotifyChannelFeed } from "@/lib/spotify/useSpotifyChannelFeed";
 import {
   Barra,
@@ -115,7 +116,7 @@ export function SpotifyWidget({
         await poner(pista);
       } catch (fallo) {
         toast.error("No se pudo reproducir", {
-          description: fallo instanceof Error ? fallo.message : undefined,
+          description: explicarFalloSpotify(fallo),
         });
       }
     },
@@ -131,7 +132,7 @@ export function SpotifyWidget({
         await reproducirContexto(contextoUri);
       } catch (fallo) {
         toast.error("No se pudo poner la lista", {
-          description: fallo instanceof Error ? fallo.message : undefined,
+          description: explicarFalloSpotify(fallo),
         });
       }
     },

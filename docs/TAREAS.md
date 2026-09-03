@@ -294,8 +294,22 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       organización desde cero — la pantalla ya existe para eso
       (`NewOrganization`, `apps/web/src/app/app/page.tsx`). No hay ninguna
       migración de datos pendiente por esto.
-- [ ] 4 · Claves S3 del almacén (Storage → S3 Access Keys) y apuntar
-      `S3_ENDPOINT` al de Supabase. *Solo Juan.*
+- [x] ~~4 · Claves S3 del almacén y apuntar `S3_ENDPOINT` al de Supabase~~ —
+      **hecho, pero no con Supabase**: de Supabase nos fuimos, así que el
+      almacén es un **MinIO propio como un servicio más de Railway** (servicio
+      `storage`, imagen `minio/minio`, volumen en `/data`). Mismo patrón que
+      Postgres, sin dar de alta nada ni volver a una dependencia que ya
+      habíamos dejado. `S3_ENDPOINT` es su dominio público —lo abren los
+      navegadores con las URLs firmadas— y `S3_ENDPOINT_INTERNO` va por
+      `storage.railway.internal`, que es por donde el servidor comprueba y
+      borra.
+      **No hubo nada que migrar**: la tabla `files` estaba vacía y los avatares
+      son fotos de Google, no archivos nuestros.
+      Un aviso que sale en el registro y **es inofensivo**: «no se pudo fijar la
+      política CORS». MinIO no implementa `PutBucketCors` —contesta «not
+      implemented»— porque su CORS se configura en el servidor, y de fábrica ya
+      responde al preflight con el origen que se le pide. Comprobado con un
+      `OPTIONS` real y con una subida entera desde el navegador.
 - [ ] Ponerle `search_path` fijo a las seis funciones que no lo llevan
       (`current_user_id`, `global_search`, `mark_channel_read`,
       `touch_opportunity`, `touch_task`, `unread_counts`). Ninguna es
@@ -320,9 +334,14 @@ ninguna funcionalidad**. El orden de lo que sigue importa.
       proyecto de Supabase, que se pausa tras una semana sin actividad. Faltan
       los dos secretos: `DATABASE_ADMIN_URL` y `BACKUP_PASSPHRASE`. *Solo Juan.*
 - [ ] Respaldo del **almacén de archivos**, que se quedó fuera: el volcado de
-      Actions es solo de la base. Va cuando estén los archivos en Supabase y se
-      sepa cuánto pesan.
-- [ ] 9 · **Y solo entonces**, apagar el PC.
+      Actions es solo de la base. Hoy no urge —el almacén está vacío— pero en
+      cuanto haya archivos de verdad hace falta, y ahora vive en el volumen de
+      un servicio de Railway, no en un disco de casa.
+- [x] ~~9 · Y solo entonces, apagar el PC~~ — **ya no hace falta el portátil
+      para nada.** Base de datos, API, tiempo real, web y almacén corren fuera.
+      Lo único que quedaba atado era MinIO, y ya está en Railway. El túnel de
+      Cloudflare y `docker-compose.prod.yml` quedan como plan de emergencia,
+      no como producción.
 
 **Vigilar el primer mes:** las horas de Render. Son 750 al mes para los dos
 servicios juntos, y quien las gasta sin que nadie trabaje es el tráfico de bots
@@ -483,6 +502,23 @@ repositorio**: con `cd docs/propuesta` la ruta del volumen sale duplicada.
   que eran del criterio y no de ellas.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
+- **`db:migrate` cambia la contraseña de `devup_app`, y la saca de
+  `DATABASE_URL`.** Al migrar la base de Railway por el túnel se le pasaron las
+  dos variables apuntando al superusuario —cómodo, y mal—: `migrate.ts` hace
+  `alter role devup_app login password <la de DATABASE_URL>`, así que le puso al
+  rol de la aplicación la contraseña de `postgres`. La API quedó respondiendo
+  500 en toda ruta que tocara la base, mientras `/health` seguía en 200 porque
+  no la toca. **Al migrar contra un entorno remoto, `DATABASE_ADMIN_URL` va al
+  superusuario y `DATABASE_URL` a `devup_app`, con su contraseña de verdad.**
+  Y para diagnosticarlo: el mensaje real no está en el texto del registro
+  —«error no controlado»— sino en el campo `err` de la entrada estructurada,
+  que en la API de Railway se pide con `deploymentLogs { attributes }`.
+- **Una política de SELECT que llama a una función que vuelve a consultar la
+  misma tabla rompe `insert ... returning`.** Postgres aplica la política de
+  SELECT también a la fila recién insertada, y la función no la ve todavía. Sale
+  «new row violates row-level security policy», que apunta a otro sitio. Las
+  políticas de una tabla se escriben sobre las columnas de su propia fila; la
+  función auxiliar es para las tablas que cuelgan de ella. Lo cazó `test:rls`.
 - **Un dominio personalizado de Railway puede quedarse atascado en "validando
   propiedad" con el DNS ya perfecto.** Le pasó a `api.hytrex.co` y a
   `live.hytrex.co` a la vez: DNS confirmado por dos resolutores, y aun así el
