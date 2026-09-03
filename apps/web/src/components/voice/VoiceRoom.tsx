@@ -25,6 +25,7 @@ import { useElapsed } from "@/lib/voice/useElapsed";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { Desplegable } from "@/components/ui/Field";
 import { ParticipantVideos } from "./ParticipantTile";
+import { SalaEspacial, type EnLaSala } from "./SalaEspacial";
 
 export function VoiceRoom({ channel }: { channel: Channel }) {
   const { user } = useSession();
@@ -39,6 +40,34 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
   const inRoom = isThisChannel && (room.status === "live" || room.status === "connecting");
   const total = room.participants.length + 1;
   const spotlightScreen = inRoom && (room.sharing || room.participants.some((p) => p.sharing));
+
+  /**
+   * Sin una sola cámara ni pantalla compartida, la sala se pinta como un SITIO
+   * y no como una rejilla de tarjetas: con la voz sola, cada tarjeta es un
+   * rectángulo con un hueco de vídeo vacío dentro y un pie de estado debajo.
+   *
+   * En cuanto alguien enciende algo, vuelve la rejilla — ahí hace falta un
+   * recuadro con proporción de vídeo, y las tarjetas son la forma correcta.
+   */
+  const soloVoz =
+    inRoom &&
+    !room.cameraOn &&
+    !room.sharing &&
+    !room.participants.some((p) => p.camera || p.sharing);
+
+  const enLaSala: EnLaSala[] = [
+    {
+      displayName: user?.displayName ?? "Tú",
+      muted: room.muted,
+      audioStream: room.localAudioStream,
+      esYo: true,
+    },
+    ...room.participants.map((p) => ({
+      displayName: p.displayName,
+      muted: p.muted,
+      audioStream: p.audioStream,
+    })),
+  ];
 
   return (
     // El halo del panel es la señal de «aquí está pasando algo»: se enciende
@@ -242,30 +271,34 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
           />
         ) : (
           <>
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
-              <ParticipantVideos
-                participant={{
-                  displayName: user?.displayName ?? "Tú",
-                  muted: room.muted,
-                  camera: room.cameraOn,
-                  sharing: room.sharing,
-                  connectionState: "connected",
-                  audioStream: room.localAudioStream,
-                  cameraStream: room.localCameraStream,
-                  screenStream: room.localScreenStream,
-                }}
-                isSelf
-                spotlightScreen={spotlightScreen}
-              />
-              {room.participants.map((participant, indice) => (
+            {soloVoz ? (
+              <SalaEspacial gente={enLaSala} />
+            ) : (
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
                 <ParticipantVideos
-                  key={participant.peerId}
-                  participant={participant}
+                  participant={{
+                    displayName: user?.displayName ?? "Tú",
+                    muted: room.muted,
+                    camera: room.cameraOn,
+                    sharing: room.sharing,
+                    connectionState: "connected",
+                    audioStream: room.localAudioStream,
+                    cameraStream: room.localCameraStream,
+                    screenStream: room.localScreenStream,
+                  }}
+                  isSelf
                   spotlightScreen={spotlightScreen}
-                  indice={indice + 1}
                 />
-              ))}
-            </ul>
+                {room.participants.map((participant, indice) => (
+                  <ParticipantVideos
+                    key={participant.peerId}
+                    participant={participant}
+                    spotlightScreen={spotlightScreen}
+                    indice={indice + 1}
+                  />
+                ))}
+              </ul>
+            )}
 
             {room.devices.length > 1 && (
               <label className="mt-5 inline-flex items-center gap-2">

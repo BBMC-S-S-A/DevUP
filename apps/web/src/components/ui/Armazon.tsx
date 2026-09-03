@@ -95,16 +95,31 @@ export function Armazon({
       <aside
         // `translate` y no `display`: un cajón que aparece de golpe no dice de
         // dónde viene, y el gesto de volver a cerrarlo deja de ser evidente.
+        // En escritorio FLOTA, separada de los bordes y con esquinas.
+        //
+        // Pegada al borde y cuadrada, la barra se lee como el marco de la
+        // ventana: el vidrio no tiene nada por detrás que dejar pasar y la
+        // atmósfera queda tapada justo en la esquina donde nace. Separándola
+        // tres cuartos de rem, la luz pasa por alrededor y entonces sí se ve
+        // que es un material sobre algo, que es toda la idea.
+        //
+        // En móvil sigue a ras y cuadrada, y no es una excepción sin más: ahí
+        // es un cajón que entra desde el canto de la pantalla, y un cajón con
+        // margen se lee como una tarjeta que salió mal.
         className={`cristal fixed inset-y-0 left-0 z-50 flex w-64 flex-col rounded-none
           transition-transform duration-300 md:z-30 md:translate-x-0
+          md:inset-y-3 md:left-3 md:w-60 md:rounded-2xl
           ${abierto ? "translate-x-0" : "-translate-x-full"}`}
         style={{ transitionTimingFunction: "var(--muelle-firme)" }}
         {...(abierto ? { role: "dialog", "aria-modal": true, "aria-label": "Navegación" } : {})}
       >
         <span
           aria-hidden
+          // Solo en móvil: cuando la barra es un cajón a ras, este filo hace de
+          // separación con el contenido. Flotando, la tarjeta ya tiene borde
+          // entero y el filo se convierte en una raya suelta encima.
           className="pointer-events-none absolute inset-y-0 right-0 w-px
-            bg-gradient-to-b from-transparent via-accent/25 to-transparent"
+            bg-gradient-to-b from-transparent via-accent/25 to-transparent md:hidden"
         />
 
         {/* Cerrar desde dentro. El velo también cierra, pero un botón visible
@@ -125,7 +140,7 @@ export function Armazon({
         {barra}
       </aside>
 
-      <main className="alto-util pt-12 md:pt-0 md:pl-64">{children}</main>
+      <main className="alto-util pt-12 md:pt-0 md:pl-[16.5rem]">{children}</main>
     </div>
   );
 }
@@ -140,7 +155,7 @@ export function Armazon({
 export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
   return (
     <div className="min-h-[100svh]">
-      <aside className="cristal fixed inset-y-0 left-0 z-30 hidden w-64 flex-col rounded-none md:flex">
+      <aside className="cristal fixed inset-y-3 left-3 z-30 hidden w-60 flex-col rounded-2xl md:flex">
         <div className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           <div className="devup-esqueleto h-2.5 w-24 rounded" />
           <div className="mt-3 flex items-center gap-2.5">
@@ -159,7 +174,7 @@ export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
           ))}
         </div>
       </aside>
-      <main className="min-h-[100svh] md:pl-64" />
+      <main className="min-h-[100svh] md:pl-[16.5rem]" />
     </div>
   );
 }
