@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
+import { YoutubeWidget } from "@/components/spotify/YoutubeWidget";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import {
   type Despliegue,
@@ -128,7 +129,7 @@ const money = (cents: number): string =>
 
 export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
-  const { canal, sesion } = useSpotify();
+  const { canal, sesion, pistaYt, youtube } = useSpotify();
   const { user } = useSession();
 
   const espacio = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
@@ -364,7 +365,7 @@ export default function PanelPage() {
           <section
             className="capa-flotante flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl transition-[box-shadow,border-color] duration-200"
             style={
-              sesion?.isPlaying
+              sesion?.isPlaying || youtube.estado.reproduciendo
                 ? {
                     borderColor: "color-mix(in oklab, var(--c-accent) 45%, transparent)",
                     boxShadow: "var(--halo-accent), inset 0 1px 0 var(--brillo-canto)",
@@ -378,7 +379,16 @@ export default function PanelPage() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {canal ? (
-                <SpotifyWidget channelId={canal} variante="expandido" />
+                // Cuando lo que suena es de YouTube, `SpotifyWidget` seguiría
+                // enseñando su propia interfaz —Cola/Buscar de Spotify— sobre
+                // una pista que no es suya. El mismo par (`pistaYt` +
+                // `videoId`) que ya usa SpotifyProvider para decidir si publica
+                // el «qué suena» de YouTube decide aquí qué tarjeta pintar.
+                pistaYt && youtube.estado.videoId ? (
+                  <YoutubeWidget />
+                ) : (
+                  <SpotifyWidget channelId={canal} variante="expandido" />
+                )
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
                   <Music size={18} className="text-faint" />
