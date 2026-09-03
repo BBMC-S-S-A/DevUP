@@ -525,10 +525,29 @@ function PanelYoutube({
 
   return createPortal(
     <div
-      className={`fixed bottom-4 right-4 z-40 overflow-hidden rounded-xl border border-line
-        bg-black shadow-[0_8px_32px_-8px_rgb(0_0_0/0.7)] transition-opacity duration-200
+      className={`overflow-hidden rounded-xl border border-line bg-black
+        shadow-[0_8px_32px_-8px_rgb(0_0_0/0.7)] transition-opacity duration-200
         ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
-      style={{ width: 256, height: 144 }}
+      /**
+       * La posición va en línea y no con `fixed bottom-4 right-4`, aunque lo
+       * suyo sería lo segundo.
+       *
+       * `globals.css` tiene `body > * { position: relative }` para que todo se
+       * pinte sobre la capa de atmósfera, y esa regla NO está dentro de una
+       * capa CSS mientras que las utilidades de Tailwind sí. En la cascada, lo
+       * que está fuera de toda capa gana a lo que está dentro, sin importar la
+       * especificidad — así que la clase `fixed` perdía. Se veía raro de
+       * verdad: hasta `absolute` calculaba `relative`, y el panel acababa a
+       * 1.600 píxeles del borde superior con el CSS aparentemente correcto.
+       */
+      style={{
+        position: "fixed",
+        bottom: 16,
+        right: 16,
+        zIndex: 40,
+        width: 256,
+        height: 144,
+      }}
       aria-hidden={!visible}
     >
       <div ref={alMontar} className="size-full" />
