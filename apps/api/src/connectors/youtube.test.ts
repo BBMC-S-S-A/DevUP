@@ -15,6 +15,12 @@
  *
  *   npm run test:youtube
  */
+// `export {}` para que este archivo sea un módulo: sin un solo import ni
+// export, TypeScript lo trata como script y prohíbe el `await` de abajo. Y ese
+// await tiene que ser de arriba, porque `env` se evalúa al importar el módulo y
+// la clave debe estar puesta antes.
+export {};
+
 process.env.YOUTUBE_API_KEY = "clave-de-prueba";
 
 const { idDeEnlace, youtubeConfigurado } = await import("./youtube.js");
