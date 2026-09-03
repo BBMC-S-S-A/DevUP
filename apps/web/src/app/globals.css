@@ -451,6 +451,28 @@ h3 {
   box-shadow: var(--sombra-chip), inset 0 1px 0 var(--brillo-canto);
 }
 
+/* Una capa DENTRO del cristal: su mismo material, sin el desenfoque.
+ *
+ * Sin `backdrop-filter` a propósito, y por dos motivos que apuntan al mismo
+ * sitio. El primero es la regla 1 de la cabecera: el cristal no va en una
+ * lista que se desplaza, porque repinta. El segundo es que ahí no haría nada
+ * — el padre ya desenfocó lo que hay detrás, así que desenfocar otra vez es
+ * pagar el coste dos veces por el mismo efecto.
+ *
+ * Lo que la hace leer como una capa nueva no es el desenfoque: es la base
+ * oscura de `--vidrio` apilándose sobre la del padre, más el canto. Y eso
+ * además MEJORA el contraste en vez de empeorarlo, que es lo contrario de lo
+ * que parece: dos capas de vidrio blanco aditivo aclararían el fondo y el
+ * texto terciario caería a 4,1:1, por debajo del mínimo AA. Con la base oscura
+ * queda en 4,7:1, un pelo mejor que una sola capa. Medido sobre el centro de
+ * una luz de la atmósfera, que es el peor caso.
+ */
+.capa {
+  background: var(--vidrio);
+  border: 1px solid var(--canto);
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
+}
+
 /* Un panel que está pasando algo ahora mismo. Ver regla 2 de la cabecera. */
 .panel-vivo {
   border-color: color-mix(in oklab, var(--c-accent) 45%, transparent);

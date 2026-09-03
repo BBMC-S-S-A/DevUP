@@ -229,7 +229,12 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
           <div>
             <GrupoRotulo titulo="Espacio" />
-            <ul className="space-y-0.5">
+            {/* Los destinos fijos del espacio van en su propia capa, separados
+                de los canales de abajo. No es adorno: los canales entran y
+                salen —se crean, se borran, cambian de nombre— y estos cinco no
+                se mueven nunca. Meterlos en una capa dice cuál de las dos
+                listas es el mapa y cuál es el contenido. */}
+            <ul className="capa space-y-0.5 rounded-2xl p-1.5">
               <li>
                 {/* El panel es la única pieza de esta lista que no es de este
                     workspace en sentido estricto —vive por persona, ver

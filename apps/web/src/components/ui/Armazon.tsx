@@ -163,15 +163,20 @@ export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
             <div className="devup-esqueleto h-3 flex-1 rounded" />
           </div>
         </div>
-        <div className="flex-1 space-y-2 px-2.5 py-4">
+        <div className="flex-1 space-y-4 px-2.5 py-4">
           <div className="devup-esqueleto h-9 rounded-xl" />
-          {Array.from({ length: filas }).map((_, i) => (
-            <div
-              key={i}
-              style={{ animationDelay: `${i * 60}ms` }}
-              className="devup-esqueleto h-7 rounded-lg"
-            />
-          ))}
+          {/* La capa se dibuja aquí también, y no es un detalle: sin ella el
+              armazón real llega con una tarjeta que el esqueleto no tenía y la
+              lista entera salta hacia abajo al montar. */}
+          <div className="capa space-y-2 rounded-2xl p-1.5">
+            {Array.from({ length: filas }).map((_, i) => (
+              <div
+                key={i}
+                style={{ animationDelay: `${i * 60}ms` }}
+                className="devup-esqueleto h-7 rounded-lg"
+              />
+            ))}
+          </div>
         </div>
       </aside>
       <main className="min-h-[100svh] md:pl-[16.5rem]" />
