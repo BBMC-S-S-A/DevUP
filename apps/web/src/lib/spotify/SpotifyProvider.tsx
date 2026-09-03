@@ -340,6 +340,14 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
 
       // Si no suena nada, esto es además la orden de empezar: una cola con cosas
       // dentro que no se mueve parece estropeada.
+      //
+      // Una pista de YouTube arranca aunque Spotify no esté conectado: no lo
+      // necesita, y exigirlo dejaría la cola quieta justo para quien añadimos
+      // YouTube en primer lugar.
+      if (esDeYoutube(pista.trackUri) && !youtube.estado.reproduciendo) {
+        await poner(pista).catch(() => {});
+        return;
+      }
       if (puedeSonar && (!uriSonando || !sonando)) {
         await poner(pista).catch(() => {});
         return;
@@ -347,7 +355,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       // Y si ya suena algo, va detrás en la cola de Spotify para que enlace.
       await sincronizarConSpotify();
     },
-    [puedeSonar, uriSonando, sonando, poner, sincronizarConSpotify],
+    [puedeSonar, uriSonando, sonando, poner, sincronizarConSpotify, youtube.estado.reproduciendo],
   );
 
   /**

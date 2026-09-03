@@ -43,6 +43,7 @@ import {
 } from "@/lib/api";
 import { type Ponible } from "@/lib/spotify/SpotifyProvider";
 import { reloj, type Playlist, type useSpotifyPlayer } from "@/lib/spotify/reproductor";
+import { esDeYoutube } from "@/lib/youtube/reproductor";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Rotulo } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -714,7 +715,12 @@ export function Buscador({
               {pista.durationMs === null ? "en vivo" : reloj(pista.durationMs)}
             </span>
 
-            {puedeReproducir && (
+            {/* YouTube no depende de que Spotify esté conectado ni de tener
+                Premium — que es exactamente el motivo de haberlo añadido. Sin
+                esta excepción, quien no tenga Spotify vería resultados de
+                YouTube que solo puede encolar y nunca poner, que es la mitad
+                inútil de la función. */}
+            {(puedeReproducir || esDeYoutube(pista.uri)) && (
               <BotonIcono
                 etiqueta={`Reproducir ${pista.name} ahora`}
                 onClick={() =>
