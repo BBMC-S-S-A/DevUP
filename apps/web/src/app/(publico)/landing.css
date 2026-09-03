@@ -1,46 +1,52 @@
 /* =============================================================================
  * DevUP · sistema visual de la landing
  *
- * ESTO NO ES EL SISTEMA DEL PRODUCTO Y NO DEBE SERLO TODAVÍA.
+ * HASTA HOY (3 de septiembre) ESTO NO ERA EL SISTEMA DEL PRODUCTO, A PROPÓSITO.
+ * La razón de entonces sigue siendo cierta y vale la pena conservarla: el
+ * morado `#6d28d9` del producto NO SALE DE LA MARCA. Muestreando los 121.990
+ * píxeles opacos de `logo-devup.png` salen dos colores y ninguno es morado:
+ * `#000B21` para el cuerpo de la D —29.859 píxeles, el dominante con
+ * diferencia— y `#0400AA` para el arco superior, un azul casi puro.
  *
- * `globals.css` está construido para una herramienta que se mira ocho horas:
- * superficies suaves, esquinas redondeadas, morado de acento y siete colores
- * con significado. Copiado a una portada da exactamente lo que dio la primera
- * versión de la propuesta — el aspecto por defecto de cualquier SaaS.
+ * Y EL AZUL Y EL MORADO SON EL MISMO COLOR. `#0400AA` es hsl(242, 100%, 33%).
+ * Subido al 68 % de luz para que contraste sobre negro da `#7A6BFF` — que es,
+ * con dos decimales de diferencia, `--c-accent-bright` de `globals.css`. No es
+ * casualidad ni una coincidencia feliz: la dirección Sala partió del mismo
+ * azul de marca que esta landing ya llevaba usando. Bajar la paleta del
+ * producto aquí no diluye la identidad — la cierra, porque ya eran el mismo
+ * tono a dos alturas.
  *
- * Y hay un dato que lo justifica: el morado `#6d28d9` del producto NO SALE DE
- * LA MARCA. Muestreando los 121.990 píxeles opacos de `logo-devup.png` salen
- * dos colores y ninguno es morado: `#000B21` para el cuerpo de la D —29.859
- * píxeles, el dominante con diferencia— y `#0400AA` para el arco superior, un
- * azul casi puro. Este archivo se construye desde ahí.
+ * QUÉ CAMBIA HOY, y por qué. Los mismos nombres de variable de siempre —para
+ * no reescribir treinta selectores— pero apuntando a los tokens de
+ * `globals.css` en vez de a valores propios: un token, no dos copias que
+ * puedan divergir. Con eso llega el vidrio (`--vidrio`, `--canto`), el
+ * degradado y la sombra del acento (`--acento-gradiente`, `--sombra-acento`) y
+ * la esquina redondeada — la regla de «radio cero» se retira porque ya no hay
+ * nada que la esquina redondeada delate: es la misma esquina que el resto de
+ * la aplicación.
  *
- * EL AZUL Y EL MORADO SON EL MISMO COLOR. `#0400AA` es hsl(242, 100%, 33%).
- * Subido al 68 % de luz para que contraste sobre negro da `#7A6BFF`, que el ojo
- * lee como morado. Por eso el tema claro es azul y el oscuro morado sin que la
- * identidad se parta en dos: es un tono a dos alturas.
- *
- * TRES REGLAS:
- *   1. Una sola familia, Manrope. El peso y el tamaño hacen toda la jerarquía.
- *   2. Dos colores por tema. Ni cian, ni ámbar, ni verde de estado.
- *   3. Radio cero. La esquina redondeada es lo que más rápido delata una
- *      maqueta hecha por defecto.
- *
- * Todo va bajo `.landing` para que no se filtre ni un token a `/app`. El día
- * que se decida bajar esta paleta al producto, se mueve a `globals.css`; hasta
- * entonces, las veintiuna pantallas de dentro no se enteran de que existe.
+ * LO QUE NO CAMBIA, y sigue siendo tan cierto como el 2 de septiembre:
+ *   - Una sola familia, Manrope. Cambiarla es una decisión de marca aparte —
+ *     de tipografía, no de material— y no se tocó hoy.
+ *   - Dos colores por tema, sin estados. La landing no tiene nada que avisar
+ *     en cian, ámbar o verde: no es una regla de la dirección Sala, es que
+ *     aquí no hace falta.
+ *   - Todo bajo `.landing`: sigue siendo su propio árbol de selectores, ahora
+ *     alimentado por los mismos tokens que `/app` en vez de por una copia.
  * ========================================================================== */
 
 .landing {
-  --fondo: #ffffff;
-  --velo: #f5f5fa;
-  --tinta: #0a0a12;
-  --suave: #5c5c72;
-  --tenue: #8e8ea6;
-  --linea: #e6e6ef;
-  --acento: #0400aa;
-  --acento-alto: #2a1fe0;
-  --acento-velo: #eeeefc;
-  --sobre-acento: #ffffff;
+  --fondo: var(--c-canvas);
+  --tinta: var(--c-ink);
+  --suave: var(--c-muted);
+  --tenue: var(--c-faint);
+  --linea: var(--c-line);
+  --acento: var(--c-accent);
+  --acento-alto: var(--c-accent-bright);
+  --acento-velo: var(--c-accent-soft);
+  /* El texto SOBRE el acento, no el acento en sí: el mismo canvas oscuro que
+     usa el botón primario del producto (Boton.tsx, variante "primario"). */
+  --sobre-acento: var(--c-canvas);
 
   --curva: cubic-bezier(0.22, 1, 0.36, 1);
   --curva-larga: cubic-bezier(0.16, 1, 0.3, 1);
@@ -54,7 +60,10 @@
   --p-3: clamp(1.9rem, 1.3rem + 2.8vw, 3.2rem);
   --p-4: clamp(2.8rem, 1.5rem + 6vw, 6.5rem);
 
-  background: var(--fondo);
+  /* Sin `background` propio: con uno opaco aquí, la atmósfera de
+     `body::before` —ya global, ya detrás de todo `/app`— se cortaría en seco
+     justo donde empieza la landing. `body` ya trae `bg-canvas`, así que dejar
+     de pintar encima es lo único que hacía falta para que se vea. */
   color: var(--tinta);
   font-family: var(--fuente-landing), ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-size: var(--p-0);
@@ -62,36 +71,6 @@
   line-height: 1.6;
   letter-spacing: -0.011em;
   min-height: 100svh;
-}
-
-/* El tema lo marca `data-tema` en el <html>, igual que en el producto — el
-   mismo conmutador sirve para los dos lados. Y sin atributo manda el sistema. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) .landing {
-    --fondo: #0b0a16;
-    --velo: #131126;
-    --tinta: #ffffff;
-    --suave: #a5a2c4;
-    --tenue: #726f95;
-    --linea: #242138;
-    --acento: #7a6bff;
-    --acento-alto: #9c90ff;
-    --acento-velo: #1a1638;
-    --sobre-acento: #0b0a16;
-  }
-}
-
-:root[data-tema="oscuro"] .landing {
-  --fondo: #0b0a16;
-  --velo: #131126;
-  --tinta: #ffffff;
-  --suave: #a5a2c4;
-  --tenue: #726f95;
-  --linea: #242138;
-  --acento: #7a6bff;
-  --acento-alto: #9c90ff;
-  --acento-velo: #1a1638;
-  --sobre-acento: #0b0a16;
 }
 
 .landing h1,
@@ -119,7 +98,18 @@
 }
 .etiAcento { color: var(--acento); }
 .num { font-variant-numeric: tabular-nums; }
-.acento { color: var(--acento); }
+
+/* El mismo degradado que `.texto-plasma` de globals.css, para «Un sitio.» del
+   titular: es la única palabra de toda la landing que lo lleva, así que vale
+   la pena el degradado — repetido en cada `.eti` o enlace se comería el
+   contraste, que es justo por lo que esa clase avisa que es solo para
+   titulares cortos. */
+.acento {
+  background: linear-gradient(96deg, var(--c-accent-bright), var(--c-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 
 /* --- Rejilla ------------------------------------------------------------- */
 .hoja {
@@ -177,26 +167,44 @@
   border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
-  border-radius: 0;
+  border-radius: 0.875rem;
   transition:
     background-color 150ms var(--curva),
     color 150ms var(--curva),
-    border-color 150ms var(--curva);
+    border-color 150ms var(--curva),
+    filter 150ms var(--curva);
 }
 .btn:focus-visible { outline: 2px solid var(--acento); outline-offset: 3px; }
 
 .btnLg { height: 3.5rem; padding: 0 2rem; }
-.btnMd { height: 2.5rem; padding: 0 1.1rem; font-size: var(--p--1); }
+.btnMd { height: 2.5rem; padding: 0 1.1rem; font-size: var(--p--1); border-radius: 0.75rem; }
 .btnFull { height: 2.9rem; width: 100%; font-size: var(--p--1); }
 
 /* Van calificadas con `.landing` a propósito. `.landing a` —que pinta los
    enlaces del acento— tiene especificidad (0,1,1) y le ganaba a un `.btnSolido`
    suelto (0,1,0): el resultado era texto azul sobre fondo azul, es decir, un
-   botón sin texto. Con dos clases, (0,2,0), manda el botón. */
-.landing .btnSolido { background: var(--acento); color: var(--sobre-acento); }
-.landing .btnSolido:hover { background: var(--acento-alto); }
+   botón sin texto. Con dos clases, (0,2,0), manda el botón.
+   El relleno es el mismo degradado que el botón primario del producto
+   (Boton.tsx, variante "primario"): `--acento-gradiente` y `--sombra-acento`
+   en vez de un plano de color, para que lea como una superficie iluminada. */
+.landing .btnSolido {
+  background: var(--acento-gradiente);
+  color: var(--sobre-acento);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.25) inset, var(--sombra-acento);
+}
+.landing .btnSolido:hover { filter: brightness(1.1); }
 
-.landing .btnLinea { border-color: var(--linea); color: var(--tinta); }
+/* `.vidrio` y no un simple hueco: en la maqueta de la dirección Sala el botón
+   secundario de la portada ("Ver la demo") es cristal, no solo un borde. Esta
+   es la única familia de botones de toda la landing donde el cristal tiene
+   sentido —dos por pantalla como mucho, nunca en una lista—, así que no
+   choca con la regla 1 de globals.css. */
+.landing .btnLinea {
+  background: var(--vidrio);
+  border-color: var(--canto);
+  color: var(--tinta);
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
+}
 .landing .btnLinea:hover { border-color: var(--acento); color: var(--acento); }
 
 .acciones { display: flex; flex-wrap: wrap; gap: 0.75rem; }
@@ -220,21 +228,44 @@
 .prueba b { font-size: var(--p-1); font-weight: 800; letter-spacing: -0.03em; }
 
 /* --- Teatro de ventanas -------------------------------------------------- */
+/* Es el visual central del hero, no una tarjeta de lista: dos por página como
+   mucho, así que el `backdrop-filter` de `--vidrio` no choca con la regla 1
+   de globals.css (cara en una lista larga, gratis aquí).
+   MEDIDO Y NO A OJO: `--vidrio` solo, en oscuro, compone sobre `--c-canvas` en
+   algo cercano a rgb(22,20,30) sobre rgb(10,7,19) — menos de 1,5:1, invisible
+   de verdad, no solo sutil. Le pasa porque este cristal está pensado para
+   vivir cerca de la luz de `--atmosfera`, que es `position: fixed` y por
+   tanto siempre relativa al viewport — y el teatro cae bastante más abajo del
+   rincón donde esa luz es fuerte. La maqueta de la dirección Sala resuelve
+   exactamente este caso con un halo de color propio en vez de depender de la
+   luz de alrededor, y aquí hace falta lo mismo. */
 .teatro {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: clamp(1.5rem, 4vw, 3rem);
   align-items: center;
-  background: var(--velo);
+  background: var(--vidrio);
+  border: 1px solid var(--canto);
+  border-radius: 1.5rem;
+  box-shadow:
+    0 40px 90px -32px color-mix(in oklab, var(--c-accent) 55%, transparent),
+    var(--sombra-panel),
+    inset 0 1px 0 var(--brillo-canto);
+  backdrop-filter: blur(20px);
   padding: clamp(1.5rem, 4vw, 3rem);
 }
 .pila { position: relative; min-height: 12rem; }
+/* `.capa` y no otro vidrio con desenfoque propio: esta ventanita va DENTRO del
+   cristal del teatro, y desenfocar dos veces el mismo fondo es pagar el coste
+   sin ganar nada (el mismo razonamiento que `.capa` en globals.css). */
 .vent {
   position: absolute;
   width: 66%;
   height: 4.75rem;
-  background: var(--fondo);
-  border: 1px solid var(--linea);
+  background: var(--vidrio);
+  border: 1px solid var(--canto);
+  border-radius: 0.875rem;
+  box-shadow: inset 0 1px 0 var(--brillo-canto);
   padding: 0.55rem 0.7rem;
   display: grid;
   gap: 0.5rem;
@@ -254,18 +285,24 @@
 .teatro.reunido .pila > .vent { transform: translate(3rem, 0) rotate(0deg); opacity: 0.12; }
 .teatro.reunido .pila > .vent:nth-child(5) { opacity: 0; }
 
+/* El destino lleva el mismo degradado y sombra que un botón primario: es
+   literalmente la conclusión de la animación, el sitio donde las seis
+   ventanas se convierten en una, así que le corresponde la misma superficie
+   iluminada que «Empezar gratis». */
 .destino {
   min-height: 12rem;
-  background: var(--acento);
+  background: var(--acento-gradiente);
   color: var(--sobre-acento);
+  border-radius: 1.125rem;
   padding: 1.25rem;
   display: grid;
   align-content: space-between;
   gap: 1rem;
   opacity: 0.25;
-  transition: opacity 800ms var(--curva) 350ms;
+  box-shadow: none;
+  transition: opacity 800ms var(--curva) 350ms, box-shadow 800ms var(--curva) 350ms;
 }
-.teatro.reunido .destino { opacity: 1; }
+.teatro.reunido .destino { opacity: 1; box-shadow: 0 1px 0 rgb(255 255 255 / 0.25) inset, var(--sombra-acento); }
 .destino span { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; }
 .destino b { font-size: clamp(1.25rem, 3vw, 1.85rem); font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; }
 
@@ -284,7 +321,7 @@
 .perfil .alivio b { color: var(--acento); font-weight: 600; }
 
 /* --- Planes -------------------------------------------------------------- */
-.ciclo { display: inline-flex; border: 1px solid var(--linea); justify-self: start; }
+.ciclo { display: inline-flex; border: 1px solid var(--linea); border-radius: 0.75rem; overflow: hidden; justify-self: start; }
 .ciclo button {
   border: none;
   background: transparent;
@@ -312,7 +349,15 @@
 }
 .col:first-child { border-left: none; padding-left: 0; }
 .col:last-child { padding-right: 0; }
-.colMarcada { background: var(--acento-velo); border-left-color: transparent; }
+/* La única de las cuatro con caja, y a propósito: sigue sin ser una tarjeta
+   con sombra —Planes.tsx es explícito en que eso es la maqueta por defecto de
+   todo SaaS—, solo un velo del acento con la esquina de Sala en vez de recta. */
+.colMarcada {
+  background: var(--acento-velo);
+  border: 1px solid color-mix(in oklab, var(--c-accent) 22%, transparent);
+  border-radius: 1.125rem;
+  padding-inline: 1.4rem;
+}
 .col h3 { font-size: var(--p-1); letter-spacing: -0.03em; line-height: 1.15; }
 
 .precio { display: grid; gap: 0.25rem; }
@@ -418,6 +463,18 @@
   .destino { opacity: 1 !important; }
 }
 
+/* Mismo trato que `.cristal`/`.cristal-denso` en globals.css: quien pide menos
+   transparencia se queda sin desenfoque y con una superficie sólida, no con un
+   cristal a medias que ni deja pasar la luz ni tiene el contraste de un fondo
+   plano. */
+@media (prefers-reduced-transparency: reduce) {
+  .teatro {
+    background: var(--c-raised);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 /* --- Solo para lectores de pantalla -------------------------------------- */
 .soloLectores {
   position: absolute;
@@ -461,6 +518,8 @@
   width: 11.5rem;
   background: var(--tinta);
   color: var(--fondo);
+  border-radius: 0.75rem;
+  box-shadow: var(--sombra-panel);
   padding: 0.55rem 0.7rem;
   font-size: 0.78rem;
   font-weight: 400;
@@ -494,6 +553,7 @@
   pointer-events: auto;
   background: transparent;
   border: 1px solid var(--linea);
+  border-radius: 0.5rem;
   color: var(--tenue);
   font-family: inherit;
   font-size: 0.5625rem;
