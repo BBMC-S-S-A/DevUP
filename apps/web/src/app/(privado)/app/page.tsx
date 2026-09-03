@@ -3,9 +3,12 @@
 import {
   AlertTriangle,
   Building2,
+  Check,
   ChevronRight,
   Code2,
+  Copy,
   Github,
+  Link2,
   LogOut,
   Mail,
   Megaphone,
@@ -374,6 +377,10 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<"member" | "admin">("member");
   const [busy, setBusy] = useState(false);
+  // Mientras el dominio de correo no esté verificado, el enlace es la vía
+  // fiable: se enseña aquí para que quien invita lo mande por su cuenta.
+  const [enlace, setEnlace] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
 
   const cargar = useCallback(async () => {
     const { invitations } = await api
@@ -411,8 +418,13 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
           event.preventDefault();
           setBusy(true);
           try {
-            await api.post(`/organizations/${organizationId}/invitations`, { email, role: rol });
-            toast.success(`Invitación enviada a ${email}`);
+            const { url } = await api.post<{ sent: boolean; url: string }>(
+              `/organizations/${organizationId}/invitations`,
+              { email, role: rol },
+            );
+            setEnlace(url);
+            setCopiado(false);
+            toast.success(`Invitación creada para ${email}`);
             setEmail("");
             await cargar();
           } catch (caught) {
@@ -449,10 +461,38 @@ function Invitaciones({ organizationId }: { organizationId: string }) {
         <Boton type="submit" variante="primario" cargando={busy}>
           Enviar
         </Boton>
-        <Boton type="button" variante="fantasma" onClick={() => setAbierto(false)}>
+        <Boton
+          type="button"
+          variante="fantasma"
+          onClick={() => {
+            setAbierto(false);
+            setEnlace(null);
+          }}
+        >
           Cerrar
         </Boton>
       </form>
+
+      {enlace && (
+        <div className="devup-entrada mt-3 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent-soft/30 px-2.5 py-2">
+          <Link2 size={13} className="shrink-0 text-accent" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
+            {enlace}
+          </span>
+          <button
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(enlace);
+              setCopiado(true);
+              toast.success("Enlace copiado");
+            }}
+            className="presionable flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-accent hover:bg-accent/10"
+          >
+            {copiado ? <Check size={12} /> : <Copy size={12} />}
+            {copiado ? "Copiado" : "Copiar"}
+          </button>
+        </div>
+      )}
 
       {pendientes.length > 0 && (
         <ul className="mt-3 space-y-1">
