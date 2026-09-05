@@ -282,10 +282,17 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                 </ItemNav>
               </li>
               <li>
+                {/* La biblioteca vivía en la raíz del workspace
+                    (`/app/w/[workspaceId]`), que era también donde aterrizaba
+                    cualquiera que acabara de crear o de entrar a un workspace.
+                    Se movió a su propia ruta porque una biblioteca vacía no es
+                    lo primero que alguien nuevo debería ver: ver
+                    `w/[workspaceId]/page.tsx`, que ahora manda al canal
+                    general en su lugar. */}
                 <ItemNav
-                  href={`/app/w/${workspaceId}`}
+                  href={`/app/w/${workspaceId}/archivos`}
                   icono={<Files size={15} />}
-                  activo={pathname === `/app/w/${workspaceId}`}
+                  activo={pathname === `/app/w/${workspaceId}/archivos`}
                   indice={1}
                 >
                   Biblioteca
@@ -370,13 +377,19 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               unread={unread}
             />
           )}
-          <ChannelGroup
-            title="Voz"
-            channels={voice}
-            workspaceId={workspaceId}
-            pathname={pathname}
-            unread={unread}
-          />
+          {/* La misma comprobación que ya tenía «Texto» tres líneas arriba:
+              un encabezado «Voz» sin ningún canal debajo es un hueco sin
+              sentido en cada workspace nuevo, y no había motivo para que las
+              dos listas se comportaran distinto. */}
+          {voice.length > 0 && (
+            <ChannelGroup
+              title="Voz"
+              channels={voice}
+              workspaceId={workspaceId}
+              pathname={pathname}
+              unread={unread}
+            />
+          )}
 
           <NewChannel workspaceId={workspaceId} onCreated={load} />
         </nav>

@@ -53,3 +53,10 @@ design/
 # persona (~/.devup/mcp.json), no aqui. Esto es por si alguien apunta
 # DEVUP_CONFIG dentro del repo mientras prueba.
 mcp.json
+# Artefactos de las pruebas de extremo a extremo (tests/e2e/, playwright.config.ts).
+# `tests/.auth/` lleva la sesión de la cuenta sembradora — cookies de verdad,
+# nunca al repo. Los otros dos son informes que se regeneran en cada corrida.
+tests/.auth/
+playwright-report/
+test-results/
+blob-report/

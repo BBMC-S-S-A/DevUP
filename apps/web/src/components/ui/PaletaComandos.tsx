@@ -62,7 +62,9 @@ function destino(orgId: string, workspaceId: string | undefined, r: SearchResult
         ? `/app/w/${r.workspaceId}/c/${r.channelId}`
         : "/app";
     case "file":
-      return r.workspaceId ? `/app/w/${r.workspaceId}` : "/app";
+      // Mismo motivo que en /buscar: la raíz del workspace ya no es la
+      // biblioteca, así que un archivo necesita decirlo explícitamente.
+      return r.workspaceId ? `/app/w/${r.workspaceId}/archivos` : "/app";
     case "task":
       return r.workspaceId ? `/app/w/${r.workspaceId}/board` : "/app";
     default:

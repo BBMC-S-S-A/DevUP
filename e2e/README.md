@@ -1,3 +1,7 @@
+> Esto son guiones sueltos para mirar la oficina a mano. La suite de verdad,
+> con Playwright y pensada para correr en cada cambio, vive en
+> [`tests/e2e/`](../tests/e2e/README.md).
+
 # Prueba de punta a punta de la oficina
 
 Levanta la pila real —Postgres, la API y Next—, crea una cuenta por la API,

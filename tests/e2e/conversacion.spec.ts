@@ -1,0 +1,274 @@
+import { expect, test } from "@playwright/test";
+import {
+  API,
+  CLAVE,
+  altaInvitada,
+  crearCanal,
+  crearOrganizacion,
+  crearWorkspace,
+  enlaceDelRegistro,
+  marca,
+  nuevaSesion,
+} from "./ayudantes";
+
+/**
+ * Conversación y notificaciones.
+ *
+ * Dos cuentas de verdad en contextos separados. Compartir contexto haría que la
+ * segunda pestaña heredara la sesión de la primera y la prueba pasaría sin
+ * probar nada.
+ *
+ * PORTADO Y ADAPTADO desde `claude/inicio-desarrollo-nu1ftu` — ver la cabecera
+ * de `ayudantes.ts`. Dos cambios reales en este archivo: `crearWorkspace` ya
+ * deja dentro del canal «general» recién sembrado, así que los pasos que
+ * antes abrían el workspace y creaban ese mismo canal a mano sobraban. Y tras
+ * rebasar sobre 62 commits nuevos en la base, invitar dice «Invitación
+ * creada», no «Invitación enviada» — ganó un enlace copiable de por medio.
+ */
+test.describe("Conversación", () => {
+  test("mensajes en vivo, no leídos, respuesta, edición y menciones", async ({ browser }) => {
+    const id = marca();
+    const anfitriona = `chat-a-${id}@devup.test`;
+    const invitada = `chat-b-${id}@devup.test`;
+    const organizacion = `Chat ${id}`;
+
+    const page = await altaInvitada(browser, "Ana Prueba", anfitriona);
+    await crearOrganizacion(page, organizacion);
+    await crearWorkspace(page, "Producto");
+    // Ya está dentro de «Producto» y de su canal «general».
+
+    // Segunda persona, por la vía real: invitación. Para invitar hace falta
+    // volver a `/app` — «Invitar a alguien» vive en la ficha de la
+    // organización, no dentro de un workspace.
+    await page.goto("/app");
+    await page.getByRole("button", { name: "Invitar a alguien" }).click();
+    await page.getByPlaceholder("correo@empresa.com").fill(invitada);
+    await page.getByRole("button", { name: "Enviar" }).click();
+    await expect(page.getByText(/Invitación creada/)).toBeVisible();
+
+    const bruno = await nuevaSesion(browser);
+    await bruno.goto(enlaceDelRegistro("invitacion"));
+    await bruno.getByRole("link", { name: "Crear mi cuenta" }).click();
+    await bruno.getByPlaceholder("Ana Martín").fill("Bruno Prueba");
+    await bruno.getByPlaceholder("mínimo 10 caracteres").fill(CLAVE);
+    await bruno.getByRole("button", { name: "Crear cuenta" }).last().click();
+    await expect(bruno.getByText(organizacion)).toBeVisible();
+
+    await page.goto("/app");
+    await page.getByRole("link", { name: /Producto/ }).click();
+    await expect(page.getByRole("link", { name: "general" })).toBeVisible();
+    await page.getByRole("link", { name: "general" }).click();
+    await page.getByPlaceholder("Escribe un mensaje").fill("¿Montamos TURN esta semana?");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("¿Montamos TURN esta semana?")).toBeVisible();
+
+    // --- No leídos -----------------------------------------------------------
+    await bruno.goto("/app");
+    await bruno.getByRole("link", { name: /Producto/ }).click();
+
+    const canal = bruno.locator("a").filter({ hasText: "general" });
+    await expect(canal.locator("span", { hasText: /^1$/ })).toBeVisible({ timeout: 45_000 });
+
+    await canal.click();
+    await expect(bruno.getByText("¿Montamos TURN esta semana?")).toBeVisible();
+    // Abrir el canal lo marca como leído.
+    await expect(canal.locator("span", { hasText: /^1$/ })).toHaveCount(0, { timeout: 45_000 });
+
+    // --- Tiempo real ---------------------------------------------------------
+    await bruno.getByPlaceholder("Escribe un mensaje").fill("Sí, y con credenciales temporales.");
+    await bruno.keyboard.press("Enter");
+    await expect(page.getByText("Sí, y con credenciales temporales.")).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // --- Responder y editar --------------------------------------------------
+    const ajeno = page.locator("div.group", { hasText: "Sí, y con credenciales temporales." }).first();
+    await ajeno.hover();
+    await ajeno.getByTitle("Responder").click();
+    await expect(page.getByText(/Respondiendo a Bruno/)).toBeVisible();
+    await page.getByPlaceholder("Escribe un mensaje").fill("De acuerdo.");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("p", { hasText: "Bruno Prueba:" }).first()).toBeVisible();
+
+    const propio = page.locator("div.group", { hasText: "De acuerdo." }).first();
+    await propio.hover();
+    await propio.getByTitle("Editar").click();
+    await page.getByPlaceholder("Escribe un mensaje").fill("De acuerdo, lo miro yo.");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("(editado)").first()).toBeVisible();
+
+    // Editar el mensaje de otro es ponerle palabras en la boca: ningún rol
+    // puede hacerlo, y la interfaz ni siquiera ofrece el botón.
+    await ajeno.hover();
+    await expect(ajeno.getByTitle("Editar")).toHaveCount(0);
+
+    // --- Menciones y notificaciones -----------------------------------------
+    await page.getByPlaceholder("Escribe un mensaje").fill("@Bruno Prueba ¿lo miras hoy?");
+    await page.keyboard.press("Enter");
+
+    const campana = bruno.locator('button[aria-label^="Notificaciones"]');
+    await expect(campana).toHaveAttribute("aria-label", /sin leer/, { timeout: 45_000 });
+
+    await campana.click();
+    await expect(bruno.getByText("Marcar todas")).toBeVisible();
+    await bruno.getByRole("link", { name: /Te han mencionado en #general/ }).click();
+    await expect(bruno.getByText("¿lo miras hoy?")).toBeVisible();
+    await expect(campana).not.toHaveAttribute("aria-label", /sin leer/, { timeout: 30_000 });
+
+    await bruno.context().close();
+  });
+
+  test("una mención en un canal privado no notifica a quien no está dentro", async ({ browser }) => {
+    const id = marca();
+    const anfitriona = `priv-a-${id}@devup.test`;
+    const fuera = `priv-b-${id}@devup.test`;
+
+    const page = await altaInvitada(browser, "Ana Prueba", anfitriona);
+    await crearOrganizacion(page, `Privado ${id}`);
+    await crearWorkspace(page, "Producto");
+
+    await page.goto("/app");
+    await page.getByRole("button", { name: "Invitar a alguien" }).click();
+    await page.getByPlaceholder("correo@empresa.com").fill(fuera);
+    await page.getByRole("button", { name: "Enviar" }).click();
+    await expect(page.getByText(/Invitación creada/)).toBeVisible();
+
+    const bruno = await nuevaSesion(browser);
+    await bruno.goto(enlaceDelRegistro("invitacion"));
+    await bruno.getByRole("link", { name: "Crear mi cuenta" }).click();
+    await bruno.getByPlaceholder("Ana Martín").fill("Bruno Fuera");
+    await bruno.getByPlaceholder("mínimo 10 caracteres").fill(CLAVE);
+    await bruno.getByRole("button", { name: "Crear cuenta" }).last().click();
+    await expect(bruno.getByText(`Privado ${id}`)).toBeVisible();
+
+    await page.goto("/app");
+    await page.getByRole("link", { name: /Producto/ }).click();
+    await crearCanal(page, "direccion", "Texto", true);
+    await page.getByRole("link", { name: "direccion" }).click();
+    await page.getByPlaceholder("Escribe un mensaje").fill("@Bruno Fuera esto no lo verás");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("esto no lo verás")).toBeVisible();
+
+    // Notificarle revelaría que ese canal existe, que es media filtración.
+    await bruno.goto("/app");
+    await bruno.getByRole("link", { name: /Producto/ }).click();
+    await bruno.waitForTimeout(3000);
+    const campana = bruno.locator('button[aria-label^="Notificaciones"]');
+    await expect(campana).not.toHaveAttribute("aria-label", /sin leer/);
+    await expect(bruno.locator("aside")).not.toContainText("direccion");
+
+    await bruno.context().close();
+  });
+
+  test("el historial exige sesión", async ({ page }) => {
+    const respuesta = await page.request.get(
+      `${API}/channels/00000000-0000-0000-0000-000000000000/messages`,
+      { failOnStatusCode: false },
+    );
+    expect(respuesta.status()).toBe(401);
+  });
+
+  test("marcar leído funciona con cualquier Content-Type", async ({ browser }) => {
+    // Esto se rompió en producción sin que cambiara una línea de código: detrás
+    // de Cloudflare Tunnel, los POST sin cuerpo empezaron a llegar con
+    // `application/x-www-form-urlencoded`, que Fastify no sabe leer, y los
+    // rechazaba con 415 antes del handler. Marcar un canal como leído dejó de
+    // funcionar para todo el equipo.
+    //
+    // Se prueba con la petición cruda y no por la interfaz a propósito: lo que
+    // falla es lo que un intermediario le hace a la cabecera, y el navegador de
+    // la prueba nunca la pondría por su cuenta.
+    const id = marca();
+    const page = await altaInvitada(browser, "Ana Prueba", `tipos-${id}@devup.test`);
+    await crearOrganizacion(page, `Tipos ${id}`);
+    await crearWorkspace(page, "Producto");
+    // Ya está dentro de «general» — la propia URL trae el id del canal.
+
+    await page.waitForURL(/\/c\/[0-9a-f-]{36}/);
+    const canal = /\/c\/([0-9a-f-]{36})/.exec(page.url())![1]!;
+
+    for (const contentType of [
+      "application/json",
+      "application/x-www-form-urlencoded",
+      "text/plain;charset=UTF-8",
+      "application/octet-stream",
+    ]) {
+      const respuesta = await page.request.post(`${API}/channels/${canal}/read`, {
+        headers: { "content-type": contentType },
+        failOnStatusCode: false,
+      });
+      expect(respuesta.status(), `Content-Type: ${contentType}`).toBe(204);
+    }
+
+    // Un cuerpo de verdad con un tipo que no sabemos leer sigue siendo 415:
+    // ahí sí hay algo que no entendemos y callarlo sería peor.
+    const conCuerpo = await page.request.post(`${API}/channels/${canal}/read`, {
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      data: "a=1",
+      failOnStatusCode: false,
+    });
+    expect(conCuerpo.status()).toBe(415);
+
+    await page.context().close();
+  });
+
+  test("acceder con la contraseña equivocada acaba limitado", async ({ page }) => {
+    const correo = `bruta-${marca()}@devup.test`;
+    // `limiteEstricto` en `apps/api/src/lib/http.ts` fija el tope en 10 por
+    // minuto y dirección — ya no es configurable por entorno, así que aquí va
+    // el mismo número a mano.
+    const maximo = 10;
+    let limitado = false;
+
+    // Dirección propia y fija: aquí interesa gastarse el cupo entero, y hacerlo
+    // desde la que usa el resto de la suite dejaría sin acceso a lo que corra
+    // después durante un minuto.
+    for (let intento = 0; intento < maximo + 2; intento += 1) {
+      const respuesta = await page.request.post(`${API}/auth/login`, {
+        data: { email: correo, password: "no-es-la-buena" },
+        headers: { "X-Forwarded-For": "10.255.255.9" },
+        failOnStatusCode: false,
+      });
+      if (respuesta.status() === 429) {
+        limitado = true;
+        break;
+      }
+    }
+
+    expect(limitado).toBe(true);
+  });
+
+  test("inventarse la dirección de origen no salta el límite", async ({ page }) => {
+    // El contador va por dirección, y la dirección sale de X-Forwarded-For. Si
+    // la API se creyera esa cabecera viniera de donde viniera, cambiarla en
+    // cada intento dejaría probar contraseñas sin freno: el límite parecería
+    // configurado y no protegería de nada.
+    //
+    // En desarrollo la cabecera sí se acepta —no hay proxy delante y la suite
+    // la necesita para repartirse el cupo—, así que lo que se comprueba aquí es
+    // lo otro: que dos direcciones distintas no comparten contador, que es la
+    // mitad honesta de la propiedad. La otra mitad la sostiene TRUST_PROXY, que
+    // en producción aborta el arranque si vale `true`.
+    const correo = `spoof-${marca()}@devup.test`;
+    const maximo = 10;
+
+    const intentar = (ip: string) =>
+      page.request.post(`${API}/auth/login`, {
+        data: { email: correo, password: "no-es-la-buena" },
+        headers: { "X-Forwarded-For": ip },
+        failOnStatusCode: false,
+      });
+
+    let agotada = false;
+    for (let intento = 0; intento < maximo + 2; intento += 1) {
+      if ((await intentar("10.254.0.1")).status() === 429) {
+        agotada = true;
+        break;
+      }
+    }
+    expect(agotada).toBe(true);
+
+    // Otra dirección arranca con su propio cupo.
+    expect((await intentar("10.254.0.2")).status()).not.toBe(429);
+  });
+});
