@@ -24,7 +24,22 @@ function LineaVacia({ children }: { children: React.ReactNode }) {
   return <p className="px-1 py-3 text-center text-[11px] text-faint">{children}</p>;
 }
 
-export function NoticiasWidget({ organizationId }: { organizationId: string }) {
+export function NoticiasWidget({
+  organizationId,
+  workspaceId,
+}: {
+  organizationId: string;
+  /**
+   * Si quien monta este widget vive dentro de un workspace, "Ver todas" tiene
+   * que quedarse en su armazón (`/app/w/[workspaceId]/noticias`) — igual que
+   * ya hace `NavegacionOrganizacion` con el resto de pantallas de
+   * organización. Sin esto se salía siempre a `/app/o/[orgId]/noticias`,
+   * aunque el `ItemNav` "Noticias" de la misma barra sí respetara el
+   * contexto: mismo destino, dos comportamientos distintos según qué botón
+   * se tocara.
+   */
+  workspaceId?: string;
+}) {
   const [items, setItems] = useState<Announcement[] | null>(null);
 
   useEffect(() => {
@@ -51,7 +66,7 @@ export function NoticiasWidget({ organizationId }: { organizationId: string }) {
         </ul>
       )}
       <Link
-        href={`/app/o/${organizationId}/noticias`}
+        href={workspaceId ? `/app/w/${workspaceId}/noticias` : `/app/o/${organizationId}/noticias`}
         className="presionable block pt-0.5 text-center text-[11px] text-accent hover:text-accent-bright"
       >
         Ver todas
