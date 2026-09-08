@@ -200,7 +200,7 @@ function Herramienta({
   return (
     <div className="p-3">
       {zona.herramienta === "noticias" ? (
-        <NoticiasWidget organizationId={orgId} />
+        <NoticiasWidget organizationId={orgId} workspaceId={workspaceId} />
       ) : (
         <NotificacionesWidget />
       )}
