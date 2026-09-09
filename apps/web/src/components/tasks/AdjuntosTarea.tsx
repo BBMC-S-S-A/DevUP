@@ -1,9 +1,10 @@
 "use client";
 
 import { ImagePlus, Loader2, Paperclip, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BotonIcono } from "@/components/ui/Boton";
+import { FilePreview } from "@/components/files/FilePreview";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { ApiError, type FileRecord, api } from "@/lib/api";
 import { uploadFile } from "@/lib/files/upload";
@@ -25,13 +26,29 @@ import { uploadFile } from "@/lib/files/upload";
  * Los enlaces de descarga se firman de uno en uno y caducan, así que se piden
  * al abrir la tarea y no se guardan: un `src` cacheado sería un enlace muerto
  * la próxima vez.
+ *
+ * Y al pulsar una imagen NO se abre otra pestaña: se abre el mismo visor que
+ * usa la biblioteca, encima de la tarea. Todo pasa dentro de la aplicación.
  */
 export function AdjuntosTarea({
   taskId,
   workspaceId,
+  pendientes = [],
+  onPendientes,
 }: {
-  taskId: string;
+  /** `null` mientras la tarea no existe todavía: se está creando. */
+  taskId: string | null;
   workspaceId: string;
+  /**
+   * MODO BORRADOR, para el diálogo de crear.
+   *
+   * Un archivo necesita el id de la tarea, y al crear todavía no hay ninguno.
+   * En vez de crear la tarea a medias para tener un id —lo que dejaría tareas
+   * huérfanas cada vez que alguien cancela—, las imágenes se retienen aquí y
+   * quien crea la tarea las sube en cuanto la API le devuelve el id.
+   */
+  pendientes?: File[];
+  onPendientes?: (archivos: File[]) => void;
 }) {
   const confirmar = useConfirmar();
   const [archivos, setArchivos] = useState<FileRecord[] | null>(null);
@@ -39,8 +56,25 @@ export function AdjuntosTarea({
   const [subiendo, setSubiendo] = useState(false);
   const [encima, setEncima] = useState(false);
   const campo = useRef<HTMLInputElement>(null);
+  const borrador = taskId === null;
+  const [viendo, setViendo] = useState<FileRecord | null>(null);
+
+  // Vistas previas locales del borrador. Se liberan al desmontar: un
+  // `createObjectURL` que nadie revoca se queda con el archivo en memoria
+  // mientras viva la pestaña.
+  const previas = useMemo(
+    () => pendientes.map((archivo) => ({ archivo, url: URL.createObjectURL(archivo) })),
+    [pendientes],
+  );
+  useEffect(
+    () => () => {
+      for (const p of previas) URL.revokeObjectURL(p.url);
+    },
+    [previas],
+  );
 
   const cargar = useCallback(async () => {
+    if (taskId === null) return;
     const { files } = await api
       .get<{ files: FileRecord[] }>(`/tasks/${taskId}/files`)
       .catch(() => ({ files: [] as FileRecord[] }));
@@ -67,6 +101,11 @@ export function AdjuntosTarea({
   const subir = useCallback(
     async (lista: File[]) => {
       if (lista.length === 0) return;
+      // Sin tarea todavia: se retienen. Las sube quien pulse «Crear».
+      if (taskId === null) {
+        onPendientes?.([...pendientes, ...lista]);
+        return;
+      }
       setSubiendo(true);
       try {
         for (const archivo of lista) {
@@ -80,7 +119,7 @@ export function AdjuntosTarea({
         setSubiendo(false);
       }
     },
-    [workspaceId, taskId, cargar],
+    [workspaceId, taskId, cargar, pendientes, onPendientes],
   );
 
   // Pegar una captura con el foco dentro del diálogo. Se escucha en el
@@ -98,6 +137,20 @@ export function AdjuntosTarea({
     document.addEventListener("paste", alPegar);
     return () => document.removeEventListener("paste", alPegar);
   }, [subir]);
+
+  // Con el visor abierto, Esc lo cierra a él y a nadie más. El diálogo de la
+  // tarea también escucha en `window`, así que sin frenarlo en captura un Esc
+  // se llevaría por delante el formulario a medio escribir.
+  useEffect(() => {
+    if (!viendo) return;
+    const alTeclear = (evento: KeyboardEvent) => {
+      if (evento.key !== "Escape") return;
+      evento.stopImmediatePropagation();
+      setViendo(null);
+    };
+    window.addEventListener("keydown", alTeclear, true);
+    return () => window.removeEventListener("keydown", alTeclear, true);
+  }, [viendo]);
 
   const borrar = async (archivo: FileRecord) => {
     if (
@@ -118,6 +171,7 @@ export function AdjuntosTarea({
 
   const imagenes = (archivos ?? []).filter((f) => f.mimeType.startsWith("image/"));
   const otros = (archivos ?? []).filter((f) => !f.mimeType.startsWith("image/"));
+  const cuantos = borrador ? previas.length : (archivos?.length ?? 0);
 
   return (
     <div>
@@ -125,8 +179,8 @@ export function AdjuntosTarea({
         <span className="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
           Imágenes y adjuntos
         </span>
-        {archivos !== null && archivos.length > 0 && (
-          <span className="font-mono text-[10px] tabular-nums text-faint">{archivos.length}</span>
+        {cuantos > 0 && (
+          <span className="font-mono text-[10px] tabular-nums text-faint">{cuantos}</span>
         )}
         <span className="flex-1" />
         <span className="text-[10px] text-faint">o pega una captura</span>
@@ -146,25 +200,49 @@ export function AdjuntosTarea({
         className={`rounded-xl border border-dashed p-2.5 transition-colors duration-[var(--dur-hover)]
           ${encima ? "border-accent/60 bg-accent-soft/30" : "border-line"}`}
       >
-        {archivos === null ? (
+        {!borrador && archivos === null ? (
           <div className="grid h-16 place-items-center">
             <Loader2 size={14} className="animate-spin text-faint" />
           </div>
         ) : (
           <>
+            {/* Las del borrador: viven en memoria y se pintan desde un blob
+                local, sin pasar por el almacen ni firmar nada. */}
+            {previas.length > 0 && (
+              <div className="mb-2 grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2">
+                {previas.map((previa, indice) => (
+                  <figure key={previa.url} className="group relative">
+                    <div className="overflow-hidden rounded-lg border border-line bg-canvas/60">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={previa.url}
+                        alt={previa.archivo.name}
+                        className="h-24 w-full object-cover"
+                      />
+                    </div>
+                    <BotonIcono
+                      etiqueta={`Quitar ${previa.archivo.name}`}
+                      onClick={() =>
+                        onPendientes?.(pendientes.filter((_, otro) => otro !== indice))
+                      }
+                      className="!absolute right-1 top-1 !size-6 opacity-0 transition-opacity
+                        group-hover:opacity-100 focus-visible:opacity-100"
+                    >
+                      <Trash2 size={11} />
+                    </BotonIcono>
+                  </figure>
+                ))}
+              </div>
+            )}
             {imagenes.length > 0 && (
               <div className="mb-2 grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2">
                 {imagenes.map((archivo) => (
                   <figure key={archivo.id} className="group relative">
-                    {/* Enlace y no lightbox: abrir el original en una pestaña
-                        es lo que la gente espera de una captura, y no hay que
-                        mantener un visor. */}
-                    <a
-                      href={urls[archivo.id] ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => setViendo(archivo)}
                       title={archivo.name}
-                      className="block overflow-hidden rounded-lg border border-line bg-canvas/60"
+                      className="presionable block w-full overflow-hidden rounded-lg border border-line bg-canvas/60"
                     >
                       {urls[archivo.id] ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -178,7 +256,7 @@ export function AdjuntosTarea({
                           <ImagePlus size={16} />
                         </div>
                       )}
-                    </a>
+                    </button>
                     <BotonIcono
                       etiqueta={`Quitar ${archivo.name}`}
                       onClick={() => void borrar(archivo)}
@@ -199,12 +277,7 @@ export function AdjuntosTarea({
                     <Paperclip size={11} className="shrink-0 text-faint" />
                     <button
                       type="button"
-                      onClick={async () => {
-                        const { url } = await api.get<{ url: string }>(
-                          `/files/${archivo.id}/download-url`,
-                        );
-                        window.open(url, "_blank", "noreferrer");
-                      }}
+                      onClick={() => setViendo(archivo)}
                       className="min-w-0 flex-1 truncate text-left text-xs text-muted hover:text-accent"
                     >
                       {archivo.name}
@@ -244,15 +317,21 @@ export function AdjuntosTarea({
                 {subiendo ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
                 {subiendo ? "Subiendo…" : "Añadir imagen"}
               </button>
-              {archivos.length === 0 && !subiendo && (
-                <span className="text-[11px] text-faint">
-                  Todo el equipo las ve.
-                </span>
+              {cuantos === 0 && !subiendo && (
+                <span className="text-[11px] text-faint">Todo el equipo las ve.</span>
               )}
             </div>
           </>
         )}
       </div>
+
+      {viendo && (
+        <FilePreview
+          file={viendo}
+          onClose={() => setViendo(null)}
+          onDeleted={() => void cargar()}
+        />
+      )}
     </div>
   );
 }

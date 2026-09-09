@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { TagBadge } from "@/components/files/TagBadge";
 import { AdjuntosTarea } from "./AdjuntosTarea";
+import { uploadFile } from "@/lib/files/upload";
 import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -88,6 +89,8 @@ export function TaskBoard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Task | null>(null);
+  /** Columna donde se está creando una tarea, si es que se está creando. */
+  const [creandoEn, setCreandoEn] = useState<{ id: string; nombre: string } | null>(null);
   const dragging = useRef<{ taskId: string; fromColumn: string } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // Estado puramente visual del arrastre: qué tarjeta está en el aire y detrás
@@ -372,17 +375,7 @@ export function TaskBoard({
                 </ul>
 
                 <div className="relative shrink-0 border-t border-line/70 p-2">
-                  <NewTask
-                    workspaceId={workspaceId}
-                    columnId={column.id}
-                    onCreated={(task) =>
-                      setColumns((current) =>
-                        current.map((c) =>
-                          c.id === column.id ? { ...c, tasks: [...c.tasks, task] } : c,
-                        ),
-                      )
-                    }
-                  />
+                  <NewTask onAbrir={() => setCreandoEn({ id: column.id, nombre: column.name })} />
                 </div>
               </Tarjeta>
             );
@@ -392,15 +385,25 @@ export function TaskBoard({
         </div>
       )}
 
-      {open && (
+      {(open || creandoEn) && (
         <TaskDialog
+          // La clave obliga a montar de nuevo al cambiar de tarea o de columna:
+          // los campos del formulario se inician del `task`, y sin esto abrir
+          // otra tarea reutilizaría el estado de la anterior.
+          key={open?.id ?? `nueva:${creandoEn?.id}`}
           task={open}
+          crearEn={open ? null : creandoEn}
+          workspaceId={workspaceId}
           members={members}
           tags={tags}
           anioActual={anioActual}
-          onClose={() => setOpen(null)}
+          onClose={() => {
+            setOpen(null);
+            setCreandoEn(null);
+          }}
           onSaved={async () => {
             setOpen(null);
+            setCreandoEn(null);
             await load();
           }}
         />
@@ -449,74 +452,26 @@ function TableroEsqueleto() {
   );
 }
 
-function NewTask({
-  workspaceId,
-  columnId,
-  onCreated,
-}: {
-  workspaceId: string;
-  columnId: string;
-  onCreated: (task: Task) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="presionable flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-faint hover:bg-raised hover:text-muted"
-      >
-        <Plus size={13} />
-        Nueva tarea
-      </button>
-    );
-  }
-
+/**
+ * «Nueva tarea» abre EL MISMO diálogo que se abre al pulsar una tarea.
+ *
+ * Antes era un formulario en línea de solo título, y eso partía el trabajo en
+ * dos: crear la tarea, volver a entrar, y ahí sí poner responsable, fecha o
+ * imágenes. Con el tablero vacío las imágenes ni se veían —no había ninguna
+ * tarea que abrir—, así que la función existía sin ser encontrable. Un solo
+ * formulario para crear y para editar quita ese segundo paso y hace que lo que
+ * una tarea puede llevar se vea desde el primer momento.
+ */
+function NewTask({ onAbrir }: { onAbrir: () => void }) {
   return (
-    <form
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const { task } = await api.post<{ task: Task }>(`/workspaces/${workspaceId}/tasks`, {
-          columnId,
-          title,
-        });
-        onCreated(task);
-        setTitle("");
-        setOpen(false);
-      }}
-      className="devup-emerge origin-bottom"
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="presionable flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-faint hover:bg-raised hover:text-muted"
     >
-      <AreaTexto
-        autoFocus
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            event.currentTarget.form?.requestSubmit();
-          }
-          if (event.key === "Escape") setOpen(false);
-        }}
-        rows={2}
-        placeholder="Qué hay que hacer"
-      />
-      <div className="mt-1.5 flex gap-1.5">
-        <Boton
-          type="submit"
-          variante="primario"
-          tamano="sm"
-          disabled={title.trim().length === 0}
-          className="flex-1"
-        >
-          Añadir
-        </Boton>
-        <Boton type="button" variante="fantasma" tamano="sm" onClick={() => setOpen(false)}>
-          Cancelar
-        </Boton>
-      </div>
-    </form>
+      <Plus size={13} />
+      Nueva tarea
+    </button>
   );
 }
 
@@ -585,13 +540,19 @@ function NewColumn({
 
 function TaskDialog({
   task,
+  crearEn,
+  workspaceId,
   members,
   tags,
   anioActual,
   onClose,
   onSaved,
 }: {
-  task: Task;
+  /** `null` cuando se está creando: entonces manda `crearEn`. */
+  task: Task | null;
+  /** Columna donde nace la tarea nueva. */
+  crearEn: { id: string; nombre: string } | null;
+  workspaceId: string;
   members: OrganizationMember[];
   tags: Tag[];
   anioActual: string;
@@ -599,12 +560,15 @@ function TaskDialog({
   onSaved: () => Promise<void>;
 }) {
   const confirmar = useConfirmar();
-  const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description);
-  const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? "");
-  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
-  const [tagIds, setTagIds] = useState(task.tags.map((t) => t.id));
+  const [title, setTitle] = useState(task?.title ?? "");
+  const [description, setDescription] = useState(task?.description ?? "");
+  const [assigneeId, setAssigneeId] = useState(task?.assigneeId ?? "");
+  const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
+  const [tagIds, setTagIds] = useState(task?.tags.map((t) => t.id) ?? []);
   const [busy, setBusy] = useState(false);
+  /** Imágenes elegidas antes de que la tarea exista. Ver `AdjuntosTarea`. */
+  const [pendientes, setPendientes] = useState<File[]>([]);
+  const creando = task === null;
 
   // El calendario del campo de fecha lo pinta el sistema; que salga en el tema
   // correcto lo decide `color-scheme`, que ahora vive en globals.css junto a la
@@ -615,23 +579,41 @@ function TaskDialog({
 
   return (
     <Dialogo
-      titulo="Tarea"
-      descripcion={`Creada el ${fechaCorta(task.createdAt, anioActual)}`}
+      titulo={creando ? "Nueva tarea" : "Tarea"}
+      descripcion={
+        task
+          ? `Creada el ${fechaCorta(task.createdAt, anioActual)}`
+          : `En ${crearEn?.nombre ?? "el tablero"}`
+      }
       onCerrar={onClose}
       ancho="lg"
     >
       <form
         onSubmit={async (event) => {
           event.preventDefault();
+          if (title.trim().length === 0) return;
           setBusy(true);
           try {
-            await api.patch(`/tasks/${task.id}`, {
+            const campos = {
               title,
               description,
               assigneeId: assigneeId || null,
               dueDate: dueDate || null,
               tagIds,
-            });
+            };
+            if (task) {
+              await api.patch(`/tasks/${task.id}`, campos);
+            } else {
+              const { task: nueva } = await api.post<{ task: Task }>(
+                `/workspaces/${workspaceId}/tasks`,
+                { columnId: crearEn?.id, ...campos },
+              );
+              // Las imágenes van DESPUÉS y de una en una: cada archivo se
+              // cuelga de un `task_id`, y hasta esta línea no existía ninguno.
+              for (const archivo of pendientes) {
+                await uploadFile(workspaceId, archivo, { taskId: nueva.id });
+              }
+            }
             await onSaved();
           } finally {
             setBusy(false);
@@ -640,8 +622,10 @@ function TaskDialog({
         className="space-y-4"
       >
         <input
+          autoFocus={creando}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
+          placeholder="Qué hay que hacer"
           aria-label="Título de la tarea"
           className="w-full rounded-xl border border-transparent bg-transparent px-2 py-1.5 font-display text-base font-semibold tracking-tight text-ink outline-none
             transition-[border-color,background-color] duration-200
@@ -716,34 +700,48 @@ function TaskDialog({
           </div>
         )}
 
-        {/* Se saca del propio `task` y no de un prop: la tarea ya sabe de qué
-            espacio de trabajo es. */}
-        <AdjuntosTarea taskId={task.id} workspaceId={task.workspaceId} />
+        <AdjuntosTarea
+          taskId={task?.id ?? null}
+          workspaceId={task?.workspaceId ?? workspaceId}
+          pendientes={pendientes}
+          onPendientes={setPendientes}
+        />
 
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-          <Boton
-            type="button"
-            variante="peligro"
-            tamano="sm"
-            icono={<Trash2 size={13} />}
-            onClick={async () => {
-              if (
-                !(await confirmar({
-                  titulo: `¿Eliminar «${task.title}»?`,
-                  accion: "Eliminar",
-                  peligro: true,
-                }))
-              )
-                return;
-              await api.delete(`/tasks/${task.id}`);
-              await onSaved();
-            }}
-          >
-            Eliminar
-          </Boton>
+          {task ? (
+            <Boton
+              type="button"
+              variante="peligro"
+              tamano="sm"
+              icono={<Trash2 size={13} />}
+              onClick={async () => {
+                if (
+                  !(await confirmar({
+                    titulo: `¿Eliminar «${task.title}»?`,
+                    accion: "Eliminar",
+                    peligro: true,
+                  }))
+                )
+                  return;
+                await api.delete(`/tasks/${task.id}`);
+                await onSaved();
+              }}
+            >
+              Eliminar
+            </Boton>
+          ) : (
+            <Boton type="button" variante="fantasma" tamano="sm" onClick={onClose}>
+              Cancelar
+            </Boton>
+          )}
 
-          <Boton type="submit" variante="primario" cargando={busy}>
-            Guardar
+          <Boton
+            type="submit"
+            variante="primario"
+            cargando={busy}
+            disabled={title.trim().length === 0}
+          >
+            {creando ? "Crear tarea" : "Guardar"}
           </Boton>
         </div>
       </form>
