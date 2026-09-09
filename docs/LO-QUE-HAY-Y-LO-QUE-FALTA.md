@@ -148,10 +148,19 @@ Están aquí porque volver a caer sale caro.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
 - **`db:migrate` cambia la contraseña de `devup_app`, y la saca de
-  `DATABASE_URL`.** Al migrar contra un entorno remoto, `DATABASE_ADMIN_URL` va
-  al superusuario y `DATABASE_URL` a `devup_app` **con su contraseña de
-  verdad**. Pasarle la del superusuario deja la API sin poder entrar a su
-  propia base, y `/health` sigue en 200 porque no la toca.
+  `APP_DB_PASSWORD` — que `dotenv` rellena desde tu `.env`.** Al migrar contra
+  un entorno remoto hay que pasarla **a mano**, con la que ese entorno ya usa
+  (la de su propio `DATABASE_URL`). Si no, le pone la de tu portátil: la API se
+  queda sin poder entrar a su propia base y `/health` sigue en 200 porque no la
+  toca, así que parece que todo va bien mientras nada funciona.
+  Esta trampa se cobró dos caídas —3 y 9 de septiembre— y la segunda fue
+  siguiendo esta misma lista, que hasta entonces señalaba `DATABASE_URL`, la
+  variable equivocada. Desde el 9 hay una **guarda en `migrate.ts`**: si el
+  destino no coincide con el del `.env` y la contraseña no viene explícita,
+  para antes de tocar nada.
+  Y ojo con cómo se prueba esa guarda: **no contra el túnel de producción**.
+  Probarla ahí con una contraseña de mentira es exactamente el fallo que la
+  guarda existe para evitar, y así se cobró la tercera caída del mismo día.
 - **Una política de SELECT que llama a una función que vuelve a consultar la
   misma tabla rompe `insert ... returning`.** Postgres aplica la política de
   SELECT también a la fila recién insertada, y la función no la ve todavía.
