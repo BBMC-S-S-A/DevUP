@@ -42,8 +42,8 @@ BLOQUES = [
 
     ("bullets", [
         "<b>46 tablas de dominio y seis claves foráneas que cruzan dominios.</b> "
-        "Todo lo demás apunta vertical a <font face='Raleway-Md'>organization_id</font> "
-        "o a <font face='Raleway-Md'>user_id</font>. Los dominios no se conocen entre sí.",
+        "Todo lo demás apunta vertical a <font face='Courier'>organization_id</font> "
+        "o a <font face='Courier'>user_id</font>. Los dominios no se conocen entre sí.",
 
         "<b>Cero columnas relacionales en la tabla de tareas</b>, fuera de tareas. "
         "Una tarea no puede apuntar a un commit, a un mensaje, a un cliente ni a un "
@@ -202,7 +202,7 @@ BLOQUES = [
     ("p", "Aquí es donde encaja lo que se pidió al estilo de Obsidian, sin construir "
           "un producto aparte. La nota en markdown es un nodo más —uno cuyo contenido "
           "lo escribe una persona en vez de deducirse de un evento— y los "
-          "<font face='Raleway-Md'>[[enlaces]]</font> de Obsidian son, exactamente, "
+          "<font face='Courier'>[[enlaces]]</font> de Obsidian son, exactamente, "
           "filas en la tabla de enlaces."),
 
     ("p", "Y la bitácora del proyecto no es una tercera tabla: es <b>el mismo grafo "
@@ -450,7 +450,7 @@ BLOQUES = [
 
     ("p", "Este apartado tiene una ventaja que ningún otro tiene: el criterio ya "
           "existe y ya está probado en el propio repositorio. La lección de que "
-          "<font face='Raleway-Md'>db:migrate</font> cambia la contraseña de la "
+          "<font face='Courier'>db:migrate</font> cambia la contraseña de la "
           "aplicación, y el diseño de expansión y contracción para lo que puede "
           "perder datos, están escritos y costaron caro. Esta pantalla es donde ese "
           "criterio se convierte en producto."),
