@@ -11,15 +11,27 @@
  *   npm run db:reset     # borra el esquema y lo reconstruye (solo desarrollo)
  */
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { config as loadEnv } from "dotenv";
+import { config as loadEnv, parse as parseEnv } from "dotenv";
 import pg from "pg";
 import { CAMINO_BUSQUEDA, esBaseLocal, opcionesTls } from "./conexion.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../..");
+
+/**
+ * ¿Venía `APP_DB_PASSWORD` del entorno de verdad, o la puso `.env`?
+ *
+ * Se mira ANTES de cargar el `.env` porque es la única forma de distinguirlo:
+ * `dotenv` no sobrescribe lo que ya existe, así que después ya no se sabe de
+ * dónde salió. La distinción importa y costó una caída — ver la guarda de más
+ * abajo.
+ */
+const claveVinoDelEntorno = process.env.APP_DB_PASSWORD !== undefined;
+
 loadEnv({ path: join(repoRoot, ".env") });
 
 const MIGRATIONS_DIR = join(repoRoot, "db", "migrations");
@@ -42,6 +54,65 @@ const appPassword = required(
   "APP_DB_PASSWORD",
   "es la contraseña del rol devup_app, con el que se conecta la API.",
 );
+
+/**
+ * LA GUARDA QUE FALTABA, Y QUE COSTÓ DOS CAÍDAS.
+ *
+ * Más abajo esto hace `alter role devup_app login password <APP_DB_PASSWORD>`.
+ * Contra la base de desarrollo es lo que se quiere. Contra cualquier otra, si
+ * esa variable salió del `.env`, le pone la contraseña del portátil: la API de
+ * ese entorno deja de poder entrar a su propia base, y `/health` sigue en 200
+ * porque no la toca, así que parece que todo va bien mientras nada funciona.
+ *
+ * Pasó el 3 de septiembre y volvió a pasar el 9, siguiendo un procedimiento
+ * escrito que además señalaba la variable equivocada. Un aviso en un documento
+ * no basta: la comprobación tiene que estar aquí.
+ *
+ * POR QUÉ NO VALE PREGUNTAR SI ES LOCAL. Contra producción se migra por un
+ * túnel, y un túnel escucha en 127.0.0.1 — así que `esBaseLocal` dice «local»
+ * justo en el caso peligroso. Fue el primer intento de esta guarda y no habría
+ * evitado nada. Lo que de verdad distingue los dos casos es si el destino es
+ * EL MISMO que el del `.env`: si alguien lo ha reapuntado a mano, es que va a
+ * otro sitio, y entonces la contraseña tiene que venir a mano también.
+ */
+const destinoDelEnv = parseEnv(
+  existsSync(join(repoRoot, ".env")) ? readFileSync(join(repoRoot, ".env"), "utf8") : "",
+).DATABASE_ADMIN_URL;
+
+function señas(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname}:${u.port || "5432"}${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+const mismoDestino = Boolean(destinoDelEnv) && señas(destinoDelEnv!) === señas(adminUrl);
+
+if (!mismoDestino && !claveVinoDelEntorno) {
+  console.error(
+    [
+      "",
+      "PARADO ANTES DE TOCAR NADA.",
+      "",
+      `Destino: ${señas(adminUrl)}`,
+      `El del .env: ${destinoDelEnv ? señas(destinoDelEnv) : "(no hay)"}`,
+      "",
+      "No son el mismo, y APP_DB_PASSWORD salió del .env —la de desarrollo—.",
+      "Aplicarla le cambiaría la contraseña a devup_app en ese destino y dejaría",
+      "a su API fuera de su propia base, con /health respondiendo 200 igual.",
+      "",
+      "Pásala a mano, con la que ese entorno ya usa (la de su DATABASE_URL):",
+      "",
+      '  APP_DB_PASSWORD="<la de su DATABASE_URL>" \\',
+      '  DATABASE_ADMIN_URL="postgres://postgres:...@127.0.0.1:55432/railway" \\',
+      "  npm run db:migrate",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
 
 const reset = process.argv.includes("--reset");
 

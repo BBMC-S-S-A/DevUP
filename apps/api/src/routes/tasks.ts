@@ -18,7 +18,13 @@ const TASK_COLUMNS = `
        from task_tags tt join tags g on g.id = tt.tag_id
       where tt.task_id = t.id),
     '[]'::json
-  ) as tags`;
+  ) as tags,
+  -- Cuántos adjuntos tiene, para que la tarjeta lo diga sin abrirla. El
+  -- subselect se evalúa bajo RLS, así que cuenta solo lo que quien mira
+  -- podría ver de todas formas.
+  (select count(*) from files f
+    where f.task_id = t.id and f.status = 'ready' and f.deleted_at is null
+  )::int as "adjuntos"`;
 
 async function loadTask(db: Db, taskId: string): Promise<Record<string, unknown>> {
   const { rows } = await db.query(

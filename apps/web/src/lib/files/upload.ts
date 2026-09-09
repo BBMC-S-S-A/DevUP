@@ -14,6 +14,8 @@ import { type FileRecord, api } from "../api";
  */
 export type UploadOptions = {
   channelId?: string | null;
+  /** Para colgar el archivo de una tarea del tablero. */
+  taskId?: string | null;
   description?: string;
   tagIds?: string[];
   onProgress?: (fraction: number) => void;
@@ -32,6 +34,7 @@ export async function uploadFile(
       mimeType: file.type || "application/octet-stream",
       sizeBytes: file.size,
       channelId: options.channelId ?? null,
+      taskId: options.taskId ?? null,
       description: options.description ?? "",
     },
   );

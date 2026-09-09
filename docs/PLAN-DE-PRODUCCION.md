@@ -56,15 +56,27 @@ túnel:
 ```bash
 railway connect Postgres --tunnel-only --port 55432
 ```
-Y entonces, **con mucho cuidado con las dos variables**:
+Y entonces, **con las dos variables que de verdad hacen falta**:
 ```bash
-DATABASE_ADMIN_URL="postgres://postgres:<pass>@127.0.0.1:55432/railway" \
-DATABASE_URL="postgres://devup_app:<SU pass>@127.0.0.1:55432/railway" \
+DATABASE_ADMIN_URL="postgres://postgres:<pass del superusuario>@127.0.0.1:55432/railway" \
+APP_DB_PASSWORD="<la contraseña que ya usa devup_app en ese entorno>" \
 npm run db:migrate
 ```
-`migrate.ts` hace `alter role devup_app login password <la de DATABASE_URL>`.
-Pasarle ahí la del superusuario deja la API fuera de su propia base. Ver
-«Trampas».
+
+**`APP_DB_PASSWORD`, no `DATABASE_URL`.** Esta página decía `DATABASE_URL` y era
+falso: `migrate.ts` hace `alter role devup_app login password
+<APP_DB_PASSWORD>`, y esa variable la carga `dotenv` de tu `.env` si no la pasas
+a mano. Es decir, seguir la versión anterior de estas instrucciones **le ponía a
+producción la contraseña de tu portátil**, y por eso la API se quedaba fuera de
+su propia base. Pasó el 3 de septiembre y volvió a pasar el 9.
+
+La contraseña que hay que pasar es la que ese entorno ya usa: está dentro del
+`DATABASE_URL` del servicio `api`, entre `devup_app:` y la `@`.
+
+Desde el 9 de septiembre **el runner se defiende solo**: si el destino no es el
+mismo que el del `.env` y `APP_DB_PASSWORD` no viene explícita, para antes de
+tocar nada y explica qué iba a romper. No hace falta acordarse de esta página;
+la página está para saber por qué existe esa guarda.
 
 **Antes de una migración con datos dentro, un volcado:**
 ```bash

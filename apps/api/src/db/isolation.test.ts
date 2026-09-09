@@ -148,13 +148,15 @@ async function main(): Promise<void> {
         )
       ).rows[0]!.id;
 
-      await db.query(
-        `insert into tasks (workspace_id, column_id, title, position, created_by)
-         values ($1,$2,$3,1000,$4)`,
-        [soloWs, soloColumn, "idea que no comparto todavía", ana],
-      );
+      const soloTask = (
+        await db.query<{ id: string }>(
+          `insert into tasks (workspace_id, column_id, title, position, created_by)
+           values ($1,$2,$3,1000,$4) returning id`,
+          [soloWs, soloColumn, "idea que no comparto todavía", ana],
+        )
+      ).rows[0]!.id;
 
-      return { org, ws, publicChannel, privateChannel, soloWs, soloChannel };
+      return { org, ws, publicChannel, privateChannel, soloWs, soloChannel, soloTask };
     });
 
     const bolt = await withUser(bruno, async (db) => {
@@ -228,6 +230,70 @@ async function main(): Promise<void> {
     check("Carla no ve las tareas de Ana", (await count(carla, "tasks")) === 0);
     check("Carla no ve ni las columnas de su tablero", (await count(carla, "task_columns")) === 3);
     check("Ana sí ve las columnas de los dos tableros", (await count(ana, "task_columns")) === 6);
+
+    // --- Adjuntos de una tarea (0028) ---------------------------------------
+    //
+    // La columna `files.task_id` abre una puerta nueva: un archivo puede
+    // apuntar a una tarea. Lo que hay que comprobar no es que se pueda
+    // adjuntar, sino que no se pueda adjuntar a una tarea de OTRO sitio
+    // pasando su identificador a mano.
+    check(
+      "Ana puede adjuntar una imagen a una tarea de su propio workspace",
+      await withUser(ana, async (db) => {
+        const { rowCount } = await db.query(
+          `insert into files
+             (organization_id, workspace_id, task_id, storage_key, name, uploaded_by, status)
+           values ($1,$2,$3,$4,$5,$6,'ready')`,
+          [
+            acme.org,
+            acme.soloWs,
+            acme.soloTask,
+            `${acme.org}/${acme.soloWs}/${randomUUID()}.png`,
+            "captura.png",
+            ana,
+          ],
+        );
+        return rowCount === 1;
+      }),
+    );
+
+    await denied(
+      "Ana no puede colgar un archivo del workspace compartido de una tarea del personal",
+      () =>
+        withUser(ana, (db) =>
+          db.query(
+            `insert into files
+               (organization_id, workspace_id, task_id, storage_key, name, uploaded_by, status)
+             values ($1,$2,$3,$4,$5,$6,'ready')`,
+            [
+              acme.org,
+              acme.ws,
+              acme.soloTask,
+              `${acme.org}/${acme.ws}/${randomUUID()}.png`,
+              "cruzada.png",
+              ana,
+            ],
+          ),
+        ),
+    );
+
+    await denied("Carla no puede adjuntar nada a una tarea que no ve", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into files
+             (organization_id, workspace_id, task_id, storage_key, name, uploaded_by, status)
+           values ($1,$2,$3,$4,$5,$6,'ready')`,
+          [
+            acme.org,
+            acme.soloWs,
+            acme.soloTask,
+            `${acme.org}/${acme.soloWs}/${randomUUID()}.png`,
+            "fisgona.png",
+            carla,
+          ],
+        ),
+      ),
+    );
 
     await denied("Carla no puede entrar en un canal del workspace personal de Ana", () =>
       withUser(carla, (db) =>

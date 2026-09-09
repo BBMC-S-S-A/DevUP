@@ -1,6 +1,8 @@
 # DevUP · Lo que hay y lo que falta
 
-Estado real del producto a 3 de septiembre de 2026. Este documento y
+Estado real del producto a 9 de septiembre de 2026 (la sección «pantalla por
+pantalla» viene de una auditoría de Juan probando cada una a mano ese día;
+el resto es del 3 de septiembre y sigue vigente). Este documento y
 [PLAN-DE-PRODUCCION.md](PLAN-DE-PRODUCCION.md) son los dos únicos que hay que
 leer para ponerse al día; el resto de documentos de planificación se retiraron
 porque decían cosas distintas entre sí y ya nadie sabía cuál valía.
@@ -63,10 +65,34 @@ Todo lo de esta lista está probado contra producción, no solo escrito.
   pega un enlace. El vídeo se ve en una esquina, y tiene que verse: lo exigen
   los términos de YouTube.
 
-### Lo demás
-Canales de texto y voz cifrada extremo a extremo, biblioteca de archivos,
-tablero de tareas, embudo de ventas, conector de GitHub, entorno de desarrollo
-embebido, DevVerse y la mesa de trabajo. Todo eso ya estaba y sigue en pie.
+### Canales, presencia y tema
+- **Canales de texto y voz/vídeo: totalmente funcionales.**
+- **Estados de presencia tipo Discord** (disponible, ocupado, no molestar).
+- **Tres temas**: claro, oscuro y el que decida el sistema operativo.
+
+---
+
+## Pantalla por pantalla (auditoría del 9 de septiembre)
+
+Lo que Juan encontró probando cada apartado a mano. Reemplaza a la vieja
+línea «todo eso ya estaba y sigue en pie» — que era cierta a medias: estaba,
+pero no toda "en pie" de la misma forma.
+
+| Pantalla | Estado |
+|---|---|
+| **Panel** | Funciona: saludo, fecha, tareas pendientes, quién está conectado, música (Spotify/YouTube), infraestructura y tareas asignadas. |
+| **Mesa** | Básico. El catálogo de herramientas para añadir no está completo. |
+| **Biblioteca** | Solo sube archivos y quedan en el workspace. **Pendiente revisar si de verdad persisten** (no confirmado más allá de la subida). |
+| **Tablero** | Básico: solo añadir tareas. Falta lo agéntico —asignar labores a cada quien— y que se comporte dinámico, tipo Trello (arrastrar entre columnas, etc.). |
+| **Ventas** | CRUD de clientes, ventas y servicios, con balance automático. Funcional para lo básico. |
+| **GitHub** | Solo visualización de commits — límite de la propia API de GitHub, no nuestro. **Falla la conexión por token**; explorar que baste con pegar el link del repo para clonarlo, sin pedir token. |
+| **Noticias** | Se publican y notifican, pero al pulsar para ver el detalle **lleva a una pantalla distinta del workspace principal, sin una vuelta intuitiva**. Carlos ya corrigió el widget de Mesa el 8 de septiembre (PR #38, en `main` pero **todavía sin desplegar**); falta unificar el resto y que «volver» regrese a la pestaña donde se estaba, no a un sitio fijo. |
+| **Infraestructura** | No funcional. |
+| **Base de datos** | No funcional — solo enseña las migraciones asociadas a un repo de GitHub. |
+| **Integraciones** | No funcional — solo pide conectar GitHub. |
+| **Entorno de desarrollo** | Mal resuelto: al entrar cambia de pestaña sola. Solo ofrece Node.js. No funciona en la VPS. |
+| **Ajustes de organización** | Básico: cambiar foto, ver usuarios, añadir enlaces y personas. Nada más todavía. |
+| **Perfil de usuario** | No existe personalización todavía. |
 
 ---
 
@@ -122,10 +148,19 @@ Están aquí porque volver a caer sale caro.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
 - **`db:migrate` cambia la contraseña de `devup_app`, y la saca de
-  `DATABASE_URL`.** Al migrar contra un entorno remoto, `DATABASE_ADMIN_URL` va
-  al superusuario y `DATABASE_URL` a `devup_app` **con su contraseña de
-  verdad**. Pasarle la del superusuario deja la API sin poder entrar a su
-  propia base, y `/health` sigue en 200 porque no la toca.
+  `APP_DB_PASSWORD` — que `dotenv` rellena desde tu `.env`.** Al migrar contra
+  un entorno remoto hay que pasarla **a mano**, con la que ese entorno ya usa
+  (la de su propio `DATABASE_URL`). Si no, le pone la de tu portátil: la API se
+  queda sin poder entrar a su propia base y `/health` sigue en 200 porque no la
+  toca, así que parece que todo va bien mientras nada funciona.
+  Esta trampa se cobró dos caídas —3 y 9 de septiembre— y la segunda fue
+  siguiendo esta misma lista, que hasta entonces señalaba `DATABASE_URL`, la
+  variable equivocada. Desde el 9 hay una **guarda en `migrate.ts`**: si el
+  destino no coincide con el del `.env` y la contraseña no viene explícita,
+  para antes de tocar nada.
+  Y ojo con cómo se prueba esa guarda: **no contra el túnel de producción**.
+  Probarla ahí con una contraseña de mentira es exactamente el fallo que la
+  guarda existe para evitar, y así se cobró la tercera caída del mismo día.
 - **Una política de SELECT que llama a una función que vuelve a consultar la
   misma tabla rompe `insert ... returning`.** Postgres aplica la política de
   SELECT también a la fila recién insertada, y la función no la ve todavía.
