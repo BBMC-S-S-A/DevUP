@@ -208,6 +208,8 @@ export type FileRecord = {
   organizationId: string;
   workspaceId: string;
   channelId: string | null;
+  /** Adjunto de una tarea del tablero, si cuelga de una. */
+  taskId: string | null;
   name: string;
   description: string;
   mimeType: string;
@@ -232,6 +234,8 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
   tags: Tag[];
+  /** Cuantos archivos cuelgan de la tarea. Para el indicador de la tarjeta. */
+  adjuntos: number;
 };
 
 export type BoardColumn = {

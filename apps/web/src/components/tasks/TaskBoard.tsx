@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, KanbanSquare, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, KanbanSquare, Paperclip, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   type BoardColumn,
@@ -10,6 +10,7 @@ import {
   api,
 } from "@/lib/api";
 import { TagBadge } from "@/components/files/TagBadge";
+import { AdjuntosTarea } from "./AdjuntosTarea";
 import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -318,11 +319,23 @@ export function TaskBoard({
                             {task.title}
                           </span>
 
-                          {task.tags.length > 0 && (
-                            <span className="mt-2 flex flex-wrap gap-1">
+                          {(task.tags.length > 0 || task.adjuntos > 0) && (
+                            <span className="mt-2 flex flex-wrap items-center gap-1">
                               {task.tags.map((tag) => (
                                 <TagBadge key={tag.id} tag={tag} />
                               ))}
+                              {/* Que la tarjeta diga que hay imágenes sin
+                                  tener que abrirla: si no se ve desde fuera,
+                                  nadie sabe que están. */}
+                              {task.adjuntos > 0 && (
+                                <span
+                                  title={`${task.adjuntos} ${task.adjuntos === 1 ? "adjunto" : "adjuntos"}`}
+                                  className="inline-flex items-center gap-1 text-[10px] text-faint"
+                                >
+                                  <Paperclip size={10} className="shrink-0" />
+                                  <span className="font-mono tabular-nums">{task.adjuntos}</span>
+                                </span>
+                              )}
                             </span>
                           )}
 
@@ -702,6 +715,10 @@ function TaskDialog({
             </div>
           </div>
         )}
+
+        {/* Se saca del propio `task` y no de un prop: la tarea ya sabe de qué
+            espacio de trabajo es. */}
+        <AdjuntosTarea taskId={task.id} workspaceId={task.workspaceId} />
 
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
           <Boton

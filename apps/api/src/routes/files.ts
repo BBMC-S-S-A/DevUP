@@ -17,7 +17,8 @@ const uuid = z.string().uuid();
 
 const FILE_COLUMNS = `
   f.id, f.organization_id as "organizationId", f.workspace_id as "workspaceId",
-  f.channel_id as "channelId", f.name, f.description, f.mime_type as "mimeType",
+  f.channel_id as "channelId", f.task_id as "taskId",
+  f.name, f.description, f.mime_type as "mimeType",
   f.size_bytes::bigint as "sizeBytes", f.status, f.uploaded_by as "uploadedBy",
   f.created_at as "createdAt",
   coalesce(p.display_name, 'cuenta eliminada') as "uploadedByName",
@@ -119,6 +120,31 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(204).send();
   });
 
+  /**
+   * Los adjuntos de una tarea.
+   *
+   * Ruta propia y no un filtro del listado del espacio: quien abre una tarea
+   * no sabe —ni tiene por qué— en qué espacio vive, y el aislamiento ya lo
+   * pone RLS sobre `files`. Solo los que llegaron a subirse: un adjunto en
+   * 'pending' es una reserva que puede no haber terminado nunca.
+   */
+  app.get("/tasks/:taskId/files", async (request) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select ${FILE_COLUMNS}
+           from files f
+           left join profiles p on p.id = f.uploaded_by
+          where f.task_id = $1 and f.status = 'ready' and f.deleted_at is null
+          order by f.created_at asc`,
+        [taskId],
+      );
+      return { files: rows };
+    });
+  });
+
   // --- Listado y búsqueda ---------------------------------------------------
   app.get("/workspaces/:workspaceId/files", async (request) => {
     const userId = requireUser(request);
@@ -201,6 +227,10 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
         mimeType: z.string().trim().max(255).default("application/octet-stream"),
         sizeBytes: z.number().int().min(0).max(env.MAX_UPLOAD_BYTES),
         channelId: uuid.nullish(),
+        // Adjunto de una tarea del tablero. Que la tarea sea de ESTE espacio
+        // lo comprueba la política de alta (0028), no esto: aquí solo se
+        // valida la forma.
+        taskId: uuid.nullish(),
         description: z.string().trim().max(2000).default(""),
       }),
       request.body,
@@ -219,14 +249,15 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
       const storageKey = buildStorageKey(organizationId, workspaceId, body.name);
       const { rows } = await db.query<{ id: string; storage_key: string }>(
         `insert into files
-           (organization_id, workspace_id, channel_id, storage_key, name,
+           (organization_id, workspace_id, channel_id, task_id, storage_key, name,
             description, mime_type, size_bytes, uploaded_by, status)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
          returning id, storage_key`,
         [
           organizationId,
           workspaceId,
           body.channelId ?? null,
+          body.taskId ?? null,
           storageKey,
           body.name,
           body.description,
