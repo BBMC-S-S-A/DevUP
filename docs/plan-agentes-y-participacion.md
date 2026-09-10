@@ -1,17 +1,18 @@
-# Nueve tareas nuevas: agentes, participación y DevVerse
+# Veintiuna tareas nuevas: agentes, participación y DevVerse
 
-Añadidas el 10 de septiembre de 2026. Continúan
+Añadidas el 10 de septiembre de 2026 — las nueve pedidas (§2) y las doce que
+salieron de pensarlas (§4). Continúan
 [`plan-interfaz.md`](plan-interfaz.md), [`vision-y-mvp.md`](vision-y-mvp.md) y
 [`DevUP-Propuesta-de-Desarrollo.pdf`](DevUP-Propuesta-de-Desarrollo.pdf), y no
 los sustituyen: aquí está lo nuevo y cómo encaja con lo que ya estaba ordenado.
 
 ---
 
-## 1. Lo primero: son nueve tareas y tres cimientos
+## 1. Lo primero: son veintiuna tareas y tres cimientos
 
-Leídas una a una parecen nueve funciones sueltas. Leídas juntas, **seis de las
-nueve se apoyan en tres piezas que no existen todavía**, y construir esas tres
-primero es la diferencia entre nueve trabajos y tres.
+Leídas una a una parecen veintiuna funciones sueltas. Leídas juntas, **quince de
+las veintiuna se apoyan en tres piezas que no existen todavía**, y construir
+esas tres primero es la diferencia entre veintiún trabajos y tres.
 
 Lo comprobé en el código antes de escribir esto.
 
@@ -265,72 +266,214 @@ tienen sentido.
 | 1 | Que nada se pierda | Sin cambios. Sigue siendo lo primero |
 | 2 | Cerrar lo a medias | Sin cambios |
 | 3 | Pruebas de navegador | Sin cambios |
-| — | **Cimientos A y C** | **Nuevo.** El registro de hechos y las neuronas. Pequeños y todo lo demás los usa |
+| — | **Cimientos A y C** | **Nuevo.** El registro de hechos (cimiento A) y las neuronas (T1). Pequeños, y quince tareas los usan |
+| — | **Cosecha del registro** | **Nuevo.** T3 participación, T10 contexto de una tarea, T11 diario, T12 post-mortem. Casi gratis una vez existe A |
 | 4 | Interfaz (I1–I5) | Antes, decidir la jerarquía de T8 |
-| — | **Cimiento B** | **Nuevo.** El servidor MCP |
-| 5 | Infraestructura | Con T6 como su cara visual |
-| 6 | Integraciones guiadas | Sin cambios |
-| 7 | Agentes | Ahora incluye T5 y T7 |
-| — | **DevVerse (T9)** | Puede ir en paralelo: no depende de nada de arriba |
+| — | **Cimiento B** | **Nuevo.** El servidor MCP (T2), y detrás T4 |
+| 5 | Infraestructura | Con T6 como su cara visual, y T15 coste por proyecto |
+| 6 | Integraciones guiadas | Con T18 plantillas de proyecto, que son su receta |
+| 7 | Agentes | T5 planes, T7 subagentes, T20 el de guardia como el primero |
+| — | **Entrada y salida** | **Nuevo.** T16 importar, T17 cliente lector, T14 saltos ahorrados. Van cuando haya alguien de fuera a quien enseñárselo |
+| — | **DevVerse (T9)** | Puede ir en paralelo: no depende de nada de arriba. Con T21 al lado |
 | 8 | Base de datos como código | Sin cambios |
-| 9 | Identidad y apertura | Con T3 ya construido |
+| 9 | Identidad y apertura | Con T3, T16 y T17 ya construidos, que es lo que la hace posible |
+| 10 | Escalar | Con T19 búsqueda que responde, que necesita material acumulado |
 
-Que T9 no dependa de nada es útil: es el trozo que una persona puede llevar en
-paralelo sin bloquear a las otras dos.
+Tres cosas que salen de mirar la tabla:
+
+**T13 no aparece porque no tiene sitio propio.** Es la pantalla que compone T1,
+T6 y la línea de tiempo, así que se hace cuando las tres existen y cuesta una
+tarde. Anotarla es más importante que planificarla.
+
+**La «cosecha del registro» es la mejor relación esfuerzo/resultado de todo el
+plan.** Cuatro funciones visibles —incluida la que mejor demuestra la tesis, la
+T10— a cambio de una tabla de solo añadir.
+
+**Y T9 sigue sin depender de nada**, que es lo que la hace el trozo ideal para
+que una persona lo lleve en paralelo sin bloquear a las otras dos.
 
 ---
 
-## 4. Otras maneras de nutrir DevUP
+## 4. Las doce que nutren el producto
 
-Lo que apareció pensando en estas nueve. Marcadas las que creo que valen más de
-lo que cuestan.
+Salieron de pensar las nueve de arriba, y entran como tareas. El **★** marca las
+que creo que valen más de lo que cuestan; los grupos no son categorías, son
+dependencias compartidas.
 
-### Lo que sale del registro de hechos, casi gratis
+### Las que salen del registro de hechos
 
-- ★ **Reconstruir el contexto de una tarea.** Un botón en la tarjeta que trae el
-  PR, los mensajes, la pizarra y la grabación de la llamada donde se habló de
-  esto. **Es la tesis del producto convertida en un botón**, y con el cimiento A
-  es una consulta. Si hubiera que elegir una sola función de esta lista, es
-  esta. **M**
-- ★ **El diario del proyecto.** «Esta semana pasó esto», generado, no escrito.
-  Sirve para el equipo, para el cliente y para quien vuelve de vacaciones. **P**
-- **Post-mortem automático.** Integración continua en rojo → qué cambió → quién
-  → qué lo arregló, en un solo hilo. **M**
-- **Onboarding de un día.** Neuronas + diagrama derivado + línea de tiempo hacen
-  un «empieza aquí» que ninguna otra herramienta puede armar, porque ninguna
-  tiene las tres cosas. **M**
+Ninguna de estas cuatro necesita nada nuevo salvo el cimiento A. Por eso son
+tan barata: el trabajo ya está hecho cuando se construye el registro.
 
-### Lo que solo nosotros podemos medir
+#### ★ T10 · Reconstruir el contexto de una tarea · M
 
-- ★ **Cuántos saltos de ventana ahorró DevUP.** El producto se vende con una
-  cifra de la industria; medir la propia es otra cosa. Es el número que convierte
-  la tesis en argumento comercial, y con el registro de hechos se puede
-  estimar. **M**
-- ★ **Coste real por proyecto**: tokens de agente + infraestructura + horas, por
-  cliente. Para una empresa de desarrollo es el número que casi nadie tiene y
-  todos quieren. **M**
+Un botón en la tarjeta que trae todo lo que rodea a esa tarea: el PR, los
+mensajes donde se discutió, la pizarra que se dibujó, la grabación de la llamada
+en la que se decidió.
 
-### Lo que decide si alguien se cambia
+**Es la tesis del producto convertida en un botón.** Todo lo demás argumenta que
+el contexto no debería perderse entre ventanas; esto lo demuestra en un clic. Si
+hubiera que elegir una sola función de este documento, es esta.
 
-- ★ **Importar desde Jira, Linear o Trello.** Sin camino de entrada nadie se
-  muda, por bueno que sea el destino. Es aburrido y es de las cosas más
-  rentables de la lista. **M**
-- ★ **Acceso de lectura para el cliente.** Que el cliente vea el avance sin
-  tocar nada y sin una reunión de estado. Para una empresa de desarrollo esto se
-  vende solo, y el aislamiento por organización ya está construido. **M**
-- **Plantillas de proyecto.** Un cliente nuevo arranca con la bóveda, el
-  repositorio, la integración continua, los canales y el tablero ya creados. **M**
+Con el registro de hechos es una consulta: los hechos ya vienen con su objeto y
+su evidencia, así que «todo lo que toca a esta tarea» es filtrar por objeto. Lo
+que hay que añadir a mano son los enlaces que hoy no se guardan — de dónde vino
+una tarea (T4), y qué tarea originó una pizarra o una llamada.
+
+**La trampa:** si el botón trae cuarenta cosas, no sirve. Ordena por cercanía a
+la tarea y corta; lo demás, detrás de un «ver todo».
+
+#### ★ T11 · El diario del proyecto · P sin prosa, M con prosa
+
+«Esta semana pasó esto», generado y no escrito. Sirve para el equipo, para el
+cliente y sobre todo para quien vuelve de vacaciones y necesita ponerse al día
+sin leer cuatrocientos mensajes.
+
+Conviene separar dos versiones, porque el coste es muy distinto: el **resumen
+cronológico** —qué se cerró, qué se desplegó, qué se rompió y se arregló— es
+agrupar el registro por semana, y es pequeño. La **versión en prosa** necesita
+que un agente lo redacte, así que depende de los agentes y va después.
+
+Empezar por el cronológico: ya es útil, y es la materia prima del otro.
+
+#### T12 · Post-mortem automático · M
+
+Integración continua en rojo → qué cambió → quién lo cambió → qué lo arregló,
+en un solo hilo y sin que nadie lo escriba. El conector de GitHub ya lee el
+estado de la última ejecución, así que lo que falta es hilar el rojo con el
+verde siguiente y con los cambios de en medio.
+
+Vale doble por un motivo que no es evidente: es lo que convierte un fallo en
+conocimiento del equipo en vez de en una anécdota que solo recuerda quien estaba
+esa noche.
+
+#### T13 · Onboarding de un día · M
+
+Un «empieza aquí» para quien llega: las neuronas de T1 para entender los
+módulos, el diagrama derivado de T6 para ver la forma del sistema, y la línea de
+tiempo para saber qué está pasando ahora.
+
+**Ninguna otra herramienta puede armar esto**, y no por falta de ganas: hace
+falta tener las tres cosas en el mismo sitio, y nadie las tiene. Su coste propio
+es pequeño —es una pantalla que compone lo que ya existe— pero está bloqueada
+por T1 y T6, así que va detrás.
+
+### Las que solo nosotros podemos medir
+
+#### ★ T14 · Cuántos saltos de ventana ahorra DevUP · M
+
+El producto se vende con una cifra de la industria —las cuatro horas semanales
+del estudio de Harvard Business Review—. Medir la propia es otra cosa, y es lo
+que convierte la tesis en argumento comercial.
+
+**Aquí hay que ser honestos con el método o esto se convierte en la métrica de
+vanidad que ya rechazamos para la gamificación.** No se puede medir un salto que
+no ocurrió. Lo que sí se puede, y hay que decirlo así en la pantalla: contar
+**acciones completadas dentro de DevUP que de otro modo habrían exigido otra
+herramienta** —aprobar un cambio, ver un despliegue, encontrar el contexto de
+una tarea— y multiplicarlo por el coste por salto que da el estudio.
+
+Eso es una **estimación con método declarado**, no una medición. Presentada así
+es honesta y convence igual. Presentada como medición, el primer cliente técnico
+que pregunte cómo se calcula nos deja sin argumento.
+
+#### ★ T15 · Coste real por proyecto · M
+
+Tokens de agente, más infraestructura, más horas, por cliente. Para una empresa
+de desarrollo es el número que casi nadie tiene y todos quieren, porque es el
+que dice si un proyecto dio dinero.
+
+Las tres partes vienen de tres sitios que ya existen o están planificados: el
+consumo de agente se mide en el propio agente —de ahí que la propuesta lo
+facture aparte—, la infraestructura la leen los conectores, y las horas salen
+del registro de hechos. La única pieza nueva es juntarlas y presentarlas.
+
+**Y encaja con el control de ventas que ya está construido**: ingreso por
+cliente lo hay; coste por cliente es la otra mitad de la resta que hoy nadie
+puede hacer.
+
+### Las que deciden si alguien se cambia
+
+#### ★ T16 · Importar de otro gestor · M
+
+Sin camino de entrada nadie se muda, por bueno que sea el destino. Es aburrido y
+es de lo más rentable de la lista.
+
+**El orden importa y no es el obvio: primero CSV, después las interfaces.** Todo
+gestor del mundo exporta a CSV, así que un importador de CSV con asignación de
+columnas cubre Jira, Linear, Trello, Asana y la hoja de cálculo en la que
+trabaja media industria, por una fracción del trabajo de integrar tres
+interfaces distintas. Las conexiones directas van después, y para las dos que se
+pidan de verdad.
+
+**Y el trabajo no está donde parece.** Leer los datos es lo fácil; lo que cuesta
+es la **asignación**: sus estados a nuestras columnas, sus campos propios a
+nuestra descripción, su gente a nuestra gente. Eso pide una pantalla de
+correspondencia con vista previa, no un botón.
+
+#### ★ T17 · Acceso de lectura para el cliente · M
+
+Que el cliente vea el avance sin tocar nada y sin una reunión de estado. Para
+una empresa de desarrollo esto se vende solo.
+
+**Pero no es gratis, y conviene saber por qué.** Los roles de hoy son
+propietario, admin y miembro, y las políticas de aislamiento están escritas
+sobre «pertenece a la organización». Un cliente es un cuarto rol que necesita
+**menos** que un miembro, y eso no es una fila más en una tabla de permisos: es
+un eje nuevo en las políticas —qué canales, qué tareas, qué archivos ve—.
+
+Con la regla dura del proyecto delante: toda tabla que entre en ese eje necesita
+su caso en las comprobaciones de aislamiento. Aquí un fallo silencioso no
+enseña datos de otra organización, enseña los datos internos del equipo a su
+cliente, que es peor.
+
+Empezar estrecho: el cliente ve **un tablero y el diario**, y nada más. Ampliar
+después, cuando se sepa qué pide de verdad.
+
+#### T18 · Plantillas de proyecto · M
+
+Un cliente nuevo arranca con la bóveda, el repositorio, la integración continua,
+los canales y el tablero ya creados, en vez de con nueve pantallas de
+configuración.
+
+Es donde converge bien con las integraciones guiadas: una plantilla es una
+receta, y las integraciones guiadas ya van a saber montar cada pieza. La
+plantilla solo dice cuáles y en qué orden.
 
 ### Oficio
 
-- **Búsqueda que responde.** Sobre mensajes, PRs y pizarras, contestando con la
-  cita de dónde lo saca. La búsqueda global ya cubre seis cosas; esto es la capa
-  de encima. **G**
-- **El agente de guardia.** Vigila la integración continua de noche y abre una
-  tarea con el diagnóstico. **M**
-- **«No me molestes hasta que…»** El estado de presencia que vigila una
-  condición —hasta que la integración pase, hasta las cuatro— y se apaga solo.
-  Encaja con los cuatro estados de la cartelera. **P**
+#### T19 · Búsqueda que responde · G
+
+Sobre mensajes, PRs, pizarras y grabaciones, contestando con la cita de dónde lo
+saca. La búsqueda global ya cubre seis cosas y devuelve resultados; esto es la
+capa de encima que devuelve **una respuesta**.
+
+**La cita no es un adorno, es el producto.** Una respuesta sin fuente sobre el
+propio proyecto es exactamente el «casi bien» que el 66 % de los
+desarrolladores dice que le cuesta más depurar que escribir. Con la cita al
+lado, se verifica en dos segundos.
+
+Va marcada como grande y va al final: necesita que primero exista el material
+—pizarras, registro, neuronas— sobre el que responder.
+
+#### T20 · El agente de guardia · M
+
+Vigila la integración continua de noche y abre una tarea con el diagnóstico,
+para que a la mañana el problema ya esté descrito en vez de descubierto.
+
+Es el primer agente **útil y acotado** que se puede construir: no toca código,
+no abre PRs, solo lee y describe. Buen candidato para ser el «un agente, un
+flujo, hasta el final» del MVP, precisamente porque su permiso más peligroso es
+crear una tarjeta.
+
+#### T21 · «No me molestes hasta que…» · P
+
+El estado de presencia que vigila una condición —hasta que la integración pase,
+hasta que termine el despliegue, hasta las cuatro— y se apaga solo.
+
+Encaja con los cuatro estados de la cartelera de DevVerse y arregla el problema
+real de «no molestar»: que nadie se acuerda de quitarlo. La condición de la
+integración continua ya se puede leer hoy.
 
 ---
 
@@ -339,9 +482,32 @@ lo que cuestan.
 1. **Qué se cuenta como participación** (T3), y si el porcentaje individual es
    visible para todos o solo para cada uno. Es la decisión más delicada de este
    documento y la que más cuesta deshacer.
-2. **Qué pantalla es la portada** (T8). Va antes de construir el armazón.
+2. **Qué pantalla es la portada** (T8). Va antes de construir el armazón, y con
+   T10 y T11 sobre la mesa la línea de tiempo tiene más papeletas que un panel
+   de tarjetas.
 3. **Si el cruce agente → bot es de solo lectura** (T7). Yo lo daría por
    cerrado así, pero conviene decirlo en voz alta porque toca la separación de
    los dos mundos.
 4. **Tamaño del sprite y cuántos cuerpos base** (T9). Sigue abierto desde
    agosto y bloquea el paso 2.
+5. **Qué ve exactamente un cliente lector** (T17). Propongo empezar con el
+   tablero y el diario y nada más, porque es un eje nuevo en las políticas de
+   aislamiento y conviene abrirlo estrecho.
+6. **Si el diario se publica al cliente** (T11 + T17). Es lo que convierte el
+   diario en producto vendible en vez de en herramienta interna — y también lo
+   que obliga a cuidar cómo se redacta.
+
+---
+
+## 6. Si hubiera que empezar mañana
+
+Tres cosas, en este orden, y ninguna es grande:
+
+1. **La tabla del registro de hechos**, con su política de aislamiento y su caso
+   en las comprobaciones. Desbloquea quince tareas.
+2. **Escribir la neurona de un módulo**, una sola, con su declaración de qué
+   archivos cubre y el aviso de deriva en la integración continua. Con una hecha
+   se sabe si el formato sirve; con doce escritas a ciegas, no.
+3. **T10, el botón que reconstruye el contexto de una tarea.** Es lo primero
+   que se puede enseñar y es lo que mejor explica de qué va DevUP — mejor que
+   cualquier página de la propuesta.
