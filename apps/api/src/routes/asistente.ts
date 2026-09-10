@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, ApiError as GeminiApiError, type Content, type Part } from "@google/genai";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
@@ -13,10 +14,18 @@ import { crearTareaEnDb, moverTareaEnDb } from "./tasks.js";
  *
  * QUIÉN PAGA, Y POR QUÉ ESO DECIDE LA ARQUITECTURA. Un asistente dentro del
  * producto necesita inferencia, y la inferencia se paga. La decisión tomada es
- * que la pague quien la usa: cada persona guarda su propia clave de API en la
- * bóveda (proveedor `anthropic`, migración 0030) y esta ruta la descifra para
- * hacer la llamada saliente y la descarta. DevUP no compra ni un token, no
- * tiene clave propia y no hay factura que crezca con el uso.
+ * que la pague quien la usa: cada persona guarda su propia clave en la bóveda
+ * y esta ruta la descifra para hacer la llamada saliente y la descarta. DevUP
+ * no compra ni un token, no tiene clave propia y no hay factura que crezca con
+ * el uso.
+ *
+ * DOS PROVEEDORES, MISMA REGLA. `anthropic` cobra por token pero no entrena con
+ * lo que se le manda. `gemini` (0031) tiene una capa gratuita real —sin cobrar
+ * tokens—, y a cambio Google usa ese contenido para mejorar sus productos; con
+ * datos reales de clientes pasando por las herramientas, eso hay que decirlo
+ * en la pantalla, no solo aquí. Si alguien tiene las dos claves puestas, se
+ * prefiere Gemini: es la que no cuesta nada, y es de suponer que quien puso
+ * las dos quiere la gratuita.
  *
  * LAS HERRAMIENTAS CORREN CONTRA LA BASE, NO CONTRA NUESTRA PROPIA API. Aquí
  * ya estamos dentro del servidor y con la identidad resuelta, así que llamarse
@@ -24,7 +33,9 @@ import { crearTareaEnDb, moverTareaEnDb } from "./tasks.js";
  * frontera: todas van por `withUser`, así que RLS sigue decidiendo qué filas
  * ve el asistente — exactamente las que vería su dueño en el navegador, ni una
  * más. Un fallo de permisos aquí no puede filtrar otra organización porque no
- * es este código el que los comprueba.
+ * es este código el que los comprueba. Y es el mismo ejecutor para los dos
+ * proveedores: lo único que cambia entre Anthropic y Gemini es el protocolo de
+ * ida y vuelta con el modelo, no lo que hace cada herramienta.
  *
  * EL BUCLE ES DE UNA SOLA PETICIÓN. El historial que manda el navegador son
  * turnos de texto; las llamadas a herramientas pasan dentro de esta petición y
@@ -40,7 +51,11 @@ const uuid = z.string().uuid();
  *  misma herramienta gasta la clave de la persona hasta que se cansa. */
 const MAX_VUELTAS = 8;
 
-const MODELO = "claude-opus-5";
+const MODELO_ANTHROPIC = "claude-opus-5";
+/** «Flash» y no «Pro»: la capa gratuita de Pro es de apenas decenas de
+ *  peticiones al día, y la de Flash alcanza de sobra para un asistente de uso
+ *  normal. Ver docs/HEARTH-Y-LA-PUERTA-MCP.md para las cifras. */
+const MODELO_GEMINI = "gemini-2.5-flash";
 
 const SISTEMA = `Eres el asistente de DevUP, dentro del espacio de trabajo de un equipo.
 
@@ -77,11 +92,11 @@ type Paso = { herramienta: string; entrada: unknown };
 /**
  * La etiqueta con la que queda marcado todo lo que escribe el asistente.
  *
- * Es el mismo nombre que usa la puerta MCP a proposito: lo que el equipo ve en
- * el tablero no debe depender de por donde entro el agente. Y no es adorno —
- * es lo que permite ver de un vistazo que salio de un modelo, filtrarlo y
+ * Es el mismo nombre que usa la puerta MCP a propósito: lo que el equipo ve en
+ * el tablero no debe depender de por dónde entró el agente. Y no es adorno —
+ * es lo que permite ver de un vistazo que salió de un modelo, filtrarlo y
  * deshacerlo en bloque. Sin esa marca, dejar escribir a un modelo en el
- * tablero de otras personas no seria aceptable.
+ * tablero de otras personas no sería aceptable.
  */
 const ETIQUETA_AGENTE = "agente";
 
@@ -89,28 +104,37 @@ const ETIQUETA_AGENTE = "agente";
  *  debajo de la respuesta. Es como el asistente «enseña» una imagen. */
 type Adjunto = { fileId: string; nombre: string; tarea: string };
 
-const HERRAMIENTAS: Anthropic.Tool[] = [
+/**
+ * Las herramientas, en un esquema neutral (JSON Schema puro).
+ *
+ * De aquí salen las dos formas que cada proveedor exige: `input_schema` para
+ * Anthropic y `parametersJsonSchema` para Gemini son, campo a campo, el mismo
+ * JSON Schema — así que se describen una sola vez y cada bucle las traduce a
+ * su propio envoltorio en vez de mantener dos listas que puedan desincronizar
+ * sus descripciones.
+ */
+const HERRAMIENTAS: { name: string; description: string; schema: Record<string, unknown> }[] = [
   {
     name: "mis_tareas",
     description:
       "Las tareas asignadas a la persona que está preguntando, en este espacio de " +
       "trabajo. Devuelve columna, vencimiento, etiquetas y cuántas imágenes lleva " +
       "cada una. Úsala para «¿qué tareas tengo?», «¿qué me toca?», «¿qué se me vence?».",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "ver_tablero",
     description:
       "El tablero completo del espacio: cada columna con sus tareas, de quién son y " +
       "cuándo vencen. Para «¿en qué anda el equipo?» o «¿qué hay en curso?».",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "ver_tarea",
     description:
       "El detalle de una tarea concreta y los nombres de sus imágenes. Se le pasa el " +
       "identificador que devuelven las otras herramientas.",
-    input_schema: {
+    schema: {
       type: "object",
       properties: { id: { type: "string", description: "El identificador de la tarea." } },
       required: ["id"],
@@ -124,7 +148,7 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       "todas las personas del equipo. Se llama una vez por tarea, y cada una debería " +
       "ser algo que alguien pueda terminar. Queda marcada con la etiqueta «agente» " +
       "para que el equipo sepa que salió de un modelo; eso no se puede desactivar.",
-    input_schema: {
+    schema: {
       type: "object",
       properties: {
         titulo: { type: "string", description: "Qué hay que hacer, en una línea." },
@@ -143,7 +167,7 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       "Crea una columna en el tablero. Solo cuando el tablero está vacío o el plan " +
       "necesita una etapa que no existe. Un tablero con ocho columnas que nadie usa es " +
       "peor que uno con tres.",
-    input_schema: {
+    schema: {
       type: "object",
       properties: { nombre: { type: "string" } },
       required: ["nombre"],
@@ -155,7 +179,7 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
     description:
       "Mueve una tarea a otra columna: es cómo se marca que algo empezó, se terminó o " +
       "se bloqueó. Se le pasa el identificador que devuelven las otras herramientas.",
-    input_schema: {
+    schema: {
       type: "object",
       properties: {
         id: { type: "string", description: "Identificador de la tarea." },
@@ -171,7 +195,7 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       "Cambia una tarea que ya existe: título, detalle, responsable o fecha. Solo se " +
       "toca lo que se pase. SOBRESCRIBE, así que equivocarse de tarea borra lo que " +
       "otra persona escribió: usa el identificador, nunca el título.",
-    input_schema: {
+    schema: {
       type: "object",
       properties: {
         id: { type: "string" },
@@ -190,7 +214,7 @@ const HERRAMIENTAS: Anthropic.Tool[] = [
       "Busca por texto en todo el contenido de la organización a la vez: mensajes de " +
       "canales, archivos, tareas, clientes, servicios y oportunidades. Para cuando la " +
       "pregunta menciona algo por su nombre y no se sabe dónde vive. No busca en código.",
-    input_schema: {
+    schema: {
       type: "object",
       properties: { texto: { type: "string", description: "Palabras, no una pregunta." } },
       required: ["texto"],
@@ -308,10 +332,12 @@ async function personaPorNombre(
 /**
  * Ejecuta una herramienta. Devuelve el texto que ve el modelo y, si toca
  * imágenes, los adjuntos para que la pantalla los enseñe.
+ *
+ * Exportada para que las pruebas puedan ejercitar las herramientas sin gastar
+ * la clave de nadie: el modelo no hace falta para comprobar que una escritura
+ * acaba donde debe. Y es la MISMA para Anthropic y para Gemini — el proveedor
+ * decide cómo se piden y se devuelven las llamadas, no qué hace cada una.
  */
-/** Exportada para que las pruebas puedan ejercitar las herramientas sin
- *  gastar la clave de nadie: el modelo no hace falta para comprobar que una
- *  escritura acaba donde debe. */
 export async function ejecutar(
   db: Db,
   workspaceId: string,
@@ -568,19 +594,269 @@ async function imagenesDe(db: Db, tareas: FilaTarea[]): Promise<Adjunto[]> {
   }));
 }
 
+type Resultado = { respuesta: string; pasos: Paso[]; adjuntos: Adjunto[] };
+
+/** Corre una vuelta de herramientas: la ejecuta contra la base con la
+ *  identidad de quien pregunta, y acumula pasos y adjuntos. Compartido por
+ *  los dos bucles de proveedor. */
+async function correrHerramienta(
+  workspaceId: string,
+  userId: string,
+  nombre: string,
+  entrada: Record<string, unknown>,
+  pasos: Paso[],
+  adjuntos: Adjunto[],
+): Promise<{ texto: string; esError: boolean }> {
+  pasos.push({ herramienta: nombre, entrada });
+  const r = await withUser(userId, (db) => ejecutar(db, workspaceId, userId, nombre, entrada)).catch(
+    (fallo: unknown) => ({
+      texto: `La herramienta falló: ${fallo instanceof Error ? fallo.message : "error"}`,
+      adjuntos: [] as Adjunto[],
+      esError: true,
+    }),
+  );
+  adjuntos.push(...r.adjuntos);
+  return { texto: r.texto, esError: "esError" in r };
+}
+
+/**
+ * El bucle con Anthropic. El historial es un array de turnos que se resiende
+ * completo en cada vuelta —la API no guarda estado—, y los resultados de
+ * herramienta de una misma vuelta van TODOS en un solo mensaje de usuario:
+ * partirlos en varios le enseña al modelo a dejar de pedir herramientas en
+ * paralelo.
+ */
+async function correrAnthropic(
+  clave: string,
+  sistema: string,
+  historial: { rol: "usuario" | "asistente"; texto: string }[],
+  pregunta: string,
+  workspaceId: string,
+  userId: string,
+): Promise<Resultado> {
+  const anthropic = new Anthropic({ apiKey: clave });
+  const herramientas: Anthropic.Tool[] = HERRAMIENTAS.map((h) => ({
+    name: h.name,
+    description: h.description,
+    input_schema: h.schema as Anthropic.Tool.InputSchema,
+  }));
+
+  const mensajes: Anthropic.MessageParam[] = [
+    ...historial.map((m) => ({
+      role: m.rol === "usuario" ? ("user" as const) : ("assistant" as const),
+      content: m.texto,
+    })),
+    { role: "user" as const, content: pregunta },
+  ];
+
+  const pasos: Paso[] = [];
+  const adjuntos: Adjunto[] = [];
+  let respuesta = "";
+
+  try {
+    for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta += 1) {
+      const salida = await anthropic.messages.create({
+        model: MODELO_ANTHROPIC,
+        max_tokens: 16000,
+        thinking: { type: "adaptive" },
+        system: sistema,
+        tools: herramientas,
+        messages: mensajes,
+      });
+
+      // El texto se acumula: una vuelta con herramientas puede traer una
+      // frase antes de la llamada, y tirarla perdería la mitad de la
+      // respuesta.
+      for (const bloque of salida.content) {
+        if (bloque.type === "text") respuesta += (respuesta ? "\n" : "") + bloque.text;
+      }
+
+      if (salida.stop_reason !== "tool_use") break;
+
+      mensajes.push({ role: "assistant", content: salida.content });
+
+      const peticiones = salida.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+      );
+
+      const resultados: Anthropic.ToolResultBlockParam[] = [];
+      for (const peticion of peticiones) {
+        const r = await correrHerramienta(
+          workspaceId,
+          userId,
+          peticion.name,
+          (peticion.input ?? {}) as Record<string, unknown>,
+          pasos,
+          adjuntos,
+        );
+        resultados.push({
+          type: "tool_result",
+          tool_use_id: peticion.id,
+          content: r.texto,
+          ...(r.esError ? { is_error: true } : {}),
+        });
+      }
+      mensajes.push({ role: "user", content: resultados });
+    }
+  } catch (fallo) {
+    // Los fallos de la clave son de quien la puso, así que el mensaje tiene
+    // que decirle qué arreglar en vez de «error interno».
+    if (fallo instanceof Anthropic.AuthenticationError) {
+      throw forbidden("tu clave de Anthropic no vale: revísala en Mi cuenta.");
+    }
+    if (fallo instanceof Anthropic.RateLimitError) {
+      throw forbidden("tu cuenta de Anthropic está al límite ahora mismo. Prueba en un rato.");
+    }
+    if (fallo instanceof Anthropic.BadRequestError) {
+      throw forbidden(`Anthropic rechazó la petición: ${fallo.message}`);
+    }
+    if (fallo instanceof Anthropic.APIError) {
+      throw forbidden(`Anthropic contestó ${fallo.status}: ${fallo.message}`);
+    }
+    throw fallo;
+  }
+
+  return {
+    respuesta: respuesta.trim() || "No supe qué contestar a eso.",
+    pasos,
+    adjuntos: [...new Map(adjuntos.map((a) => [a.fileId, a])).values()],
+  };
+}
+
+/**
+ * El bucle con Gemini.
+ *
+ * Verificado contra los tipos reales del paquete instalado (`@google/genai`
+ * 2.21.0) y no contra un resumen de documentación: la primera vez que busqué
+ * cómo hacer esto, el buscador describió la plataforma de AGENTES de Google
+ * —un producto aparte, con su propio sandbox— como si fuera la forma normal
+ * de llamar a una función, y habría sido código completamente equivocado. El
+ * método de verdad es `ai.models.generateContent`, con `contents` como un
+ * array de turnos `{role, parts}` que se reenvía completo en cada vuelta —
+ * igual que Anthropic, sin estado en el servidor de Google.
+ *
+ * Las llamadas a función de una misma vuelta se agrupan en un único turno de
+ * cada lado —un `model` con todas las `functionCall` y un `user` con todas las
+ * `functionResponse` que las responden—, por el mismo motivo que en Anthropic:
+ * partirlas en varios turnos le enseña al modelo a dejar de pedir varias a la
+ * vez.
+ */
+async function correrGemini(
+  clave: string,
+  sistema: string,
+  historial: { rol: "usuario" | "asistente"; texto: string }[],
+  pregunta: string,
+  workspaceId: string,
+  userId: string,
+): Promise<Resultado> {
+  const ai = new GoogleGenAI({ apiKey: clave });
+  const tools = [
+    {
+      functionDeclarations: HERRAMIENTAS.map((h) => ({
+        name: h.name,
+        description: h.description,
+        parametersJsonSchema: h.schema,
+      })),
+    },
+  ];
+
+  const contents: Content[] = [
+    ...historial.map((m) => ({
+      role: m.rol === "usuario" ? "user" : "model",
+      parts: [{ text: m.texto }] as Part[],
+    })),
+    { role: "user", parts: [{ text: pregunta }] },
+  ];
+
+  const pasos: Paso[] = [];
+  const adjuntos: Adjunto[] = [];
+  let respuesta = "";
+
+  try {
+    for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta += 1) {
+      const salida = await ai.models.generateContent({
+        model: MODELO_GEMINI,
+        contents,
+        config: {
+          systemInstruction: { parts: [{ text: sistema }] },
+          tools,
+        },
+      });
+
+      if (salida.text) respuesta += (respuesta ? "\n" : "") + salida.text;
+
+      const llamadas = salida.functionCalls;
+      if (!llamadas || llamadas.length === 0) break;
+
+      // El turno del modelo, tal cual llegó — con sus `functionCall` y
+      // cualquier texto que los acompañara.
+      const parteModelo = salida.candidates?.[0]?.content;
+      contents.push(parteModelo ?? { role: "model", parts: llamadas.map((fc) => ({ functionCall: fc })) });
+
+      const resultados: Part[] = [];
+      for (const llamada of llamadas) {
+        const r = await correrHerramienta(
+          workspaceId,
+          userId,
+          llamada.name ?? "",
+          (llamada.args ?? {}) as Record<string, unknown>,
+          pasos,
+          adjuntos,
+        );
+        resultados.push({
+          functionResponse: {
+            id: llamada.id,
+            name: llamada.name,
+            response: r.esError ? { error: r.texto } : { output: r.texto },
+          },
+        });
+      }
+      contents.push({ role: "user", parts: resultados });
+    }
+  } catch (fallo) {
+    if (fallo instanceof GeminiApiError) {
+      if (fallo.status === 401 || fallo.status === 403) {
+        throw forbidden("tu clave de Gemini no vale: revísala en Mi cuenta.");
+      }
+      if (fallo.status === 429) {
+        throw forbidden(
+          "tu clave de Gemini está al límite de su cuota gratuita por hoy. Prueba mañana, " +
+            "o pon una clave de pago en Mi cuenta.",
+        );
+      }
+      throw forbidden(`Gemini contestó ${fallo.status}: ${fallo.message}`);
+    }
+    throw fallo;
+  }
+
+  return {
+    respuesta: respuesta.trim() || "No supe qué contestar a eso.",
+    pasos,
+    adjuntos: [...new Map(adjuntos.map((a) => [a.fileId, a])).values()],
+  };
+}
+
 export async function asistenteRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
-  /** ¿Hay clave puesta? La pantalla lo pregunta para saber qué enseñar. Nunca
-   *  devuelve la clave: solo si existe. */
+  /** Qué proveedor tiene puesto la persona, si tiene alguno. La pantalla lo
+   *  pregunta para saber qué enseñar. Nunca devuelve la clave: solo si existe
+   *  y cuál es. */
   app.get("/me/asistente", async (request) => {
     const userId = requireUser(request);
     return withUser(userId, async (db) => {
-      const { rows } = await db.query<{ id: string }>(
-        "select id from connections where user_id = $1 and provider = 'anthropic' limit 1",
+      const { rows } = await db.query<{ provider: "anthropic" | "gemini" }>(
+        "select provider from connections where user_id = $1 and provider in ('anthropic','gemini')",
         [userId],
       );
-      return { configurado: rows.length > 0, modelo: MODELO };
+      // Gemini gana si hay las dos: es la gratuita, y quien puso las dos
+      // probablemente quiere esa.
+      const proveedor = rows.find((r) => r.provider === "gemini")?.provider ?? rows[0]?.provider ?? null;
+      return {
+        configurado: proveedor !== null,
+        proveedor,
+        modelo: proveedor === "gemini" ? MODELO_GEMINI : MODELO_ANTHROPIC,
+      };
     });
   });
 
@@ -611,116 +887,37 @@ export async function asistenteRoutes(app: FastifyInstance): Promise<void> {
         [workspaceId],
       );
       if (!ws[0]) return null;
-      const { rows: con } = await db.query<{ id: string }>(
-        "select id from connections where user_id = $1 and provider = 'anthropic' limit 1",
+
+      const { rows: con } = await db.query<{ id: string; provider: "anthropic" | "gemini" }>(
+        "select id, provider from connections where user_id = $1 and provider in ('anthropic','gemini')",
         [userId],
       );
-      if (!con[0]) return { espacio: ws[0], clave: null };
-      return { espacio: ws[0], clave: await getDecryptedSecret(db, con[0]!.id) };
+      // Mismo criterio que /me/asistente: Gemini gana si hay las dos.
+      const elegida = con.find((c) => c.provider === "gemini") ?? con[0];
+      if (!elegida) return { espacio: ws[0], proveedor: null, clave: null };
+
+      return {
+        espacio: ws[0],
+        proveedor: elegida.provider,
+        clave: await getDecryptedSecret(db, elegida.id),
+      };
     });
 
     if (!preparado) throw forbidden("no tienes acceso a ese espacio de trabajo");
-    if (!preparado.clave) {
+    if (!preparado.clave || !preparado.proveedor) {
       throw forbidden(
         "todavía no has puesto tu clave de IA. Se pone en Mi cuenta, y el gasto es tuyo: " +
           "DevUP no compra inferencia.",
       );
     }
 
-    const anthropic = new Anthropic({ apiKey: preparado.clave });
+    const sistema = `${SISTEMA}\n\nEl espacio de trabajo se llama «${preparado.espacio.name}».`;
 
-    const mensajes: Anthropic.MessageParam[] = [
-      ...historial.map((m) => ({
-        role: m.rol === "usuario" ? ("user" as const) : ("assistant" as const),
-        content: m.texto,
-      })),
-      { role: "user" as const, content: pregunta },
-    ];
+    const resultado =
+      preparado.proveedor === "gemini"
+        ? await correrGemini(preparado.clave, sistema, historial, pregunta, workspaceId, userId)
+        : await correrAnthropic(preparado.clave, sistema, historial, pregunta, workspaceId, userId);
 
-    const pasos: Paso[] = [];
-    const adjuntos: Adjunto[] = [];
-    let respuesta = "";
-
-    try {
-      for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta += 1) {
-        const salida = await anthropic.messages.create({
-          model: MODELO,
-          max_tokens: 16000,
-          thinking: { type: "adaptive" },
-          system: `${SISTEMA}\n\nEl espacio de trabajo se llama «${preparado.espacio.name}».`,
-          tools: HERRAMIENTAS,
-          messages: mensajes,
-        });
-
-        // El texto se acumula: una vuelta con herramientas puede traer una
-        // frase antes de la llamada, y tirarla perdería la mitad de la
-        // respuesta.
-        for (const bloque of salida.content) {
-          if (bloque.type === "text") respuesta += (respuesta ? "\n" : "") + bloque.text;
-        }
-
-        if (salida.stop_reason !== "tool_use") break;
-
-        mensajes.push({ role: "assistant", content: salida.content });
-
-        const peticiones = salida.content.filter(
-          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-        );
-
-        // Todos los resultados en UN solo mensaje de usuario: partirlos en
-        // varios le enseña al modelo a dejar de pedir herramientas en
-        // paralelo.
-        const resultados: Anthropic.ToolResultBlockParam[] = [];
-        for (const peticion of peticiones) {
-          pasos.push({ herramienta: peticion.name, entrada: peticion.input });
-          const r = await withUser(userId, (db) =>
-            ejecutar(
-              db,
-              workspaceId,
-              userId,
-              peticion.name,
-              (peticion.input ?? {}) as Record<string, unknown>,
-            ),
-          ).catch((fallo: unknown) => ({
-            texto: `La herramienta falló: ${fallo instanceof Error ? fallo.message : "error"}`,
-            adjuntos: [] as Adjunto[],
-            fallo: true,
-          }));
-          adjuntos.push(...r.adjuntos);
-          resultados.push({
-            type: "tool_result",
-            tool_use_id: peticion.id,
-            content: r.texto,
-            ...("fallo" in r ? { is_error: true } : {}),
-          });
-        }
-        mensajes.push({ role: "user", content: resultados });
-      }
-    } catch (fallo) {
-      // Los fallos de la clave son de quien la puso, así que el mensaje tiene
-      // que decirle qué arreglar en vez de «error interno».
-      if (fallo instanceof Anthropic.AuthenticationError) {
-        throw forbidden("tu clave de IA no vale: revísala en Mi cuenta.");
-      }
-      if (fallo instanceof Anthropic.RateLimitError) {
-        throw forbidden("tu cuenta de Anthropic está al límite ahora mismo. Prueba en un rato.");
-      }
-      if (fallo instanceof Anthropic.BadRequestError) {
-        throw forbidden(`Anthropic rechazó la petición: ${fallo.message}`);
-      }
-      if (fallo instanceof Anthropic.APIError) {
-        throw forbidden(`Anthropic contestó ${fallo.status}: ${fallo.message}`);
-      }
-      throw fallo;
-    }
-
-    // Sin duplicados: dos herramientas pueden traer la misma imagen.
-    const unicos = [...new Map(adjuntos.map((a) => [a.fileId, a])).values()];
-
-    return {
-      respuesta: respuesta.trim() || "No supe qué contestar a eso.",
-      pasos,
-      adjuntos: unicos,
-    };
+    return resultado;
   });
 }

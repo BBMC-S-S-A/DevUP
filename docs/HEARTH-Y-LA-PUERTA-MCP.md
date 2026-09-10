@@ -219,6 +219,30 @@ sigue siendo `buscar`; lo que mejora es lo que devuelve.
 
 ---
 
+## 5b. El asistente de dentro tambien habla con Gemini
+
+No solo con Anthropic. Gemini 2.5 Flash tiene una capa gratuita real —sin
+cobrar tokens, con cuota diaria de sobra para uso normal (referencia:
+~1.500 peticiones/dia)—, y quien no quiera gastar nada puede traer esa clave
+en vez de una de pago. Google usa el contenido de la capa gratuita para
+mejorar sus productos; con datos reales de clientes pasando por las
+herramientas, la pantalla lo dice y no solo este documento.
+
+Mismo enum de siempre (0031, igual que 0030): un valor mas en
+`connection_provider`, no una tabla nueva. Si alguien tiene las dos claves
+puestas, gana Gemini — es la gratuita.
+
+`apps/api/src/routes/asistente.ts` tiene dos bucles, uno por proveedor, y
+comparten el mismo `ejecutar()`: el proveedor decide como se piden y se
+devuelven las llamadas a herramienta, no que hace cada una.
+
+Trampa que costo tres verificaciones antes de escribir una linea: buscar
+"Gemini function calling Node.js" trajo la API de AGENTES de Google —un
+producto aparte, con su propio sandbox, no la generacion de texto normal— y
+la habria dado por buena si no se hubiera contrastado contra los tipos reales
+del paquete instalado. El metodo correcto es `ai.models.generateContent`, no
+la superficie que describia esa documentacion.
+
 ## 6. Entorno local, de cero a verde
 
 ```bash

@@ -10,7 +10,10 @@ const uuid = z.string().uuid();
 // del producto (0030). Va aqui y no en una tabla propia porque es exactamente
 // lo que esta boveda ya sabe guardar: un secreto ajeno, de una persona,
 // cifrado y separado de la fila que se puede listar.
-const PROVIDERS = ["github", "spotify", "anthropic"] as const;
+// `gemini` es la segunda opcion de clave de IA (0031): capa gratuita real,
+// para quien no quiera gastar nada en el asistente. Google usa ese contenido
+// para mejorar sus productos, y eso lo dice la pantalla, no solo aqui.
+const PROVIDERS = ["github", "spotify", "anthropic", "gemini"] as const;
 
 const CONNECTION_COLUMNS = `
   id, provider, display_name as "displayName", created_at as "createdAt"`;

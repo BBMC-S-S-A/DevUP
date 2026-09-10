@@ -68,22 +68,63 @@ function useSesiones() {
   return { sesiones, error, cargar };
 }
 
+type Proveedor = "gemini" | "anthropic";
+
+/**
+ * Los dos proveedores que puede usar el asistente, y su ficha.
+ *
+ * Gemini va primero porque es la opción sin coste — Google no cobra por
+ * tokens en su capa gratuita — y es lo que la mayoría va a querer. Anthropic
+ * sigue disponible para quien prefiera pagar y no tener el aviso de abajo.
+ */
+const FICHA: Record<
+  Proveedor,
+  { nombre: string; chip: string; placeholder: string; ayuda: string; aviso?: string }
+> = {
+  gemini: {
+    nombre: "Gemini",
+    chip: "gratis",
+    placeholder: "AIza…",
+    ayuda: "Se saca en aistudio.google.com/apikey. Sin tarjeta, y no cuesta nada por token.",
+    aviso:
+      "Google usa el contenido de la capa gratuita para mejorar sus productos: lo que le " +
+      "preguntes al asistente —nombres de clientes incluidos— pasa por ahí. Si eso te " +
+      "preocupa, usa Anthropic en su lugar.",
+  },
+  anthropic: {
+    nombre: "Anthropic (Claude)",
+    chip: "de pago",
+    placeholder: "sk-ant-…",
+    ayuda: "Se saca en console.anthropic.com. Es prepago y va aparte de tu suscripción de Claude.",
+  },
+};
+
 /**
  * La clave con la que funciona el asistente de dentro de DevUP.
  *
- * POR QUE LA PONE CADA PERSONA. Un asistente dentro del producto necesita
+ * POR QUÉ LA PONE CADA PERSONA. Un asistente dentro del producto necesita
  * inferencia, y la inferencia se paga. Que la clave sea de quien la usa es lo
- * que permite tenerlo sin que DevUP compre ni un token y sin una factura comun
- * que crece con el uso. El coste es de quien lo consume, asi que escala sin
- * arruinar a nadie.
+ * que permite tenerlo sin que DevUP compre ni un token y sin una factura común
+ * que crece con el uso. El coste es de quien lo consume —cero, si elige
+ * Gemini—, así que escala sin arruinar a nadie.
  *
- * La clave se guarda cifrada en la boveda que ya existe (proveedor
- * `anthropic`, migracion 0030), separada de la fila que se puede listar: por
- * eso enseñar «tienes una clave puesta» no puede filtrar la clave.
+ * DOS PROVEEDORES Y NO UNO. La suscripción de Claude no se puede gastar desde
+ * un producto de terceros —no existe ese permiso—, así que «sin gastar nada»
+ * solo es posible con una capa gratuita de verdad. Gemini la tiene; Anthropic
+ * no. Se dejan las dos porque no todos van a aceptar el aviso de privacidad
+ * de la gratuita.
+ *
+ * Las claves se guardan cifradas en la bóveda que ya existía (0015), con
+ * `anthropic` y `gemini` como valores del mismo enum (0030, 0031): separadas
+ * de la fila que se puede listar, por eso enseñar «tienes una clave puesta»
+ * no puede filtrar la clave.
  */
 function ClaveDeIA() {
   const confirmar = useConfirmar();
-  const [conexion, setConexion] = useState<{ id: string } | null | undefined>(undefined);
+  const [conexiones, setConexiones] = useState<{ id: string; provider: Proveedor }[] | undefined>(
+    undefined,
+  );
+  const [abriendo, setAbriendo] = useState<Proveedor | null>(null);
   const [clave, setClave] = useState("");
   const [guardando, setGuardando] = useState(false);
 
@@ -91,23 +132,28 @@ function ClaveDeIA() {
     const { connections } = await api
       .get<{ connections: { id: string; provider: string }[] }>("/connections")
       .catch(() => ({ connections: [] as { id: string; provider: string }[] }));
-    setConexion(connections.find((c) => c.provider === "anthropic") ?? null);
+    setConexiones(
+      connections.filter((c): c is { id: string; provider: Proveedor } =>
+        c.provider === "gemini" || c.provider === "anthropic",
+      ),
+    );
   }, []);
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
-  const guardar = async () => {
+  const guardar = async (proveedor: Proveedor) => {
     if (clave.trim().length === 0) return;
     setGuardando(true);
     try {
       await api.post("/connections", {
-        provider: "anthropic",
-        displayName: "Clave del asistente",
+        provider: proveedor,
+        displayName: `Clave del asistente (${FICHA[proveedor].nombre})`,
         secret: clave.trim(),
       });
       setClave("");
+      setAbriendo(null);
       toast.success("Clave guardada. El asistente ya funciona.");
       await cargar();
     } catch (fallo) {
@@ -117,12 +163,11 @@ function ClaveDeIA() {
     }
   };
 
-  const quitar = async () => {
+  const quitar = async (conexion: { id: string; provider: Proveedor }) => {
     if (
-      !conexion ||
       !(await confirmar({
-        titulo: "¿Quitar tu clave de IA?",
-        descripcion: "El asistente dejara de funcionar para ti hasta que pongas otra.",
+        titulo: `¿Quitar la clave de ${FICHA[conexion.provider].nombre}?`,
+        descripcion: "El asistente dejará de poder usarla hasta que pongas otra.",
         accion: "Quitar",
         peligro: true,
       }))
@@ -136,6 +181,8 @@ function ClaveDeIA() {
     }
   };
 
+  const puestas = new Map((conexiones ?? []).map((c) => [c.provider, c]));
+
   return (
     <Tarjeta className="p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -144,57 +191,102 @@ function ClaveDeIA() {
       </div>
 
       <p className="mb-4 max-w-prose text-xs leading-relaxed text-muted">
-        El asistente de DevUP habla con <b>tu propio modelo</b>. DevUP no compra inferencia: no
-        hay clave compartida ni factura comun, y lo que gastes lo paga tu cuenta de Anthropic.
-        Se guarda cifrada y no se puede volver a leer desde aqui.
+        El asistente de DevUP habla con <b>tu propio modelo</b>. DevUP no compra inferencia: no hay
+        clave compartida ni factura común, y lo que gastes —si algo— lo paga tu cuenta. Se guarda
+        cifrada y no se puede volver a leer desde aquí. Si tienes las dos puestas, se usa Gemini.
       </p>
 
-      {conexion === undefined ? (
+      {conexiones === undefined ? (
         <div className="grid h-12 place-items-center">
           <Loader2 size={14} className="animate-spin text-faint" />
         </div>
-      ) : conexion ? (
-        <div className="flex items-center gap-3 rounded-xl border border-line bg-canvas/40 px-3 py-2">
-          <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-accent/40 bg-accent-soft/40 text-accent">
-            <Check size={13} />
-          </span>
-          <span className="min-w-0 flex-1 text-sm text-ink">Clave puesta</span>
-          <BotonIcono
-            etiqueta="Quitar la clave"
-            className="!size-7 hover:bg-danger/10 hover:text-danger"
-            onClick={() => void quitar()}
-          >
-            <Trash2 size={13} />
-          </BotonIcono>
-        </div>
       ) : (
-        <>
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <Field
-                label="Clave de API de Anthropic"
-                type="password"
-                value={clave}
-                onChange={setClave}
-                onKeyDown={(evento) => {
-                  if (evento.key === "Enter") void guardar();
+        <div className="space-y-2.5">
+          {(Object.keys(FICHA) as Proveedor[]).map((proveedor) => {
+            const ficha = FICHA[proveedor];
+            const puesta = puestas.get(proveedor);
+
+            if (puesta) {
+              return (
+                <div
+                  key={proveedor}
+                  className="flex items-center gap-3 rounded-xl border border-line bg-canvas/40 px-3 py-2"
+                >
+                  <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-accent/40 bg-accent-soft/40 text-accent">
+                    <Check size={13} />
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm text-ink">
+                    {ficha.nombre} <Chip tono={proveedor === "gemini" ? "accent" : undefined}>{ficha.chip}</Chip>
+                  </span>
+                  <BotonIcono
+                    etiqueta={`Quitar la clave de ${ficha.nombre}`}
+                    className="!size-7 hover:bg-danger/10 hover:text-danger"
+                    onClick={() => void quitar(puesta)}
+                  >
+                    <Trash2 size={13} />
+                  </BotonIcono>
+                </div>
+              );
+            }
+
+            if (abriendo === proveedor) {
+              return (
+                <div key={proveedor} className="rounded-xl border border-line p-3">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Field
+                        label={`Clave de ${ficha.nombre}`}
+                        type="password"
+                        value={clave}
+                        onChange={setClave}
+                        onKeyDown={(evento) => {
+                          if (evento.key === "Enter") void guardar(proveedor);
+                        }}
+                        placeholder={ficha.placeholder}
+                      />
+                    </div>
+                    <Boton
+                      variante="primario"
+                      cargando={guardando}
+                      disabled={clave.trim().length === 0}
+                      onClick={() => void guardar(proveedor)}
+                    >
+                      Guardar
+                    </Boton>
+                    <Boton variante="fantasma" onClick={() => setAbriendo(null)}>
+                      Cancelar
+                    </Boton>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-faint">{ficha.ayuda}</p>
+                  {ficha.aviso && (
+                    <p className="mt-1.5 rounded-lg border border-warn/30 bg-warn/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-warn">
+                      {ficha.aviso}
+                    </p>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={proveedor}
+                type="button"
+                onClick={() => {
+                  setAbriendo(proveedor);
+                  setClave("");
                 }}
-                placeholder="sk-ant-…"
-              />
-            </div>
-            <Boton
-              variante="primario"
-              cargando={guardando}
-              disabled={clave.trim().length === 0}
-              onClick={() => void guardar()}
-            >
-              Guardar
-            </Boton>
-          </div>
-          <p className="mt-1.5 text-[11px] text-faint">
-            Se saca de console.anthropic.com. Es prepago y va aparte de tu suscripcion de Claude.
-          </p>
-        </>
+                className="presionable flex w-full items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2 text-left hover:border-line-strong"
+              >
+                <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-line bg-raised/40 text-faint">
+                  <Plus size={13} />
+                </span>
+                <span className="min-w-0 flex-1 text-sm text-muted">
+                  Poner clave de {ficha.nombre} <Chip tono={proveedor === "gemini" ? "accent" : undefined}>{ficha.chip}</Chip>
+                </span>
+              </button>
+            );
+          })}
+        </div>
       )}
     </Tarjeta>
   );

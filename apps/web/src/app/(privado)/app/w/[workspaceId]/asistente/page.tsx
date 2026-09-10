@@ -36,13 +36,17 @@ export default function AsistentePage() {
   const [pregunta, setPregunta] = useState("");
   const [pensando, setPensando] = useState(false);
   const [configurado, setConfigurado] = useState<boolean | null>(null);
+  const [proveedor, setProveedor] = useState<"gemini" | "anthropic" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const final = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void api
-      .get<{ configurado: boolean }>("/me/asistente")
-      .then((r) => setConfigurado(r.configurado))
+      .get<{ configurado: boolean; proveedor: "gemini" | "anthropic" | null }>("/me/asistente")
+      .then((r) => {
+        setConfigurado(r.configurado);
+        setProveedor(r.proveedor);
+      })
       .catch(() => setConfigurado(false));
   }, []);
 
@@ -89,6 +93,12 @@ export default function AsistentePage() {
       junto={<Chip tono="accent">tu propio modelo</Chip>}
     >
       {configurado === false && <SinClave workspaceId={workspaceId} />}
+      {configurado && proveedor === "gemini" && (
+        <p className="mb-3 text-[11px] text-faint">
+          Usando Gemini, tu clave gratuita. Google usa este contenido para mejorar sus productos —
+          cámbialo en Mi cuenta si prefieres Anthropic.
+        </p>
+      )}
 
       <div className="space-y-3">
         {turnos.length === 0 && configurado !== false && (
@@ -164,8 +174,8 @@ function SinClave({ workspaceId }: { workspaceId: string }) {
       </div>
       <p className="mb-3 max-w-prose text-xs leading-relaxed text-muted">
         El asistente usa <b>tu propio modelo</b>, no uno de DevUP: aquí no hay ninguna clave
-        compartida ni factura común, y por eso el asistente no le cuesta nada a nadie más que a
-        quien lo usa. Pega tu clave de API de Anthropic en Mi cuenta y vuelve.
+        compartida ni factura común. Pega una clave de Gemini —gratis, sin tarjeta— o de
+        Anthropic en Mi cuenta y vuelve.
       </p>
       <Link href={`/app/w/${workspaceId}/cuenta`}>
         <Boton variante="primario" tamano="sm" icono={<KeyRound size={13} />}>
