@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  Bot,
   Files,
   Gamepad2,
   Hash,
@@ -298,6 +299,22 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   indice={2}
                 >
                   Tablero
+                </ItemNav>
+              </li>
+              <li>
+                {/* El asistente va con el trabajo y no en un apartado aparte:
+                    se le pregunta POR el tablero, el panel y la biblioteca, asi
+                    que su sitio es junto a ellos. Usa la clave de cada persona
+                    -DevUP no compra inferencia-, y quien no la haya puesto se
+                    encuentra ahi la explicacion y el enlace, en vez de un
+                    error. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/asistente`}
+                  icono={<Bot size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/asistente`}
+                  indice={3}
+                >
+                  Asistente
                 </ItemNav>
               </li>
               <li>

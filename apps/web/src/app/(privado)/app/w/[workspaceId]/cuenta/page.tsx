@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, Copy, KeyRound, Loader2, Monitor, Plus, Trash2 } from "lucide-react";
+import { Bot, Check, Copy, KeyRound, Loader2, Monitor, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
@@ -32,6 +32,7 @@ export default function CuentaPage() {
       ancho="lg"
     >
       <div className="space-y-4">
+        <ClaveDeIA />
         <ConexionesDeAgente />
         <Navegadores />
       </div>
@@ -65,6 +66,138 @@ function useSesiones() {
   }, [cargar]);
 
   return { sesiones, error, cargar };
+}
+
+/**
+ * La clave con la que funciona el asistente de dentro de DevUP.
+ *
+ * POR QUE LA PONE CADA PERSONA. Un asistente dentro del producto necesita
+ * inferencia, y la inferencia se paga. Que la clave sea de quien la usa es lo
+ * que permite tenerlo sin que DevUP compre ni un token y sin una factura comun
+ * que crece con el uso. El coste es de quien lo consume, asi que escala sin
+ * arruinar a nadie.
+ *
+ * La clave se guarda cifrada en la boveda que ya existe (proveedor
+ * `anthropic`, migracion 0030), separada de la fila que se puede listar: por
+ * eso enseñar «tienes una clave puesta» no puede filtrar la clave.
+ */
+function ClaveDeIA() {
+  const confirmar = useConfirmar();
+  const [conexion, setConexion] = useState<{ id: string } | null | undefined>(undefined);
+  const [clave, setClave] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const cargar = useCallback(async () => {
+    const { connections } = await api
+      .get<{ connections: { id: string; provider: string }[] }>("/connections")
+      .catch(() => ({ connections: [] as { id: string; provider: string }[] }));
+    setConexion(connections.find((c) => c.provider === "anthropic") ?? null);
+  }, []);
+
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+
+  const guardar = async () => {
+    if (clave.trim().length === 0) return;
+    setGuardando(true);
+    try {
+      await api.post("/connections", {
+        provider: "anthropic",
+        displayName: "Clave del asistente",
+        secret: clave.trim(),
+      });
+      setClave("");
+      toast.success("Clave guardada. El asistente ya funciona.");
+      await cargar();
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no pude guardarla");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const quitar = async () => {
+    if (
+      !conexion ||
+      !(await confirmar({
+        titulo: "¿Quitar tu clave de IA?",
+        descripcion: "El asistente dejara de funcionar para ti hasta que pongas otra.",
+        accion: "Quitar",
+        peligro: true,
+      }))
+    )
+      return;
+    try {
+      await api.delete(`/connections/${conexion.id}`);
+      await cargar();
+    } catch {
+      toast.error("no pude quitarla");
+    }
+  };
+
+  return (
+    <Tarjeta className="p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Sparkles size={13} className="text-accent" />
+        <Rotulo>Clave del asistente</Rotulo>
+      </div>
+
+      <p className="mb-4 max-w-prose text-xs leading-relaxed text-muted">
+        El asistente de DevUP habla con <b>tu propio modelo</b>. DevUP no compra inferencia: no
+        hay clave compartida ni factura comun, y lo que gastes lo paga tu cuenta de Anthropic.
+        Se guarda cifrada y no se puede volver a leer desde aqui.
+      </p>
+
+      {conexion === undefined ? (
+        <div className="grid h-12 place-items-center">
+          <Loader2 size={14} className="animate-spin text-faint" />
+        </div>
+      ) : conexion ? (
+        <div className="flex items-center gap-3 rounded-xl border border-line bg-canvas/40 px-3 py-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-accent/40 bg-accent-soft/40 text-accent">
+            <Check size={13} />
+          </span>
+          <span className="min-w-0 flex-1 text-sm text-ink">Clave puesta</span>
+          <BotonIcono
+            etiqueta="Quitar la clave"
+            className="!size-7 hover:bg-danger/10 hover:text-danger"
+            onClick={() => void quitar()}
+          >
+            <Trash2 size={13} />
+          </BotonIcono>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Field
+                label="Clave de API de Anthropic"
+                type="password"
+                value={clave}
+                onChange={setClave}
+                onKeyDown={(evento) => {
+                  if (evento.key === "Enter") void guardar();
+                }}
+                placeholder="sk-ant-…"
+              />
+            </div>
+            <Boton
+              variante="primario"
+              cargando={guardando}
+              disabled={clave.trim().length === 0}
+              onClick={() => void guardar()}
+            >
+              Guardar
+            </Boton>
+          </div>
+          <p className="mt-1.5 text-[11px] text-faint">
+            Se saca de console.anthropic.com. Es prepago y va aparte de tu suscripcion de Claude.
+          </p>
+        </>
+      )}
+    </Tarjeta>
+  );
 }
 
 /**

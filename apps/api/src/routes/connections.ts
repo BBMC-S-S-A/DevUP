@@ -6,7 +6,11 @@ import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { decryptSecret, encryptSecret } from "../security/vault.js";
 
 const uuid = z.string().uuid();
-const PROVIDERS = ["github", "spotify"] as const;
+// `anthropic` es la clave de IA de cada persona, para el asistente de dentro
+// del producto (0030). Va aqui y no en una tabla propia porque es exactamente
+// lo que esta boveda ya sabe guardar: un secreto ajeno, de una persona,
+// cifrado y separado de la fila que se puede listar.
+const PROVIDERS = ["github", "spotify", "anthropic"] as const;
 
 const CONNECTION_COLUMNS = `
   id, provider, display_name as "displayName", created_at as "createdAt"`;

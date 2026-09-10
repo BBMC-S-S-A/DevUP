@@ -1,0 +1,26 @@
+-- ---------------------------------------------------------------------------
+-- La clave de IA de cada persona, en el baúl que ya existe.
+--
+-- Para que haya un asistente DENTRO de DevUP hace falta inferencia, y la
+-- inferencia se paga. La decisión tomada es que la pague quien la usa: cada
+-- persona pega su propia clave de API y DevUP no compra ni un token. Así el
+-- coste escala con quien lo consume y el producto sigue sin depender de una
+-- factura que crece sola.
+--
+-- POR QUÉ NO HAY TABLA NUEVA. La clave es exactamente lo que la bóveda de la
+-- 0015 ya sabe guardar: un secreto ajeno, de una persona, cifrado en
+-- `connection_secrets` y con su fila pública en `connections`. Una tabla
+-- nueva significaría otra política de RLS que escribir, otro caso de
+-- aislamiento y otro sitio donde equivocarse; esto es un valor más en un
+-- enum.
+--
+-- Y por eso hereda gratis lo que más importa: el secreto no vive en la misma
+-- fila que lo que se puede listar, así que enseñar «tienes una clave puesta»
+-- no puede filtrar la clave.
+--
+-- ADD VALUE Y NO USARLO AQUÍ: Postgres admite añadir un valor al enum dentro
+-- de una transacción, pero no usarlo en la misma. Este archivo solo lo añade;
+-- quien lo usa es el código de la aplicación, después.
+-- ---------------------------------------------------------------------------
+
+alter type public.connection_provider add value if not exists 'anthropic';

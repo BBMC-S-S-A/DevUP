@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "devup": {
+      "command": "npx",
+      "args": ["-y", "tsx", "./apps/mcp/src/index.ts"],
+      "env": {}
+    }
+  }
+}

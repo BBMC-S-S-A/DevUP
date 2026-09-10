@@ -1712,6 +1712,77 @@ async function main(): Promise<void> {
     // cortar la de otro. Lo primero lo garantiza la firma de la funcion —saca
     // el usuario de current_user_id() y no admite que se le diga otro—, y lo
     // segundo la politica sessions_update de la 0001.
+    // ---------------------------------------------------------------------
+    // La clave de IA es PERSONAL (0030)
+    //
+    // La boveda ya estaba probada para conexiones de ORGANIZACION, donde que
+    // un compañero lea el token de GitHub es lo correcto. La clave del
+    // asistente es el caso contrario y no lo probaba nadie: es de una persona,
+    // y quien la lea gasta el dinero de otro. La politica de DELETE de
+    // connection_secrets, ademas, solo comprueba que la fila exista — falla
+    // cerrada porque su subconsulta corre bajo RLS de `connections`, y eso es
+    // justo lo que hay que fijar con una prueba antes de que alguien
+    // "simplifique" esa politica.
+    console.log("\nLa clave de IA de cada persona");
+
+    const claveDeAna = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into connections (provider, user_id, display_name, created_by)
+         values ('anthropic', $1, 'Clave del asistente', $1) returning id`,
+        [ana],
+      );
+      const id = rows[0]!.id;
+      await db.query(
+        "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
+        [id, encryptSecret("sk-ant-de-ana")],
+      );
+      return id;
+    });
+
+    const veLaConexion = (quien: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query("select id from connections where id = $1", [claveDeAna]);
+        return rows.length;
+      });
+    const veElSecreto = (quien: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query(
+          "select connection_id from connection_secrets where connection_id = $1",
+          [claveDeAna],
+        );
+        return rows.length;
+      });
+
+    check("Ana ve su propia clave", (await veLaConexion(ana)) === 1);
+    check("y puede leer su secreto, que es lo que necesita el asistente", (await veElSecreto(ana)) === 1);
+    check(
+      "Carla, de la MISMA organizacion, no ve la conexion personal de Ana",
+      (await veLaConexion(carla)) === 0,
+    );
+    check(
+      "y no puede leer su clave ni sabiendo el id",
+      (await veElSecreto(carla)) === 0,
+    );
+
+    const borradoPorCarla = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        "delete from connection_secrets where connection_id = $1",
+        [claveDeAna],
+      );
+      return rowCount ?? 0;
+    });
+    check("ni puede borrarsela", borradoPorCarla === 0);
+    check("y despues del intento sigue ahi", (await veElSecreto(ana)) === 1);
+
+    const descifrada = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ encrypted_secret: Buffer }>(
+        "select encrypted_secret from connection_secrets where connection_id = $1",
+        [claveDeAna],
+      );
+      return decryptSecret(rows[0]!.encrypted_secret);
+    });
+    check("Ana la recupera intacta", descifrada === "sk-ant-de-ana");
+
     console.log("\nConexiones de agente");
 
     const abrirConexion = (quien: string, nombre: string) =>
