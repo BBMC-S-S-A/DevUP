@@ -23,17 +23,21 @@ Nada corre ya en el portátil de nadie. Cinco piezas, las cinco fuera:
 | Pieza | Dónde | Dirección |
 |---|---|---|
 | Web (aplicación + landing) | Cloudflare Workers | `devup.hytrex.co` |
-| API | Railway | `api-production-7b95.up.railway.app` |
+| API | Railway | `api.hytrex.co` |
 | Tiempo real (WebSockets) | Railway | `live-production-976a.up.railway.app` |
 | Base de datos | Railway, red privada | `postgres.railway.internal` |
 | Archivos (MinIO) | Railway, con volumen | `storage-production-2cdb.up.railway.app` |
 
-**Los dominios bonitos (`api.hytrex.co`, `live.hytrex.co`) están pendientes**:
-sus certificados se quedaron atascados en Railway durante horas con el DNS ya
-correcto, así que se apuntó todo a los dominios `*.up.railway.app`, que
-funcionan desde el primer minuto. Cuando Railway los emita, hay que cambiar
-`NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_WS_URL` **y reconstruir la web** (se
-incrustan al compilar), más `GOOGLE_REDIRECT_URI` y `COOKIE_SAME_SITE=lax`.
+**La API pasó a `api.hytrex.co` el 9 de septiembre por la noche, y no fue
+estética: era lo que dejaba entrar a la gente.** Con la API en
+`api-production-7b95.up.railway.app` y la web en `hytrex.co`, la cookie de
+sesión era de terceros, y Safari en macOS las bloquea de fábrica. Ver la
+trampa correspondiente. El dominio de Railway sigue vivo y sirve de vuelta
+atrás: `NEXT_PUBLIC_API_URL` es una variable del repositorio.
+
+**`live.hytrex.co` sigue sin usarse**, y no corre prisa: el tiempo real no
+autentica por cookie sino por un tique de un solo uso, así que estar en otro
+dominio no le afecta.
 
 `hytrex.co` (el apex) sigue apuntando a un túnel que ya no existe y da 530,
 aunque la landing está desplegada. Es un cambio de DNS.
@@ -145,6 +149,16 @@ Ordenado por lo que más duele.
 
 Están aquí porque volver a caer sale caro.
 
+- **Web y API tienen que compartir dominio registrable, o Safari deja fuera a
+  media plantilla.** Si la API vive en un dominio distinto al de la web, su
+  cookie de sesión es de terceros y hace falta `SameSite=None`; Safari en
+  macOS trae «Impedir el seguimiento entre sitios» activado de fábrica y la
+  tira. Y el fallo no se parece a un fallo de sesión: `POST /auth/login`
+  contesta **200** y el `GET /auth/me` de dos líneas después contesta **401**,
+  así que parece que la contraseña está mal. En los registros se ve como una
+  persona reintentando cinco veces con contraseña y siete con Google sin
+  conseguir una sola sesión, mientras a otra le entra a la primera desde
+  Chrome. Costó una noche el 9 de septiembre.
 - **RLS falla en silencio.** Tabla sin política = cero filas y ningún error.
   Toda tabla nueva necesita política **y** caso en `isolation.test.ts`.
 - **`db:migrate` cambia la contraseña de `devup_app`, y la saca de

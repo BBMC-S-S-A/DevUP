@@ -43,12 +43,39 @@ Necesita `RAILWAY_API_TOKEN` en el entorno. `live` es el mismo código con
 ### Web (Cloudflare Workers)
 ```bash
 cd apps/web
-NEXT_PUBLIC_API_URL=https://api-production-7b95.up.railway.app \
+NEXT_PUBLIC_API_URL=https://api.hytrex.co \
 NEXT_PUBLIC_WS_URL=wss://live-production-976a.up.railway.app \
 npm run cf:deploy
 ```
 **Esas dos variables se incrustan al compilar.** Cambiarlas en un panel no hace
-nada: hay que reconstruir.
+nada: hay que reconstruir. En el workflow salen de las *variables* del
+repositorio (Settings -> Variables), no de secretos, para poder cambiarlas sin
+editar el archivo.
+
+**`NEXT_PUBLIC_API_URL` tiene que estar bajo `hytrex.co`, y no es estetica.**
+Si la API queda en otro dominio registrable que la web, su cookie de sesion
+pasa a ser de terceros y Safari la bloquea de fabrica: la gente no entra. Ver
+la trampa en el otro documento.
+
+Mover la API de dominio son tres pasos, y el orden importa:
+
+1. Dar de alta la direccion de vuelta nueva en Google Cloud Console
+   (Credenciales -> cliente OAuth -> URI de redireccion autorizados), **sin
+   borrar la vieja**, que es la vuelta atras. Si este paso falta, entrar con
+   Google deja de funcionar para todos en cuanto se haga el 2.
+2. `GOOGLE_REDIRECT_URI` en el servicio `api` de Railway.
+3. La variable del repositorio y reconstruir la web.
+
+Entre el 2 y el 3 hay una ventana en la que entrar con Google no funciona: la
+web servida todavia habla con el dominio viejo. Conviene hacerlos seguidos.
+
+Al terminar **se cierran todas las sesiones abiertas**, porque la cookie vieja
+pertenece al dominio anterior.
+
+`APP_BASE_URL` es a donde la API devuelve despues de entrar con Google. Tiene
+que ser el dominio que la gente usa de verdad (`devup.hytrex.co`), no otro que
+tambien responda: dos puertas para lo mismo es como se acaban reportando
+fallos que nadie reproduce.
 
 ### Base de datos
 La base está en la red privada de Railway, así que desde fuera hace falta un
@@ -102,8 +129,11 @@ migración, y el despliegue inmediatamente después.
 2. **Apuntar `hytrex.co` a la landing.** Está desplegada y el apex da 530.
 
 ### Después
-3. **Dominios propios** (`api.hytrex.co`, `live.hytrex.co`) cuando Railway
-   emita sus certificados, con la reconstrucción de la web que eso implica.
+3. **`COOKIE_SAME_SITE=lax`** en el servicio `api`. Desde que la web y la API
+   comparten `hytrex.co` la cookie ya no es de terceros y `none` dejo de hacer
+   falta. Se quedo puesta porque cambiarla durante la mudanza habria dejado a
+   todo el mundo fuera hasta que la web se reconstruyera. Es endurecer, no
+   arreglar.
 4. **Partir `ventas`**, con las pruebas de navegador delante.
 5. **Responsive dentro de las pantallas grandes.**
 6. **Higiene de la base**: `search_path` en las seis funciones, y decidir qué
