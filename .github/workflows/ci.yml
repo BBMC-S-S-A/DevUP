@@ -94,6 +94,14 @@ jobs:
         # correcta se sabe.
         run: npm run test:integraciones
 
+      - name: La puerta MCP
+        # No prueba que la busqueda encuentre cosas —eso es de global_search y
+        # de RLS, y ya lo cubre el aislamiento— sino lo propio de esa capa: el
+        # token rotado que llega en set-cookie, quien gana entre el archivo y
+        # la variable de entorno, y resolver la organizacion sin pedirle un
+        # uuid al modelo. Las tres se rompen en silencio.
+        run: npm run test:mcp
+
       - name: Migraciones idempotentes
         # Aplicarlas dos veces no debe cambiar nada ni fallar. Detecta la
         # migración que se editó después de aplicarse, que es la forma más
