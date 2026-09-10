@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ClienteDevUP } from "../api.js";
+import type { ClienteApi } from "../api.js";
 import { resolverEspacio, todosLosEspacios, type Espacio } from "../espacios.js";
 import { imagenesDeTarea, TOPE_POR_LLAMADA, type Bloque } from "../imagenes.js";
 
@@ -84,7 +84,7 @@ export const descripcionMisTareas = [
 ].join("\n");
 
 export async function misTareas(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: { espacio?: string; organizacion?: string; con_imagenes?: boolean },
 ): Promise<Bloque[]> {
   const { user } = await cliente.get<{ user: { id: string } }>("/auth/me");
@@ -169,7 +169,7 @@ export const descripcionVerTablero = [
 ].join("\n");
 
 export async function verTablero(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: { espacio?: string; organizacion?: string },
 ): Promise<string> {
   const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
@@ -215,7 +215,7 @@ export const descripcionVerTarea = [
 ].join("\n");
 
 export async function verTarea(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: { tarea: string; espacio?: string; organizacion?: string },
 ): Promise<Bloque[]> {
   // POR QUE SE RECORREN LOS TABLEROS EN VEZ DE PEDIR LA TAREA POR SU ID: la

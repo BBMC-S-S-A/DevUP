@@ -1,4 +1,4 @@
-import type { ClienteDevUP } from "./api.js";
+import type { ClienteApi } from "./api.js";
 
 export type Organizacion = { id: string; name: string; slug: string };
 
@@ -16,7 +16,7 @@ export type Organizacion = { id: string; name: string; slug: string };
  * abandona.
  */
 export async function resolverOrganizacion(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   nombre?: string,
 ): Promise<Organizacion> {
   const { organizations } = await cliente.get<{ organizations: Organizacion[] }>("/organizations");

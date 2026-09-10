@@ -100,6 +100,22 @@ const schema = z.object({
    */
   REALTIME_ENABLED: bool("true"),
 
+  /**
+   * Si esta instancia sirve la puerta MCP remota (`POST /mcp`), la que permite
+   * conectar un Claude pegando una URL en vez de instalar el paquete de stdio.
+   *
+   * FALSO POR DEFECTO, al contrario que `REALTIME_ENABLED`, y el motivo es la
+   * diferencia entre las dos: aquella describe algo que YA funcionaba y no
+   * debía cambiar al partir la instancia en dos; esta abre una superficie
+   * nueva. Encenderla es una decisión —y hay que haber aplicado la migración
+   * 0032 y tener `/oauth/*` sirviendo antes de que valga para algo.
+   *
+   * El servidor de autorización (`routes/oauth.ts`) NO depende de esto: se
+   * registra siempre. Sin la puerta, lo peor que pasa es que alguien saque un
+   * token que todavía no tiene dónde usarse.
+   */
+  MCP_REMOTE_ENABLED: bool("false"),
+
   // --- Altas -----------------------------------------------------------------
   // `invite` es el valor por defecto a propósito: una instancia de equipo con
   // el registro abierto es una instancia donde entra cualquiera que encuentre

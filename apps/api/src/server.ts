@@ -20,6 +20,7 @@ import { fileRoutes } from "./routes/files.js";
 import { githubRoutes, refreshRepo } from "./routes/github.js";
 import { infraestructuraRoutes } from "./routes/infraestructura.js";
 import { iceRoutes } from "./routes/ice.js";
+import { mcpRoutes } from "./routes/mcp.js";
 import { messageRoutes } from "./routes/messages.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { oauthRoutes } from "./routes/oauth.js";
@@ -159,6 +160,13 @@ await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(notificationRoutes);
 await app.register(oauthRoutes);
+
+// La puerta MCP remota, solo donde se encienda. El servidor de autorización de
+// arriba va siempre: emitir un token no depende de que esta instancia sea la
+// que atiende el protocolo.
+if (env.MCP_REMOTE_ENABLED) {
+  await app.register(mcpRoutes);
+}
 await app.register(announcementRoutes);
 await app.register(asistenteRoutes);
 await app.register(preferenceRoutes);
