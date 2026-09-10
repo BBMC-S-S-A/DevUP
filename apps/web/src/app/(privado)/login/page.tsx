@@ -104,8 +104,14 @@ function LoginForm() {
   // esto, quien pulsa un botón que dice «gratis» aterriza en un formulario de
   // acceso y tiene que darse cuenta solo de que hay una pestaña al lado.
   const pideRegistro = params.get("modo") === "registro";
+  // Desde la pantalla de invitación: quien ya tiene cuenta pulsa «Ya tengo
+  // cuenta» y llega aquí con esto, para no aterrizar en el formulario de
+  // alta por defecto solo porque el enlace trae una invitación.
+  const pideAcceso = params.get("modo") === "acceso";
 
-  const [mode, setMode] = useState<Mode>(inviteToken || pideRegistro ? "register" : "login");
+  const [mode, setMode] = useState<Mode>(
+    pideAcceso ? "login" : inviteToken || pideRegistro ? "register" : "login",
+  );
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -147,6 +153,21 @@ function LoginForm() {
         });
       } else {
         await api.post<{ user: User }>("/auth/login", { email, password });
+        // La cuenta ya existía: /auth/login no sabe de invitaciones, así que
+        // sin esto entrar con una cuenta que ya tenías dejaba la invitación
+        // sin canjear y la organización nueva no aparecía nunca. El registro
+        // sí lo canjea en el propio /auth/register porque ahí se crea la
+        // cuenta a la vez; aquí hace falta un segundo paso porque la cuenta
+        // ya existe de antes.
+        if (inviteToken) {
+          await api.post("/invitations/accept", { token: inviteToken }).catch(() => {
+            // Si falla —el correo no coincide, la invitación ya se usó— se
+            // deja entrar igual: la cuenta es válida y entrar no debe
+            // bloquearse por una invitación que no se pudo canjear. La
+            // pantalla de invitación ya explica esos casos si vuelve a abrir
+            // el enlace.
+          });
+        }
       }
 
       // `refresh()` no siempre encuentra sesión en el primer intento: entre

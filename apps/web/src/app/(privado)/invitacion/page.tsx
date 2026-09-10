@@ -204,12 +204,24 @@ function Invitacion() {
           </p>
         )
       ) : (
-        <EnlacePrimario
-          href={`/login?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(invitation.email)}`}
-        >
-          <UserPlus size={15} />
-          Crear mi cuenta
-        </EnlacePrimario>
+        <>
+          <EnlacePrimario
+            href={`/login?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(invitation.email)}`}
+          >
+            <UserPlus size={15} />
+            Crear mi cuenta
+          </EnlacePrimario>
+          {/* Quien ya tiene cuenta con este correo —de otra organización,
+              normalmente— no debe aterrizar en el formulario de alta: eso
+              intenta registrar un correo que ya existe y falla. `modo=acceso`
+              abre el login directamente en "Entrar", que ahora sí canjea la
+              invitación después de entrar. */}
+          <EnlaceSecundario
+            href={`/login?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(invitation.email)}&modo=acceso`}
+          >
+            Ya tengo cuenta
+          </EnlaceSecundario>
+        </>
       )}
 
       <p className="mt-4 text-center font-mono text-[10px] text-faint">enlace de un solo uso</p>
