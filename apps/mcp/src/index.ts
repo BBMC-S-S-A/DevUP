@@ -14,6 +14,20 @@ import {
   verTablero,
   verTarea,
 } from "./herramientas/tareas.js";
+import {
+  actualizarTarea,
+  crearColumna,
+  crearTarea,
+  descripcionActualizarTarea,
+  descripcionCrearColumna,
+  descripcionCrearTarea,
+  descripcionMoverTarea,
+  esquemaActualizarTarea,
+  esquemaCrearColumna,
+  esquemaCrearTarea,
+  esquemaMoverTarea,
+  moverTarea,
+} from "./herramientas/escribir.js";
 import { cargarConfiguracion, rutaDeConfiguracion } from "./configuracion.js";
 
 /**
@@ -101,6 +115,51 @@ servidor.tool(
   descripcionVerTarea,
   esquemaVerTarea,
   herramienta((cliente, entrada) => verTarea(cliente, entrada)),
+);
+
+// --- Las que escriben -------------------------------------------------------
+//
+// Escriben en el tablero de un equipo, asi que van marcadas: todo lo que crean
+// lleva la etiqueta «agente», que es lo que permite verlo, filtrarlo y
+// deshacerlo en bloque. El porque, en herramientas/escribir.ts.
+//
+// No hay ninguna de borrar, y es deliberado: equivocarse creando deja trabajo
+// que revisar, equivocarse borrando deja trabajo perdido.
+
+servidor.tool(
+  "crear_tarea",
+  descripcionCrearTarea,
+  esquemaCrearTarea,
+  herramienta(async (cliente, entrada) => [
+    { type: "text" as const, text: await crearTarea(cliente, entrada) },
+  ]),
+);
+
+servidor.tool(
+  "crear_columna",
+  descripcionCrearColumna,
+  esquemaCrearColumna,
+  herramienta(async (cliente, entrada) => [
+    { type: "text" as const, text: await crearColumna(cliente, entrada) },
+  ]),
+);
+
+servidor.tool(
+  "mover_tarea",
+  descripcionMoverTarea,
+  esquemaMoverTarea,
+  herramienta(async (cliente, entrada) => [
+    { type: "text" as const, text: await moverTarea(cliente, entrada) },
+  ]),
+);
+
+servidor.tool(
+  "actualizar_tarea",
+  descripcionActualizarTarea,
+  esquemaActualizarTarea,
+  herramienta(async (cliente, entrada) => [
+    { type: "text" as const, text: await actualizarTarea(cliente, entrada) },
+  ]),
 );
 
 const transporte = new StdioServerTransport();

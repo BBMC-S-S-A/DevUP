@@ -102,6 +102,52 @@ export class ClienteDevUP {
     return this.acceso;
   }
 
+  /**
+   * Peticiones que escriben. Mismo reintento que `get` para el acceso
+   * caducado, pero SIN reintentar si el fallo es otro: repetir un POST que
+   * quizas si llego crearia la tarea dos veces, y una tarea duplicada en el
+   * tablero de un equipo es peor que un error visible.
+   */
+  async post<T>(camino: string, cuerpo: unknown): Promise<T> {
+    const lanzar = async () =>
+      fetch(`${this.config.apiUrl}${camino}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${await this.accesoValido()}`,
+          "content-type": "application/json",
+          "user-agent": "devup-mcp",
+        },
+        body: JSON.stringify(cuerpo),
+      });
+
+    let respuesta = await lanzar();
+    if (respuesta.status === 401) {
+      this.acceso = null;
+      respuesta = await lanzar();
+    }
+    return leer<T>(respuesta, camino);
+  }
+
+  async patch<T>(camino: string, cuerpo: unknown): Promise<T> {
+    const lanzar = async () =>
+      fetch(`${this.config.apiUrl}${camino}`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${await this.accesoValido()}`,
+          "content-type": "application/json",
+          "user-agent": "devup-mcp",
+        },
+        body: JSON.stringify(cuerpo),
+      });
+
+    let respuesta = await lanzar();
+    if (respuesta.status === 401) {
+      this.acceso = null;
+      respuesta = await lanzar();
+    }
+    return leer<T>(respuesta, camino);
+  }
+
   async get<T>(camino: string): Promise<T> {
     const acceso = await this.accesoValido();
     const respuesta = await fetch(`${this.config.apiUrl}${camino}`, {
