@@ -153,8 +153,10 @@ jobs:
         run: |
           fallos=0
           for u in \
+            "https://api.hytrex.co/auth/signup-policy" \
             "https://api-production-7b95.up.railway.app/auth/signup-policy" \
             "https://live-production-976a.up.railway.app/health" \
+            "https://app.hytrex.co/" \
             "https://devup.hytrex.co/"
           do
             c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$u" || echo 000)
