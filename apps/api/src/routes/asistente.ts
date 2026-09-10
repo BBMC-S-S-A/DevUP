@@ -54,8 +54,15 @@ const MAX_VUELTAS = 8;
 const MODELO_ANTHROPIC = "claude-opus-5";
 /** «Flash» y no «Pro»: la capa gratuita de Pro es de apenas decenas de
  *  peticiones al día, y la de Flash alcanza de sobra para un asistente de uso
- *  normal. Ver docs/HEARTH-Y-LA-PUERTA-MCP.md para las cifras. */
-const MODELO_GEMINI = "gemini-2.5-flash";
+ *  normal. Ver docs/HEARTH-Y-LA-PUERTA-MCP.md para las cifras.
+ *
+ * `gemini-2.5-flash` se retiró para cuentas nuevas el 10 de septiembre de
+ * 2026 -lo avisó la propia API en un 404, no un aviso previo-. `3.8` y no
+ * `3.6` -que fue lo que la API sugirió en ese error- porque Google mismo
+ * documenta 3.8 como el Flash actual recomendado para proyectos nuevos, con
+ * la misma capa gratuita: menos vidas le queda a una versión que ya nace
+ * marcada como "previa". */
+const MODELO_GEMINI = "gemini-3.8-flash";
 
 const SISTEMA = `Eres el asistente de DevUP, dentro del espacio de trabajo de un equipo.
 
