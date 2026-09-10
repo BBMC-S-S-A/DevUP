@@ -7,6 +7,9 @@ el resto es del 3 de septiembre y sigue vigente). Este documento y
 leer para ponerse al día; el resto de documentos de planificación se retiraron
 porque decían cosas distintas entre sí y ya nadie sabía cuál valía.
 
+Para el trabajo que viene —el motor agéntico— la guía es
+[HEARTH-Y-LA-PUERTA-MCP.md](HEARTH-Y-LA-PUERTA-MCP.md).
+
 Lo que **no** está aquí, a propósito:
 
 - El **porqué** de las decisiones caras vive en [`decisiones/`](decisiones/), y
@@ -127,9 +130,12 @@ Ordenado por lo que más duele.
   `global_search`, `mark_channel_read`, `touch_opportunity`, `touch_task`,
   `unread_counts`). Ninguna es `security definer`, así que es higiene, no un
   agujero.
-- **`user_tokens` es una tabla muerta**: creada en la 0006, con aislamiento
-  encendido, sin política y sin una sola referencia en el código. Borrarla es
-  una migración destructiva, así que es una decisión.
+- ~~**`user_tokens` es una tabla muerta**~~ — **era falso, y borrarla habría
+  roto producción.** `account.ts` la usa para verificar el correo y para
+  restablecer la contraseña, a través de `issue_user_token` y
+  `consume_user_token`, que son `security definer`. No tiene política porque
+  nadie la consulta directamente **a propósito**. Se queda como está. Se
+  descubrió el 9 de septiembre leyendo el código para diseñar la puerta MCP.
 - **Partir `ventas`** (1.273 líneas) en cabecera, embudo, clientes y
   cotizaciones. Pide las pruebas de navegador antes: es mover código sin
   cambiar comportamiento, y sin red se hace a ciegas.
