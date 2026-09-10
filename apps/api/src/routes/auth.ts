@@ -26,7 +26,9 @@ import {
   HttpError,
   forbidden,
   limiteEstricto,
+  notFound,
   parseBody,
+  parseParams,
   requireUser,
   unauthorized,
 } from "../lib/http.js";
@@ -80,14 +82,25 @@ async function openSession(
   db: Db,
   userId: string,
   userAgent: string,
+  /**
+   * El nombre y la marca de conexión de agente, que tienen que sobrevivir a la
+   * rotación. Al renovar se consume la sesión y se abre otra; si no se
+   * arrastraran, la primera renovación convertiría una conexión de agente en
+   * una sesión anónima: seguiría viva y con todo el acceso, pero desaparecería
+   * de la lista de conexiones y ya no habría forma de encontrarla para
+   * revocarla.
+   */
+  etiqueta: { label: string; isAgent: boolean } = { label: "", isAgent: false },
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const { token, hash } = newRefreshToken();
   const expiresAt = new Date(Date.now() + refreshTtlSeconds * 1000);
-  await db.query("select public.session_open($1, $2, $3, $4)", [
+  await db.query("select public.session_open($1, $2, $3, $4, $5, $6)", [
     userId,
     hash,
     expiresAt.toISOString(),
     userAgent.slice(0, 300),
+    etiqueta.label,
+    etiqueta.isAgent,
   ]);
   return { accessToken: await signAccessToken(userId), refreshToken: token };
 }
@@ -253,13 +266,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!presented) throw unauthorized("no hay token de refresco");
 
     const result = await withUser(null, async (db) => {
-      const { rows } = await db.query<{ user_id: string }>(
-        "select user_id from public.session_consume($1)",
-        [hashRefreshToken(presented)],
-      );
+      const { rows } = await db.query<{
+        user_id: string;
+        label: string;
+        is_agent: boolean;
+      }>("select user_id, label, is_agent from public.session_consume($1)", [
+        hashRefreshToken(presented),
+      ]);
       const consumed = rows[0];
       if (!consumed) return null;
-      const tokens = await openSession(db, consumed.user_id, request.headers["user-agent"] ?? "");
+      const tokens = await openSession(db, consumed.user_id, request.headers["user-agent"] ?? "", {
+        label: consumed.label,
+        isAgent: consumed.is_agent,
+      });
       return { userId: consumed.user_id, tokens };
     });
 
@@ -458,7 +477,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
-        `select id, user_agent as "userAgent", created_at as "createdAt",
+        `select id, user_agent as "userAgent", label, is_agent as "isAgent",
+                created_at as "createdAt",
                 expires_at as "expiresAt", revoked_at as "revokedAt"
            from sessions
           where revoked_at is null and expires_at > now()
@@ -466,5 +486,72 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       );
       return { sessions: rows };
     });
+  });
+
+  /**
+   * Conexiones de agente: la credencial con la que alguien conecta su propio
+   * Claude a DevUP por MCP.
+   *
+   * NO ES UN TIPO DE TOKEN NUEVO. Es una sesión con nombre, de las mismas que
+   * abre el navegador: mismo hash guardado, misma caducidad de 30 días, misma
+   * rotación, misma revocación. Lo que cambia es que lleva un nombre para
+   * poder distinguirla en la lista, y que el token se le enseña a la persona
+   * una vez para que lo pegue en su configuración.
+   *
+   * EL TOKEN SE ENSEÑA UNA SOLA VEZ, y no por ceremonia: en la base solo hay
+   * su hash, así que no es que no queramos volver a mostrarlo — es que no
+   * podemos. Si se pierde, se revoca y se crea otra.
+   */
+  app.post(
+    "/auth/agent-connections",
+    { onRequest: requireSession, ...limiteEstricto },
+    async (request) => {
+      const userId = requireUser(request);
+      const { label } = parseBody(
+        z.object({ label: z.string().trim().min(1).max(60) }),
+        request.body,
+      );
+
+      const { token, hash } = newRefreshToken();
+      const expiresAt = new Date(Date.now() + refreshTtlSeconds * 1000);
+
+      const connection = await withUser(userId, async (db) => {
+        const { rows } = await db.query<{ agent_connection_open: string }>(
+          "select public.agent_connection_open($1, $2, $3)",
+          [label, hash, expiresAt.toISOString()],
+        );
+        return rows[0]!.agent_connection_open;
+      });
+
+      return {
+        connection: { id: connection, label, expiresAt: expiresAt.toISOString() },
+        // La única vez que este valor sale del servidor.
+        token,
+      };
+    },
+  );
+
+  /**
+   * Revocar una sesión por su id, que es lo que hace falta para poder cortar
+   * una conexión de agente desde la pantalla.
+   *
+   * Sin función de base: la política `sessions_update` de la 0001 ya limita el
+   * UPDATE a las filas propias, así que un id ajeno no encuentra fila y se va
+   * en 404. El aislamiento lo pone RLS, no una comprobación aquí.
+   */
+  app.delete("/auth/sessions/:id", { onRequest: requireSession }, async (request, reply) => {
+    const userId = requireUser(request);
+    const { id } = parseParams(z.object({ id: z.string().uuid() }), request.params);
+
+    const revocada = await withUser(userId, async (db) => {
+      const { rowCount } = await db.query(
+        "update sessions set revoked_at = now() where id = $1 and revoked_at is null",
+        [id],
+      );
+      return (rowCount ?? 0) > 0;
+    });
+
+    if (!revocada) throw notFound("esa sesión no existe o ya estaba cortada");
+    return reply.status(204).send();
   });
 }

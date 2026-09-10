@@ -1,4 +1,14 @@
-import { Code2, Database, Github, Lightbulb, Megaphone, Server, Settings, Target } from "lucide-react";
+import {
+  Code2,
+  Database,
+  Github,
+  KeyRound,
+  Lightbulb,
+  Megaphone,
+  Server,
+  Settings,
+  Target,
+} from "lucide-react";
 import { ItemNav } from "./ItemNav";
 import { retraso } from "@/lib/animacion";
 
@@ -83,11 +93,24 @@ export function NavegacionOrganizacion({
         <span className="min-w-0 flex-1 truncate">Entorno de desarrollo</span>
       </a>
 
+      {/* Mi cuenta va SIN puerta de rol, al revés que Ajustes: ahí es correcto
+          esconderlo porque es la organización, pero una conexión de agente la
+          necesita cualquiera que quiera enchufar su Claude, y un miembro raso
+          es justamente quien no tiene otra manera de llegar. */}
+      <ItemNav
+        href={`${base}/cuenta`}
+        icono={<KeyRound size={14} />}
+        indice={indiceInicial + pantallas.length + 1}
+        activo={pathname === `${base}/cuenta`}
+      >
+        Mi cuenta
+      </ItemNav>
+
       {puedeAjustar && (
         <ItemNav
           href={`${base}/ajustes`}
           icono={<Settings size={14} />}
-          indice={indiceInicial + pantallas.length + 1}
+          indice={indiceInicial + pantallas.length + 2}
           activo={pathname === `${base}/ajustes`}
         >
           Ajustes

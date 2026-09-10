@@ -1703,6 +1703,93 @@ async function main(): Promise<void> {
           ]),
         ),
     );
+
+    // ---------------------------------------------------------------------
+    // Conexiones de agente (0029)
+    //
+    // Emiten una credencial de 30 dias con todo el acceso de una persona, asi
+    // que aqui lo que importa es que nadie pueda abrir una a nombre de otro ni
+    // cortar la de otro. Lo primero lo garantiza la firma de la funcion —saca
+    // el usuario de current_user_id() y no admite que se le diga otro—, y lo
+    // segundo la politica sessions_update de la 0001.
+    console.log("\nConexiones de agente");
+
+    const abrirConexion = (quien: string, nombre: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ agent_connection_open: string }>(
+          "select public.agent_connection_open($1,$2,$3)",
+          [nombre, `hash-agente-${nombre}-${suffix}`, new Date(Date.now() + 86_400_000).toISOString()],
+        );
+        return rows[0]!.agent_connection_open;
+      });
+
+    const conexionDeAna = await abrirConexion(ana, "claude-de-ana");
+    check("Ana abre su conexion de agente", Boolean(conexionDeAna));
+
+    const suyas = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string; label: string; is_agent: boolean }>(
+        "select id, label, is_agent from sessions where is_agent",
+      );
+      return rows;
+    });
+    check(
+      "y la ve con su nombre y marcada como de agente",
+      suyas.some((f) => f.id === conexionDeAna && f.label === "claude-de-ana" && f.is_agent),
+    );
+
+    const lasDeCarla = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ id: string }>("select id from sessions where is_agent");
+      return rows.map((r) => r.id);
+    });
+    check("Carla no ve la conexion de agente de Ana", !lasDeCarla.includes(conexionDeAna));
+
+    // Lo que de verdad se prueba: aunque Carla tenga el id —y un id se filtra
+    // por mil sitios— no puede cortarla. Sin fila que actualizar, la ruta
+    // responde 404 y Carla no distingue «no existe» de «no es tuya».
+    const cortadaPorCarla = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        "update sessions set revoked_at = now() where id = $1 and revoked_at is null",
+        [conexionDeAna],
+      );
+      return rowCount ?? 0;
+    });
+    check("Carla no puede cortar la conexion de Ana ni con su id", cortadaPorCarla === 0);
+
+    const sigueViva = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ revoked_at: string | null }>(
+        "select revoked_at from sessions where id = $1",
+        [conexionDeAna],
+      );
+      return rows[0]?.revoked_at === null;
+    });
+    check("y sigue viva despues del intento", sigueViva);
+
+    const cortadaPorAna = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "update sessions set revoked_at = now() where id = $1 and revoked_at is null",
+        [conexionDeAna],
+      );
+      return rowCount ?? 0;
+    });
+    check("Ana si puede cortar la suya", cortadaPorAna === 1);
+
+    // El nombre sobrevive a la rotacion: sin esto, la primera renovacion
+    // convertiria la conexion en una sesion anonima que sigue viva con todo el
+    // acceso y ya no aparece en la lista para poder revocarla.
+    const paraRotar = await abrirConexion(ana, "claude-que-rota");
+    check("hay otra conexion para probar la rotacion", Boolean(paraRotar));
+    const consumida = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ label: string; is_agent: boolean }>(
+        "select label, is_agent from public.session_consume($1)",
+        [`hash-agente-claude-que-rota-${suffix}`],
+      );
+      return rows[0];
+    });
+    check(
+      "al consumirla, devuelve el nombre y la marca para arrastrarlos",
+      consumida?.label === "claude-que-rota" && consumida?.is_agent === true,
+    );
+
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

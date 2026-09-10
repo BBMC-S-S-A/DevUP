@@ -417,3 +417,23 @@ export type Entorno = {
   /** El último despliegue, que es lo que enseña la tarjeta. */
   ultimo: Despliegue | null;
 };
+
+/**
+ * Una sesión abierta. `isAgent` distingue las conexiones de agente —la
+ * credencial con la que alguien conecta su Claude por MCP— de los navegadores
+ * de siempre; ver la migración 0029.
+ */
+export type Sesion = {
+  id: string;
+  userAgent: string;
+  label: string;
+  isAgent: boolean;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type ConexionDeAgente = {
+  id: string;
+  label: string;
+  expiresAt: string;
+};
