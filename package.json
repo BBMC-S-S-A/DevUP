@@ -31,7 +31,8 @@
     "test:google": "npm run test:google --workspace apps/api",
     "test:youtube": "npm run test:youtube --workspace apps/api",
     "test:puerta": "npm run test:puerta --workspace apps/api",
-    "test:mcp": "npm run test:mcp --workspace apps/mcp"
+    "test:mcp": "npm run test:mcp --workspace apps/mcp",
+    "test:asistente": "npm run test:asistente --workspace apps/api"
   },
   "engines": {
     "node": ">=20.11"

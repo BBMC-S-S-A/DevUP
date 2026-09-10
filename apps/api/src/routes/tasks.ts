@@ -180,32 +180,18 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       request.body,
     );
 
-    const task = await withUser(userId, async (db) => {
-      const { rows } = await db.query<{ id: string }>(
-        `insert into tasks
-           (workspace_id, column_id, title, description, assignee_id, due_date, position, created_by)
-         values (
-           $1, $2, $3, $4, $5, $6,
-           coalesce((select max(position) from tasks where column_id = $2), 0) + $7,
-           $8
-         )
-         returning id`,
-        [
-          workspaceId,
-          body.columnId,
-          body.title,
-          body.description,
-          body.assigneeId ?? null,
-          body.dueDate ?? null,
-          STEP,
-          userId,
-        ],
-      );
-      const taskId = rows[0]!.id;
-      await attachTaskTags(db, taskId, body.tagIds);
-      if (body.assigneeId) await avisarAsignacion(db, taskId, body.assigneeId, userId);
-      return loadTask(db, taskId);
-    });
+    const task = await withUser(userId, (db) =>
+      crearTareaEnDb(db, {
+        workspaceId,
+        columnId: body.columnId,
+        title: body.title,
+        description: body.description,
+        assigneeId: body.assigneeId ?? null,
+        dueDate: body.dueDate ?? null,
+        tagIds: body.tagIds,
+        autor: userId,
+      }),
+    );
 
     return reply.status(201).send({ task });
   });
@@ -290,38 +276,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       request.body,
     );
 
-    return withUser(userId, async (db) => {
-      const { rows: previousRows } = await db.query<{ position: number }>(
-        "select position from tasks where id = $1 and column_id = $2",
-        [body.afterTaskId ?? null, body.columnId],
-      );
-      const previous = previousRows[0]?.position ?? null;
-
-      const { rows: nextRows } = await db.query<{ position: number }>(
-        `select position from tasks
-          where column_id = $1 and id <> $2 and ($3::float8 is null or position > $3)
-          order by position limit 1`,
-        [body.columnId, taskId, previous],
-      );
-      const next = nextRows[0]?.position ?? null;
-
-      const position =
-        previous === null && next === null
-          ? STEP
-          : previous === null
-            ? next! - STEP
-            : next === null
-              ? previous + STEP
-              : (previous + next) / 2;
-
-      const { rowCount } = await db.query(
-        "update tasks set column_id = $2, position = $3 where id = $1",
-        [taskId, body.columnId, position],
-      );
-      if (rowCount === 0) throw notFound("tarea no encontrada");
-
-      return { task: await loadTask(db, taskId) };
-    });
+    return withUser(userId, async (db) => ({
+      task: await moverTareaEnDb(db, taskId, body.columnId, body.afterTaskId ?? null),
+    }));
   });
 
   app.delete("/tasks/:taskId", async (request, reply) => {
@@ -330,4 +287,94 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     await withUser(userId, (db) => db.query("delete from tasks where id = $1", [taskId]));
     return reply.status(204).send();
   });
+}
+
+// ---------------------------------------------------------------------------
+// Lo que comparten la ruta y el asistente de dentro del producto
+//
+// POR QUE ESTAN EXTRAIDAS. `asistente.ts` tambien crea y mueve tareas, y
+// copiar el SQL alli habria perdido dos cosas en silencio: el calculo de la
+// posicion —que decide donde cae la tarjeta en la columna— y el AVISO a quien
+// recibe la tarea. Una tarea creada por el asistente que no notifica a su
+// responsable es una tarea que nadie ve.
+//
+// Reciben `db` y no abren transaccion: la abre quien llama, con `withUser`, y
+// asi el aislamiento por RLS es el mismo por los dos caminos.
+// ---------------------------------------------------------------------------
+
+export async function crearTareaEnDb(
+  db: Db,
+  datos: {
+    workspaceId: string;
+    columnId: string;
+    title: string;
+    description: string;
+    assigneeId: string | null;
+    dueDate: string | null;
+    tagIds: string[];
+    autor: string;
+  },
+): Promise<Record<string, unknown>> {
+  const { rows } = await db.query<{ id: string }>(
+    `insert into tasks
+       (workspace_id, column_id, title, description, assignee_id, due_date, position, created_by)
+     values (
+       $1, $2, $3, $4, $5, $6,
+       coalesce((select max(position) from tasks where column_id = $2), 0) + $7,
+       $8
+     )
+     returning id`,
+    [
+      datos.workspaceId,
+      datos.columnId,
+      datos.title,
+      datos.description,
+      datos.assigneeId,
+      datos.dueDate,
+      STEP,
+      datos.autor,
+    ],
+  );
+  const taskId = rows[0]!.id;
+  await attachTaskTags(db, taskId, datos.tagIds);
+  if (datos.assigneeId) await avisarAsignacion(db, taskId, datos.assigneeId, datos.autor);
+  return loadTask(db, taskId);
+}
+
+export async function moverTareaEnDb(
+  db: Db,
+  taskId: string,
+  columnId: string,
+  afterTaskId: string | null,
+): Promise<Record<string, unknown>> {
+  const { rows: previousRows } = await db.query<{ position: number }>(
+    "select position from tasks where id = $1 and column_id = $2",
+    [afterTaskId, columnId],
+  );
+  const previous = previousRows[0]?.position ?? null;
+
+  const { rows: nextRows } = await db.query<{ position: number }>(
+    `select position from tasks
+      where column_id = $1 and id <> $2 and ($3::float8 is null or position > $3)
+      order by position limit 1`,
+    [columnId, taskId, previous],
+  );
+  const next = nextRows[0]?.position ?? null;
+
+  const position =
+    previous === null && next === null
+      ? STEP
+      : previous === null
+        ? next! - STEP
+        : next === null
+          ? previous + STEP
+          : (previous + next) / 2;
+
+  const { rowCount } = await db.query(
+    "update tasks set column_id = $2, position = $3 where id = $1",
+    [taskId, columnId, position],
+  );
+  if (rowCount === 0) throw notFound("tarea no encontrada");
+
+  return loadTask(db, taskId);
 }

@@ -16,7 +16,8 @@
     "test:world": "tsx src/realtime/world.test.ts",
     "test:google": "tsx src/auth/google.test.ts",
     "test:youtube": "tsx src/connectors/youtube.test.ts",
-    "test:puerta": "tsx src/routes/auth.puerta.test.ts"
+    "test:puerta": "tsx src/routes/auth.puerta.test.ts",
+    "test:asistente": "tsx src/routes/asistente.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

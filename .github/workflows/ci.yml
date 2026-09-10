@@ -94,6 +94,15 @@ jobs:
         # correcta se sabe.
         run: npm run test:integraciones
 
+      - name: Las herramientas del asistente
+        # Sin gastar la clave de nadie: el modelo no hace falta para comprobar
+        # que una escritura acaba en la columna correcta, con su responsable y
+        # con la etiqueta de procedencia. La comprobacion que mas importa es la
+        # de no mover una tarea a la columna de otro espacio: eso RLS no lo
+        # puede impedir cuando la persona tiene acceso a los dos, asi que lo
+        # pone el codigo y si alguien lo borra, esto se pone rojo.
+        run: npm run test:asistente
+
       - name: La puerta MCP
         # No prueba que la busqueda encuentre cosas —eso es de global_search y
         # de RLS, y ya lo cubre el aislamiento— sino lo propio de esa capa: el

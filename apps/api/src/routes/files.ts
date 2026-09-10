@@ -97,17 +97,7 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const tag = await withUser(userId, async (db) => {
-      // Crear una etiqueta que ya existe devuelve la existente en vez de un
-      // conflicto: quien escribe «diseño» en el selector quiere esa etiqueta,
-      // no un error.
-      const { rows } = await db.query(
-        `insert into tags (organization_id, name, color, created_by)
-         values ($1, $2, $3, $4)
-         on conflict (organization_id, name) do update set color = excluded.color
-         returning id, name, color`,
-        [orgId, body.name, body.color, userId],
-      );
-      return rows[0];
+      return asegurarEtiqueta(db, orgId, body.name, body.color, userId);
     });
 
     return reply.status(201).send({ tag });
@@ -407,4 +397,30 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     announceFileChange(removed.workspace_id, "deleted", fileId);
     return reply.status(204).send();
   });
+}
+
+/**
+ * Da de alta una etiqueta, o devuelve la que ya hubiera.
+ *
+ * Crear una etiqueta que ya existe devuelve la existente en vez de un
+ * conflicto: quien escribe «diseño» en el selector quiere esa etiqueta, no un
+ * error. Extraida porque el asistente tambien la necesita — marca con
+ * «agente» todo lo que crea, y esa marca es lo que hace revisable y
+ * reversible que un modelo escriba en el tablero de un equipo.
+ */
+export async function asegurarEtiqueta(
+  db: Db,
+  organizationId: string,
+  nombre: string,
+  color: string,
+  autor: string,
+): Promise<{ id: string; name: string; color: string }> {
+  const { rows } = await db.query<{ id: string; name: string; color: string }>(
+    `insert into tags (organization_id, name, color, created_by)
+     values ($1, $2, $3, $4)
+     on conflict (organization_id, name) do update set color = excluded.color
+     returning id, name, color`,
+    [organizationId, nombre, color, autor],
+  );
+  return rows[0]!;
 }
