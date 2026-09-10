@@ -3,6 +3,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ClienteDevUP, ErrorDeApi } from "./api.js";
 import { buscar, descripcionBuscar, esquemaBuscar } from "./herramientas/buscar.js";
+import {
+  descripcionMisTareas,
+  descripcionVerTablero,
+  descripcionVerTarea,
+  esquemaMisTareas,
+  esquemaVerTablero,
+  esquemaVerTarea,
+  misTareas,
+  verTablero,
+  verTarea,
+} from "./herramientas/tareas.js";
 import { cargarConfiguracion, rutaDeConfiguracion } from "./configuracion.js";
 
 /**
@@ -38,19 +49,59 @@ function clienteDevUP(): ClienteDevUP {
 /** Convierte cualquier fallo en una respuesta que el modelo pueda leer y
  *  explicar. Lanzar hacia el transporte deja al modelo con «error interno», que
  *  no le dice a la persona qué tiene que arreglar. */
-function comoError(fallo: unknown): { content: [{ type: "text"; text: string }] } {
+function comoError(fallo: unknown) {
   const mensaje =
     fallo instanceof ErrorDeApi || fallo instanceof Error ? fallo.message : String(fallo);
   return { content: [{ type: "text" as const, text: `No pude: ${mensaje}` }] };
 }
 
-servidor.tool("buscar", descripcionBuscar, esquemaBuscar, async (entrada) => {
-  try {
-    return { content: [{ type: "text" as const, text: await buscar(clienteDevUP(), entrada) }] };
-  } catch (fallo) {
-    return comoError(fallo);
-  }
-});
+/** Envuelve una herramienta: construye el cliente a la primera llamada y
+ *  convierte cualquier fallo en algo que el modelo pueda contar. */
+function herramienta<E>(hacer: (cliente: ClienteDevUP, entrada: E) => Promise<Contenido[]>) {
+  return async (entrada: E) => {
+    try {
+      return { content: await hacer(clienteDevUP(), entrada) };
+    } catch (fallo) {
+      return comoError(fallo);
+    }
+  };
+}
+
+type Contenido =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
+servidor.tool(
+  "buscar",
+  descripcionBuscar,
+  esquemaBuscar,
+  herramienta(async (cliente, entrada) => [
+    { type: "text" as const, text: await buscar(cliente, entrada) },
+  ]),
+);
+
+servidor.tool(
+  "mis_tareas",
+  descripcionMisTareas,
+  esquemaMisTareas,
+  herramienta((cliente, entrada) => misTareas(cliente, entrada)),
+);
+
+servidor.tool(
+  "ver_tablero",
+  descripcionVerTablero,
+  esquemaVerTablero,
+  herramienta(async (cliente, entrada) => [
+    { type: "text" as const, text: await verTablero(cliente, entrada) },
+  ]),
+);
+
+servidor.tool(
+  "ver_tarea",
+  descripcionVerTarea,
+  esquemaVerTarea,
+  herramienta((cliente, entrada) => verTarea(cliente, entrada)),
+);
 
 const transporte = new StdioServerTransport();
 await servidor.connect(transporte);
