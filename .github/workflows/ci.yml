@@ -119,3 +119,24 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: La imagen de la API construye
+        # `npm run build` compila TypeScript; esto comprueba otra cosa que se
+        # rompe aparte y solo se veía al desplegar: que el Dockerfile siga
+        # copiando los workspaces que la API necesita. Desde que depende de
+        # `apps/mcp` para servir la puerta remota, olvidarse de una línea aquí
+        # no da ningún error de tipos — da un contenedor que arranca y se cae
+        # en la primera petición al MCP.
+        run: docker build -f apps/api/Dockerfile -t devup-api:ci .
+
+      - name: Y el contenedor resuelve la puerta MCP
+        # Lo que de verdad se quiere saber: que dentro de la imagen final el
+        # `import` de `@devup/mcp` encuentra el compilado. Se comprueba sin
+        # levantar la API entera —no hay base ni almacén aquí— importando el
+        # módulo a mano.
+        run: |
+          docker run --rm --entrypoint node devup-api:ci \
+            -e "import('@devup/mcp/registro.js').then(m => {
+                  if (typeof m.registrarHerramientas !== 'function') throw new Error('registrarHerramientas no está');
+                  console.log('la imagen resuelve @devup/mcp');
+                }).catch(e => { console.error(e.message); process.exit(1); })"

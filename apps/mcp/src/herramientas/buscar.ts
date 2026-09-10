@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ClienteDevUP } from "../api.js";
+import type { ClienteApi } from "../api.js";
 import { resolverOrganizacion } from "../organizaciones.js";
 
 /**
@@ -70,7 +70,7 @@ export const descripcionBuscar = [
 ].join("\n");
 
 export async function buscar(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: { texto: string; organizacion?: string; limite?: number },
 ): Promise<string> {
   const organizacion = await resolverOrganizacion(cliente, entrada.organizacion);

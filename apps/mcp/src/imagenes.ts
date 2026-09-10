@@ -1,4 +1,4 @@
-import type { ClienteDevUP } from "./api.js";
+import type { ClienteApi } from "./api.js";
 
 /**
  * Bajar los adjuntos de una tarea y devolverlos como imágenes de verdad.
@@ -45,7 +45,7 @@ type Adjunto = {
  * queda para que quien recorra varias tareas no se pase del tope global.
  */
 export async function imagenesDeTarea(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   taskId: string,
   cupo: number,
 ): Promise<{ bloques: Bloque[]; cupo: number; omitidas: number }> {
@@ -103,7 +103,7 @@ export async function imagenesDeTarea(
  * peticion va SIN la cabecera de sesión — la firma ya es la autorización, y
  * mandar el token a un tercero sería regalarlo.
  */
-async function bajar(cliente: ClienteDevUP, fileId: string): Promise<string | null> {
+async function bajar(cliente: ClienteApi, fileId: string): Promise<string | null> {
   try {
     const { url } = await cliente.get<{ url: string }>(`/files/${fileId}/download-url`);
     const respuesta = await fetch(url);

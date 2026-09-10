@@ -8,8 +8,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-# Solo el workspace de la API: la web se construye en su propia imagen.
-RUN npm ci --workspace apps/api --include-workspace-root
+# `apps/mcp` entra porque la API depende de él: sirve las mismas herramientas
+# por HTTP que el paquete sirve por stdio (ver apps/api/src/routes/mcp.ts). Sin
+# su package.json, npm no puede enlazar el workspace y el `import` de
+# `@devup/mcp/registro.js` no resuelve.
+COPY apps/mcp/package.json apps/mcp/
+# La web no: se construye en su propia imagen.
+RUN npm ci --workspace apps/api --workspace apps/mcp --include-workspace-root
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -17,7 +22,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY package.json package-lock.json ./
 COPY apps/api ./apps/api
-RUN npm run build --workspace apps/api
+COPY apps/mcp ./apps/mcp
+# `apps/mcp` primero: el typecheck de la API lee su fuente, pero en ejecución
+# se importa su `dist`, así que si no se construye aquí el proceso arranca y
+# muere en la primera petición al MCP.
+RUN npm run build --workspace apps/mcp && npm run build --workspace apps/api
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -32,6 +41,13 @@ COPY --from=deps  --chown=devup:devup /app/apps/api/node_modules ./apps/api/node
 COPY --from=build --chown=devup:devup /app/apps/api/dist ./apps/api/dist
 COPY --chown=devup:devup apps/api/package.json ./apps/api/
 COPY --chown=devup:devup package.json ./
+
+# `apps/mcp` compilado, y su package.json con él: el enlace de
+# node_modules/@devup/mcp apunta a esta carpeta, y es su mapa de `exports` el
+# que traduce `@devup/mcp/registro.js` a `dist/registro.js`. Sin el
+# package.json, el enlace existe y la importación falla igual.
+COPY --from=build --chown=devup:devup /app/apps/mcp/dist ./apps/mcp/dist
+COPY --chown=devup:devup apps/mcp/package.json ./apps/mcp/
 
 # Las migraciones viajan con la imagen: desplegar y migrar tienen que poder
 # hacerse con el mismo artefacto, o acaban desincronizados.

@@ -128,22 +128,42 @@ revocar una sesión, y eso ya funciona.
 Lo único que hay que añadir es la etiqueta —para distinguir en la lista
 «Chrome en el portátil» de «Claude de Juan»— y que el listado la enseñe.
 
-### Actualización: el servidor de autorización ya está, el transporte remoto todavía no
+### Actualización: el transporte remoto ya está
 
-Primera mitad de "remoto después", hecha: `apps/api/src/routes/oauth.ts` +
-`db/migrations/0032_oauth_clientes.sql` implementan OAuth 2.1 con PKCE y
-registro dinámico de clientes (RFC 7591), reusando `sessions` tal cual —
+"Remoto después" está hecho, en dos piezas:
+
+**El servidor de autorización** — `apps/api/src/routes/oauth.ts` +
+`db/migrations/0032_oauth_clientes.sql`: OAuth 2.1 con PKCE y registro
+dinámico de clientes (RFC 7591), reusando `sessions` tal cual —
 `/oauth/token` termina llamando a `session_open`, la misma función de
-siempre. La pantalla de consentimiento vive en `apps/web`
-(`/app/autorizar-agente`), no en la API.
+siempre, así que un token de un cliente OAuth es indistinguible de una
+sesión del navegador y sale en la misma lista de "Conexiones de agente". La
+pantalla de consentimiento vive en `apps/web` (`/app/autorizar-agente`), no
+en la API: la API solo devuelve JSON o redirecciones, igual que con Google.
 
-**Lo que falta para que el conector remoto de verdad funcione**: el propio
-endpoint MCP por HTTP/SSE (`apps/api/src/routes/mcp.ts`, todavía sin
-escribir) que reciba el `Bearer` emitido por `/oauth/token` y sirva las
-mismas herramientas de `apps/mcp/src/herramientas/*`. Sin eso, un cliente
-puede autorizarse y sacar un token, pero no hay nada al otro lado que hable
-el protocolo MCP. `apps/mcp` por stdio sigue siendo el único camino que
-funciona de punta a punta hoy.
+**La puerta** — `apps/api/src/routes/mcp.ts`, detrás de
+`MCP_REMOTE_ENABLED`: transporte Streamable HTTP **sin estado**
+(`sessionIdGenerator: undefined`), un servidor y un transporte nuevos por
+petición. El modo con sesión guarda estado en memoria del proceso, y aquí se
+rompería solo: la API son dos servicios y se reinicia en cada despliegue.
+
+Tres decisiones que conviene no deshacer sin leer esto:
+
+- **Las herramientas son las mismas, no una copia.** `apps/mcp/src/registro.ts`
+  las registra, y lo llaman los dos transportes. Si se duplicaran, lo primero
+  que divergiría son las descripciones — que son la documentación que el
+  modelo lee para decidir si usa una herramienta, o sea lo que más importa.
+- **Las herramientas hablan con la API por HTTP aunque el MCP viva DENTRO de
+  la API**, por el bucle local (`127.0.0.1`). Es la decisión de §3: un solo
+  camino a los datos, las mismas reglas de negocio, el mismo RLS. El precio es
+  una petición local por herramienta.
+- **`ClienteApi` es una interfaz y no la clase.** Los dos transportes se
+  autentican distinto (disco con rotación vs. acceso ya verificado en la
+  petición) y las herramientas no tienen por qué saber cuál las llama.
+
+Lo que queda: encenderlo en producción —aplicar la 0032 y poner
+`MCP_REMOTE_ENABLED=true` en el servicio `api`— y probarlo con un Claude de
+verdad.
 
 ### El transporte es stdio, y remoto después
 

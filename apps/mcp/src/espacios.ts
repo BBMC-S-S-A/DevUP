@@ -1,4 +1,4 @@
-import type { ClienteDevUP } from "./api.js";
+import type { ClienteApi } from "./api.js";
 import { resolverOrganizacion } from "./organizaciones.js";
 
 export type Espacio = { id: string; name: string };
@@ -10,7 +10,7 @@ export type Espacio = { id: string; name: string };
  * cuenta. Ver `organizaciones.ts` para el porqué.
  */
 export async function resolverEspacio(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   nombre?: string,
   organizacion?: string,
 ): Promise<Espacio> {
@@ -51,7 +51,7 @@ export async function resolverEspacio(
 /** Todos los espacios a los que llega esta persona, para recorrerlos cuando la
  *  pregunta no menciona ninguno («¿qué tareas tengo?» no dice dónde). */
 export async function todosLosEspacios(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   organizacion?: string,
 ): Promise<{ org: string; espacios: Espacio[] }> {
   const org = await resolverOrganizacion(cliente, organizacion);

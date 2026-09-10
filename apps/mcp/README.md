@@ -21,11 +21,31 @@ poniendo RLS en la base, igual que para el navegador.
 
 De momento una, y de solo lectura. Las siguientes están listadas en la guía.
 
-## Conectarlo
+## Dos maneras de conectarlo, y cuál elegir
 
-Hace falta un token de sesión de DevUP. **Todavía no hay pantalla para
-crearlo** — es el siguiente paso del trabajo: en Ajustes irán las «conexiones
-de agente», que son sesiones con etiqueta, listables y revocables desde
+| | Remoto (una URL) | Local (este paquete, stdio) |
+|---|---|---|
+| Qué hay que instalar | Nada | Node y el repositorio clonado |
+| Cómo se configura | Se pega la URL en el conector de Claude | Editando un JSON con la ruta de tu copia |
+| Dónde corre | En la API de DevUP | En tu máquina |
+| Para quién | Cualquiera del equipo | Quien ya desarrolla aquí |
+
+**El remoto es el camino normal.** Se pega
+`https://api.hytrex.co/mcp` en Claude → Connectors → Add custom connector, y
+Claude hace el resto: descubre el servidor de autorización, se registra, y
+manda a DevUP a pedir el consentimiento. No hay token que copiar ni archivo
+que editar.
+
+Lo sirve `apps/api` (`src/routes/mcp.ts`), con las herramientas de este mismo
+paquete —la lista está en `src/registro.ts` y no se escribe dos veces— y hace
+falta `MCP_REMOTE_ENABLED=true` en esa instancia. El flujo OAuth vive en
+`apps/api/src/routes/oauth.ts`.
+
+## Conectarlo en local, por stdio
+
+Para desarrollar sobre las herramientas, o para apuntar a una API local. Hace
+falta un token de conexión de agente: en DevUP, Ajustes → Conexiones de
+agente → crear una. Son sesiones con etiqueta, listables y revocables desde
 `/auth/sessions` como cualquier otra.
 
 Con el token en la mano, en la configuración de Claude:

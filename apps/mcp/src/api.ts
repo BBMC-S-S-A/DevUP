@@ -28,7 +28,29 @@ export class ErrorDeApi extends Error {
   }
 }
 
-export class ClienteDevUP {
+/**
+ * Lo único que una herramienta necesita saber de su cliente.
+ *
+ * POR QUÉ UNA INTERFAZ Y NO LA CLASE. Hay dos maneras de llegar a estas
+ * herramientas y no se autentican igual: por stdio, `ClienteDevUP` cambia un
+ * token de refresco guardado en disco por accesos cortos; por el transporte
+ * remoto (`apps/api/src/routes/mcp.ts`), el acceso ya viene verificado en la
+ * petición y no hay archivo ninguno. Las herramientas no tienen por qué
+ * distinguirlo: piden `get`/`post`/`patch` y no les importa de dónde sale la
+ * credencial.
+ *
+ * Con la clase en la firma esto no se podía: sus campos privados hacen que
+ * TypeScript la compare por identidad y no por forma, así que ninguna otra
+ * implementación encajaría.
+ */
+export interface ClienteApi {
+  readonly apiUrl: string;
+  get<T>(camino: string): Promise<T>;
+  post<T>(camino: string, cuerpo: unknown): Promise<T>;
+  patch<T>(camino: string, cuerpo: unknown): Promise<T>;
+}
+
+export class ClienteDevUP implements ClienteApi {
   private config: Configuracion;
   private acceso: string | null = null;
   private caducaEn = 0;

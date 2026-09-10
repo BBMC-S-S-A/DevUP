@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ClienteDevUP } from "../api.js";
+import type { ClienteApi } from "../api.js";
 import { resolverEspacio, type Espacio } from "../espacios.js";
 import { resolverOrganizacion } from "../organizaciones.js";
 
@@ -46,7 +46,7 @@ type Etiqueta = { id: string; name: string };
  * El alta de etiquetas ya es idempotente en la API (`on conflict do update`),
  * así que esto es una llamada y no una comprobación previa.
  */
-async function etiquetaDeAgente(cliente: ClienteDevUP, organizacion?: string): Promise<string> {
+async function etiquetaDeAgente(cliente: ClienteApi, organizacion?: string): Promise<string> {
   const org = await resolverOrganizacion(cliente, organizacion);
   const { tag } = await cliente.post<{ tag: Etiqueta }>(`/organizations/${org.id}/tags`, {
     name: ETIQUETA_AGENTE,
@@ -56,7 +56,7 @@ async function etiquetaDeAgente(cliente: ClienteDevUP, organizacion?: string): P
 }
 
 /** El tablero del espacio, que hace falta para resolver columnas por nombre. */
-async function tablero(cliente: ClienteDevUP, espacioId: string): Promise<Columna[]> {
+async function tablero(cliente: ClienteApi, espacioId: string): Promise<Columna[]> {
   const { columns } = await cliente.get<{ columns: Columna[] }>(
     `/workspaces/${espacioId}/board`,
   );
@@ -90,7 +90,7 @@ export function resolverColumna(columnas: Columna[], nombre?: string): Columna {
 
 /** Resuelve una persona por nombre, para asignar sin pedir uuid. */
 async function resolverPersona(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   nombre: string,
   organizacion?: string,
 ): Promise<string> {
@@ -155,7 +155,7 @@ export const descripcionCrearTarea = [
 ].join("\n");
 
 export async function crearTarea(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: {
     titulo: string;
     detalle?: string;
@@ -210,7 +210,7 @@ export const descripcionCrearColumna = [
 ].join("\n");
 
 export async function crearColumna(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: { nombre: string; espacio?: string; organizacion?: string },
 ): Promise<string> {
   const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
@@ -240,7 +240,7 @@ export const descripcionMoverTarea = [
 const ES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function moverTarea(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: { tarea: string; columna: string; espacio?: string; organizacion?: string },
 ): Promise<string> {
   const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
@@ -305,7 +305,7 @@ export const descripcionActualizarTarea = [
 ].join("\n");
 
 export async function actualizarTarea(
-  cliente: ClienteDevUP,
+  cliente: ClienteApi,
   entrada: {
     tarea: string;
     titulo?: string;

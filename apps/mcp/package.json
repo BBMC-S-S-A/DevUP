@@ -6,12 +6,36 @@
   "bin": {
     "devup-mcp": "dist/index.js"
   },
+  "//exports": [
+    "Las herramientas se sirven por dos transportes: este paquete por stdio, y",
+    "apps/api por HTTP (routes/mcp.ts). Para que el segundo las importe sin",
+    "copiarlas, se exponen por subruta — nunca la raíz: `src/index.ts` conecta",
+    "el transporte stdio al importarse, así que importarlo desde la API",
+    "arrancaría un servidor stdio dentro del proceso del servidor web.",
+    "`types` apunta al fuente y `import` al compilado: así el typecheck de",
+    "quien importa no depende de que este paquete esté construido, y en",
+    "producción se ejecuta el .js de dist."
+  ],
+  "exports": {
+    "./api.js": { "types": "./src/api.ts", "import": "./dist/api.js" },
+    "./registro.js": { "types": "./src/registro.ts", "import": "./dist/registro.js" },
+    "./organizaciones.js": {
+      "types": "./src/organizaciones.ts",
+      "import": "./dist/organizaciones.js"
+    },
+    "./espacios.js": { "types": "./src/espacios.ts", "import": "./dist/espacios.js" },
+    "./imagenes.js": { "types": "./src/imagenes.ts", "import": "./dist/imagenes.js" },
+    "./herramientas/*.js": {
+      "types": "./src/herramientas/*.ts",
+      "import": "./dist/herramientas/*.js"
+    }
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test:mcp": "tsx src/herramientas/buscar.test.ts && tsx src/herramientas/escribir.test.ts"
+    "test:mcp": "tsx src/herramientas/buscar.test.ts && tsx src/herramientas/escribir.test.ts && tsx src/registro.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
