@@ -25,6 +25,7 @@
     "@aws-sdk/s3-request-presigner": "^3.700.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^10.0.2",
+    "@fastify/formbody": "^8.0.2",
     "@fastify/helmet": "^13.1.0",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^11.0.2",

@@ -1861,10 +1861,72 @@ async function main(): Promise<void> {
       consumida?.label === "claude-que-rota" && consumida?.is_agent === true,
     );
 
+    // ---------------------------------------------------------------------
+    // OAuth remoto del MCP (0032)
+    //
+    // oauth_clients es de lectura abierta a proposito (catalogo publico de
+    // "que aplicacion existe", sin datos de nadie) — no hace falta un caso
+    // de aislamiento para eso. Lo que si importa es oauth_codes: lleva un
+    // user_id, y aunque el codigo en si no sirve sin el code_verifier que
+    // solo tiene quien lo pidio, no deberia ser visible fuera de su dueño,
+    // ni nadie deberia poder crear uno a nombre de otra persona. Y el canje
+    // tiene que ser de un solo uso — es la defensa contra reutilizar un
+    // codigo interceptado.
+    // ---------------------------------------------------------------------
+    console.log("\nOAuth remoto del MCP");
+
+    const clienteOAuth = `cliente-test-${suffix}`;
+    await admin.query(
+      `insert into oauth_clients (client_id, client_name, redirect_uris)
+       values ($1, 'Cliente de prueba', '["https://claude.ai/callback"]'::jsonb)`,
+      [clienteOAuth],
+    );
+
+    const codigoDeAna = `codigo-ana-${suffix}`;
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, expires_at)
+         values ($1, $2, $3, 'https://claude.ai/callback', 'reto-de-prueba', now() + interval '10 minutes')`,
+        [codigoDeAna, clienteOAuth, ana],
+      ),
+    );
+
+    check("Ana ve su propio codigo de autorizacion", (await count(ana, "oauth_codes")) === 1);
+    check("Carla no ve el codigo de Ana", (await count(carla, "oauth_codes")) === 0);
+
+    await denied("nadie puede crear un codigo a nombre de otra persona", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, expires_at)
+           values ($1, $2, $3, 'https://claude.ai/callback', 'otro-reto', now() + interval '10 minutes')`,
+          [`codigo-colado-${suffix}`, clienteOAuth, ana],
+        ),
+      ),
+    );
+
+    const canjeado = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ userId: string }>(
+        `select user_id as "userId" from public.oauth_code_consume($1)`,
+        [codigoDeAna],
+      );
+      return rows[0];
+    });
+    check("el canje devuelve al dueño real del codigo", canjeado?.userId === ana);
+
+    const reintento = await withUser(null, async (db) => {
+      const { rows } = await db.query("select user_id from public.oauth_code_consume($1)", [codigoDeAna]);
+      return rows.length;
+    });
+    check("un codigo ya canjeado no se puede volver a usar", reintento === 0);
+
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la
     // organización de un equipo entero— y eso obliga a este orden.
+    // oauth_clients no cuelga de ningún user_id/organization_id, así que se
+    // limpia aparte — sus oauth_codes sí caen solos al borrar los usuarios
+    // (ON DELETE CASCADE).
+    await admin.query("delete from public.oauth_clients where client_id like $1", [`%-${suffix}`]);
     await admin.query("delete from public.organizations where slug like $1", [`%-${suffix}`]);
     await admin.query("delete from public.users where email like $1", [`%-${suffix}@devup.test`]);
     await admin.end();
