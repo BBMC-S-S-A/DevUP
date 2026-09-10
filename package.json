@@ -4,7 +4,8 @@
   "private": true,
   "workspaces": [
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "apps/mcp"
   ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
@@ -29,7 +30,8 @@
     "supabase:comprobar": "node scripts/comprobar-supabase.mjs",
     "test:google": "npm run test:google --workspace apps/api",
     "test:youtube": "npm run test:youtube --workspace apps/api",
-    "test:puerta": "npm run test:puerta --workspace apps/api"
+    "test:puerta": "npm run test:puerta --workspace apps/api",
+    "test:mcp": "npm run test:mcp --workspace apps/mcp"
   },
   "engines": {
     "node": ">=20.11"

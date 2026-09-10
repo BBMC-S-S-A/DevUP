@@ -150,7 +150,17 @@ decisión.
 
 ## 4. El primer entregable: solo lectura
 
-Seis herramientas. Todas leen, ninguna escribe, así que el peor fallo posible
+**`buscar` ya está**, en `apps/mcp`, probada de punta a punta contra la API
+local: tres arranques seguidos con el token rotando, la organización resuelta
+sin pedir uuid, y la comprobación que más importa —una sesión de una
+organización no ve por el agente ni una fila de otra—. 23 comprobaciones
+propias de esta capa, más las 188 de aislamiento que siguen en verde.
+
+Lo que falta para poder usarla de verdad es la **pantalla que emite el token**:
+«conexiones de agente» en Ajustes, que son sesiones con etiqueta. Hoy el token
+hay que sacarlo a mano.
+
+Seis herramientas en total. Todas leen, ninguna escribe, así que el peor fallo posible
 es una respuesta pobre.
 
 | Herramienta | Contra qué | Contesta |
@@ -228,7 +238,29 @@ web responde 500 a todo, con un error que no menciona la causa.
 
 ---
 
-## 7. Trampa nueva: los finales de línea rompen las migraciones
+## 7. Trampa: el token de agente rota, así que la variable de entorno no manda
+
+Salió construyendo `buscar`, y es de las que solo se ven probando dos veces.
+
+`/auth/refresh` **consume** el token de refresco que se le presenta y emite
+otro. Eso es lo correcto —un token robado deja de valer en cuanto el dueño
+renueva— pero significa que el token vivo no es el que se configuró: es el
+último que se guardó en el disco.
+
+Lo natural es escribir «la variable de entorno pisa al archivo», que es lo que
+hace todo el mundo. Con rotación eso está mal: cada arranque presentaría el
+token con el que se sembró la conexión, ya consumido, y la conexión moriría
+después del primer uso con un mensaje que dice «caducó o alguien la revocó» —
+verdad, y sin señalar la causa.
+
+Así que el archivo manda y `DEVUP_TOKEN` **siembra**. Para no perder la
+capacidad de cambiar de sesión a mano, se guarda de qué semilla salió: si la
+variable trae otra distinta, se entiende que es deliberado y se adopta. Hay
+prueba de las cuatro combinaciones en `buscar.test.ts`.
+
+---
+
+## 8. Trampa: los finales de línea rompen las migraciones
 
 Encontrada montando este entorno, y va a volver a pasar en cualquier portátil
 nuevo.

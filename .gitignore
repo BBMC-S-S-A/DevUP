@@ -48,3 +48,8 @@ docs/propuesta/__pycache__/
 .wrangler
 apps/web/.dev.vars
 design/
+
+# El archivo con el token de la conexion de agente vive en el disco de cada
+# persona (~/.devup/mcp.json), no aqui. Esto es por si alguien apunta
+# DEVUP_CONFIG dentro del repo mientras prueba.
+mcp.json
