@@ -1,5 +1,6 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import formbody from "@fastify/formbody";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
@@ -21,6 +22,7 @@ import { infraestructuraRoutes } from "./routes/infraestructura.js";
 import { iceRoutes } from "./routes/ice.js";
 import { messageRoutes } from "./routes/messages.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { oauthRoutes } from "./routes/oauth.js";
 import { preferenceRoutes } from "./routes/preferences.js";
 import { recordingRoutes } from "./routes/recordings.js";
 import { salesRoutes } from "./routes/sales.js";
@@ -59,6 +61,10 @@ await app.register(cors, {
 });
 
 await app.register(cookie);
+
+// Solo lo necesita /oauth/token: RFC 6749 exige que el canje de código viaje
+// como application/x-www-form-urlencoded, no JSON.
+await app.register(formbody);
 
 // La API solo devuelve JSON, así que la mayor parte de helmet sobra; lo que
 // aporta es impedir que un navegador adivine el tipo de una respuesta y la
@@ -152,6 +158,7 @@ await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(notificationRoutes);
+await app.register(oauthRoutes);
 await app.register(announcementRoutes);
 await app.register(asistenteRoutes);
 await app.register(preferenceRoutes);

@@ -128,6 +128,23 @@ revocar una sesión, y eso ya funciona.
 Lo único que hay que añadir es la etiqueta —para distinguir en la lista
 «Chrome en el portátil» de «Claude de Juan»— y que el listado la enseñe.
 
+### Actualización: el servidor de autorización ya está, el transporte remoto todavía no
+
+Primera mitad de "remoto después", hecha: `apps/api/src/routes/oauth.ts` +
+`db/migrations/0032_oauth_clientes.sql` implementan OAuth 2.1 con PKCE y
+registro dinámico de clientes (RFC 7591), reusando `sessions` tal cual —
+`/oauth/token` termina llamando a `session_open`, la misma función de
+siempre. La pantalla de consentimiento vive en `apps/web`
+(`/app/autorizar-agente`), no en la API.
+
+**Lo que falta para que el conector remoto de verdad funcione**: el propio
+endpoint MCP por HTTP/SSE (`apps/api/src/routes/mcp.ts`, todavía sin
+escribir) que reciba el `Bearer` emitido por `/oauth/token` y sirva las
+mismas herramientas de `apps/mcp/src/herramientas/*`. Sin eso, un cliente
+puede autorizarse y sacar un token, pero no hay nada al otro lado que hable
+el protocolo MCP. `apps/mcp` por stdio sigue siendo el único camino que
+funciona de punta a punta hoy.
+
 ### El transporte es stdio, y remoto después
 
 MCP admite stdio (un proceso local que Claude arranca) y remoto por HTTP. El
