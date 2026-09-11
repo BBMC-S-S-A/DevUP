@@ -83,6 +83,8 @@ export function createRecorder(
   const cleanup = () => {
     for (const source of sources.values()) source.disconnect();
     sources.clear();
+    // Mismo caso que en `useSpeaking`: cerrar un contexto ya cerrado lanza y
+    // no hay nada que hacer con ese error.
     void context.close().catch(() => {});
   };
 

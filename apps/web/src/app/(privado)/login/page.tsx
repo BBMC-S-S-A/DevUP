@@ -204,6 +204,10 @@ function LoginForm() {
       setError("escribe tu correo y vuelve a pulsar");
       return;
     }
+    // ESTE SILENCIO ES LA FUNCIÓN, NO UN DESCUIDO. La pantalla dice
+    // «enviado» tanto si el correo existe como si no, y anotar o enseñar el
+    // fallo convertiría este formulario en una forma de averiguar quién tiene
+    // cuenta: bastaría con probar direcciones y mirar cuál se queja.
     await api.post("/auth/forgot-password", { email }).catch(() => {});
     setForgotSent(true);
   }

@@ -37,6 +37,9 @@ export function useSpeaking(stream: MediaStream | null, enabled = true): boolean
     if (!AudioContextCtor) return;
 
     const context = new AudioContextCtor();
+    // `resume` rechaza cuando el navegador aún no ha visto un gesto de la
+    // persona. No es un fallo: es la política de reproducción automática
+    // haciendo su trabajo, y el contexto se reanuda solo en cuanto lo haya.
     void context.resume().catch(() => {});
 
     const source = context.createMediaStreamSource(stream);
@@ -82,6 +85,9 @@ export function useSpeaking(stream: MediaStream | null, enabled = true): boolean
       cancelAnimationFrame(frame);
       source.disconnect();
       analyser.disconnect();
+      // Cerrar un contexto ya cerrado lanza. Pasa al desmontar dos veces
+      // seguidas —en desarrollo, con el modo estricto— y no hay nada que
+      // hacer con ese error.
       void context.close().catch(() => {});
       speakingRef.current = false;
     };

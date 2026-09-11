@@ -17,6 +17,7 @@ import { ItemNav } from "@/components/ui/ItemNav";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
 import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
+import { ignorar } from "@/lib/fallo";
 
 /**
  * El armazón de organización.
@@ -93,7 +94,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
       .then(({ url }) => {
         if (vigente) setLogo(url);
       })
-      .catch(() => {});
+      .catch(ignorar("no se pudo cargar el logo de la organización"));
     return () => {
       vigente = false;
     };

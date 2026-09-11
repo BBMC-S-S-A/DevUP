@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SpotifyTrack } from "../api";
+import { ignorar } from "@/lib/fallo";
 
 /**
  * El motor de reproducción: todo lo que habla con Spotify, y nada de interfaz.
@@ -221,7 +222,12 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
 
         const p = new window.Spotify.Player({
           name: "DevUP",
-          getOAuthToken: (cb) => void tokenFresco().then(cb).catch(() => {}),
+          // Sin token el SDK no arranca y se queda callado para siempre:
+          // «no suena nada y no dice por qué» es exactamente este camino.
+          getOAuthToken: (cb) =>
+            void tokenFresco()
+              .then(cb)
+              .catch(ignorar("no se pudo dar un token fresco al reproductor de Spotify")),
           volume: ESTADO_INICIAL.volumen,
         });
 
@@ -512,12 +518,14 @@ export function useSpotifyPlayer(activo: boolean, onPistaCambiada?: (uri: string
 
   const soltarEn = useCallback(async (ms: number) => {
     arrastrando.current = false;
-    await reproductor.current?.seek(ms).catch(() => {});
+    await reproductor.current?.seek(ms).catch(ignorar("no se pudo mover la reproducción"));
   }, []);
 
   const ponerVolumen = useCallback(async (v: number) => {
     setEstado((e) => ({ ...e, volumen: v }));
-    await reproductor.current?.setVolume(v).catch(() => {});
+    // Sin aviso: el volumen es un deslizador y un mensaje por cada
+    // movimiento fallido sería peor que el fallo.
+    await reproductor.current?.setVolume(v).catch(ignorar("no se pudo cambiar el volumen"));
   }, []);
 
   const alternarAleatorio = useCallback(async () => {

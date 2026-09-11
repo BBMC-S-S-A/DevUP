@@ -44,6 +44,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // A propósito, y es importante que siga así: cerrar sesión tiene que
+    // funcionar aunque el servidor no conteste. Lo que pasa justo después
+    // —borrar el usuario de memoria— es lo que de verdad saca a la persona de
+    // la aplicación en este navegador, que suele ser lo que quiere quien cierra
+    // sesión en un ordenador prestado.
     await api.post("/auth/logout").catch(() => {});
     setUser(null);
     router.push("/login");

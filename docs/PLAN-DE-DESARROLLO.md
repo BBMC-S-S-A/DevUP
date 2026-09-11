@@ -17,7 +17,7 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 3 | **`/app` deja de ser aterrizaje** y te devuelve donde estabas | **Hecho** |
 | 4 | **Buscar en todas las organizaciones**, desde ⌘K | **Hecho** |
 | 5 | **Estado terminal en las columnas** — que «hecha» exista | **Hecho** |
-| 6 | **Las capturas de error mudas** del camino que se usa a diario | **Hecho, en parte** |
+| 6 | **Las capturas de error mudas** | **Hecho** — de 42 a 5, y las 5 explicadas |
 | 7 | **Las primeras pruebas de `apps/web`**, y fuera una duplicación | **Hecho** |
 | 8 | **El embudo pintaba el día anterior**, y nadie lo veía | **Hecho** |
 | 9 | **Grabar una llamada dejó de ser invisible** | **Hecho** |
@@ -114,10 +114,28 @@ quien lo mantiene.**
   porque la conexión ya está rota, y anotarlo taparía la causa con su
   consecuencia.
 
-**Lo que queda:** Spotify (7), la voz (6) y `signaling.ts` (5). Son de medios,
-donde muchos fallos sí son ignorables de verdad —permiso denegado,
-reproducción automática bloqueada— y merecen una pasada propia con criterio, no
-un cambio mecánico. Y las 6 de `world/**`, que es zona restringida.
+**Segunda pasada: Spotify, la voz y el reproductor.** Y ahí la regla se aplicó
+en las dos direcciones, que es lo que la hace útil:
+
+- **Con voz** donde el fallo se nota y no se entiende: quitar una pista de la
+  cola —si la baja no llega, reaparece para el resto—, poner una pista, el
+  token del reproductor de Spotify (sin él el SDK no arranca **y se queda
+  callado para siempre**), y el audio o el vídeo de un participante, porque «no
+  oigo a Ana» es de las quejas más difíciles de rastrear.
+- **Mudas a propósito, pero explicadas**, que era la mitad que faltaba:
+  `AudioContext.resume()` rechaza cuando el navegador aún no ha visto un gesto
+  —es la política de reproducción automática, no un fallo—; cerrar un contexto
+  ya cerrado lanza; retirar la reserva de una subida fallida la recoge el
+  barrendero; y cerrar sesión tiene que funcionar aunque el servidor no
+  conteste.
+- **Y una que es una función de seguridad**, no un descuido: recuperar
+  contraseña se calla a propósito. La pantalla dice «enviado» exista el correo o
+  no, y anotar el fallo convertiría ese formulario en una forma de averiguar
+  quién tiene cuenta.
+
+**De 42 a 5**, y las cinco que quedan —todas en `signaling.ts`— son de la
+señalización en tiempo real y merecen mirarse con el protocolo delante. Más las
+6 de `world/**`, que es zona restringida.
 
 ---
 
