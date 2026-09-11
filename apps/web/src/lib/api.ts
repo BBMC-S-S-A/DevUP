@@ -371,6 +371,8 @@ export type SearchResult = {
   id: string;
   title: string;
   snippet: string;
+  /** De qué organización sale. Lo que permite buscar en todas sin confundirlas. */
+  organizationId: string | null;
   workspaceId: string | null;
   channelId: string | null;
   rank: number;

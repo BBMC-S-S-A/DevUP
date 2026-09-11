@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SearchResult } from "@/lib/api";
+import type { Organization, SearchResult } from "@/lib/api";
 import { api } from "@/lib/datos";
 import { Rotulo } from "./Superficies";
 
@@ -67,11 +67,21 @@ function destino(orgId: string, workspaceId: string | undefined, r: SearchResult
       return r.workspaceId ? `/app/w/${r.workspaceId}/archivos` : "/app";
     case "task":
       return r.workspaceId ? `/app/w/${r.workspaceId}/board` : "/app";
-    default:
+    default: {
       // Ventas no es de ningún workspace en concreto, pero si se está mirando
       // desde uno, entrar ahí no debe cambiar de armazón — mismo motivo que
       // `NavegacionOrganizacion`.
-      return workspaceId ? `/app/w/${workspaceId}/ventas` : `/app/o/${orgId}/ventas`;
+      //
+      // Con la búsqueda cruzando organizaciones esto ya no puede darse por
+      // hecho: un cliente puede salir de OTRA organización, y entonces
+      // quedarse en el armazón del espacio actual llevaría a una pantalla de
+      // ventas que no es la suya. Solo se conserva el armazón cuando el
+      // resultado es de aquí.
+      const suya = r.organizationId ?? orgId;
+      return workspaceId && suya === orgId
+        ? `/app/w/${workspaceId}/ventas`
+        : `/app/o/${suya}/ventas`;
+    }
   }
 }
 
@@ -89,7 +99,31 @@ export function PaletaComandos({
   const [resultados, setResultados] = useState<SearchResult[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [activo, setActivo] = useState(0);
+  /** Nombre de cada organización, para poder decir de cuál sale un resultado. */
+  const [nombres, setNombres] = useState<Record<string, string>>({});
   const campo = useRef<HTMLInputElement>(null);
+
+  // Una sola vez, y solo cuando la paleta se abre por primera vez: si la
+  // búsqueda cruza organizaciones, un resultado tiene que poder decir de cuál
+  // viene — dos clientes con el mismo nombre en dos empresas distintas serían
+  // indistinguibles, y entrar en el equivocado es peor que no encontrarlo.
+  useEffect(() => {
+    if (!abierta || Object.keys(nombres).length > 0) return;
+    let vigente = true;
+    void api
+      .get<{ organizations: Organization[] }>("/organizations")
+      .then(({ organizations }) => {
+        if (!vigente) return;
+        setNombres(Object.fromEntries(organizations.map((o) => [o.id, o.name])));
+      })
+      .catch(() => {
+        // Sin nombres los resultados salen igual, solo que sin decir de dónde.
+        // Es peor, no es roto: no merece tirar la paleta.
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [abierta, nombres]);
 
   // ⌘K en Mac, Ctrl+K en el resto. Se escucha en captura para ganarle a
   // cualquier campo que también quiera la K.
@@ -124,8 +158,13 @@ export function PaletaComandos({
     const id = setTimeout(async () => {
       setBuscando(true);
       try {
+        // Sin organización en la ruta: la paleta busca en TODO lo que alcanza
+        // esta cuenta. Quien pertenece a tres organizaciones tenía que saber
+        // de antemano en cuál estaba lo que buscaba, que es justo lo que no se
+        // sabe cuando se busca. El aislamiento no cambia — ver la migración
+        // 0036.
         const { results } = await api.get<{ results: SearchResult[] }>(
-          `/organizations/${orgId}/search?q=${encodeURIComponent(termino)}`,
+          `/search?q=${encodeURIComponent(termino)}`,
         );
         setResultados(results.slice(0, 8));
         setActivo(0);
@@ -136,7 +175,7 @@ export function PaletaComandos({
       }
     }, 180);
     return () => clearTimeout(id);
-  }, [q, orgId]);
+  }, [q]);
 
   const ir = useCallback(
     (r: SearchResult) => {
@@ -211,6 +250,14 @@ export function PaletaComandos({
                         <span className="block truncate text-[11px] text-faint">{r.snippet}</span>
                       )}
                     </span>
+                    {/* Solo cuando viene de otra organización. Ponerlo en
+                        todos sería ruido en el caso normal —casi todo sale de
+                        donde estás— y el que importa dejaría de destacar. */}
+                    {r.organizationId && r.organizationId !== orgId && (
+                      <Rotulo className="shrink-0 text-accent-bright">
+                        {nombres[r.organizationId] ?? "Otra organización"}
+                      </Rotulo>
+                    )}
                     <Rotulo className="shrink-0">{NOMBRES[r.entity]}</Rotulo>
                     {activo === i && (
                       <CornerDownLeft size={12} className="shrink-0 text-accent" />

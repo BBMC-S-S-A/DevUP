@@ -921,6 +921,41 @@ async function main(): Promise<void> {
     check("Bruno no encuentra el servicio por búsqueda", (await search(bruno, "Auditoría")).length === 0);
     check("Bruno no encuentra la oportunidad por búsqueda", (await search(bruno, "backend")).length === 0);
 
+    // Buscar SIN acotar a ninguna organización (migración 0036). Es el caso
+    // que de verdad importa de ese cambio: pasarle nulo quita el `where
+    // organization_id`, y si el aislamiento dependiera de ese `where` —y no de
+    // las políticas, como está escrito— esto sería una fuga entre clientes.
+    // Aquí es donde se ve que no lo es.
+    const buscarEnTodo = (user: string, term: string): Promise<string[]> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ entity: string }>(
+          "select entity from public.global_search(null, $1, 50)",
+          [term],
+        );
+        return rows.map((r) => r.entity);
+      });
+
+    check(
+      "Sin acotar, Carla sigue encontrando lo suyo",
+      (await buscarEnTodo(carla, "equipo")).includes("message"),
+    );
+    check(
+      "Sin acotar, Bruno NO ve el mensaje de Acme",
+      (await buscarEnTodo(bruno, "equipo")).length === 0,
+    );
+    check(
+      "Sin acotar, Bruno NO ve el archivo de Acme",
+      (await buscarEnTodo(bruno, "secreto")).length === 0,
+    );
+    check(
+      "Sin acotar, Bruno NO ve el cliente de Acme",
+      (await buscarEnTodo(bruno, "Confidencial")).length === 0,
+    );
+    check(
+      "Sin acotar, Carla tampoco ve el canal privado ajeno",
+      !(await buscarEnTodo(carla, "dirección")).includes("message"),
+    );
+
     // --- Bóveda de credenciales ------------------------------------------------
     //
     // Dos tablas: connections (metadata) y connection_secrets (el token

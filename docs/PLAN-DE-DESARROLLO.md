@@ -1,0 +1,76 @@
+# Plan de desarrollo · el marco y el vocabulario
+
+Abierto el 11 de septiembre de 2026. Es la lista de trabajo viva que sale de
+[PROPUESTA-UNA-SOLA-VENTANA.md](PROPUESTA-UNA-SOLA-VENTANA.md) y
+[PROPUESTA-UNA-SOLA-PLATAFORMA.md](PROPUESTA-UNA-SOLA-PLATAFORMA.md).
+
+Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo.
+
+---
+
+## Estado
+
+| | Trabajo | Estado |
+|---|---|---|
+| 1 | **Riel de organizaciones**, en el armazón que no se repinta | **Hecho** |
+| 2 | **El ancho, por la forma del contenido** | **Hecho** |
+| 3 | **`/app` deja de ser aterrizaje** y te devuelve donde estabas | **Hecho** |
+| 4 | **Buscar en todas las organizaciones**, desde ⌘K | **Hecho** |
+| 5 | **Estado terminal en las columnas** — que «hecha» exista | **En curso** |
+| 6 | **Las capturas de error mudas** del camino que se usa a diario | Después |
+| 7 | Una superficie por nivel, y el acento reservado | Después |
+
+**Pendiente de verificación visual:** 1, 2 y 3 pasan typecheck y build, pero sin
+Docker en este entorno no se ha podido levantar la pila y verlos pintados. Es la
+comprobación que falta, y en cambios de marco es la que importa.
+
+---
+
+## 4 · Buscar en todas las organizaciones
+
+**El problema.** `global_search(_organization_id, …)` está atada a una
+organización, y la pantalla dice «Todo lo de la organización». Quien tiene tres
+tiene que saber de antemano en cuál está lo que busca, que es exactamente lo que
+no se sabe cuando se busca.
+
+**Por qué es barato.** La propia migración 0014 lo deja escrito: ese
+`where organization_id` **solo acota, no protege** — la función no es
+`security definer` y el aislamiento lo ponen las políticas de cada tabla. Así
+que buscar en todas es *dejar de acotar*, no abrir nada.
+
+**Qué hay que tocar:**
+
+1. Migración: `_organization_id` admite nulo —«todas las mías»— y el resultado
+   dice de qué organización viene cada fila.
+2. `GET /search`, sin organización en la ruta.
+3. La paleta de comandos (⌘K), que es donde buscar debe vivir: un gesto y no un
+   sitio al que llegar.
+4. La pantalla `/buscar`, que deja de mentir en su título.
+5. La herramienta `buscar` del MCP, que **fallaba** cuando había varias
+   organizaciones y no se decía cuál: le pedía elegir a quien todavía no puede
+   saberlo.
+
+**Hecho.** Con su caso en `isolation.test.ts`: pasarle nulo quita el `where
+organization_id`, así que si el aislamiento dependiera de ese `where` —y no de
+las políticas— sería una fuga entre clientes. Esa prueba es la que lo demuestra,
+y queda pendiente de correrse contra una base de verdad.
+
+---
+
+## 5 · Que «hecha» exista
+
+Una tarea tiene columna, y una columna tiene nombre. No hay estado terminal, así
+que `mis_tareas` del MCP devuelve también las terminadas, el panel no puede
+contar, el grafo no podrá cerrar nada y no se puede notificar que algo se
+completó. **Un campo que falta rompe cuatro funciones que parecen sanas.**
+
+Es una columna en una tabla y es el mejor retorno del proyecto.
+
+---
+
+## Lo que NO entra en este plan
+
+- Tocar colores o tipografía: ya está resuelto y demostrado en `landing.css`.
+- Hacer el panel configurable: ya fue una rejilla configurable y se quitó.
+- Alojar repositorios, el grafo y DevVerse: tienen su propio diseño y van
+  después del vocabulario.

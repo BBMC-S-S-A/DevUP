@@ -82,7 +82,11 @@ function destino(orgId: string, result: SearchResult): string {
     case "client":
     case "service":
     case "opportunity":
-      return `/app/o/${orgId}/ventas`;
+      // La organización del RESULTADO, no la de la pantalla. Desde que la
+      // búsqueda cruza organizaciones, un cliente puede salir de otra, y usar
+      // la de aquí llevaría a un embudo de ventas que no es el suyo — sin dar
+      // error, solo enseñando lo que no se buscaba.
+      return `/app/o/${result.organizationId ?? orgId}/ventas`;
   }
 }
 
@@ -112,8 +116,12 @@ function Buscador() {
       setLoading(true);
       setError(null);
       try {
+        // Sin organización: se busca en todo lo que alcanza esta cuenta. La
+        // pantalla decía «todo lo de la organización» y quien pertenece a
+        // varias tenía que acertar de antemano en cuál estaba lo que buscaba.
+        // El aislamiento no cambia — ver la migración 0036.
         const { results } = await api.get<{ results: SearchResult[] }>(
-          `/organizations/${orgId}/search?q=${encodeURIComponent(termino)}`,
+          `/search?q=${encodeURIComponent(termino)}`,
         );
         setResults(results);
       } catch (caught) {
@@ -163,7 +171,7 @@ function Buscador() {
           <div className="mt-8 text-center">
             <Rotulo>Búsqueda global</Rotulo>
             <h1 className="mt-2.5 text-2xl font-semibold">
-              Todo lo de la <span className="texto-plasma">organización</span>
+              Todo lo <span className="texto-plasma">tuyo</span>
             </h1>
           </div>
 
@@ -180,7 +188,7 @@ function Buscador() {
               autoFocus
               value={q}
               onChange={(event) => setQ(event.target.value)}
-              aria-label="Buscar en la organización"
+              aria-label="Buscar en todo lo tuyo"
               placeholder="Buscar mensajes, archivos, tareas, clientes, ventas…"
               className="h-14 w-full rounded-2xl border border-line bg-canvas/70 pl-12 pr-12 text-base outline-none
                 transition-[border-color,box-shadow,background-color] duration-200
@@ -212,7 +220,7 @@ function Buscador() {
               ? "buscando…"
               : results !== null
                 ? `${results.length} ${results.length === 1 ? "resultado" : "resultados"}`
-                : "6 tipos · todos los workspaces"}
+                : "6 tipos · todas tus organizaciones"}
           </p>
         </div>
       </header>
@@ -231,8 +239,8 @@ function Buscador() {
         {results === null && !loading && (
           <EstadoVacio
             icono={<ScanSearch size={20} />}
-            titulo="Escribe y busca en toda la organización"
-            pista="Un solo campo para lo que está repartido por todos los workspaces. Los resultados llegan agrupados por tipo."
+            titulo="Escribe y busca en todo lo tuyo"
+            pista="Un solo campo para lo que está repartido por todas tus organizaciones y espacios de trabajo. Los resultados llegan agrupados por tipo."
             accion={
               <div className="flex flex-wrap justify-center gap-1.5">
                 {ORDEN.map((entity) => {
