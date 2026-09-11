@@ -35,3 +35,24 @@ export function guardarUltimoEspacio(workspaceId: string): void {
     // defecto. No hay nada que avisar: nadie pidió que se guardara.
   }
 }
+
+/**
+ * Olvidar el recuerdo, cuando resulta que ya no vale.
+ *
+ * `/app` manda al espacio recordado sin comprobarlo antes, a propósito:
+ * comprobarlo cuesta una ronda de peticiones en el gesto más repetido de la
+ * aplicación. El precio de esa decisión es este: cuando el recuerdo es malo
+ * —te sacaron del espacio, o se borró— hay que olvidarlo AL DESCUBRIRLO, o
+ * cada vez que se abra la aplicación se volverá a entrar al mismo error.
+ *
+ * Sin esto, la decisión de no comprobar deja de ser «se paga la vez que falla»
+ * y pasa a ser «se paga siempre a partir de esa vez».
+ */
+export function olvidarUltimoEspacio(): void {
+  try {
+    localStorage.removeItem(CLAVE_ULTIMO_ESPACIO);
+  } catch {
+    // Si no se puede borrar tampoco se pudo guardar, así que no había nada que
+    // olvidar.
+  }
+}

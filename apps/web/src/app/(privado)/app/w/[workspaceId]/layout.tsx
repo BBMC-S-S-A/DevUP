@@ -25,7 +25,7 @@ import { ApiError, type Channel, type Organization, type Workspace, api } from "
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { useHayRiel } from "@/components/ui/RielOrganizaciones";
-import { guardarUltimoEspacio } from "@/lib/ultimo-espacio";
+import { guardarUltimoEspacio, olvidarUltimoEspacio } from "@/lib/ultimo-espacio";
 import { ignorar } from "@/lib/fallo";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
@@ -57,6 +57,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     guardarUltimoEspacio(workspaceId);
   }, [workspaceId]);
+
   const { mode, setMode, ready: modeReady } = useViewMode();
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -65,6 +66,16 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const [rolOrganizacion, setRolOrganizacion] = useState<Organization["role"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Y se olvida en cuanto se descubre que no vale. `/app` entra al espacio
+  // recordado sin comprobarlo —comprobar cuesta una ronda de peticiones en el
+  // gesto más repetido que hay—, así que si no se borra aquí, cada vez que se
+  // abra la aplicación se volvería a aterrizar en este mismo error. Sin esto,
+  // «se paga la vez que falla» se convierte en «se paga siempre a partir de
+  // esa vez».
+  useEffect(() => {
+    if (!loading && (error || !workspace)) olvidarUltimoEspacio();
+  }, [error, loading, workspace]);
 
   const load = useCallback(async () => {
     try {
