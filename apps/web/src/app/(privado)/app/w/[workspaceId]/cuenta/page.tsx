@@ -1,6 +1,17 @@
 "use client";
 
-import { Bot, Check, Copy, KeyRound, Loader2, Monitor, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Copy,
+  KeyRound,
+  Loader2,
+  Monitor,
+  Plus,
+  Sparkles,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
@@ -9,6 +20,8 @@ import { useConfirmar } from "@/components/ui/Confirmar";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { Pagina } from "@/components/ui/Pagina";
 import { type ConexionDeAgente, type Sesion, ApiError, api } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { iniciales } from "@/lib/fechas";
 
 /**
  * Mi cuenta: lo que es de la persona y no de la organización.
@@ -32,6 +45,7 @@ export default function CuentaPage() {
       ancho="lg"
     >
       <div className="space-y-4">
+        <Perfil />
         <ClaveDeIA />
         <ConexionesDeAgente />
         <Navegadores />
@@ -98,6 +112,110 @@ const FICHA: Record<
     ayuda: "Se saca en console.anthropic.com. Es prepago y va aparte de tu suscripción de Claude.",
   },
 };
+
+/**
+ * El perfil: cómo te ve el resto.
+ *
+ * NO EXISTÍA, Y ERA LO PRIMERO QUE SE BUSCABA. El nombre se fijaba al
+ * registrarse —o lo ponía Google— y a partir de ahí era para siempre: quien
+ * entró con un apodo, o con el nombre mal escrito, no tenía dónde arreglarlo.
+ * «Mi cuenta» tenía tres secciones y ninguna era la persona.
+ *
+ * EL CARGO YA ESTABA Y NADIE LO USABA. `PATCH /me/profile` acepta `title` desde
+ * que se escribió, y la única pantalla que llamaba a esa ruta mandaba
+ * únicamente la presencia. Otra función construida que no se podía encontrar.
+ *
+ * LA FOTO NO ESTÁ, Y NO SE FINGE. `profiles.avatar_url` existe, pero solo se
+ * escribe al entrar con Google y no se pinta en ninguna pantalla: en toda la
+ * aplicación el avatar es la inicial. Añadir la subida sin cambiar además todos
+ * los sitios que dibujan esa chapa daría una foto que solo se ve aquí, que es
+ * peor que no tenerla.
+ */
+function Perfil() {
+  const { user, refresh } = useSession();
+  const [nombre, setNombre] = useState("");
+  const [cargo, setCargo] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  // Se siembra desde la sesión cuando llega, y no se vuelve a pisar: si se
+  // reasignara en cada renderizado, escribir en el campo sería imposible.
+  useEffect(() => {
+    if (!user) return;
+    setNombre(user.displayName ?? "");
+    setCargo(user.title ?? "");
+  }, [user]);
+
+  const limpio = nombre.trim();
+  const cambiado = Boolean(user) && (limpio !== (user?.displayName ?? "") || cargo.trim() !== (user?.title ?? ""));
+
+  const guardar = async () => {
+    if (!limpio) {
+      toast.error("el nombre no puede quedar vacío");
+      return;
+    }
+    setGuardando(true);
+    try {
+      await api.patch("/me/profile", { displayName: limpio, title: cargo.trim() });
+      // Se recarga la sesión y no solo el estado local: el nombre se pinta en
+      // la barra lateral, en las menciones y en cada tarjeta que hayas tocado.
+      // Sin esto, cambiarlo aquí dejaría el resto de la pantalla diciendo el
+      // anterior hasta la siguiente recarga.
+      await refresh();
+      toast.success("perfil actualizado");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Tarjeta className="p-4">
+      <Rotulo>Perfil</Rotulo>
+      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+        Cómo te ve el resto del equipo: en la barra, en las menciones y en cada tarea que lleves.
+      </p>
+
+      <div className="mt-4 flex items-start gap-3.5">
+        <span
+          aria-hidden
+          className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line-strong
+            bg-accent-soft/70 font-display text-base font-semibold text-accent-bright"
+        >
+          {iniciales(nombre || user?.displayName || "?")}
+        </span>
+
+        <div className="min-w-0 flex-1 space-y-3">
+          <Field
+            label="Nombre"
+            value={nombre}
+            onChange={setNombre}
+            maxLength={80}
+            placeholder="Tu nombre"
+          />
+
+          <Field
+            label="Cargo"
+            hint="Opcional. Sale al lado de tu nombre para que se sepa a quién preguntar."
+            value={cargo}
+            onChange={setCargo}
+            maxLength={40}
+            placeholder="Backend, diseño, ventas…"
+          />
+
+          <p className="text-[11px] text-faint">
+            El correo ({user?.email}) no se cambia desde aquí: es con lo que entras.
+          </p>
+
+          <Boton onClick={() => void guardar()} disabled={!cambiado || guardando} tamano="sm">
+            {guardando ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            Guardar
+          </Boton>
+        </div>
+      </div>
+    </Tarjeta>
+  );
+}
 
 /**
  * La clave con la que funciona el asistente de dentro de DevUP.

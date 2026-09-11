@@ -22,7 +22,8 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 8 | **El embudo pintaba el día anterior**, y nadie lo veía | **Hecho** |
 | 9 | **Grabar una llamada dejó de ser invisible** | **Hecho** |
 | 10 | **El dinero, en un solo sitio** — y una decisión que hay que tomar | **Hecho** |
-| 11 | Una superficie por nivel, y el acento reservado | Después |
+| 11 | **El perfil, que no existía** — nombre y cargo | **Hecho** |
+| 12 | Una superficie por nivel, y el acento reservado | Después |
 
 **Cómo se verifica desde aquí.** No hay Docker ni Postgres en el entorno donde
 se escribe esto, así que `test:rls` no se puede correr en local — pero **sí
@@ -205,6 +206,26 @@ tiene que llevarla y sumar líneas de monedas distintas deja de ser una suma.
 
 Mientras tanto, está en una línea (`MONEDA` en `lib/dinero.ts`) y no en dos
 componentes.
+
+---
+
+## 11 · El perfil, que no existía
+
+Lo señalaste al usarlo: no hay personalización del perfil. Comprobado, y era
+literal — «Mi cuenta» tenía tres secciones (clave del asistente, conexiones de
+agente, navegadores con sesión) y **ninguna era la persona**.
+
+- **El nombre no se podía cambiar nunca.** `PATCH /me/profile` aceptaba
+  presencia y cargo, y nada más. Se fijaba al registrarse o lo ponía Google, y a
+  partir de ahí era para siempre.
+- **El cargo ya estaba y nadie lo usaba.** La API lo acepta desde que se
+  escribió, y la única pantalla que llamaba a esa ruta mandaba solo la
+  presencia. Otra función construida que no se podía encontrar.
+- **La foto no se añade, y no se finge.** `profiles.avatar_url` existe pero solo
+  se escribe al entrar con Google y **no se pinta en ninguna pantalla**: en toda
+  la aplicación el avatar es la inicial. Añadir la subida sin cambiar además
+  todos los sitios que dibujan esa chapa daría una foto que solo se ve en su
+  propia pantalla, que es peor que no tenerla.
 
 ---
 

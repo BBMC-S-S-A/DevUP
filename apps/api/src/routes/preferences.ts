@@ -157,22 +157,41 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
       z.object({
         presence: z.enum(["available", "busy_open", "do_not_disturb"]).optional(),
         title: z.string().trim().max(40).optional(),
+        /**
+         * El nombre con el que te ve el resto.
+         *
+         * No se podía cambiar. Se fijaba al registrarse —o lo ponía Google— y
+         * a partir de ahí era para siempre: quien se registró con un apodo, o
+         * con el nombre mal escrito, no tenía forma de arreglarlo.
+         *
+         * Aquí NO admite vacío, al contrario que `title`. Un cargo en blanco
+         * es «no tengo cargo» y se entiende; un nombre en blanco deja a una
+         * persona sin forma de ser nombrada en toda la aplicación —menciones,
+         * responsables de tarea, quién subió un archivo— y todas esas
+         * pantallas tendrían que inventarse un texto de relleno.
+         */
+        displayName: z.string().trim().min(1).max(80).optional(),
       }),
       request.body,
     );
 
     return withUser(userId, async (db) => {
-      const { rows } = await db.query<{ presence: string; title: string | null }>(
+      const { rows } = await db.query<{
+        presence: string;
+        title: string | null;
+        displayName: string;
+      }>(
         `update profiles
             set presence = coalesce($2::presence_state, presence),
                 title    = case
                              when $3::text is null then title
                              when btrim($3) = '' then null
                              else btrim($3)
-                           end
+                           end,
+                display_name = coalesce(nullif(btrim($4), ''), display_name)
           where id = $1
-      returning presence, title`,
-        [userId, body.presence ?? null, body.title ?? null],
+      returning presence, title, display_name as "displayName"`,
+        [userId, body.presence ?? null, body.title ?? null, body.displayName ?? null],
       );
       return rows[0]!;
     });
