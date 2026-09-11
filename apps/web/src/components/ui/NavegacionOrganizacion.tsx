@@ -5,6 +5,7 @@ import {
   KeyRound,
   Lightbulb,
   Megaphone,
+  ScanSearch,
   Server,
   Settings,
   Target,
@@ -72,6 +73,11 @@ export function NavegacionOrganizacion({
           { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
           { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
           { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
+          // Va la última porque es la portada de las dos de arriba, no una
+          // séptima pantalla: reúne lo que Base de datos e Integraciones ya
+          // analizan por su cuenta. Quien busca «auditar mi proyecto» no abre
+          // ninguna de las dos, y ese era todo el problema.
+          { href: `${base}/auditoria`, icono: <ScanSearch size={14} />, texto: "Auditoría" },
         ]
       : []),
   ];
