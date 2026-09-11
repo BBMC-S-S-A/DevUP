@@ -4,7 +4,7 @@
  * QUE SE PRUEBA, Y POR QUE ESTA CAPA LO NECESITA. Desde que hay dos
  * transportes —stdio (`index.ts`) y HTTP remoto
  * (`apps/api/src/routes/mcp.ts`)— la lista de herramientas vive en un solo
- * sitio a proposito. Esto fija esa propiedad: que las ocho quedan registradas
+ * sitio a proposito. Esto fija esa propiedad: que todas quedan registradas
  * y con los nombres que el modelo espera. Si alguien anade una herramienta y
  * la cablea solo en un transporte, o le cambia el nombre a una que ya usa
  * alguien, esto se pone rojo.
@@ -47,10 +47,12 @@ const ESPERADAS = [
   "mis_tareas",
   "ver_tablero",
   "ver_tarea",
+  "ver_arquitectura",
   "crear_tarea",
   "crear_columna",
   "mover_tarea",
   "actualizar_tarea",
+  "dibujar_arquitectura",
 ];
 
 console.log("\nRegistro de herramientas");

@@ -8,7 +8,7 @@ import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Cargando, Fallo } from "@/components/ui/Pagina";
 import { Dialogo, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import type { EnlaceArquitectura, NodoArquitectura, TipoNodoArquitectura } from "@/lib/api";
-import { api, useMutacion, useRecurso } from "@/lib/datos";
+import { api, sembrar, useMutacion, useRecurso } from "@/lib/datos";
 
 /**
  * El diagrama de arquitectura: un lienzo con nodos que se arrastran y se
@@ -70,9 +70,17 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
   const enlaces = recurso.datos?.links ?? [];
   const porId = new Map(nodos.map((n) => [n.id, n]));
 
+  /**
+   * Mover NO invalida, escribe la posición nueva directamente en lo guardado.
+   *
+   * Invalidando, soltar una caja disparaba una relectura del diagrama entero
+   * —con su parpadeo— para enterarse de algo que esta pantalla ya sabía: dónde
+   * acaba de soltarla la persona que la arrastró. El servidor se entera igual
+   * por el `PATCH`; lo que no hace falta es preguntárselo de vuelta.
+   */
   const mover = useMutacion(
     (id: string, posX: number, posY: number) => api.patch(`/architecture/nodes/${id}`, { posX, posY }),
-    { invalida: [clave] },
+    { fallo: "No se pudo guardar la posición." },
   );
 
   const borrarNodo = useMutacion((id: string) => api.delete(`/architecture/nodes/${id}`), {
@@ -85,6 +93,11 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
     invalida: [clave],
     fallo: "No se pudo borrar el enlace.",
   });
+
+  /** Lo último que trajo el servidor, para reescribirlo con la posición nueva. */
+  function cacheDelDiagrama(): Respuesta | undefined {
+    return recurso.datos;
+  }
 
   function posicionDe(nodo: NodoArquitectura): { x: number; y: number } {
     if (arrastre && arrastre.id === nodo.id) return { x: arrastre.x, y: arrastre.y };
@@ -128,6 +141,17 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
       if (!movido) return;
       const x = Math.max(0, Math.round(desdeX + (e.clientX - inicioX)));
       const y = Math.max(0, Math.round(desdeY + (e.clientY - inicioY)));
+
+      // La posición nueva se guarda ANTES de soltar el estado del arrastre. Al
+      // revés, entre una cosa y otra hay un fotograma con la posición vieja y
+      // la caja da un salto hacia atrás justo al soltarla.
+      const actual = cacheDelDiagrama();
+      if (actual) {
+        sembrar(clave, {
+          ...actual,
+          nodes: actual.nodes.map((n) => (n.id === nodo.id ? { ...n, posX: x, posY: y } : n)),
+        });
+      }
       setArrastre(null);
       void mover.ejecutar(nodo.id, x, y);
     }

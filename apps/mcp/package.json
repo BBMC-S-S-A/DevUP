@@ -35,7 +35,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test:mcp": "tsx src/herramientas/buscar.test.ts && tsx src/herramientas/escribir.test.ts && tsx src/registro.test.ts"
+    "test:mcp": "tsx src/herramientas/buscar.test.ts && tsx src/herramientas/escribir.test.ts && tsx src/herramientas/arquitectura.test.ts && tsx src/registro.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

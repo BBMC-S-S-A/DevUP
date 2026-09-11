@@ -40,17 +40,25 @@ function avisar(clave: string) {
 }
 
 /**
- * Tira lo guardado y hace que quien lo esté mirando lo vuelva a pedir.
+ * Marca lo guardado como viejo y hace que quien lo esté mirando lo vuelva a
+ * pedir.
  *
  * POR PREFIJO Y NO POR CLAVE EXACTA a propósito: al borrar un cliente hay que
  * invalidar su lista, sus cotizaciones y el resumen del embudo, y quien borra
  * no debería tener que acordarse de las tres. `invalidar("/clients")` alcanza a
  * `/clients?page=2` y a `/clients/abc/quotes` de una vez.
+ *
+ * SE MARCA, NO SE BORRA — y la diferencia se ve en pantalla. Borrando, la
+ * pantalla se quedaba sin nada que enseñar y volvía al «cargando» de la
+ * primera vez: mover una caja del diagrama hacía desaparecer el diagrama
+ * entero durante medio segundo. Eso es justo lo contrario de lo que promete la
+ * cabecera de este archivo. Con `cuando` a cero lo viejo sigue pintado,
+ * `pedir` lo considera caducado y trae lo nuevo por detrás.
  */
 export function invalidar(prefijo: string) {
-  for (const clave of [...cache.keys()]) {
+  for (const [clave, entrada] of [...cache.entries()]) {
     if (clave.startsWith(prefijo)) {
-      cache.delete(clave);
+      cache.set(clave, { ...entrada, cuando: 0 });
       avisar(clave);
     }
   }

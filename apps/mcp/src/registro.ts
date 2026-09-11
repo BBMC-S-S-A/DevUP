@@ -1,5 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ErrorDeApi, type ClienteApi } from "./api.js";
+import {
+  descripcionDibujarArquitectura,
+  descripcionVerArquitectura,
+  dibujarArquitectura,
+  esquemaDibujarArquitectura,
+  esquemaVerArquitectura,
+  verArquitectura,
+} from "./herramientas/arquitectura.js";
 import { buscar, descripcionBuscar, esquemaBuscar } from "./herramientas/buscar.js";
 import {
   descripcionMisTareas,
@@ -100,6 +108,15 @@ export function registrarHerramientas(
     herramienta((cliente, entrada) => verTarea(cliente, entrada)),
   );
 
+  servidor.tool(
+    "ver_arquitectura",
+    descripcionVerArquitectura,
+    esquemaVerArquitectura,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await verArquitectura(cliente, entrada) },
+    ]),
+  );
+
   // --- Las que escriben -----------------------------------------------------
   //
   // Escriben en el tablero de un equipo, asi que van marcadas: todo lo que
@@ -142,6 +159,22 @@ export function registrarHerramientas(
     esquemaActualizarTarea,
     herramienta(async (cliente, entrada) => [
       { type: "text" as const, text: await actualizarTarea(cliente, entrada) },
+    ]),
+  );
+
+  /**
+   * Dibujar la arquitectura es la única escritura que no va al tablero.
+   *
+   * Es acumulativa y no borra nada, así que el peor caso de equivocarse es un
+   * lienzo con cajas de más —que una persona quita de una en una— y no trabajo
+   * perdido. Coloca las cajas ella: ver `herramientas/arquitectura.ts`.
+   */
+  servidor.tool(
+    "dibujar_arquitectura",
+    descripcionDibujarArquitectura,
+    esquemaDibujarArquitectura,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await dibujarArquitectura(cliente, entrada) },
     ]),
   );
 }
