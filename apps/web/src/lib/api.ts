@@ -254,6 +254,8 @@ export type OrganizationMember = {
   role: "owner" | "admin" | "member";
   displayName: string;
   avatarUrl: string | null;
+  /** A qué se dedica, escrito por la propia persona en su perfil. */
+  title: string | null;
   presence: Presencia;
 };
 

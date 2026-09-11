@@ -231,9 +231,19 @@ function Miembros({
               <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[11px] font-semibold text-muted">
                 {(member.displayName || "?").trim().charAt(0).toUpperCase()}
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm">
-                {member.displayName}
-                {member.userId === yo && <span className="ml-1.5 text-xs text-faint">(tú)</span>}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">
+                  {member.displayName}
+                  {member.userId === yo && <span className="ml-1.5 text-xs text-faint">(tú)</span>}
+                </span>
+                {/* El cargo, debajo del nombre. Lo escribe cada cual en su
+                    perfil y hasta ahora no se veía en ninguna parte fuera de
+                    DevVerse — o sea, casi nunca. Es lo que contesta «¿a quién
+                    le pregunto esto?» sin tener que preguntar primero a quién
+                    preguntar. */}
+                {member.title && (
+                  <span className="block truncate text-[11px] text-faint">{member.title}</span>
+                )}
               </span>
 
               {administro && member.role !== "owner" && member.userId !== yo ? (

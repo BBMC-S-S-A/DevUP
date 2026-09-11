@@ -134,6 +134,12 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       const { rows } = await db.query(
         `select m.user_id as "userId", m.role, m.created_at as "joinedAt",
                 p.display_name as "displayName", p.avatar_url as "avatarUrl",
+                -- El cargo va con el nombre por el mismo motivo que la
+                -- presencia: si ya se puede ver quién es alguien, saber a qué
+                -- se dedica no abre ninguna puerta y contesta «¿a quién le
+                -- pregunto esto?», que es de las cosas que más tiempo comen en
+                -- un equipo. Lo escribe cada cual en su propio perfil.
+                p.title,
                 p.presence
            from organization_members m
            join profiles p on p.id = m.user_id
