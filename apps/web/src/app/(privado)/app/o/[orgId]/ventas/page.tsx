@@ -19,6 +19,7 @@ import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useOrgId } from "@/lib/workspace-context";
 import { diasHasta, fechaCorta, hoyLocal } from "@/lib/fechas";
+import { dinero } from "@/lib/dinero";
 import { ApiError, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { tinte } from "@/lib/tinte";
@@ -112,13 +113,9 @@ const STAGES: {
   { id: "lost", label: "Perdida", rgb: "251 113 133", rgbTexto: "251 113 133", tono: "danger" },
 ];
 
-/** Céntimos a euros, sin decimales cuando son redondos. */
-const money = (cents: number): string =>
-  new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
-  }).format(cents / 100);
+// Una sola regla para toda la aplicación. El panel tenía la suya y no era la
+// misma, así que la misma venta se leía distinta según la pantalla.
+const money = dinero;
 
 // `fechaCorta` y no `new Date(iso)`: `expected_close` y `ends_on` son columnas
 // `date`, así que llegan como «2026-09-11» sin hora. `new Date` las interpreta

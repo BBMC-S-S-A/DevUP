@@ -30,6 +30,7 @@ import { useSession } from "@/lib/session";
 import { useSpotify } from "@/lib/spotify/SpotifyProvider";
 import { tinte } from "@/lib/tinte";
 import { diasHasta, hoyLocal } from "@/lib/fechas";
+import { dineroRedondo } from "@/lib/dinero";
 
 /**
  * El panel personal.
@@ -117,10 +118,9 @@ const ICONO_NOTIFICACION: Record<Notification["kind"], typeof AtSign> = {
   announcement: Megaphone,
 };
 
-const money = (cents: number): string =>
-  new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
-    cents / 100,
-  );
+// Sin decimales, que es lo que pide una cifra de cabecera. La regla vive en
+// `lib/dinero.ts` junto con la del embudo, para que no vuelvan a separarse.
+const money = dineroRedondo;
 
 export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();

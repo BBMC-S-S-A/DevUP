@@ -11,7 +11,8 @@
     "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "test:enlaces": "tsx src/lib/enlaces.test.ts",
-    "test:fechas": "tsx src/lib/fechas.test.ts"
+    "test:fechas": "tsx src/lib/fechas.test.ts",
+    "test:dinero": "tsx src/lib/dinero.test.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -21,7 +21,8 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 7 | **Las primeras pruebas de `apps/web`**, y fuera una duplicación | **Hecho** |
 | 8 | **El embudo pintaba el día anterior**, y nadie lo veía | **Hecho** |
 | 9 | **Grabar una llamada dejó de ser invisible** | **Hecho** |
-| 10 | Una superficie por nivel, y el acento reservado | Después |
+| 10 | **El dinero, en un solo sitio** — y una decisión que hay que tomar | **Hecho** |
+| 11 | Una superficie por nivel, y el acento reservado | Después |
 
 **Cómo se verifica desde aquí.** No hay Docker ni Postgres en el entorno donde
 se escribe esto, así que `test:rls` no se puede correr en local — pero **sí
@@ -170,6 +171,40 @@ Ahora se avisa **solo a quien dio su consentimiento** —avisar a quien dijo que
 no sería contarle que se guardó una grabación en la que decidió no salir— y en
 la biblioteca lleva su marca. El enlace va a los archivos y no a una pantalla de
 grabaciones, porque una grabación es un archivo más y esa pantalla no existe.
+
+---
+
+## 10 · El dinero, y una decisión pendiente
+
+El embudo y el panel tenían cada uno su formateador, y no eran el mismo: uno
+enseña los céntimos cuando no son redondos y el otro nunca. La misma venta se
+leía distinta según la pantalla. Ahora la regla vive una vez, con diez
+comprobaciones.
+
+### Lo que hay que decidir, y no puedo decidir yo
+
+**La moneda está escrita a mano.** Contado contra la base:
+
+- `services.currency` existe (`char(3)`, por defecto `'EUR'`) y la API la
+  devuelve con el catálogo.
+- `opportunity_items` copia del servicio el nombre y el precio, **pero no la
+  moneda**.
+- `goals.target_cents` tampoco la tiene.
+- `opportunity_amount_cents` suma las líneas sin mirar ninguna moneda.
+- Y el endpoint del embudo devuelve `amountCents` **sin decir de qué moneda es**,
+  así que la pantalla no puede saberlo ni queriendo.
+
+El modelo soporta monedas a medias y la interfaz no soporta ninguna: todo se
+guarda en céntimos de una moneda implícita que se decidió escribiendo `"EUR"` en
+dos componentes.
+
+**No se cambia adivinando.** Si la organización factura en otra moneda, lo que
+hay que decidir es si DevUP es de **una sola** —y entonces es un ajuste de la
+organización, no una constante— o de **varias**, y entonces `opportunity_items`
+tiene que llevarla y sumar líneas de monedas distintas deja de ser una suma.
+
+Mientras tanto, está en una línea (`MONEDA` en `lib/dinero.ts`) y no en dos
+componentes.
 
 ---
 
