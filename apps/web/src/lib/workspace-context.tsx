@@ -50,3 +50,28 @@ export function useOrgId(): string {
   }
   return orgId;
 }
+
+/**
+ * El workspace de la pantalla actual.
+ *
+ * GitHub, Base de datos, Infraestructura y Arquitectura preguntan por esto y
+ * no por la organización (migración 0035): cada proyecto tiene su git, su base
+ * y su infraestructura, y antes los tres workspaces de una empresa veían lo
+ * mismo porque la pantalla resolvía la organización aunque la URL dijera
+ * `/app/w/…`.
+ *
+ * Falla en vez de caer a la organización a propósito. Caer sería reproducir
+ * exactamente el fallo que esto viene a arreglar, y además en silencio.
+ */
+export function useWorkspaceId(): string {
+  const params = useParams<{ workspaceId?: string }>();
+  const workspace = useContext(WorkspaceContext);
+  const workspaceId = params.workspaceId ?? workspace?.id;
+  if (!workspaceId) {
+    throw new Error(
+      "useWorkspaceId: esta pantalla es de un workspace y se abrió fuera de uno. " +
+        "Debe vivir bajo /app/w/[workspaceId]/…",
+    );
+  }
+  return workspaceId;
+}

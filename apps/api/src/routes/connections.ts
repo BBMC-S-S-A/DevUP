@@ -28,6 +28,71 @@ const CONNECTION_COLUMNS = `
 export async function connectionRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
+  /**
+   * --- De workspace ---------------------------------------------------------
+   *
+   * El token de GitHub vive aquí desde 0035, no en la organización: cada
+   * proyecto tiene su git, y con una credencial compartida el aislamiento
+   * sería de mentira —el token de un equipo abriría los repositorios privados
+   * que otro equipo conectara—.
+   */
+  app.get("/workspaces/:workspaceId/connections", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select ${CONNECTION_COLUMNS} from connections
+          where workspace_id = $1 order by created_at`,
+        [workspaceId],
+      );
+      return { connections: rows };
+    });
+  });
+
+  app.post("/workspaces/:workspaceId/connections", async (request, reply) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        provider: z.enum(PROVIDERS),
+        displayName: z.string().trim().max(80).default(""),
+        secret: z.string().min(1).max(4000),
+      }),
+      request.body,
+    );
+
+    const connection = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into connections (provider, workspace_id, display_name, created_by)
+         values ($1,$2,$3,$4) returning id`,
+        [body.provider, workspaceId, body.displayName, userId],
+      );
+      const id = rows[0]!.id;
+      await db.query(
+        "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
+        [id, encryptSecret(body.secret)],
+      );
+
+      // Un token de GitHub adopta los repositorios que ya estaban sin él. Ver
+      // el porqué en la ruta equivalente de organización, más abajo.
+      if (body.provider === "github") {
+        await db.query(
+          `update github_repos set connection_id = $1
+            where workspace_id = $2 and connection_id is null`,
+          [id, workspaceId],
+        );
+      }
+
+      const { rows: full } = await db.query(
+        `select ${CONNECTION_COLUMNS} from connections where id = $1`,
+        [id],
+      );
+      return full[0];
+    });
+
+    return reply.status(201).send({ connection });
+  });
+
   // --- De organización --------------------------------------------------------
   app.get("/organizations/:orgId/connections", async (request) => {
     const userId = requireUser(request);

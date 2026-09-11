@@ -37,7 +37,7 @@ const CONTENIDO_PLANTILLA: Record<string, string> = {
   "index.js": (PLANTILLA_EN_BLANCO["index.js"] as { file: { contents: string } }).file.contents,
 };
 
-export function DevWorkspace({ orgId }: { orgId: string }) {
+export function DevWorkspace({ workspaceId }: { workspaceId: string }) {
   const { status, error: errorArranque, instance } = useWebContainer();
   const [proyecto, setProyecto] = useState<ProyectoElegido | null>(null);
   const [arbol, setArbol] = useState<ArbolNodo[]>([]);
@@ -143,7 +143,7 @@ export function DevWorkspace({ orgId }: { orgId: string }) {
   }
 
   if (!proyecto) {
-    return <IniciarProyecto orgId={orgId} onElegir={elegirProyecto} />;
+    return <IniciarProyecto workspaceId={workspaceId} onElegir={elegirProyecto} />;
   }
 
   return (

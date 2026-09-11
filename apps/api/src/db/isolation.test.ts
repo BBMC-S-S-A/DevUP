@@ -1076,9 +1076,9 @@ async function main(): Promise<void> {
 
     const acmeRepo = await withUser(ana, async (db) => {
       const { rows } = await db.query<{ id: string }>(
-        `insert into github_repos (connection_id, organization_id, full_name, added_by)
-         values ($1,$2,'acme/producto',$3) returning id`,
-        [acmeConnection, acme.org, ana],
+        `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+         values ($1,$2,$3,'acme/producto',$4) returning id`,
+        [acmeConnection, acme.org, acme.ws, ana],
       );
       const id = rows[0]!.id;
       await db.query("select public.upsert_github_repo_stats($1, $2::jsonb, null)", [
@@ -1098,9 +1098,9 @@ async function main(): Promise<void> {
     await denied("Carla, que es miembro raso, no puede conectar un repositorio", () =>
       withUser(carla, (db) =>
         db.query(
-          `insert into github_repos (connection_id, organization_id, full_name, added_by)
-           values ($1,$2,'acme/colado',$3)`,
-          [acmeConnection, acme.org, carla],
+          `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+           values ($1,$2,$3,'acme/colado',$4)`,
+          [acmeConnection, acme.org, acme.ws, carla],
         ),
       ),
     );
@@ -1108,9 +1108,9 @@ async function main(): Promise<void> {
     await denied("Bruno no puede conectar un repositorio en la organización de Acme", () =>
       withUser(bruno, (db) =>
         db.query(
-          `insert into github_repos (connection_id, organization_id, full_name, added_by)
-           values ($1,$2,'bruno/intruso',$3)`,
-          [acmeConnection, acme.org, bruno],
+          `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+           values ($1,$2,$3,'bruno/intruso',$4)`,
+          [acmeConnection, acme.org, acme.ws, bruno],
         ),
       ),
     );
@@ -1118,13 +1118,14 @@ async function main(): Promise<void> {
     // --- Un repositorio público, sin token detrás (0034) ----------------------
     //
     // Es el caso nuevo y el que más importa comprobar: sin conexión, lo único
-    // que aísla la fila es su `organization_id`. Si esa política estuviera mal,
-    // un repositorio añadido pegando un enlace sería visible para cualquiera.
+    // que aísla la fila es su `workspace_id` (0035). Si esa política estuviera
+    // mal, un repositorio añadido pegando un enlace sería visible para
+    // cualquiera.
     const acmePublico = await withUser(ana, async (db) => {
       const { rows } = await db.query<{ id: string }>(
-        `insert into github_repos (connection_id, organization_id, full_name, added_by)
-         values (null,$1,'acme/publico',$2) returning id`,
-        [acme.org, ana],
+        `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+         values (null,$1,$2,'acme/publico',$3) returning id`,
+        [acme.org, acme.ws, ana],
       );
       return rows[0]!.id;
     });
@@ -1136,9 +1137,39 @@ async function main(): Promise<void> {
     await denied("Bruno no puede colar un repositorio sin token en Acme", () =>
       withUser(bruno, (db) =>
         db.query(
-          `insert into github_repos (connection_id, organization_id, full_name, added_by)
-           values (null,$1,'bruno/publico',$2)`,
-          [acme.org, bruno],
+          `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+           values (null,$1,$2,'bruno/publico',$3)`,
+          [acme.org, acme.ws, bruno],
+        ),
+      ),
+    );
+
+    // --- Un workspace no ve el git de otro, ni siendo de la misma empresa ----
+    //
+    // ESTE ES EL CASO QUE FALTABA, y el fallo que 0035 arregla: hasta ahora
+    // esto colgaba de la organización, así que los tres proyectos de una
+    // empresa veían exactamente los mismos repositorios. Carla es de Acme, y
+    // aun así no tiene por qué ver lo del cuaderno personal de Ana.
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+         values (null,$1,$2,'acme/solo-de-ana',$3)`,
+        [acme.org, acme.soloWs, ana],
+      ),
+    );
+
+    check("Ana ve también el repositorio de su workspace personal", (await count(ana, "github_repos")) === 3);
+    check(
+      "Carla, de la misma organización, NO lo ve: es de otro workspace",
+      (await count(carla, "github_repos")) === 2,
+    );
+
+    await denied("Carla no puede meter un repositorio en un workspace al que no llega", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+           values (null,$1,$2,'acme/colado-en-el-cuaderno',$3)`,
+          [acme.org, acme.soloWs, carla],
         ),
       ),
     );
@@ -1294,9 +1325,9 @@ async function main(): Promise<void> {
 
     const acmeEntorno = await withUser(ana, async (db) => {
       const { rows } = await db.query<{ id: string }>(
-        `insert into environments (organization_id, name, kind, url, created_by)
-         values ($1,'producción','production','https://acme.example',$2) returning id`,
-        [acme.org, ana],
+        `insert into environments (organization_id, workspace_id, name, kind, url, created_by)
+         values ($1,$2,'producción','production','https://acme.example',$3) returning id`,
+        [acme.org, acme.ws, ana],
       );
       const id = rows[0]!.id;
       await db.query(
@@ -1321,8 +1352,8 @@ async function main(): Promise<void> {
     await denied("Carla, que es miembro rasa, no puede crear un entorno", () =>
       withUser(carla, (db) =>
         db.query(
-          `insert into environments (organization_id, name, created_by) values ($1,'colado',$2)`,
-          [acme.org, carla],
+          `insert into environments (organization_id, workspace_id, name, created_by) values ($1,$2,'colado',$3)`,
+          [acme.org, acme.ws, carla],
         ),
       ),
     );
@@ -1330,11 +1361,77 @@ async function main(): Promise<void> {
     await denied("Bruno no puede crear un entorno en Acme", () =>
       withUser(bruno, (db) =>
         db.query(
-          `insert into environments (organization_id, name, created_by) values ($1,'intruso',$2)`,
-          [acme.org, bruno],
+          `insert into environments (organization_id, workspace_id, name, created_by) values ($1,$2,'intruso',$3)`,
+          [acme.org, acme.ws, bruno],
         ),
       ),
     );
+
+    // La infraestructura también es del proyecto, no de la empresa (0035).
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into environments (organization_id, workspace_id, name, created_by)
+         values ($1,$2,'la de mi cuaderno',$3)`,
+        [acme.org, acme.soloWs, ana],
+      ),
+    );
+
+    check("Ana ve el entorno de su workspace personal", (await count(ana, "environments")) === 2);
+    check(
+      "Carla, de la misma organización, NO ve la infraestructura de otro workspace",
+      (await count(carla, "environments")) === 1,
+    );
+
+    // --- Y el diagrama de arquitectura (0033, ya por workspace en 0035) ------
+    console.log("\nDiagrama de arquitectura");
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into architecture_nodes (organization_id, workspace_id, kind, name, created_by)
+         values ($1,$2,'servicio','API de Acme',$3)`,
+        [acme.org, acme.ws, ana],
+      ),
+    );
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into architecture_nodes (organization_id, workspace_id, kind, name, created_by)
+         values ($1,$2,'base_datos','La base de mi cuaderno',$3)`,
+        [acme.org, acme.soloWs, ana],
+      ),
+    );
+
+    check("Ana ve los dos nodos que dibujó", (await count(ana, "architecture_nodes")) === 2);
+    check(
+      "Carla ve el del workspace compartido y no el del personal",
+      (await count(carla, "architecture_nodes")) === 1,
+    );
+    check("Bruno no ve ningún nodo de Acme", (await count(bruno, "architecture_nodes")) === 0);
+
+    // El diagrama es de todo el equipo del workspace, no solo de quien
+    // administra: Carla, miembro rasa, sí puede dibujar en el compartido. Es
+    // la decisión de 0033 y conviene que quede escrita como prueba, porque es
+    // lo contrario de lo que hacen las otras tablas de esta pantalla.
+    const carlaDibujo = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        `insert into architecture_nodes (organization_id, workspace_id, kind, name, created_by)
+         values ($1,$2,'cola','La cola que añadió Carla',$3)`,
+        [acme.org, acme.ws, carla],
+      );
+      return rowCount ?? 0;
+    });
+    check("Carla, miembro rasa, sí puede dibujar en el diagrama de su workspace", carlaDibujo === 1);
+
+    await denied("pero no en el diagrama de un workspace al que no llega", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into architecture_nodes (organization_id, workspace_id, kind, name, created_by)
+           values ($1,$2,'cola','colada',$3)`,
+          [acme.org, acme.soloWs, carla],
+        ),
+      ),
+    );
+
+    console.log("\nEntornos y despliegues (continuación)");
 
     // El caso que de verdad importa: ni siquiera la dueña del entorno puede
     // escribir un despliegue a mano. Si esto dejara de fallar, cualquiera

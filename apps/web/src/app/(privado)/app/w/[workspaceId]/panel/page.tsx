@@ -139,8 +139,11 @@ export default function PanelPage() {
   const ventas = useRecurso<{ opportunities: Venta[] }>(
     orgId ? `/organizations/${orgId}/pipeline` : null,
   );
+  // Del workspace y no de la organización (0035): el panel de un proyecto
+  // enseña la infraestructura de ese proyecto. Y no espera a que cargue el
+  // espacio, porque el id ya viene en la URL.
   const entornos = useRecurso<{ environments: Entorno[] }>(
-    orgId ? `/organizations/${orgId}/environments` : null,
+    `/workspaces/${workspaceId}/environments`,
   );
   const miembros = useRecurso<{ members: OrganizationMember[] }>(
     orgId ? `/organizations/${orgId}/members` : null,

@@ -13,7 +13,7 @@ import { Rotulo } from "@/components/ui/Superficies";
  * docs/decisiones/0004-conector-github-embebido-y-agente-ia.md.
  */
 export default function DevPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const { workspaceId } = useParams<{ workspaceId: string }>();
 
   return (
     <div className="min-h-[100svh]">
@@ -42,7 +42,7 @@ export default function DevPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-8">
-        <DevWorkspace orgId={orgId} />
+        <DevWorkspace workspaceId={workspaceId} />
       </main>
     </div>
   );

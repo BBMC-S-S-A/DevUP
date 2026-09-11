@@ -130,20 +130,20 @@ export async function sincronizarEntorno(
 export async function infraestructuraRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
-  app.get("/organizations/:orgId/environments", async (request) => {
+  app.get("/workspaces/:workspaceId/environments", async (request) => {
     const userId = requireUser(request);
-    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
         `select ${COLUMNAS}, ${ULTIMO}
            from environments e
-          where e.organization_id = $1
+          where e.workspace_id = $1
           order by
             -- Producción primero siempre. Es lo que se viene a mirar, y
             -- ordenar por nombre la escondería detrás de «desarrollo».
             case e.kind when 'production' then 0 when 'staging' then 1 else 2 end,
             e.name`,
-        [orgId],
+        [workspaceId],
       );
       return { environments: rows };
     });
@@ -172,9 +172,9 @@ export async function infraestructuraRoutes(app: FastifyInstance): Promise<void>
    * repositorio hace su primera lectura: esperar al siguiente ciclo dejaría la
    * tarjeta vacía justo cuando más se está mirando.
    */
-  app.post("/organizations/:orgId/environments", async (request, reply) => {
+  app.post("/workspaces/:workspaceId/environments", async (request, reply) => {
     const userId = requireUser(request);
-    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const body = parseBody(
       z.object({
         name: z.string().trim().min(1).max(60),
@@ -187,11 +187,16 @@ export async function infraestructuraRoutes(app: FastifyInstance): Promise<void>
     );
 
     const creado = await withUser(userId, async (db) => {
+      // `organization_id` se sigue rellenando aunque ya no mande: la columna
+      // no se puede borrar —una migración solo añade— y dejarla vacía haría
+      // que cualquier consulta vieja devolviera menos de lo que hay.
       const { rows } = await db.query<{ id: string }>(
-        `insert into environments (organization_id, name, kind, url, connection_id, external_id, created_by)
-         values ($1,$2,$3::environment_kind,$4,$5,$6,$7) returning id`,
+        `insert into environments
+           (workspace_id, organization_id, name, kind, url, connection_id, external_id, created_by)
+         values ($1,(select organization_id from workspaces where id = $1),
+                 $2,$3::environment_kind,$4,$5,$6,$7) returning id`,
         [
-          orgId,
+          workspaceId,
           body.name,
           body.kind,
           body.url ?? null,

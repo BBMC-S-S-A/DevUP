@@ -51,8 +51,8 @@ const ALTO_LIENZO = 560;
 
 type Respuesta = { nodes: NodoArquitectura[]; links: EnlaceArquitectura[] };
 
-export function DiagramaArquitectura({ orgId }: { orgId: string }) {
-  const clave = `/organizations/${orgId}/architecture`;
+export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
+  const clave = `/workspaces/${workspaceId}/architecture`;
   const recurso = useRecurso<Respuesta>(clave);
   const lienzoRef = useRef<HTMLDivElement>(null);
   const confirmar = useConfirmar();

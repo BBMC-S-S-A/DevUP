@@ -52,14 +52,28 @@ export function NavegacionOrganizacion({
   indiceInicial?: number;
 }) {
   const base = workspaceId ? `/app/w/${workspaceId}` : `/app/o/${orgId}`;
-  const baseDev = `/app/o/${orgId}`;
+
+  /**
+   * GitHub, Infraestructura, Base de datos e Integraciones solo salen dentro
+   * de un workspace (migración 0035).
+   *
+   * No es una cuestión de orden en la barra: es que fuera de un workspace no
+   * tienen respuesta. Cada proyecto tiene su git, su base y su
+   * infraestructura, así que «los repositorios de la organización» ya no es
+   * una pregunta con sentido — y la pantalla que la contestaba enseñaba a los
+   * tres proyectos de una empresa exactamente lo mismo.
+   */
   const pantallas = [
     { href: `${base}/ventas`, icono: <Target size={14} />, texto: "Ventas" },
-    { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
     { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
-    { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
-    { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
-    { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
+    ...(workspaceId
+      ? [
+          { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
+          { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
+          { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
+          { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
+        ]
+      : []),
   ];
 
   return (
@@ -80,18 +94,24 @@ export function NavegacionOrganizacion({
           página se sirva con sus cabeceras de aislamiento, y una navegación de
           cliente no vuelve a pedirla al servidor: se quedaría sin ellas y
           WebContainer no arranca. Es el fallo menos evidente de este archivo,
-          así que va anotado aquí y en docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md. */}
-      <a
-        href={`${baseDev}/dev`}
-        style={retraso(indiceInicial + pantallas.length)}
-        className="devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5
-          pl-3 pr-2 text-[13px] text-muted hover:bg-raised/70 hover:text-ink"
-      >
-        <span className="shrink-0 text-faint">
-          <Code2 size={14} />
-        </span>
-        <span className="min-w-0 flex-1 truncate">Entorno de desarrollo</span>
-      </a>
+          así que va anotado aquí y en docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md.
+
+          Solo dentro de un workspace, como el resto de instrumentos: lo que
+          abre son los repositorios del proyecto, y desde 0035 esos son suyos
+          y no de la organización. */}
+      {workspaceId && (
+        <a
+          href={`${base}/dev`}
+          style={retraso(indiceInicial + pantallas.length)}
+          className="devup-entrada presionable relative flex items-center gap-2.5 rounded-lg py-1.5
+            pl-3 pr-2 text-[13px] text-muted hover:bg-raised/70 hover:text-ink"
+        >
+          <span className="shrink-0 text-faint">
+            <Code2 size={14} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">Entorno de desarrollo</span>
+        </a>
+      )}
 
       {/* Mi cuenta va SIN puerta de rol, al revés que Ajustes: ahí es correcto
           esconderlo porque es la organización, pero una conexión de agente la

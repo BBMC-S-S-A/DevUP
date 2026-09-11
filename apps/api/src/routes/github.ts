@@ -75,19 +75,19 @@ async function repoConCredencial(
 export async function githubRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
-  app.get("/organizations/:orgId/github/repos", async (request) => {
+  app.get("/workspaces/:workspaceId/github/repos", async (request) => {
     const userId = requireUser(request);
-    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     return withUser(userId, async (db) => {
-      // Por `organization_id` y no cruzando con la conexión: desde 0034 un
-      // repositorio público no tiene ninguna, y aquel `join` lo escondía.
+      // Por `workspace_id` desde 0035: cada proyecto tiene su git, y antes
+      // todos los de una empresa veían la misma lista.
       const { rows } = await db.query(
         `select ${REPO_COLUMNS}
            from github_repos r
            left join github_repo_stats s on s.github_repo_id = r.id
-          where r.organization_id = $1
+          where r.workspace_id = $1
           order by r.created_at`,
-        [orgId],
+        [workspaceId],
       );
       return { repos: rows };
     });
@@ -108,9 +108,9 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
    * un repositorio privado sin token tiene que poder verse en pantalla y
    * arreglarse conectando el token, no desaparecer.
    */
-  app.post("/organizations/:orgId/github/repos", async (request, reply) => {
+  app.post("/workspaces/:workspaceId/github/repos", async (request, reply) => {
     const userId = requireUser(request);
-    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const body = parseBody(
       z.object({ url: z.string().trim().min(1).max(300) }),
       request.body,
@@ -127,16 +127,19 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const { repoId, token } = await withUser(userId, async (db) => {
       const { rows: conexiones } = await db.query<{ id: string }>(
         `select id from connections
-          where organization_id = $1 and provider = 'github'
+          where workspace_id = $1 and provider = 'github'
           order by created_at limit 1`,
-        [orgId],
+        [workspaceId],
       );
       const connectionId = conexiones[0]?.id ?? null;
 
+      // `organization_id` se sigue rellenando aunque ya no mande: la columna
+      // no se puede borrar (una migración solo añade) y dejarla a null haría
+      // que las consultas viejas devolvieran menos de lo que hay.
       const { rows } = await db.query<{ id: string }>(
-        `insert into github_repos (connection_id, organization_id, full_name, added_by)
-         values ($1,$2,$3,$4) returning id`,
-        [connectionId, orgId, fullName, userId],
+        `insert into github_repos (connection_id, workspace_id, organization_id, full_name, added_by)
+         values ($1,$2,(select organization_id from workspaces where id = $2),$3,$4) returning id`,
+        [connectionId, workspaceId, fullName, userId],
       );
       return {
         repoId: rows[0]!.id,

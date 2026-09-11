@@ -3,7 +3,7 @@
 > Generado leyendo el código con `npm run grafo`. **No se edita a mano**: lo que se escriba aquí
 > desaparece en la siguiente pasada. Última: 2026-09-11.
 
-Hoy el proyecto tiene **23 áreas de API**, **17 pantallas**, **12 componentes que hablan con la API** y **50 tablas** repartidas en 34 migraciones.
+Hoy el proyecto tiene **23 áreas de API**, **17 pantallas**, **12 componentes que hablan con la API** y **50 tablas** repartidas en 35 migraciones.
 
 ## Qué áreas se tocan de verdad
 
@@ -69,16 +69,16 @@ graph LR
   subgraph Pantallas_y_componentes
     P__app_autorizar_agente["/app/autorizar-agente"]
     P__app_o__orgId_ajustes["/app/o/:orgId/ajustes"]
-    P__app_o__orgId_base_de_datos["/app/o/:orgId/base-de-datos"]
     P__app_o__orgId_buscar["/app/o/:orgId/buscar"]
-    P__app_o__orgId_github["/app/o/:orgId/github"]
-    P__app_o__orgId_infraestructura["/app/o/:orgId/infraestructura"]
-    P__app_o__orgId_integraciones["/app/o/:orgId/integraciones"]
     P__app_o__orgId_noticias["/app/o/:orgId/noticias"]
     P__app_o__orgId_ventas["/app/o/:orgId/ventas"]
     P__app["/app"]
     P__app_w__workspaceId_asistente["/app/w/:workspaceId/asistente"]
+    P__app_w__workspaceId_base_de_datos["/app/w/:workspaceId/base-de-datos"]
     P__app_w__workspaceId_cuenta["/app/w/:workspaceId/cuenta"]
+    P__app_w__workspaceId_github["/app/w/:workspaceId/github"]
+    P__app_w__workspaceId_infraestructura["/app/w/:workspaceId/infraestructura"]
+    P__app_w__workspaceId_integraciones["/app/w/:workspaceId/integraciones"]
     P__app_w__workspaceId_mesa["/app/w/:workspaceId/mesa"]
     P__app_w__workspaceId_panel["/app/w/:workspaceId/panel"]
     P__invitacion["/invitacion"]
@@ -179,23 +179,24 @@ graph LR
   P__app_autorizar_agente --> A_oauth
   P__app_o__orgId_ajustes --> A_account
   P__app_o__orgId_ajustes --> A_workspaces
-  P__app_o__orgId_base_de_datos --> A_github
   P__app_o__orgId_buscar --> A_search
-  P__app_o__orgId_github --> A_connections
-  P__app_o__orgId_github --> A_github
-  P__app_o__orgId_infraestructura --> A_connections
-  P__app_o__orgId_infraestructura --> A_infraestructura
-  P__app_o__orgId_integraciones --> A_github
   P__app_o__orgId_noticias --> A_announcements
   P__app_o__orgId_noticias --> A_workspaces
   P__app_o__orgId_ventas --> A_sales
   P__app --> A_account
   P__app --> A_workspaces
   P__app_w__workspaceId_asistente --> A_asistente
+  P__app_w__workspaceId_base_de_datos --> A_github
   P__app_w__workspaceId_cuenta --> A_auth
   P__app_w__workspaceId_cuenta --> A_connections
+  P__app_w__workspaceId_github --> A_connections
+  P__app_w__workspaceId_github --> A_github
+  P__app_w__workspaceId_infraestructura --> A_connections
+  P__app_w__workspaceId_infraestructura --> A_infraestructura
+  P__app_w__workspaceId_integraciones --> A_github
   P__app_w__workspaceId_mesa --> A_preferences
   P__app_w__workspaceId_mesa --> A_workspaces
+  P__app_w__workspaceId_panel --> A_infraestructura
   P__app_w__workspaceId_panel --> A_notifications
   P__app_w__workspaceId_panel --> A_workspaces
   P__invitacion --> A_account
@@ -227,6 +228,7 @@ graph LR
   A_announcements --> T_profiles
   A_arquitectura --> T_architecture_links
   A_arquitectura --> T_architecture_nodes
+  A_arquitectura --> T_workspaces
   A_asistente --> T_connections
   A_asistente --> T_files
   A_asistente --> T_organization_members
@@ -248,11 +250,13 @@ graph LR
   A_github --> T_connections
   A_github --> T_github_repo_stats
   A_github --> T_github_repos
+  A_github --> T_workspaces
   A_github -.-> C_github
   A_github -.-> C_integraciones
   A_github -.-> C_migraciones
   A_infraestructura --> T_deployments
   A_infraestructura --> T_environments
+  A_infraestructura --> T_workspaces
   A_infraestructura -.-> C_despliegues
   A_messages --> T_channels
   A_messages --> T_files
@@ -312,14 +316,14 @@ graph LR
 |---|---|---|---|
 | `account` | 10 | `invitations`, `organizations`, `users`, `workspaces` | — |
 | `announcements` | 4 | `announcements`, `organization_members`, `profiles` | — |
-| `arquitectura` | 6 | `architecture_links`, `architecture_nodes` | — |
+| `arquitectura` | 6 | `architecture_links`, `architecture_nodes`, `workspaces` | — |
 | `asistente` | 2 | `connections`, `files`, `organization_members`, `profiles`, `task_columns`, `tasks`, `workspaces` | — |
 | `auth` | 11 | `profiles`, `sessions`, `users` | — |
-| `connections` | 5 | `connection_secrets`, `connections`, `github_repos` | — |
+| `connections` | 7 | `connection_secrets`, `connections`, `github_repos` | — |
 | `files` | 11 | `file_tags`, `files`, `profiles`, `tags`, `workspaces` | — |
-| `github` | 8 | `connections`, `github_repo_stats`, `github_repos` | `github`, `integraciones`, `migraciones` |
+| `github` | 8 | `connections`, `github_repo_stats`, `github_repos`, `workspaces` | `github`, `integraciones`, `migraciones` |
 | `ice` | 1 | — | — |
-| `infraestructura` | 5 | `deployments`, `environments` | `despliegues` |
+| `infraestructura` | 5 | `deployments`, `environments`, `workspaces` | `despliegues` |
 | `mcp` | 3 | — | — |
 | `messages` | 6 | `channels`, `files`, `messages`, `profiles` | — |
 | `notifications` | 3 | `notifications`, `profiles` | — |
@@ -352,8 +356,8 @@ graph LR
 | POST | `/organizations/:orgId/announcements` | `announcements` |
 | PATCH | `/announcements/:id` | `announcements` |
 | DELETE | `/announcements/:id` | `announcements` |
-| GET | `/organizations/:orgId/architecture` | `arquitectura` |
-| POST | `/organizations/:orgId/architecture/nodes` | `arquitectura` |
+| GET | `/workspaces/:workspaceId/architecture` | `arquitectura` |
+| POST | `/workspaces/:workspaceId/architecture/nodes` | `arquitectura` |
 | PATCH | `/architecture/nodes/:nodeId` | `arquitectura` |
 | DELETE | `/architecture/nodes/:nodeId` | `arquitectura` |
 | POST | `/architecture/links` | `arquitectura` |
@@ -371,6 +375,8 @@ graph LR
 | GET | `/auth/sessions` | `auth` |
 | POST | `/auth/agent-connections` | `auth` |
 | DELETE | `/auth/sessions/:id` | `auth` |
+| GET | `/workspaces/:workspaceId/connections` | `connections` |
+| POST | `/workspaces/:workspaceId/connections` | `connections` |
 | GET | `/organizations/:orgId/connections` | `connections` |
 | POST | `/organizations/:orgId/connections` | `connections` |
 | GET | `/connections` | `connections` |
@@ -387,8 +393,8 @@ graph LR
 | GET | `/files/:fileId/download-url` | `files` |
 | PATCH | `/files/:fileId` | `files` |
 | DELETE | `/files/:fileId` | `files` |
-| GET | `/organizations/:orgId/github/repos` | `github` |
-| POST | `/organizations/:orgId/github/repos` | `github` |
+| GET | `/workspaces/:workspaceId/github/repos` | `github` |
+| POST | `/workspaces/:workspaceId/github/repos` | `github` |
 | GET | `/github/repos/:repoId/migraciones` | `github` |
 | GET | `/github/repos/:repoId/integraciones` | `github` |
 | POST | `/github/repos/:repoId/refresh` | `github` |
@@ -396,9 +402,9 @@ graph LR
 | GET | `/github/repos/:repoId/file` | `github` |
 | DELETE | `/github/repos/:repoId` | `github` |
 | GET | `/calls/ice-servers` | `ice` |
-| GET | `/organizations/:orgId/environments` | `infraestructura` |
+| GET | `/workspaces/:workspaceId/environments` | `infraestructura` |
 | GET | `/environments/:envId/deployments` | `infraestructura` |
-| POST | `/organizations/:orgId/environments` | `infraestructura` |
+| POST | `/workspaces/:workspaceId/environments` | `infraestructura` |
 | POST | `/environments/:envId/sync` | `infraestructura` |
 | DELETE | `/environments/:envId` | `infraestructura` |
 | POST | `/mcp` | `mcp` |
@@ -542,7 +548,7 @@ graph LR
 | `user_workbench_prefs` | `0025_mesa_de_trabajo.sql` | `preferences` |
 | `users` | `0001_core.sql` | `account`, `auth` |
 | `workspace_members` | `0027_miembros_por_workspace.sql` | — |
-| `workspaces` | `0001_core.sql` | `account`, `asistente`, `files`, `tasks`, `workspaces` |
+| `workspaces` | `0001_core.sql` | `account`, `arquitectura`, `asistente`, `files`, `github`, `infraestructura`, `tasks`, `workspaces` |
 | `world_avatars` | `0007_world.sql` | `world` |
 | `world_outfits` | `0023_atuendos_por_organizacion.sql` | `world` |
 | `world_props` | `0010_world_editor.sql` | `world` |
@@ -556,17 +562,17 @@ graph LR
 | `/app` | `account`, `workspaces` |
 | `/app/autorizar-agente` | `oauth` |
 | `/app/o/:orgId/ajustes` | `account`, `workspaces` |
-| `/app/o/:orgId/base-de-datos` | `github` |
 | `/app/o/:orgId/buscar` | `search` |
-| `/app/o/:orgId/github` | `connections`, `github` |
-| `/app/o/:orgId/infraestructura` | `connections`, `infraestructura` |
-| `/app/o/:orgId/integraciones` | `github` |
 | `/app/o/:orgId/noticias` | `announcements`, `workspaces` |
 | `/app/o/:orgId/ventas` | `sales` |
 | `/app/w/:workspaceId/asistente` | `asistente` |
+| `/app/w/:workspaceId/base-de-datos` | `github` |
 | `/app/w/:workspaceId/cuenta` | `auth`, `connections` |
+| `/app/w/:workspaceId/github` | `connections`, `github` |
+| `/app/w/:workspaceId/infraestructura` | `connections`, `infraestructura` |
+| `/app/w/:workspaceId/integraciones` | `github` |
 | `/app/w/:workspaceId/mesa` | `preferences`, `workspaces` |
-| `/app/w/:workspaceId/panel` | `notifications`, `workspaces` |
+| `/app/w/:workspaceId/panel` | `infraestructura`, `notifications`, `workspaces` |
 | `/invitacion` | `account` |
 | `/login` | `account`, `auth` |
 | `/recuperar` | `account` |
@@ -600,6 +606,7 @@ tablas que tocan por dentro.
 | `auth_identity` | `users` | `auth` |
 | `can_access_channel` | `channel_members`, `channels` | — (solo desde dentro) |
 | `can_access_workspace` | `organization_members`, `workspace_members`, `workspaces` | — (solo desde dentro) |
+| `can_manage_workspace` | `workspaces` | — (solo desde dentro) |
 | `channel_of_session` | `call_sessions` | — (solo desde dentro) |
 | `consume_user_token` | `user_tokens` | `account` |
 | `create_channel` | `channel_members`, `channels` | `workspaces` |
@@ -646,6 +653,7 @@ tablas que tocan por dentro.
 | `upsert_world_avatar` | `world_avatars` | `world` |
 | `upsert_world_outfit` | `world_outfits` | `world` |
 | `user_count` | `users` | `account`, `auth` |
+| `workspace_por_defecto` | `workspaces` | — (solo desde dentro) |
 | `world_enabled_for_workspace` | `organizations`, `workspaces` | `world` |
 
 ## Tablas que ninguna ruta nombra

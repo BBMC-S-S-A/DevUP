@@ -29,31 +29,31 @@ const LINK_COLUMNS_L = `l.id, l.source_id as "sourceId", l.target_id as "targetI
 export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
-  app.get("/organizations/:orgId/architecture", async (request) => {
+  app.get("/workspaces/:workspaceId/architecture", async (request) => {
     const userId = requireUser(request);
-    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const [nodes, links] = await Promise.all([
         db.query(
-          `select ${NODE_COLUMNS} from architecture_nodes where organization_id = $1 order by created_at`,
-          [orgId],
+          `select ${NODE_COLUMNS} from architecture_nodes where workspace_id = $1 order by created_at`,
+          [workspaceId],
         ),
         db.query(
           `select ${LINK_COLUMNS_L}
              from architecture_links l
              join architecture_nodes n on n.id = l.source_id
-            where n.organization_id = $1
+            where n.workspace_id = $1
             order by l.created_at`,
-          [orgId],
+          [workspaceId],
         ),
       ]);
       return { nodes: nodes.rows, links: links.rows };
     });
   });
 
-  app.post("/organizations/:orgId/architecture/nodes", async (request, reply) => {
+  app.post("/workspaces/:workspaceId/architecture/nodes", async (request, reply) => {
     const userId = requireUser(request);
-    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const body = parseBody(
       z.object({
         kind: KIND.default("servicio"),
@@ -68,10 +68,11 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     const node = await withUser(userId, async (db) => {
       const { rows } = await db.query(
         `insert into architecture_nodes
-           (organization_id, kind, name, description, pos_x, pos_y, created_by)
-         values ($1,$2::architecture_node_kind,$3,$4,$5,$6,$7)
+           (workspace_id, organization_id, kind, name, description, pos_x, pos_y, created_by)
+         values ($1,(select organization_id from workspaces where id = $1),
+                 $2::architecture_node_kind,$3,$4,$5,$6,$7)
          returning ${NODE_COLUMNS}`,
-        [orgId, body.kind, body.name, body.description ?? "", body.posX, body.posY, userId],
+        [workspaceId, body.kind, body.name, body.description ?? "", body.posX, body.posY, userId],
       );
       return rows[0];
     });

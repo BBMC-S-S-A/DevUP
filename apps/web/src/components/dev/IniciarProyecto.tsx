@@ -10,15 +10,15 @@ export type ProyectoElegido = { tipo: "github"; repoId: string; fullName: string
 
 /**
  * Pantalla de arranque del entorno de desarrollo: importar uno de los
- * repositorios de GitHub ya conectados en esta organización (solo lectura
+ * repositorios de GitHub ya conectados en este espacio de trabajo (solo lectura
  * en esta fase), o empezar en blanco con una plantilla mínima de Node.js que
  * no necesita ninguna conexión. Ninguna de las dos vías bloquea a la otra.
  */
 export function IniciarProyecto({
-  orgId,
+  workspaceId,
   onElegir,
 }: {
-  orgId: string;
+  workspaceId: string;
   onElegir: (proyecto: ProyectoElegido) => void;
 }) {
   const [repos, setRepos] = useState<GithubRepo[] | null>(null);
@@ -26,10 +26,10 @@ export function IniciarProyecto({
 
   useEffect(() => {
     api
-      .get<{ repos: GithubRepo[] }>(`/organizations/${orgId}/github/repos`)
+      .get<{ repos: GithubRepo[] }>(`/workspaces/${workspaceId}/github/repos`)
       .then(({ repos }) => setRepos(repos))
       .catch((caught) => setError(caught instanceof ApiError ? caught.message : "no se pudo cargar"));
-  }, [orgId]);
+  }, [workspaceId]);
 
   return (
     <div className="devup-entrada mx-auto max-w-2xl space-y-6 py-10">
