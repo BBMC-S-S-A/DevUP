@@ -11,6 +11,7 @@ import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
+import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
@@ -43,6 +44,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();
   const pathname = usePathname();
   const { user, signOut } = useSession();
+  const hayRiel = useHayRiel();
 
   const [organizacion, setOrganizacion] = useState<Organization | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -132,16 +134,21 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
       <>
 
         <header className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
-          {/* «Organizaciones», una sola vez y en un solo sitio. Es el nombre que
-              usaban cuatro de las cinco cabeceras copiadas. */}
-          <Link
-            href="/app"
-            className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
-              text-[11px] text-muted hover:text-accent-bright"
-          >
-            <ArrowLeft size={12} />
-            Organizaciones
-          </Link>
+          {/* Con el riel puesto este enlace sobra: la vuelta a todas las
+              organizaciones está en su pie, y dos caminos al mismo sitio en la
+              misma pantalla es la duplicación que este armazón vino a quitar.
+              Sin riel —una sola organización, o móvil— sigue siendo la única
+              salida y se queda. */}
+          {!hayRiel && (
+            <Link
+              href="/app"
+              className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
+                text-[11px] text-muted hover:text-accent-bright"
+            >
+              <ArrowLeft size={12} />
+              Organizaciones
+            </Link>
+          )}
 
           <div className="flex items-center gap-2.5">
             {logo ? (

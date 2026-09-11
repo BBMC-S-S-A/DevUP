@@ -24,6 +24,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } 
 import { ApiError, type Channel, type Organization, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
+import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
@@ -45,6 +46,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useSession();
+  const hayRiel = useHayRiel();
   const { mode, setMode, ready: modeReady } = useViewMode();
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -193,14 +195,21 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         <>
 
         <header className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
-          <Link
-            href="/app"
-            className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
-              text-[11px] text-muted hover:text-accent-bright"
-          >
-            <ArrowLeft size={12} />
-            Workspaces
-          </Link>
+          {/* Con el riel puesto este enlace sobra: la vuelta a todas las
+              organizaciones está en su pie, y dos caminos al mismo sitio en la
+              misma pantalla es la duplicación que este armazón vino a quitar.
+              Sin riel —una sola organización, o móvil— sigue siendo la única
+              salida y se queda. */}
+          {!hayRiel && (
+            <Link
+              href="/app"
+              className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
+                text-[11px] text-muted hover:text-accent-bright"
+            >
+              <ArrowLeft size={12} />
+              Workspaces
+            </Link>
+          )}
 
           <div className="flex items-center gap-2.5">
             {/* La inicial en una chapa hace que dos workspaces con nombres

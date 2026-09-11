@@ -3,6 +3,7 @@
 import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useHayRiel } from "./RielOrganizaciones";
 
 /**
  * El armazón: barra lateral y contenido.
@@ -37,6 +38,10 @@ export function Armazon({
   const [abierto, setAbierto] = useState(false);
   const pathname = usePathname();
   const boton = useRef<HTMLButtonElement>(null);
+  // El riel de organizaciones ocupa los 56 px de la izquierda cuando está.
+  // Solo en escritorio: en móvil esta barra ya es un cajón y el riel no se
+  // pinta, así que las clases `md:` son justo las que cambian.
+  const hayRiel = useHayRiel();
 
   useEffect(() => setAbierto(false), [pathname]);
 
@@ -108,7 +113,8 @@ export function Armazon({
         // margen se lee como una tarjeta que salió mal.
         className={`cristal fixed inset-y-0 left-0 z-50 flex w-64 flex-col rounded-none
           transition-transform duration-300 md:z-30 md:translate-x-0
-          md:inset-y-3 md:left-3 md:w-60 md:rounded-2xl
+          md:inset-y-3 md:w-60 md:rounded-2xl
+          ${hayRiel ? "md:left-[4.75rem]" : "md:left-3"}
           ${abierto ? "translate-x-0" : "-translate-x-full"}`}
         style={{ transitionTimingFunction: "var(--muelle-firme)" }}
         {...(abierto ? { role: "dialog", "aria-modal": true, "aria-label": "Navegación" } : {})}
@@ -140,7 +146,9 @@ export function Armazon({
         {barra}
       </aside>
 
-      <main className="alto-util pt-12 md:pt-0 md:pl-[16.5rem]">{children}</main>
+      <main className={`alto-util pt-12 md:pt-0 ${hayRiel ? "md:pl-[20.25rem]" : "md:pl-[16.5rem]"}`}>
+        {children}
+      </main>
     </div>
   );
 }
@@ -153,9 +161,16 @@ export function Armazon({
  * el anuncio de algo que no va a aparecer.
  */
 export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
+  // El mismo margen que el armazón de verdad. Sin esto la barra salta hacia la
+  // derecha en cuanto llegan los datos, que es el tipo de sobresalto que hace
+  // que una carga rápida se sienta peor que una lenta.
+  const hayRiel = useHayRiel();
   return (
     <div className="min-h-[100svh]">
-      <aside className="cristal fixed inset-y-3 left-3 z-30 hidden w-60 flex-col rounded-2xl md:flex">
+      <aside
+        className={`cristal fixed inset-y-3 z-30 hidden w-60 flex-col rounded-2xl md:flex
+          ${hayRiel ? "left-[4.75rem]" : "left-3"}`}
+      >
         <div className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           <div className="devup-esqueleto h-2.5 w-24 rounded" />
           <div className="mt-3 flex items-center gap-2.5">
@@ -179,7 +194,7 @@ export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
           </div>
         </div>
       </aside>
-      <main className="min-h-[100svh] md:pl-[16.5rem]" />
+      <main className={`min-h-[100svh] ${hayRiel ? "md:pl-[20.25rem]" : "md:pl-[16.5rem]"}`} />
     </div>
   );
 }
