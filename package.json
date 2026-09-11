@@ -34,7 +34,10 @@
     "test:youtube": "npm run test:youtube --workspace apps/api",
     "test:puerta": "npm run test:puerta --workspace apps/api",
     "test:mcp": "npm run test:mcp --workspace apps/mcp",
-    "test:asistente": "npm run test:asistente --workspace apps/api"
+    "test:asistente": "npm run test:asistente --workspace apps/api",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "engines": {
     "node": ">=20.11"

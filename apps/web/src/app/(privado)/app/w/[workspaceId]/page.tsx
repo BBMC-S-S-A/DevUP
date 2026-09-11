@@ -1,67 +1,82 @@
 "use client";
 
-import { Files, Loader2, ShieldCheck } from "lucide-react";
-import { useParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FileLibrary } from "@/components/files/FileLibrary";
-import { Chip, Rotulo } from "@/components/ui/Superficies";
-import { type Workspace, api } from "@/lib/api";
+import { type Channel, api } from "@/lib/api";
+import { useViewMode } from "@/lib/view-mode";
 
-export default function WorkspacePage() {
+/**
+ * La raíz de un workspace. No es una pantalla: es un cruce.
+ *
+ * ANTES ERA LA BIBLIOTECA DE ARCHIVOS, y por accidente de orden de
+ * construcción, no por decisión — se movió a `./archivos`. El estudio de
+ * flujo del 5 de septiembre de 2026 encontró que crear un workspace no
+ * siembra ningún canal (ver `workspaces.ts`, antes de esta misma corrección),
+ * así que aterrizar aquí era aterrizar en una pantalla vacía sin nada que
+ * hacer, en el tercer elemento del menú cuando el propio menú dice que el
+ * primero es el Panel.
+ *
+ * Ahora la raíz manda al canal general recién sembrado — o al primero de
+ * texto que encuentre, para los workspaces creados antes de esta corrección,
+ * que no tienen ninguno sembrado.
+ *
+ * NO decide nada cuando el modo es «immersive»: ese caso ya lo resuelve el
+ * layout un nivel arriba (`WorkspaceLayout`), que redirige a DevVerse desde
+ * esta misma ruta raíz. Decidir aquí también sería una carrera entre dos
+ * redirecciones sobre la misma URL.
+ */
+export default function WorkspaceHome() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const router = useRouter();
+  const { mode, ready: modeReady } = useViewMode();
+  const [sinCanales, setSinCanales] = useState(false);
 
   useEffect(() => {
-    void api
-      .get<{ workspace: Workspace }>(`/workspaces/${workspaceId}`)
-      .then(({ workspace }) => setWorkspace(workspace))
-      .catch(() => setWorkspace(null));
-  }, [workspaceId]);
+    if (!modeReady) return;
+    // El layout ya se encarga de mandar a DevVerse cuando el modo es
+    // inmersivo; decidir aquí también duplicaría la redirección.
+    if (mode === "immersive") return;
 
-  if (!workspace) {
-    return (
-      <div className="alto-util-fijo grid place-items-center">
-        <span className="flex items-center gap-2 text-faint">
-          <Loader2 className="animate-spin" size={16} />
-          <Rotulo>abriendo la biblioteca</Rotulo>
-        </span>
-      </div>
-    );
-  }
+    let cancelado = false;
+
+    void api
+      .get<{ channels: Channel[] }>(`/workspaces/${workspaceId}/channels`)
+      .then(({ channels }) => {
+        if (cancelado) return;
+
+        const texto = channels
+          .filter((canal) => canal.kind === "text")
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+        // El canal «general» —si sigue llamándose así— es el destino natural;
+        // si alguien lo renombró o lo borró, el más antiguo de texto es la
+        // mejor apuesta siguiente.
+        const destino = texto.find((canal) => canal.name === "general") ?? texto[0];
+
+        if (destino) {
+          router.replace(`/app/w/${workspaceId}/c/${destino.id}`);
+        } else {
+          // Solo pasa en un workspace creado antes de que se sembrara el
+          // canal general, y que además no tiene ningún canal de texto
+          // propio. El Panel es mejor destino que una biblioteca vacía.
+          setSinCanales(true);
+        }
+      })
+      .catch(() => setSinCanales(true));
+
+    return () => {
+      cancelado = true;
+    };
+  }, [workspaceId, mode, modeReady, router]);
+
+  useEffect(() => {
+    if (sinCanales) router.replace(`/app/w/${workspaceId}/panel`);
+  }, [sinCanales, workspaceId, router]);
 
   return (
-    <div className="alto-util">
-      {/* La cabecera lleva la rejilla y el filo de luz porque es la única
-          superficie fija de la vista: da profundidad al fondo y marca dónde
-          acaba el rótulo y empieza el almacén, sin un borde duro de por medio. */}
-      <header className="rejilla filo-luz px-6 pb-6 pt-7 sm:px-8">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-accent/25 bg-accent-soft/60 text-accent-bright">
-              <Files size={18} />
-            </span>
-            <div className="min-w-0">
-              <Rotulo>almacén · {workspace.name}</Rotulo>
-              <h1 className="mt-0.5 truncate text-xl font-semibold">Biblioteca</h1>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Chip tono="accent">
-              <ShieldCheck size={11} />
-              enlace firmado
-            </Chip>
-            <p className="max-w-xl text-xs leading-relaxed text-muted">
-              Todos los archivos de {workspace.name}. Se acceden por enlace firmado con caducidad,
-              nunca desde un bucket público.
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl px-6 pb-16 pt-6 sm:px-8">
-        <FileLibrary workspaceId={workspaceId} organizationId={workspace.organizationId} />
-      </div>
+    <div className="grid min-h-[100svh] place-items-center">
+      <Loader2 className="animate-spin text-faint" size={20} />
     </div>
   );
 }

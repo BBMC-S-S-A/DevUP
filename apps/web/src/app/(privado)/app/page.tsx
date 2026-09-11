@@ -569,6 +569,7 @@ function NewWorkspace({
   organizationId: string;
   onCreated: () => Promise<void>;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [visibility, setVisibility] = useState<"shared" | "personal">("shared");
@@ -595,15 +596,19 @@ function NewWorkspace({
         event.preventDefault();
         setBusy(true);
         try {
-          await api.post(`/organizations/${organizationId}/workspaces`, { name, visibility });
+          // La API ya siembra un canal «general» con un mensaje de
+          // orientación (ver workspaces.ts). Entrar directo ahí en vez de
+          // quedarse en la lista es la diferencia entre crear un workspace y
+          // empezar a usarlo: sin esto, quedaba un clic más para encontrar la
+          // tarjeta recién creada y entrar.
+          const { workspace, generalChannelId } = await api.post<{
+            workspace: { id: string };
+            generalChannelId: string;
+          }>(`/organizations/${organizationId}/workspaces`, { name, visibility });
           toast.success(`Workspace «${name}» creado`);
-          setName("");
-          setVisibility("shared");
-          setOpen(false);
-          await onCreated();
+          router.push(`/app/w/${workspace.id}/c/${generalChannelId}`);
         } catch (caught) {
           toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear el workspace");
-        } finally {
           setBusy(false);
         }
       }}
@@ -652,10 +657,15 @@ function NewWorkspace({
         ))}
       </div>
 
+      {/* Antes explicaba también el caso límite —«ni siquiera quien administra
+          la organización»— en el primer formulario que ve alguien recién
+          registrado. Es verdad y sigue estando en la API, pero es una excepción
+          para explicar después, no la frase que decide si trabajar solo o en
+          equipo. */}
       <p className="text-[11px] leading-relaxed text-muted">
         {visibility === "personal"
-          ? "Un espacio para trabajar solo: sus archivos, canales y tareas no los ve nadie más, ni siquiera quien administra la organización."
-          : "Todo el equipo verá sus archivos, canales y tareas."}
+          ? "Solo tú lo ves: tus archivos, canales y tareas quedan aparte del resto del equipo."
+          : "Todo el equipo lo ve y puede usarlo."}
       </p>
     </form>
   );
@@ -696,8 +706,14 @@ function NewOrganization({
       <div className="relative">
         <Rotulo className="block">Nueva</Rotulo>
         <h2 className="mt-0.5 text-base font-semibold">Organización</h2>
+        {/* «Es la frontera de aislamiento» era la primera frase técnica que
+            veía alguien recién registrado, antes de haber escrito nada.
+            El hecho sigue siendo cierto y sigue siendo real —lo hace RLS,
+            no esta frase— pero aquí solo hace falta decir qué gana quien
+            lo crea, en su propio idioma. */}
         <p className="mb-4 mt-1.5 max-w-md text-xs leading-relaxed text-muted">
-          Es la frontera de aislamiento: nada de una organización es visible desde otra.
+          Aquí vivirán vuestros canales, archivos y tareas — a salvo de cualquier otra
+          organización, aunque compartáis el mismo DevUP.
         </p>
 
         <form

@@ -73,7 +73,10 @@ function destino(orgId: string, result: SearchResult): string {
         ? `/app/w/${result.workspaceId}/c/${result.channelId}`
         : `/app`;
     case "file":
-      return result.workspaceId ? `/app/w/${result.workspaceId}` : `/app`;
+      // La raíz del workspace dejó de ser la biblioteca — ver
+      // `w/[workspaceId]/page.tsx` — así que un resultado de archivo tiene
+      // que decir «archivos» explícitamente o aterriza en un canal de chat.
+      return result.workspaceId ? `/app/w/${result.workspaceId}/archivos` : `/app`;
     case "task":
       return result.workspaceId ? `/app/w/${result.workspaceId}/board` : `/app`;
     case "client":

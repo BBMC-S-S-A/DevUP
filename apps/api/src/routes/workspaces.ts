@@ -24,6 +24,26 @@ const slug = z
   );
 
 /**
+ * El mensaje que espera a quien entra por primera vez a un workspace nuevo.
+ *
+ * Sin esto, crear un workspace no crea ningún canal: quien entra aterriza en
+ * una pantalla vacía y tiene que encontrar y usar «Nuevo canal» antes de poder
+ * escribir una sola palabra. Con esto, hay un sitio donde escribir desde el
+ * primer segundo y una nota que dice qué hacer a continuación — no una
+ * bienvenida vacía, tres acciones concretas.
+ */
+function mensajeDeBienvenida(nombreWorkspace: string): string {
+  return (
+    `Este es el canal general de ${nombreWorkspace}.\n\n` +
+    "Tres cosas para arrancar, ninguna obligatoria:\n" +
+    "· Invita a tu equipo desde Ajustes, en la organización.\n" +
+    "· Crea tu primera tarea en el Tablero.\n" +
+    "· Si os gusta lo visual, dad una vuelta por DevVerse.\n\n" +
+    "Nada de esto hace falta para seguir hablando aquí mismo."
+  );
+}
+
+/**
  * Organizaciones, workspaces y canales.
  *
  * Ninguna consulta lleva `where organization_id = ...`: el filtrado lo hace
@@ -407,7 +427,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       request.body,
     );
 
-    const workspace = await withUser(userId, async (db) => {
+    const { workspace, generalChannelId } = await withUser(userId, async (db) => {
       const { rows } = await db.query(
         `insert into workspaces (organization_id, name, created_by, visibility)
          values ($1, $2, $3, $4)
@@ -415,10 +435,27 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
                    created_by as "createdBy", created_at as "createdAt"`,
         [orgId, body.name, userId, body.visibility],
       );
-      return rows[0];
+      const workspace = rows[0];
+
+      // El mismo camino que ya usa la creación manual de canales
+      // (`create_channel`, SECURITY DEFINER): repite su propia comprobación de
+      // acceso al workspace, así que crear el workspace un instante antes en
+      // esta misma transacción no la esquiva.
+      const { rows: canal } = await db.query<{ create_channel: string }>(
+        "select public.create_channel($1, $2, $3, $4)",
+        [workspace.id, "general", "text", false],
+      );
+      const generalChannelId = canal[0]!.create_channel;
+
+      await db.query(
+        `insert into messages (channel_id, author_id, body) values ($1, $2, $3)`,
+        [generalChannelId, userId, mensajeDeBienvenida(workspace.name)],
+      );
+
+      return { workspace, generalChannelId };
     });
 
-    return reply.status(201).send({ workspace });
+    return reply.status(201).send({ workspace, generalChannelId });
   });
 
   app.get("/workspaces/:workspaceId", async (request) => {
