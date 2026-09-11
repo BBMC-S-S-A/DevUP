@@ -36,6 +36,7 @@ import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
 import { Chip, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
+import { ignorar } from "@/lib/fallo";
 
 /**
  * Ventas, búsqueda y GitHub son de la organización, no de un workspace: el
@@ -281,7 +282,9 @@ function InsigniaOrganizacion({ organization }: { organization: Organization }) 
       .then((respuesta) => {
         if (!cancelado) setUrl(respuesta.url);
       })
-      .catch(() => {});
+      // Sin logo queda la chapa con la inicial, que ya distingue. Es de los
+      // fallos que de verdad no cambian nada.
+      .catch(ignorar("no se pudo cargar el logo de la organización"));
     return () => {
       cancelado = true;
     };

@@ -8,6 +8,8 @@ import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { buildWsUrl, requestTicket } from "@/lib/ws";
 import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
+import { ignorar } from "@/lib/fallo";
+import { toast } from "sonner";
 
 /**
  * Las herramientas de la organización viven en las dos URLs: `/app/o/[orgId]/x`
@@ -229,7 +231,12 @@ export function NotificationBell() {
                 tamano="sm"
                 icono={<CheckCheck size={12} />}
                 onClick={async () => {
-                  await api.post("/notifications/read-all").catch(() => {});
+                  // Un gesto explícito: si falla, la lista se vuelve a
+                  // pintar igual que estaba y parece que el botón no hace
+                  // nada. Decirlo cuesta una línea.
+                  await api.post("/notifications/read-all").catch(() => {
+                    toast.error("no se pudieron marcar como leídas");
+                  });
                   await cargar();
                 }}
               >
@@ -256,7 +263,12 @@ export function NotificationBell() {
                       onClick={async () => {
                         setAbierta(false);
                         if (!item.readAt) {
-                          await api.post(`/notifications/${item.id}/read`).catch(() => {});
+                          // Aquí no hay aviso a propósito: es incidental a
+                          // navegar, y un aviso encima de la pantalla a la que
+                          // acabas de entrar estorba más de lo que informa.
+                          await api
+                            .post(`/notifications/${item.id}/read`)
+                            .catch(ignorar("no se pudo marcar la notificación como leída"));
                           await cargar();
                         }
                       }}

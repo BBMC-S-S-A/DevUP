@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
@@ -57,12 +57,22 @@ async function attachTaskTags(db: Db, taskId: string, tagIds: string[]): Promise
 
 const STEP = 1000;
 
-/** Avisa a quien recibe una tarea, salvo que se la haya asignado a sí mismo. */
+/**
+ * Avisa a quien recibe una tarea, salvo que se la haya asignado a sí mismo.
+ *
+ * El aviso no puede tirar la petición: la tarea ya está asignada y no se va a
+ * desasignar porque la campana no suene. Pero tampoco se traga en silencio —
+ * un aviso que no sale y que nadie anota es indistinguible de uno que nadie
+ * leyó, y el síntoma («nunca me entero de lo que me asignan») no señala a la
+ * causa. Por eso el registro es opcional en la firma pero se pasa siempre que
+ * hay uno a mano.
+ */
 async function avisarAsignacion(
   db: Db,
   taskId: string,
   assigneeId: string,
   actorId: string,
+  log?: FastifyBaseLogger,
 ): Promise<void> {
   if (assigneeId === actorId) return;
   const { rows } = await db.query<{ title: string; workspace_id: string }>(
@@ -78,7 +88,9 @@ async function avisarAsignacion(
     "Te han asignado una tarea",
     tarea.title,
     `/app/w/${tarea.workspace_id}/board`,
-  ).catch(() => {});
+  ).catch((fallo: unknown) => {
+    log?.warn({ err: fallo, taskId, assigneeId }, "no se pudo avisar de una asignación");
+  });
 }
 
 export async function taskRoutes(app: FastifyInstance): Promise<void> {
@@ -198,16 +210,20 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const task = await withUser(userId, (db) =>
-      crearTareaEnDb(db, {
-        workspaceId,
-        columnId: body.columnId,
-        title: body.title,
-        description: body.description,
-        assigneeId: body.assigneeId ?? null,
-        dueDate: body.dueDate ?? null,
-        tagIds: body.tagIds,
-        autor: userId,
-      }),
+      crearTareaEnDb(
+        db,
+        {
+          workspaceId,
+          columnId: body.columnId,
+          title: body.title,
+          description: body.description,
+          assigneeId: body.assigneeId ?? null,
+          dueDate: body.dueDate ?? null,
+          tagIds: body.tagIds,
+          autor: userId,
+        },
+        request.log,
+      ),
     );
 
     return reply.status(201).send({ task });
@@ -269,7 +285,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       // Solo cuando la asignación cambia: guardar la tarjeta por cualquier otro
       // motivo no debe volver a avisar a quien ya la tenía.
       if ("assigneeId" in body_ && body.assigneeId && body.assigneeId !== anterior) {
-        await avisarAsignacion(db, taskId, body.assigneeId, userId);
+        await avisarAsignacion(db, taskId, body.assigneeId, userId, request.log);
       }
 
       return { task: await loadTask(db, taskId) };
@@ -331,6 +347,7 @@ export async function crearTareaEnDb(
     tagIds: string[];
     autor: string;
   },
+  log?: FastifyBaseLogger,
 ): Promise<Record<string, unknown>> {
   const { rows } = await db.query<{ id: string }>(
     `insert into tasks
@@ -354,7 +371,7 @@ export async function crearTareaEnDb(
   );
   const taskId = rows[0]!.id;
   await attachTaskTags(db, taskId, datos.tagIds);
-  if (datos.assigneeId) await avisarAsignacion(db, taskId, datos.assigneeId, datos.autor);
+  if (datos.assigneeId) await avisarAsignacion(db, taskId, datos.assigneeId, datos.autor, log);
   return loadTask(db, taskId);
 }
 

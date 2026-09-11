@@ -17,7 +17,7 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 3 | **`/app` deja de ser aterrizaje** y te devuelve donde estabas | **Hecho** |
 | 4 | **Buscar en todas las organizaciones**, desde ⌘K | **Hecho** |
 | 5 | **Estado terminal en las columnas** — que «hecha» exista | **Hecho** |
-| 6 | **Las capturas de error mudas** del camino que se usa a diario | **En curso** |
+| 6 | **Las capturas de error mudas** del camino que se usa a diario | **Hecho, en parte** |
 | 7 | Una superficie por nivel, y el acento reservado | Después |
 
 **Pendiente de verificación visual:** 1, 2 y 3 pasan typecheck y build, pero sin
@@ -80,6 +80,33 @@ se pida, el tablero lo enseña y deja cambiarlo en el sitio, y una tarea
 terminada se ve terminada. Con su caso en `isolation.test.ts`: es una escritura
 nueva, y una escritura que nadie comprueba se descubre el día que alguien de
 otra organización cierra las tareas de la tuya.
+
+---
+
+## 6 · Las capturas mudas
+
+Eran 42 fuera de la zona restringida. La regla que se aplicó, y que ahora vive
+escrita en `lib/fallo.ts`: **si quien lo usa no se entera, tiene que enterarse
+quien lo mantiene.**
+
+- **`ignorar(motivo)`** para lo que de verdad no cambia lo que puedes hacer —un
+  logo que no carga, marcar un canal como leído al entrar—. Se anota y se sigue.
+  El motivo es obligatorio a propósito: escribirlo obliga a contestar «¿y si
+  esto falla, qué?», que es la pregunta que no se hizo las 42 veces.
+- **Aviso de verdad** donde la persona acaba de pedir algo y no ha pasado:
+  guardar la disposición de la mesa, marcar todo como leído. Ahí callarse es
+  mentir.
+- **En el servidor, al registro**: la asignación de una tarea y la invitación
+  por campana. «Nunca me entero de lo que me asignan» es una queja que hay que
+  poder rastrear.
+- **Y uno se queda mudo a propósito**: el `rollback` de `pool.ts`. Si falla es
+  porque la conexión ya está rota, y anotarlo taparía la causa con su
+  consecuencia.
+
+**Lo que queda:** Spotify (7), la voz (6) y `signaling.ts` (5). Son de medios,
+donde muchos fallos sí son ignorables de verdad —permiso denegado,
+reproducción automática bloqueada— y merecen una pasada propia con criterio, no
+un cambio mecánico. Y las 6 de `world/**`, que es zona restringida.
 
 ---
 
