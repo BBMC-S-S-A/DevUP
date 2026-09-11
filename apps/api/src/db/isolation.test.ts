@@ -235,10 +235,13 @@ async function main(): Promise<void> {
     // tabla nueva, así que no hay política nueva — pero sí una escritura nueva,
     // y una escritura que nadie comprueba es una que se descubre el día que
     // alguien de otra organización cierra las tareas de la tuya.
+    // Del workspace PERSONAL de Ana, no del compartido: Carla pertenece al
+    // compartido —ve sus tres columnas, se comprueba arriba— así que marcar una
+    // columna suya sería legítimo. Lo que no puede tocar es el espacio personal.
     const columnaDeAna = await withUser(ana, async (db) => {
       const { rows } = await db.query<{ id: string }>(
         "select id from task_columns where workspace_id = $1 order by position limit 1",
-        [acme.ws],
+        [acme.soloWs],
       );
       return rows[0]!.id;
     });
@@ -258,7 +261,7 @@ async function main(): Promise<void> {
       (await marcarTerminal(bruno, columnaDeAna)) === 0,
     );
     check(
-      "Carla tampoco, aunque sea de la misma organización pero no del workspace",
+      "Carla tampoco, aunque sea de la misma organización: el espacio personal no es suyo",
       (await marcarTerminal(carla, columnaDeAna)) === 0,
     );
 
@@ -957,26 +960,36 @@ async function main(): Promise<void> {
     // organization_id`, y si el aislamiento dependiera de ese `where` —y no de
     // las políticas, como está escrito— esto sería una fuga entre clientes.
     // Aquí es donde se ve que no lo es.
+    // Devuelve los TÍTULOS y no solo el tipo. Sin acotar, «no ve nada» es la
+    // comprobación equivocada: Bruno tiene su propio `secreto-de-bruno.png` y
+    // encontrarlo es lo correcto. Lo que hay que demostrar es que no aparece lo
+    // de Acme, que es una afirmación distinta y mucho más fuerte.
     const buscarEnTodo = (user: string, term: string): Promise<string[]> =>
       withUser(user, async (db) => {
-        const { rows } = await db.query<{ entity: string }>(
-          "select entity from public.global_search(null, $1, 50)",
+        const { rows } = await db.query<{ title: string }>(
+          "select title from public.global_search(null, $1, 50)",
           [term],
         );
-        return rows.map((r) => r.entity);
+        return rows.map((r) => r.title ?? "");
       });
+
+    const deBruno = await buscarEnTodo(bruno, "secreto");
 
     check(
       "Sin acotar, Carla sigue encontrando lo suyo",
-      (await buscarEnTodo(carla, "equipo")).includes("message"),
+      (await buscarEnTodo(carla, "equipo")).length > 0,
+    );
+    check(
+      "Sin acotar, Bruno SÍ encuentra su propio archivo",
+      deBruno.includes("secreto-de-bruno.png"),
+    );
+    check(
+      "Sin acotar, Bruno NO ve el archivo de Acme — y esto es lo que importa",
+      !deBruno.includes("secreto-de-ana.png"),
     );
     check(
       "Sin acotar, Bruno NO ve el mensaje de Acme",
       (await buscarEnTodo(bruno, "equipo")).length === 0,
-    );
-    check(
-      "Sin acotar, Bruno NO ve el archivo de Acme",
-      (await buscarEnTodo(bruno, "secreto")).length === 0,
     );
     check(
       "Sin acotar, Bruno NO ve el cliente de Acme",
@@ -984,7 +997,7 @@ async function main(): Promise<void> {
     );
     check(
       "Sin acotar, Carla tampoco ve el canal privado ajeno",
-      !(await buscarEnTodo(carla, "dirección")).includes("message"),
+      !(await buscarEnTodo(carla, "dirección")).some((t) => t.includes("dirección")),
     );
 
     // --- Bóveda de credenciales ------------------------------------------------
