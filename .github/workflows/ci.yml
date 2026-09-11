@@ -111,6 +111,14 @@ jobs:
         # uuid al modelo. Las tres se rompen en silencio.
         run: npm run test:mcp
 
+      - name: La navegación de la web
+        # Las primeras pruebas de `apps/web`, y no son un trámite: la regla de
+        # a dónde lleva cada resultado estaba escrita dos veces y ya había
+        # divergido entre las dos copias. Aterrizar en el sitio equivocado no
+        # se parece a un error, así que nadie lo reporta como tal — que es
+        # justo para lo que sirve una prueba.
+        run: npm run test:web
+
       - name: Migraciones idempotentes
         # Aplicarlas dos veces no debe cambiar nada ni fallar. Detecta la
         # migración que se editó después de aplicarse, que es la forma más

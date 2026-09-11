@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Organization, SearchResult } from "@/lib/api";
 import { api } from "@/lib/datos";
+import { destinoDeResultado } from "@/lib/enlaces";
 import { Rotulo } from "./Superficies";
 
 /**
@@ -54,36 +55,6 @@ const NOMBRES: Record<SearchResult["entity"], string> = {
   service: "Servicio",
   opportunity: "Venta",
 };
-
-function destino(orgId: string, workspaceId: string | undefined, r: SearchResult): string {
-  switch (r.entity) {
-    case "message":
-      return r.workspaceId && r.channelId
-        ? `/app/w/${r.workspaceId}/c/${r.channelId}`
-        : "/app";
-    case "file":
-      // Mismo motivo que en /buscar: la raíz del workspace ya no es la
-      // biblioteca, así que un archivo necesita decirlo explícitamente.
-      return r.workspaceId ? `/app/w/${r.workspaceId}/archivos` : "/app";
-    case "task":
-      return r.workspaceId ? `/app/w/${r.workspaceId}/board` : "/app";
-    default: {
-      // Ventas no es de ningún workspace en concreto, pero si se está mirando
-      // desde uno, entrar ahí no debe cambiar de armazón — mismo motivo que
-      // `NavegacionOrganizacion`.
-      //
-      // Con la búsqueda cruzando organizaciones esto ya no puede darse por
-      // hecho: un cliente puede salir de OTRA organización, y entonces
-      // quedarse en el armazón del espacio actual llevaría a una pantalla de
-      // ventas que no es la suya. Solo se conserva el armazón cuando el
-      // resultado es de aquí.
-      const suya = r.organizationId ?? orgId;
-      return workspaceId && suya === orgId
-        ? `/app/w/${workspaceId}/ventas`
-        : `/app/o/${suya}/ventas`;
-    }
-  }
-}
 
 export function PaletaComandos({
   orgId,
@@ -180,7 +151,7 @@ export function PaletaComandos({
   const ir = useCallback(
     (r: SearchResult) => {
       setAbierta(false);
-      router.push(destino(orgId, workspaceId, r));
+      router.push(destinoDeResultado(r, { orgId, workspaceId }));
     },
     [orgId, workspaceId, router],
   );

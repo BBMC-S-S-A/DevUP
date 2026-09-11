@@ -18,7 +18,8 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 4 | **Buscar en todas las organizaciones**, desde ⌘K | **Hecho** |
 | 5 | **Estado terminal en las columnas** — que «hecha» exista | **Hecho** |
 | 6 | **Las capturas de error mudas** del camino que se usa a diario | **Hecho, en parte** |
-| 7 | Una superficie por nivel, y el acento reservado | Después |
+| 7 | **Las primeras pruebas de `apps/web`**, y fuera una duplicación | **Hecho** |
+| 8 | Una superficie por nivel, y el acento reservado | Después |
 
 **Pendiente de verificación visual:** 1, 2 y 3 pasan typecheck y build, pero sin
 Docker en este entorno no se ha podido levantar la pila y verlos pintados. Es la
@@ -107,6 +108,22 @@ quien lo mantiene.**
 donde muchos fallos sí son ignorables de verdad —permiso denegado,
 reproducción automática bloqueada— y merecen una pasada propia con criterio, no
 un cambio mecánico. Y las 6 de `world/**`, que es zona restringida.
+
+---
+
+## 7 · Las primeras pruebas de la web
+
+`apps/web` no tenía ni una, y eso no es solo una carencia: es lo que bloquea
+partir `ventas`, que lleva un mes marcada para dividirse y en ese mes creció.
+Mover código sin red se hace a ciegas.
+
+Se empezó por la navegación porque era la lógica **duplicada** —`destino()`
+estaba escrita dos veces y ya distinta entre las dos copias— y porque falla de
+la peor manera: aterrizar en el sitio equivocado no se parece a un error, así
+que nadie lo reporta como tal.
+
+Ahora vive una vez en `lib/enlaces.ts`, con 13 comprobaciones, y corre en CI.
+Sin marco de pruebas, igual que el resto del repositorio: `tsx` y un contador.
 
 ---
 

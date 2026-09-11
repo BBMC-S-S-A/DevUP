@@ -21,6 +21,7 @@ import { BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { ApiError, type SearchResult, api } from "@/lib/api";
 import { useOrgId } from "@/lib/workspace-context";
+import { destinoDeResultado } from "@/lib/enlaces";
 
 /**
  * Búsqueda global (S6): mensajes, archivos, tareas, clientes, servicios y
@@ -65,30 +66,6 @@ const ORDEN: SearchResult["entity"][] = [
   "service",
   "opportunity",
 ];
-
-function destino(orgId: string, result: SearchResult): string {
-  switch (result.entity) {
-    case "message":
-      return result.workspaceId && result.channelId
-        ? `/app/w/${result.workspaceId}/c/${result.channelId}`
-        : `/app`;
-    case "file":
-      // La raíz del workspace dejó de ser la biblioteca — ver
-      // `w/[workspaceId]/page.tsx` — así que un resultado de archivo tiene
-      // que decir «archivos» explícitamente o aterriza en un canal de chat.
-      return result.workspaceId ? `/app/w/${result.workspaceId}/archivos` : `/app`;
-    case "task":
-      return result.workspaceId ? `/app/w/${result.workspaceId}/board` : `/app`;
-    case "client":
-    case "service":
-    case "opportunity":
-      // La organización del RESULTADO, no la de la pantalla. Desde que la
-      // búsqueda cruza organizaciones, un cliente puede salir de otra, y usar
-      // la de aquí llevaría a un embudo de ventas que no es el suyo — sin dar
-      // error, solo enseñando lo que no se buscaba.
-      return `/app/o/${result.organizationId ?? orgId}/ventas`;
-  }
-}
 
 export default function BuscarPage() {
   return (
@@ -319,7 +296,7 @@ function Buscador() {
                         }
                       >
                         <Link
-                          href={destino(orgId, result)}
+                          href={destinoDeResultado(result, { orgId })}
                           className="presionable group flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3
                             hover:border-line-strong hover:bg-raised"
                         >
