@@ -22,6 +22,27 @@ import { Rotulo } from "./Superficies";
  * enseña junto al título.
  */
 
+/**
+ * El ancho se elige por la FORMA del contenido, no por gusto.
+ *
+ * Estaba decidiéndose pantalla a pantalla y salió lo esperable: todas las
+ * pantallas reales acabaron en `lg` —896 px— y en un monitor de 1900 eso deja
+ * más de la mitad vacía. La queja al usarlo fue exactamente esa.
+ *
+ * Pero ensanchar todo tampoco: una línea de texto de 1900 px no se lee mejor,
+ * se lee peor, y un formulario estirado a lo ancho es más difícil de rellenar
+ * que uno en columna. Así que la regla, y no el caso por caso:
+ *
+ * - `sm` / `md`: texto para leer y formularios. Noticias, Ajustes, Mi cuenta.
+ * - `lg` / `xl`: listas con prosa dentro, donde la línea sigue importando.
+ *   La auditoría, las migraciones y las integraciones.
+ * - `completo`: lo que está hecho de columnas, tarjetas o lienzo, donde el
+ *   ancho es capacidad y no decoración. El embudo, GitHub, la infraestructura,
+ *   el tablero.
+ *
+ * La pregunta para decidir: ¿el ancho de más se llena de CONTENIDO o de LÍNEA?
+ * Si es contenido, `completo`. Si es línea, columna.
+ */
 const ANCHOS = {
   sm: "max-w-2xl",
   md: "max-w-3xl",

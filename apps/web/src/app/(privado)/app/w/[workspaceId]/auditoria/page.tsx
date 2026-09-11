@@ -171,7 +171,7 @@ export default function AuditoriaPage() {
       titulo="Auditoría"
       rotulo="Todo lo que hay que mirar en este repositorio, junto"
       icono={<ScanSearch size={20} />}
-      ancho="lg"
+      ancho="xl"
       acciones={
         lista.length > 1 ? (
           <Desplegable

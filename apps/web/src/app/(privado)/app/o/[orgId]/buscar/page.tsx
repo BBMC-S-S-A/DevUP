@@ -217,7 +217,10 @@ function Buscador() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-6 py-8">
+      {/* El campo se queda estrecho arriba —una caja de búsqueda de 1200 px no
+          se lee mejor, se lee peor— pero los resultados no: son una lista densa
+          y en un monitor ancho cabían menos de la mitad de los que caben. */}
+      <main className="mx-auto max-w-5xl px-6 py-8">
         {error && (
           <div className="devup-entrada mb-5 flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger/[0.07] px-3.5 py-2.5">
             <SearchX size={14} className="mt-px shrink-0 text-danger" />

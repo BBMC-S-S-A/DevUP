@@ -129,7 +129,7 @@ export default function OrganizationsPage() {
   const totalWorkspaces = Object.values(workspaces).reduce((suma, lista) => suma + lista.length, 0);
 
   return (
-    <main className="mx-auto max-w-4xl px-5 py-10 sm:px-6">
+    <main className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
       <Suspense fallback={null}>
         <SpotifyRedirectToast />
       </Suspense>

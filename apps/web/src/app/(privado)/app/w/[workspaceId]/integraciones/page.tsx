@@ -70,7 +70,7 @@ export default function IntegracionesPage() {
       titulo="Integraciones"
       rotulo="Lo que estáis haciendo a mano, y qué os lo ahorraría"
       icono={<Lightbulb size={20} />}
-      ancho="lg"
+      ancho="xl"
       acciones={
         lista.length > 1 ? (
           <Desplegable
