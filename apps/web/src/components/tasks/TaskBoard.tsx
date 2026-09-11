@@ -7,6 +7,7 @@ import {
   Paperclip,
   Plus,
   CircleCheck,
+  Pencil,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -76,6 +77,8 @@ export function TaskBoard({
   // sigue decidiendo `dragging` y el `afterTaskId` que se pasa a `drop`.
   const [enElAire, setEnElAire] = useState<string | null>(null);
   const [huecoTras, setHuecoTras] = useState<string | null>(null);
+  /** Qué columna se está renombrando ahora mismo, si alguna. */
+  const [renombrando, setRenombrando] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -98,6 +101,65 @@ export function TaskBoard({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const confirmarEnTablero = useConfirmar();
+
+  /**
+   * Renombrar una columna.
+   *
+   * `PATCH /columns/:id` acepta el nombre desde que se escribió y **no lo
+   * llamaba nadie**: una columna mal escrita se quedaba así para siempre, o
+   * había que borrarla con sus tareas dentro y rehacerla. Ahora que una columna
+   * puede además significar «aquí se termina», cómo se llama importa más.
+   *
+   * Se edita EN EL SITIO y no en un diálogo: renombrar una columna es cambiar
+   * una palabra, y abrir una ventana encima para eso interrumpe más de lo que
+   * ayuda. Un `prompt` del navegador habría sido más corto de escribir y se ve
+   * como lo que es — una pieza de otra aplicación metida dentro de esta.
+   */
+  const renombrarColumna = async (column: BoardColumn, propuesto: string) => {
+    const nombre = propuesto.trim();
+    if (!nombre || nombre === column.name) return;
+    setColumns((previas) => previas.map((c) => (c.id === column.id ? { ...c, name: nombre } : c)));
+    try {
+      await api.patch(`/columns/${column.id}`, { name: nombre });
+    } catch {
+      setColumns((previas) =>
+        previas.map((c) => (c.id === column.id ? { ...c, name: column.name } : c)),
+      );
+      toast.error("no se pudo renombrar la columna");
+    }
+  };
+
+  /**
+   * Borrar una columna, con sus tareas dentro.
+   *
+   * `DELETE /columns/:id` tampoco lo llamaba nadie, así que una columna creada
+   * por error no se podía quitar. La ruta avisa en su comentario de que las
+   * tareas caen por la cascada de la clave foránea y de que «la interfaz avisa
+   * antes» — esa interfaz no existía, y aquí está: se dice cuántas tareas se
+   * lleva por delante, porque «¿eliminar columna?» no deja claro que se borra
+   * también lo que hay dentro.
+   */
+  const borrarColumna = async (column: BoardColumn) => {
+    const cuantas = column.tasks.length;
+    const ok = await confirmarEnTablero({
+      titulo: `¿Eliminar la columna «${column.name}»?`,
+      descripcion:
+        cuantas > 0
+          ? `Se borran también sus ${cuantas} ${cuantas === 1 ? "tarea" : "tareas"}. No se puede deshacer.`
+          : "Está vacía, así que no se pierde ninguna tarea.",
+      accion: "Eliminar",
+      peligro: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/columns/${column.id}`);
+      await load();
+    } catch {
+      toast.error("no se pudo eliminar la columna");
+    }
+  };
 
   /**
    * Marca o desmarca una columna como «aquí se termina».
@@ -226,9 +288,40 @@ export function TaskBoard({
                       sobrevolada ? "bg-accent" : "bg-line-strong"
                     }`}
                   />
-                  <h3 className="min-w-0 flex-1 truncate font-display text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                    {column.name}
-                  </h3>
+                  {renombrando === column.id ? (
+                    <input
+                      autoFocus
+                      defaultValue={column.name}
+                      maxLength={40}
+                      aria-label="Nombre de la columna"
+                      onBlur={(e) => {
+                        setRenombrando(null);
+                        void renombrarColumna(column, e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        // Intro guarda y Escape cancela, que es lo que espera
+                        // cualquiera que haya renombrado algo alguna vez. El
+                        // guardado real lo hace `onBlur`, y quitar el foco es
+                        // lo que hacen las dos teclas.
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") {
+                          e.currentTarget.value = column.name;
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="min-w-0 flex-1 rounded-md border border-accent/50 bg-canvas px-1.5
+                        py-0.5 font-display text-[11px] font-semibold uppercase tracking-[0.18em]
+                        text-ink outline-none"
+                    />
+                  ) : (
+                    <h3
+                      onDoubleClick={() => setRenombrando(column.id)}
+                      title="Doble clic para renombrar"
+                      className="min-w-0 flex-1 truncate font-display text-[11px] font-semibold uppercase tracking-[0.18em] text-muted"
+                    >
+                      {column.name}
+                    </h3>
+                  )}
                   {/* Que esta columna cierra tareas se dice aquí y se cambia
                       aquí. Antes «hecho» era solo el nombre que alguien
                       escribió, y nada del producto podía leerlo: el MCP
@@ -252,6 +345,26 @@ export function TaskBoard({
                     }`}
                   >
                     <CircleCheck size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenombrando(column.id)}
+                    title="Renombrar la columna"
+                    aria-label={`Renombrar «${column.name}»`}
+                    className="presionable shrink-0 rounded-lg p-0.5 text-line-strong
+                      transition-colors hover:text-muted"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void borrarColumna(column)}
+                    title="Eliminar la columna"
+                    aria-label={`Eliminar «${column.name}»`}
+                    className="presionable shrink-0 rounded-lg p-0.5 text-line-strong
+                      transition-colors hover:text-danger"
+                  >
+                    <Trash2 size={12} />
                   </button>
                   <span className="shrink-0 rounded-lg border border-line bg-canvas/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted">
                     {column.tasks.length}
