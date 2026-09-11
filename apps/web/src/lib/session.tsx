@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { type User, api } from "./api";
+import { olvidarUltimoEspacio } from "./ultimo-espacio";
 
 type SessionState = {
   user: User | null;
@@ -50,6 +51,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // la aplicación en este navegador, que suele ser lo que quiere quien cierra
     // sesión en un ordenador prestado.
     await api.post("/auth/logout").catch(() => {});
+    // Y se olvida el último espacio. Sin esto, en ese mismo ordenador prestado
+    // la siguiente persona que entra aterriza en el espacio de la anterior:
+    // `/app` entra al espacio recordado sin validarlo a propósito, así que se
+    // come una pantalla de error que no es suya. No se ve nada —eso lo impide
+    // RLS— pero es la misma persona la que sobra en la ecuación.
+    olvidarUltimoEspacio();
     setUser(null);
     router.push("/login");
   }, [router]);

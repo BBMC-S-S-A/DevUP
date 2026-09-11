@@ -81,6 +81,20 @@ export function useWorkspaceIdOpcional(): string | null {
   return params.workspaceId ?? workspace?.id ?? null;
 }
 
+/**
+ * La organización actual, o `null` si esta pantalla no está dentro de ninguna.
+ *
+ * Misma pareja que arriba y por el mismo motivo. La campana de notificaciones
+ * se pinta también en `/app/organizaciones`, donde no hay ni organización ni
+ * espacio, así que preguntar con `useOrgId` allí sería reventar la barra
+ * entera por querer saber algo que allí no existe.
+ */
+export function useOrgIdOpcional(): string | null {
+  const params = useParams<{ orgId?: string }>();
+  const workspace = useContext(WorkspaceContext);
+  return params.orgId ?? workspace?.organizationId ?? null;
+}
+
 export function useWorkspaceId(): string {
   const params = useParams<{ workspaceId?: string }>();
   const workspace = useContext(WorkspaceContext);

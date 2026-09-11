@@ -73,14 +73,31 @@ export function destinoDeResultado(
  * aquí, con el contexto de quien lee delante.
  *
  * Ese era el fallo de «Noticias te saca del espacio».
+ *
+ * SOLO SI EL ESPACIO ES DE ESA ORGANIZACIÓN, y esta es la parte que faltaba.
+ * Quien pertenece a dos empresas puede estar en un espacio de B cuando le
+ * llega la notificación de una noticia de A. Traducir a ciegas lo dejaba en
+ * las noticias de B —donde esa noticia no está— sin que nada explicara por
+ * qué. No es una fuga, es peor de encontrar: contenido equivocado en silencio.
+ * Cuando no coinciden se deja la forma larga, que cambia de armazón pero
+ * llega a donde decía el enlace.
+ *
+ * Es la misma comprobación que `destinoDeResultado` hace veinte líneas más
+ * arriba (`suya === desde.orgId`). Que una de las dos la tuviera y la otra no
+ * es exactamente el motivo de que las dos vivan en este archivo.
  */
 const HERRAMIENTAS_DE_ORGANIZACION = new Set(["noticias", "ventas"]);
 
-export function enlaceDentroDelEspacio(link: string, workspaceId: string | null): string {
+export function enlaceDentroDelEspacio(
+  link: string,
+  workspaceId: string | null,
+  orgActual: string | null,
+): string {
   if (!workspaceId) return link;
   const partes = link.split("/");
   // ["", "app", "o", orgId, herramienta, ...resto]
   if (partes[1] !== "app" || partes[2] !== "o" || !partes[4]) return link;
   if (!HERRAMIENTAS_DE_ORGANIZACION.has(partes[4])) return link;
+  if (!orgActual || partes[3] !== orgActual) return link;
   return ["", "app", "w", workspaceId, ...partes.slice(4)].join("/");
 }
