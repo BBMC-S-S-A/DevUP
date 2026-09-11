@@ -18,6 +18,7 @@ import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useOrgId } from "@/lib/workspace-context";
+import { diasHasta, fechaCorta, hoyLocal } from "@/lib/fechas";
 import { ApiError, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { tinte } from "@/lib/tinte";
@@ -119,8 +120,12 @@ const money = (cents: number): string =>
     maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100);
 
-const fecha = (iso: string): string =>
-  new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+// `fechaCorta` y no `new Date(iso)`: `expected_close` y `ends_on` son columnas
+// `date`, así que llegan como «2026-09-11» sin hora. `new Date` las interpreta
+// como medianoche UTC y al oeste de Greenwich —Colombia es UTC−5— se pintaba el
+// día ANTERIOR. Aquí se pintaba «10 sept» para un cierre del once, sin fallar y
+// sin avisar. Ver `lib/fechas.ts`.
+const fecha = (iso: string): string => fechaCorta(iso);
 
 /**
  * Cuántos días faltan hasta una fecha de cierre esperada, contra el mismo
@@ -130,11 +135,6 @@ const fecha = (iso: string): string =>
  * tres es el umbral que usa ese ejemplo y el que se conserva aquí.
  */
 const DIAS_URGENCIA = 3;
-function diasParaCerrar(expectedClose: string, hoy: Date): number {
-  const cierre = new Date(expectedClose);
-  const msPorDia = 1000 * 60 * 60 * 24;
-  return Math.round((cierre.getTime() - hoy.getTime()) / msPorDia);
-}
 
 /**
  * Escalón de entrada de una lista. El índice va topado a propósito: en un
@@ -228,7 +228,9 @@ export default function SalesPage() {
   const wonCount = totals.get("won")!.count;
   // Un solo «hoy» para todo el tablero: si cada tarjeta pidiera la hora, dos
   // ventas a un milisegundo de la medianoche podrían leer días distintos.
-  const hoy = new Date();
+  // En calendario y no un instante: restar una fecha sin hora contra un `Date`
+  // con hora daba un día de más o de menos según la hora a la que se mirara.
+  const hoy = hoyLocal();
 
   if (loading) return <EsqueletoEmbudo />;
 
@@ -439,7 +441,7 @@ export default function SalesPage() {
                     // tarjeta entera, y los dos con un dato real detrás.
                     const restan =
                       deal.expectedClose && stage.id !== "won" && stage.id !== "lost"
-                        ? diasParaCerrar(deal.expectedClose, hoy)
+                        ? diasHasta(deal.expectedClose, hoy)
                         : null;
                     const urgente = restan !== null && restan <= DIAS_URGENCIA;
                     const material =

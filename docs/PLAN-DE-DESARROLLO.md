@@ -19,11 +19,18 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 5 | **Estado terminal en las columnas** — que «hecha» exista | **Hecho** |
 | 6 | **Las capturas de error mudas** del camino que se usa a diario | **Hecho, en parte** |
 | 7 | **Las primeras pruebas de `apps/web`**, y fuera una duplicación | **Hecho** |
-| 8 | Una superficie por nivel, y el acento reservado | Después |
+| 8 | **El embudo pintaba el día anterior**, y nadie lo veía | **Hecho** |
+| 9 | Una superficie por nivel, y el acento reservado | Después |
 
-**Pendiente de verificación visual:** 1, 2 y 3 pasan typecheck y build, pero sin
-Docker en este entorno no se ha podido levantar la pila y verlos pintados. Es la
-comprobación que falta, y en cambios de marco es la que importa.
+**Cómo se verifica desde aquí.** No hay Docker ni Postgres en el entorno donde
+se escribe esto, así que `test:rls` no se puede correr en local — pero **sí
+corre en CI**, contra un Postgres 17 de verdad. Empujar es la forma de
+verificarlo, y ya sirvió: cazó dos comprobaciones mal planteadas en el mismo día
+que se escribieron.
+
+**Lo que sigue sin verificarse es lo visual.** Los puntos 1, 2 y 3 pasan
+typecheck y build, pero nadie los ha visto pintados. En cambios de marco esa es
+la comprobación que importa, y no la puede hacer CI.
 
 ---
 
@@ -124,6 +131,26 @@ que nadie lo reporta como tal.
 
 Ahora vive una vez en `lib/enlaces.ts`, con 13 comprobaciones, y corre en CI.
 Sin marco de pruebas, igual que el resto del repositorio: `tsx` y un contador.
+
+---
+
+## 8 · El embudo pintaba el día anterior
+
+Encontrado buscando duplicación, no buscando fallos. `expected_close` y
+`ends_on` son columnas `date`, así que llegan como «2026-09-11» sin hora.
+`new Date("2026-09-11")` no es el once: es **medianoche UTC** del once, y al
+oeste de Greenwich eso cae el día anterior.
+
+**En Colombia, UTC−5, un cierre del 11 se pintaba «10 sept».** Sin fallar, sin
+avisar, y solo visible comparando la pantalla con lo que se escribió.
+`diasParaCerrar` lo tenía doble: además restaba esa medianoche UTC contra un
+`Date` con hora, así que el resultado cambiaba según la hora a la que miraras.
+
+`TaskBoard` ya lo tenía resuelto y lo dejó escrito en un comentario. Que la
+solución viviera dentro de un componente es justo por lo que el segundo sitio
+volvió a caer. Ahora vive en `lib/fechas.ts`, con 24 comprobaciones que **fijan
+la zona horaria a una del oeste** — sin eso la prueba pasaría en Madrid y el
+fallo seguiría en Bogotá, que es exactamente cómo dura meses.
 
 ---
 

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { toast } from "sonner";
+import { fechaCorta, hoyLocal, iniciales } from "@/lib/fechas";
 import {
   type BoardColumn,
   type OrganizationMember,
@@ -26,39 +27,6 @@ import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { AreaTexto, Desplegable } from "@/components/ui/Field";
-
-const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-/**
- * La fecha se parte a mano en vez de pasarla por `Date`: `new Date("2026-08-17")`
- * es medianoche UTC, así que al oeste de Greenwich un vencimiento se mostraría
- * el día anterior. Aquí solo se lee el trozo de calendario que llega y no se
- * reinterpreta nada.
- */
-function fechaCorta(iso: string, anioActual: string): string {
-  const [anio, mes, dia] = iso.slice(0, 10).split("-");
-  const nombre = MESES[Number(mes) - 1];
-  if (!nombre || !dia) return iso;
-  return `${Number(dia)} ${nombre}${anio === anioActual ? "" : ` ${anio.slice(2)}`}`;
-}
-
-/** Hoy en calendario local, en el mismo formato que llega del servidor. */
-function hoyLocal(): string {
-  const ahora = new Date();
-  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
-  const dia = String(ahora.getDate()).padStart(2, "0");
-  return `${ahora.getFullYear()}-${mes}-${dia}`;
-}
-
-/**
- * Dos letras del responsable. En una tarjeta de 300 px el nombre completo se
- * corta casi siempre; el disco con las iniciales es lo que de verdad se
- * reconoce de un vistazo, y el nombre queda al lado para desempatar.
- */
-function iniciales(nombre: string): string {
-  const partes = nombre.trim().split(/\s+/).slice(0, 2);
-  return partes.map((parte) => parte[0]?.toUpperCase() ?? "").join("") || "?";
-}
 
 /** Tono del vencimiento: vencido grita, hoy avisa, el resto solo informa. */
 function tonoVencimiento(dueDate: string, hoy: string): string {

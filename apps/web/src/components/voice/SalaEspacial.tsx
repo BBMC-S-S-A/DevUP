@@ -5,6 +5,7 @@ import { Mic, MicOff } from "lucide-react";
 import { tinte } from "@/lib/tinte";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
 import { HiddenAudio } from "./ParticipantTile";
+import { iniciales } from "@/lib/fechas";
 
 /**
  * La sala como un SITIO, no como una rejilla de tarjetas.
@@ -30,16 +31,6 @@ import { HiddenAudio } from "./ParticipantTile";
 // estable por persona para sus avatares, y era o compartirlo o dejar que las
 // dos copias divergieran el día que cambie la paleta.
 
-function iniciales(nombre: string): string {
-  return (
-    nombre
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((p) => p.charAt(0).toUpperCase())
-      .join("") || "?"
-  );
-}
 
 export type EnLaSala = {
   displayName: string;
