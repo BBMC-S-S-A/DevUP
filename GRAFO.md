@@ -3,7 +3,7 @@
 > Generado leyendo el código con `npm run grafo`. **No se edita a mano**: lo que se escriba aquí
 > desaparece en la siguiente pasada. Última: 2026-09-11.
 
-Hoy el proyecto tiene **23 áreas de API**, **17 pantallas**, **12 componentes que hablan con la API** y **50 tablas** repartidas en 35 migraciones.
+Hoy el proyecto tiene **23 áreas de API**, **18 pantallas**, **12 componentes que hablan con la API** y **50 tablas** repartidas en 37 migraciones.
 
 ## Qué áreas se tocan de verdad
 
@@ -11,7 +11,7 @@ Dos áreas están acopladas cuando escriben en la misma tabla, se importen o no 
 Ese es el único parentesco que cuenta, y es el que enseña este diagrama.
 
 Las tablas que tocan 4 áreas o más quedan fuera: son el armazón del producto y no
-distinguen a nadie —con ellas dentro, todo aparece conectado con todo—. Hoy son `connections`, `files`, `profiles`, `workspaces`.
+distinguen a nadie —con ellas dentro, todo aparece conectado con todo—. Hoy son `channels`, `connections`, `files`, `profiles`, `workspaces`.
 
 ```mermaid
 graph LR
@@ -48,10 +48,10 @@ graph LR
   connections --- |github_repos| github
   connections --- |connection_secrets| spotify
   files --- |tags| tasks
-  messages --- |channels| workspaces
-  messages --- |channels, messages| world
+  messages --- |messages| workspaces
+  messages --- |messages| world
   tasks --- |task_columns, tasks| world
-  workspaces --- |channels| world
+  workspaces --- |messages| world
   classDef isla stroke-dasharray: 4 3;
 ```
 
@@ -72,8 +72,9 @@ graph LR
     P__app_o__orgId_buscar["/app/o/:orgId/buscar"]
     P__app_o__orgId_noticias["/app/o/:orgId/noticias"]
     P__app_o__orgId_ventas["/app/o/:orgId/ventas"]
-    P__app["/app"]
+    P__app_organizaciones["/app/organizaciones"]
     P__app_w__workspaceId_asistente["/app/w/:workspaceId/asistente"]
+    P__app_w__workspaceId_auditoria["/app/w/:workspaceId/auditoria"]
     P__app_w__workspaceId_base_de_datos["/app/w/:workspaceId/base-de-datos"]
     P__app_w__workspaceId_cuenta["/app/w/:workspaceId/cuenta"]
     P__app_w__workspaceId_github["/app/w/:workspaceId/github"]
@@ -183,12 +184,14 @@ graph LR
   P__app_o__orgId_noticias --> A_announcements
   P__app_o__orgId_noticias --> A_workspaces
   P__app_o__orgId_ventas --> A_sales
-  P__app --> A_account
-  P__app --> A_workspaces
+  P__app_organizaciones --> A_account
+  P__app_organizaciones --> A_workspaces
   P__app_w__workspaceId_asistente --> A_asistente
+  P__app_w__workspaceId_auditoria --> A_github
   P__app_w__workspaceId_base_de_datos --> A_github
   P__app_w__workspaceId_cuenta --> A_auth
   P__app_w__workspaceId_cuenta --> A_connections
+  P__app_w__workspaceId_cuenta --> A_preferences
   P__app_w__workspaceId_github --> A_connections
   P__app_w__workspaceId_github --> A_github
   P__app_w__workspaceId_infraestructura --> A_connections
@@ -272,6 +275,7 @@ graph LR
   A_recordings --> T_call_recording_consents
   A_recordings --> T_call_recordings
   A_recordings --> T_call_sessions
+  A_recordings --> T_channels
   A_recordings --> T_files
   A_recordings --> T_profiles
   A_sales --> T_clients
@@ -292,6 +296,7 @@ graph LR
   A_tasks --> T_tasks
   A_tasks --> T_workspaces
   A_workspaces --> T_channels
+  A_workspaces --> T_messages
   A_workspaces --> T_organization_links
   A_workspaces --> T_organization_members
   A_workspaces --> T_organizations
@@ -329,12 +334,12 @@ graph LR
 | `notifications` | 3 | `notifications`, `profiles` | — |
 | `oauth` | 5 | `oauth_clients`, `oauth_codes` | — |
 | `preferences` | 5 | `profiles`, `user_dashboard_prefs`, `user_workbench_prefs` | — |
-| `recordings` | 2 | `call_recording_consents`, `call_recordings`, `call_sessions`, `files`, `profiles` | — |
+| `recordings` | 2 | `call_recording_consents`, `call_recordings`, `call_sessions`, `channels`, `files`, `profiles` | — |
 | `sales` | 15 | `clients`, `goals`, `opportunities`, `opportunity_items`, `profiles`, `services` | — |
-| `search` | 1 | — | — |
+| `search` | 2 | — | — |
 | `spotify` | 12 | `channel_listening_sessions`, `channel_queue_tracks`, `connection_secrets`, `connections` | — |
 | `tasks` | 8 | `files`, `profiles`, `tags`, `task_columns`, `task_tags`, `tasks`, `workspaces` | — |
-| `workspaces` | 21 | `channels`, `organization_links`, `organization_members`, `organizations`, `profiles`, `workspaces` | — |
+| `workspaces` | 21 | `channels`, `messages`, `organization_links`, `organization_members`, `organizations`, `profiles`, `workspaces` | — |
 | `world` | 8 | `channels`, `files`, `messages`, `task_columns`, `tasks`, `world_avatars`, `world_outfits`, `world_props`, `world_rooms`, `world_zones` | — |
 | `youtube` | 3 | — | `youtube` |
 
@@ -446,6 +451,7 @@ graph LR
 | POST | `/opportunities/:dealId/items` | `sales` |
 | PATCH | `/opportunity-items/:itemId` | `sales` |
 | DELETE | `/opportunity-items/:itemId` | `sales` |
+| GET | `/search` | `search` |
 | GET | `/organizations/:orgId/search` | `search` |
 | GET | `/integrations/spotify/authorize` | `spotify` |
 | GET | `/integrations/spotify/callback` | `spotify` |
@@ -515,7 +521,7 @@ graph LR
 | `channel_members` | `0001_core.sql` | — |
 | `channel_queue_tracks` | `0017_spotify.sql` | `spotify` |
 | `channel_reads` | `0005_messages.sql` | — |
-| `channels` | `0001_core.sql` | `messages`, `workspaces`, `world` |
+| `channels` | `0001_core.sql` | `messages`, `recordings`, `workspaces`, `world` |
 | `clients` | `0012_ventas.sql` | `sales` |
 | `connection_secrets` | `0015_vault.sql` | `connections`, `spotify` |
 | `connections` | `0015_vault.sql` | `asistente`, `connections`, `github`, `spotify` |
@@ -527,7 +533,7 @@ graph LR
 | `github_repos` | `0016_github.sql` | `connections`, `github` |
 | `goals` | `0013_objetivos.sql` | `sales` |
 | `invitations` | `0006_invitations_notifications.sql` | `account` |
-| `messages` | `0005_messages.sql` | `messages`, `world` |
+| `messages` | `0005_messages.sql` | `messages`, `workspaces`, `world` |
 | `notifications` | `0006_invitations_notifications.sql` | `notifications` |
 | `oauth_clients` | `0032_oauth_clientes.sql` | `oauth` |
 | `oauth_codes` | `0032_oauth_clientes.sql` | `oauth` |
@@ -559,15 +565,16 @@ graph LR
 
 | Pantalla o componente | Áreas que consume |
 |---|---|
-| `/app` | `account`, `workspaces` |
 | `/app/autorizar-agente` | `oauth` |
 | `/app/o/:orgId/ajustes` | `account`, `workspaces` |
 | `/app/o/:orgId/buscar` | `search` |
 | `/app/o/:orgId/noticias` | `announcements`, `workspaces` |
 | `/app/o/:orgId/ventas` | `sales` |
+| `/app/organizaciones` | `account`, `workspaces` |
 | `/app/w/:workspaceId/asistente` | `asistente` |
+| `/app/w/:workspaceId/auditoria` | `github` |
 | `/app/w/:workspaceId/base-de-datos` | `github` |
-| `/app/w/:workspaceId/cuenta` | `auth`, `connections` |
+| `/app/w/:workspaceId/cuenta` | `auth`, `connections`, `preferences` |
 | `/app/w/:workspaceId/github` | `connections`, `github` |
 | `/app/w/:workspaceId/infraestructura` | `connections`, `infraestructura` |
 | `/app/w/:workspaceId/integraciones` | `github` |

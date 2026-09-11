@@ -17,8 +17,10 @@ corregirlo antes que nada.**
 Dije que las tablas de entornos y despliegues «no las llena nadie». Es falso.
 En `routes/infraestructura.ts` está todo el camino escrito:
 
-- `POST /organizations/:orgId/environments` inserta el entorno **y sincroniza
-  en la misma petición**.
+- `POST /workspaces/:workspaceId/environments` inserta el entorno **y sincroniza
+  en la misma petición**. (Esta auditoría se escribió cuando la ruta colgaba de
+  la organización; la migración 0035 la pasó al workspace, y el fondo de lo que
+  dice este párrafo no cambia.)
 - `sincronizarEntorno()` pide los despliegues al proveedor con el token de la
   conexión, los filtra por entorno (`producción` no enseña los de `staging`) y
   los guarda con `upsert_deployment`.

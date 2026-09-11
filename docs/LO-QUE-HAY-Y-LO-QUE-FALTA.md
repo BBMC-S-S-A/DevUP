@@ -79,27 +79,41 @@ Todo lo de esta lista está probado contra producción, no solo escrito.
 
 ---
 
-## Pantalla por pantalla (auditoría del 9 de septiembre)
+## Pantalla por pantalla (auditoría del 9 de septiembre, revisada el 11)
 
 Lo que Juan encontró probando cada apartado a mano. Reemplaza a la vieja
 línea «todo eso ya estaba y sigue en pie» — que era cierta a medias: estaba,
 pero no toda "en pie" de la misma forma.
+
+**Revisado el 11 de septiembre.** Cuatro filas decían «no funcional» y ya no es
+cierto, y una de ellas nunca lo fue: lo que estaba roto no eran las pantallas
+sino dos cosas debajo. La causa está contada en
+[AUDITORIA-DE-LA-APLICACION.md](AUDITORIA-DE-LA-APLICACION.md) §0 y en los
+commits `b01d928` (GitHub por enlace) y `488dcbd` (el fallo de la capa de
+datos). Se deja lo que decía cada fila, tachado, porque un documento de estado
+que borra sus propios errores no sirve para aprender de ellos.
 
 | Pantalla | Estado |
 |---|---|
 | **Panel** | Funciona: saludo, fecha, tareas pendientes, quién está conectado, música (Spotify/YouTube), infraestructura y tareas asignadas. |
 | **Mesa** | Básico. El catálogo de herramientas para añadir no está completo. |
 | **Biblioteca** | Solo sube archivos y quedan en el workspace. **Pendiente revisar si de verdad persisten** (no confirmado más allá de la subida). |
-| **Tablero** | Básico: solo añadir tareas. Falta lo agéntico —asignar labores a cada quien— y que se comporte dinámico, tipo Trello (arrastrar entre columnas, etc.). |
+| **Tablero** | Básico: añadir y asignar tareas, y desde la 0037 una tarea puede estar **hecha**. Falta que se comporte dinámico, tipo Trello (arrastrar entre columnas). |
 | **Ventas** | CRUD de clientes, ventas y servicios, con balance automático. Funcional para lo básico. |
-| **GitHub** | Solo visualización de commits — límite de la propia API de GitHub, no nuestro. **Falla la conexión por token**; explorar que baste con pegar el link del repo para clonarlo, sin pedir token. |
+| **GitHub** | ~~Falla la conexión por token; explorar que baste con pegar el link del repo~~ → **hecho**: se pega el enlace y ya, sin token. El token pasó a ser lo que hace falta solo para repositorios privados, y es de cada workspace. Sigue siendo solo lectura. |
 | **Noticias** | Se publican y notifican, pero al pulsar para ver el detalle **lleva a una pantalla distinta del workspace principal, sin una vuelta intuitiva**. Carlos ya corrigió el widget de Mesa el 8 de septiembre (PR #38, en `main` pero **todavía sin desplegar**); falta unificar el resto y que «volver» regrese a la pestaña donde se estaba, no a un sitio fijo. |
-| **Infraestructura** | No funcional. |
-| **Base de datos** | No funcional — solo enseña las migraciones asociadas a un repo de GitHub. |
-| **Integraciones** | No funcional — solo pide conectar GitHub. |
-| **Entorno de desarrollo** | Mal resuelto: al entrar cambia de pestaña sola. Solo ofrece Node.js. No funciona en la VPS. |
+| **Infraestructura** | ~~No funcional.~~ → **Funciona.** Nunca estuvo vacía: lo que fallaba era que crear o sincronizar un entorno dejaba la pantalla cargando para siempre, por un fallo de la capa de datos. Además tiene ahora la pestaña **Arquitectura**: un diagrama de nodos y enlaces que se dibuja a mano o lo genera el agente por MCP. |
+| **Base de datos** | ~~No funcional~~ → **Funciona.** Lee las migraciones del repositorio y las pasa por el criterio. Lo que la rompía era un 500 sin explicación cuando GitHub contestaba mal; ahora dice qué pasó. Sin token lee 12 archivos en vez de 40, por el cupo anónimo compartido. |
+| **Integraciones** | ~~No funcional — solo pide conectar GitHub.~~ → **Funciona** sin token, por el mismo arreglo. Sigue siendo un diagnóstico de seis reglas: señala lo que se está haciendo a mano, no lo monta. |
+| **Entorno de desarrollo** | Mal resuelto: al entrar cambia de pestaña sola. Solo ofrece Node.js. No funciona en la VPS. Desde la 0035 vive dentro del workspace, porque lo que abre son sus repositorios. |
 | **Ajustes de organización** | Básico: cambiar foto, ver usuarios, añadir enlaces y personas. Nada más todavía. |
-| **Perfil de usuario** | No existe personalización todavía. |
+| **Perfil de usuario** | ~~No existe personalización todavía.~~ → **Existe** desde la PR #42: nombre, cargo y foto, y el cargo se ve donde sirve y no solo dentro de DevVerse. |
+
+**Y una cosa que la tabla no decía porque no se veía:** hasta la migración 0035,
+GitHub, Base de datos, Infraestructura y Arquitectura colgaban de la
+organización, así que los tres proyectos de una empresa veían exactamente los
+mismos repositorios y entornos. Ahora cada workspace tiene su git, su base, su
+infraestructura y su propia credencial.
 
 ---
 

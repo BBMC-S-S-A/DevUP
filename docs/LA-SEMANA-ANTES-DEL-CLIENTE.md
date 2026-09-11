@@ -41,7 +41,7 @@ Verificado en el código: las cuatro leen del mismo sitio.
 
 | Pantalla | De dónde saca sus datos |
 |---|---|
-| GitHub | `/organizations/:orgId/github/repos` |
+| GitHub | `/workspaces/:workspaceId/github/repos` (era por organización hasta la 0035) |
 | Base de datos | esos repos → `/github/repos/:id/migraciones` |
 | Integraciones | esos repos → `/github/repos/:id/integraciones` |
 | Infraestructura | filtra conexiones por `provider === "github"` |

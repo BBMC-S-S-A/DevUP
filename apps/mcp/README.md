@@ -15,11 +15,34 @@ poniendo RLS en la base, igual que para el navegador.
 
 ## Herramientas
 
+Todas se registran en un solo sitio —`src/registro.ts`— y se sirven por los dos
+transportes. Si añades una, `npm run test:mcp` se pone rojo hasta que la
+apuntes también en la lista que comprueba el registro.
+
+### Leer
+
 | Herramienta | Qué hace |
 |---|---|
-| `buscar` | Busca por texto en mensajes, archivos, tareas, clientes, servicios y oportunidades de una organización a la vez. |
+| `buscar` | Busca por texto en mensajes, archivos, tareas, clientes, servicios y oportunidades a la vez. |
+| `mis_tareas` | Las tareas asignadas a quien conectó el agente. |
+| `ver_tablero` | El tablero de un espacio, con sus columnas y tarjetas. |
+| `ver_tarea` | Una tarea con su detalle, y sus imágenes adjuntas incrustadas. |
+| `ver_arquitectura` | Los componentes del diagrama de un espacio y cómo se conectan. |
 
-De momento una, y de solo lectura. Las siguientes están listadas en la guía.
+### Escribir
+
+Todo lo que crean en el tablero lleva la etiqueta `agente`, que es lo que
+permite verlo, filtrarlo y deshacerlo en bloque. **No hay ninguna de borrar, y
+es deliberado**: equivocarse creando deja trabajo que revisar, equivocarse
+borrando deja trabajo perdido.
+
+| Herramienta | Qué hace |
+|---|---|
+| `crear_tarea` | Una tarea en el tablero, con responsable y fecha si se dicen. |
+| `crear_columna` | Una columna nueva en el tablero. |
+| `mover_tarea` | Pasa una tarea de columna. |
+| `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |
+| `dibujar_arquitectura` | Vuelca un diagrama entero —componentes y conexiones— en un espacio. Coloca las cajas ella: no hay que darle coordenadas. Reutiliza lo que ya exista con ese nombre en vez de duplicarlo. |
 
 ## Dos maneras de conectarlo, y cuál elegir
 
