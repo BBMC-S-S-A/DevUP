@@ -18,6 +18,8 @@ export const unauthorized = (m = "sin sesión") => new HttpError(401, m, "sin_se
 export const forbidden = (m = "sin permiso") => new HttpError(403, m, "sin_permiso");
 export const notFound = (m = "no encontrado") => new HttpError(404, m, "no_encontrado");
 export const conflict = (m: string) => new HttpError(409, m, "conflicto");
+/** Falló quien está detrás (GitHub, el proveedor de turno), no nosotros. */
+export const badGateway = (m: string) => new HttpError(502, m, "proveedor_fallo");
 
 /**
  * Traduce los errores de Postgres a respuestas HTTP.

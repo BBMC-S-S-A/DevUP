@@ -116,13 +116,9 @@ export default function BaseDeDatosPage() {
         <>
           <Criterio />
 
-          {analisis.error && (
-            <Fallo className="mb-5" onReintentar={() => void analisis.recargar()}>
-              {analisis.error}
-            </Fallo>
-          )}
-
-          {analisis.cargando ? (
+          {analisis.error ? (
+            <Fallo onReintentar={() => void analisis.recargar()}>{analisis.error}</Fallo>
+          ) : analisis.cargando ? (
             <Cargando etiqueta="Leyendo migraciones" />
           ) : migraciones.length === 0 ? (
             <EstadoVacio

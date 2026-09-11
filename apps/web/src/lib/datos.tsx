@@ -126,7 +126,14 @@ export function useRecurso<T>(
 
   useEffect(() => {
     if (!clave) return;
-    const oyente = () => redibujar((n) => n + 1);
+    // Redibuja para notar el hueco, y vuelve a pedir: `invalidar` solo borra
+    // la caché y avisa, no trae nada nuevo por su cuenta. Sin este segundo
+    // paso, una pantalla que crea algo y luego invalida se queda cargando
+    // para siempre —la caché está vacía pero nadie vuelve a preguntar—.
+    const oyente = () => {
+      redibujar((n) => n + 1);
+      void pedir(false);
+    };
     const grupo = oyentes.get(clave) ?? new Set();
     grupo.add(oyente);
     oyentes.set(clave, grupo);

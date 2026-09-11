@@ -104,13 +104,9 @@ export default function IntegracionesPage() {
         />
       ) : (
         <>
-          {diagnostico.error && (
-            <Fallo className="mb-5" onReintentar={() => void diagnostico.recargar()}>
-              {diagnostico.error}
-            </Fallo>
-          )}
-
-          {diagnostico.cargando ? (
+          {diagnostico.error ? (
+            <Fallo onReintentar={() => void diagnostico.recargar()}>{diagnostico.error}</Fallo>
+          ) : diagnostico.cargando ? (
             <Cargando etiqueta="Leyendo el repositorio" />
           ) : recomendaciones.length === 0 ? (
             // El vacío aquí es una buena noticia y hay que decirlo como tal: si

@@ -9,7 +9,7 @@ import {
 } from "../connectors/migraciones.js";
 import { ARCHIVOS_DE_INTERES, diagnosticar } from "../connectors/integraciones.js";
 import { type Db, withUser } from "../db/pool.js";
-import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { badGateway, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
 
 const uuid = z.string().uuid();
@@ -133,7 +133,12 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
       };
     });
 
-    const arbol = await fetchGithubTree(token, fullName);
+    // Un fallo al hablar con GitHub —token caducado, repo renombrado— no es
+    // un fallo nuestro: se traduce a un mensaje que la pantalla ya sabe
+    // enseñar, en vez de un 500 sin explicación.
+    const arbol = await fetchGithubTree(token, fullName).catch((error: unknown) => {
+      throw badGateway(error instanceof Error ? error.message : "no se pudo leer el repositorio");
+    });
     const todas = migracionesDelArbol(arbol.map((e) => e.path));
 
     if (todas.length === 0) {
@@ -207,7 +212,9 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
       };
     });
 
-    const arbol = await fetchGithubTree(token, fullName);
+    const arbol = await fetchGithubTree(token, fullName).catch((error: unknown) => {
+      throw badGateway(error instanceof Error ? error.message : "no se pudo leer el repositorio");
+    });
     const rutas = arbol.filter((e) => e.type === "blob").map((e) => e.path);
 
     const aLeer = [
