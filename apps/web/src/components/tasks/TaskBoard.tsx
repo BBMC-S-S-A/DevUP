@@ -6,10 +6,12 @@ import {
   KanbanSquare,
   Paperclip,
   Plus,
+  CircleCheck,
   Trash2,
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { toast } from "sonner";
 import {
   type BoardColumn,
   type OrganizationMember,
@@ -129,6 +131,28 @@ export function TaskBoard({
     void load();
   }, [load]);
 
+  /**
+   * Marca o desmarca una columna como «aquí se termina».
+   *
+   * Optimista y sin recargar el tablero: es un interruptor y devolverlo a su
+   * sitio si falla se nota menos que esperar una vuelta entera de la red para
+   * ver moverse un icono.
+   */
+  const marcarTerminal = async (column: BoardColumn) => {
+    const valor = !column.isTerminal;
+    setColumns((previas) =>
+      previas.map((c) => (c.id === column.id ? { ...c, isTerminal: valor } : c)),
+    );
+    try {
+      await api.patch(`/columns/${column.id}`, { isTerminal: valor });
+    } catch {
+      setColumns((previas) =>
+        previas.map((c) => (c.id === column.id ? { ...c, isTerminal: !valor } : c)),
+      );
+      toast.error("no se pudo cambiar la columna");
+    }
+  };
+
   const drop = async (columnId: string, afterTaskId: string | null) => {
     const info = dragging.current;
     dragging.current = null;
@@ -237,6 +261,30 @@ export function TaskBoard({
                   <h3 className="min-w-0 flex-1 truncate font-display text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
                     {column.name}
                   </h3>
+                  {/* Que esta columna cierra tareas se dice aquí y se cambia
+                      aquí. Antes «hecho» era solo el nombre que alguien
+                      escribió, y nada del producto podía leerlo: el MCP
+                      devolvía las terminadas al preguntar qué queda pendiente.
+                      Es un botón y no un ajuste escondido porque es la clase
+                      de cosa que hay que poder corregir en el sitio — la
+                      migración la adivina por el nombre y puede fallar. */}
+                  <button
+                    type="button"
+                    onClick={() => void marcarTerminal(column)}
+                    title={
+                      column.isTerminal
+                        ? "Las tareas que llegan aquí cuentan como terminadas. Pulsa para quitarlo."
+                        : "Marcar esta columna como «terminadas»"
+                    }
+                    aria-pressed={column.isTerminal}
+                    className={`presionable shrink-0 rounded-lg p-0.5 transition-colors ${
+                      column.isTerminal
+                        ? "text-live"
+                        : "text-line-strong hover:text-muted"
+                    }`}
+                  >
+                    <CircleCheck size={13} />
+                  </button>
                   <span className="shrink-0 rounded-lg border border-line bg-canvas/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted">
                     {column.tasks.length}
                   </span>
@@ -331,7 +379,16 @@ export function TaskBoard({
                             hover:brightness-125 active:cursor-grabbing motion-reduce:transition-none
                             ${viajando ? "panel-vivo scale-[1.03] opacity-45" : ""}`}
                         >
-                          <span className="block text-[13px] font-medium leading-snug text-ink">
+                          {/* Terminada se ve terminada. Tachado y apagada, no
+                              escondida: sigue estando en su columna porque el
+                              tablero cuenta una historia, y borrarla de la
+                              vista haría que «¿esto se hizo?» dejara de tener
+                              respuesta. */}
+                          <span
+                            className={`block text-[13px] font-medium leading-snug ${
+                              column.isTerminal ? "text-muted line-through" : "text-ink"
+                            }`}
+                          >
                             {task.title}
                           </span>
 

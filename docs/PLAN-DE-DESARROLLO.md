@@ -16,8 +16,8 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 2 | **El ancho, por la forma del contenido** | **Hecho** |
 | 3 | **`/app` deja de ser aterrizaje** y te devuelve donde estabas | **Hecho** |
 | 4 | **Buscar en todas las organizaciones**, desde ⌘K | **Hecho** |
-| 5 | **Estado terminal en las columnas** — que «hecha» exista | **En curso** |
-| 6 | **Las capturas de error mudas** del camino que se usa a diario | Después |
+| 5 | **Estado terminal en las columnas** — que «hecha» exista | **Hecho** |
+| 6 | **Las capturas de error mudas** del camino que se usa a diario | **En curso** |
 | 7 | Una superficie por nivel, y el acento reservado | Después |
 
 **Pendiente de verificación visual:** 1, 2 y 3 pasan typecheck y build, pero sin
@@ -65,6 +65,21 @@ contar, el grafo no podrá cerrar nada y no se puede notificar que algo se
 completó. **Un campo que falta rompe cuatro funciones que parecen sanas.**
 
 Es una columna en una tabla y es el mejor retorno del proyecto.
+
+**Hecho** (migración 0037). La marca vive en la COLUMNA y no en la tarea: una
+marca en la tarea permitiría que estuviera «hecha» dentro de «En curso», un
+estado que nadie sabe dibujar. El valor por defecto es `false` porque marcar de
+más hace desaparecer tareas de «lo que me queda» sin que nadie lo pida, y eso no
+se nota; no marcar sí. A los tableros que ya existen se les adivina por el
+nombre, y solo con los que no admiten otra lectura — «listo» queda fuera a
+propósito, porque en medio tablero significa terminado y en el otro medio «listo
+para empezar».
+
+Consumidores arreglados: `mis_tareas` del MCP deja fuera lo terminado salvo que
+se pida, el tablero lo enseña y deja cambiarlo en el sitio, y una tarea
+terminada se ve terminada. Con su caso en `isolation.test.ts`: es una escritura
+nueva, y una escritura que nadie comprueba se descubre el día que alguien de
+otra organización cierra las tareas de la tuya.
 
 ---
 

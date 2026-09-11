@@ -242,6 +242,8 @@ export type BoardColumn = {
   id: string;
   name: string;
   position: number;
+  /** Si terminar en esta columna cuenta como terminar. Migración 0037. */
+  isTerminal: boolean;
   tasks: Task[];
 };
 

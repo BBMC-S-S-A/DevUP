@@ -91,7 +91,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
     return withUser(userId, async (db) => {
       const { rows: columns } = await db.query(
-        `select id, name, position from task_columns
+        `select id, name, position, is_terminal as "isTerminal" from task_columns
           where workspace_id = $1 order by position, created_at`,
         [workspaceId],
       );
@@ -128,7 +128,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
            $1, $2,
            coalesce((select max(position) from task_columns where workspace_id = $1), 0) + $3
          )
-         returning id, name, position`,
+         returning id, name, position, is_terminal as "isTerminal"`,
         [workspaceId, body.name, STEP],
       );
       if (!rows[0]) throw notFound("workspace no encontrado");
@@ -142,14 +142,31 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { columnId } = parseParams(z.object({ columnId: uuid }), request.params);
     const body = parseBody(
-      z.object({ name: z.string().trim().min(1).max(40) }),
+      z
+        .object({
+          name: z.string().trim().min(1).max(40).optional(),
+          /** Si terminar en esta columna cuenta como terminar (migración 0037). */
+          isTerminal: z.boolean().optional(),
+        })
+        // Los dos campos son opcionales por separado, pero un PATCH sin
+        // ninguno es una petición que no pide nada: se rechaza en vez de
+        // devolver un 200 que no cambió nada, que es indistinguible de haber
+        // funcionado.
+        .refine((v) => v.name !== undefined || v.isTerminal !== undefined, {
+          message: "no hay nada que cambiar: manda «name», «isTerminal» o los dos",
+        }),
       request.body,
     );
 
     return withUser(userId, async (db) => {
+      // `coalesce` para que mandar solo uno de los dos no borre el otro.
       const { rows } = await db.query(
-        "update task_columns set name = $2 where id = $1 returning id, name, position",
-        [columnId, body.name],
+        `update task_columns
+            set name = coalesce($2, name),
+                is_terminal = coalesce($3, is_terminal)
+          where id = $1
+          returning id, name, position, is_terminal as "isTerminal"`,
+        [columnId, body.name ?? null, body.isTerminal ?? null],
       );
       if (!rows[0]) throw notFound("columna no encontrada");
       return { column: rows[0] };

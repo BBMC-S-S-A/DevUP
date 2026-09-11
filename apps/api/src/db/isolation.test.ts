@@ -231,6 +231,37 @@ async function main(): Promise<void> {
     check("Carla no ve ni las columnas de su tablero", (await count(carla, "task_columns")) === 3);
     check("Ana sí ve las columnas de los dos tableros", (await count(ana, "task_columns")) === 6);
 
+    // Marcar una columna como «aquí se termina» (migración 0037). No es una
+    // tabla nueva, así que no hay política nueva — pero sí una escritura nueva,
+    // y una escritura que nadie comprueba es una que se descubre el día que
+    // alguien de otra organización cierra las tareas de la tuya.
+    const columnaDeAna = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.ws],
+      );
+      return rows[0]!.id;
+    });
+
+    const marcarTerminal = (user: string, columnId: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rowCount } = await db.query(
+          "update task_columns set is_terminal = true where id = $1",
+          [columnId],
+        );
+        return rowCount ?? 0;
+      });
+
+    check("Ana puede marcar su columna como terminal", (await marcarTerminal(ana, columnaDeAna)) === 1);
+    check(
+      "Bruno no puede marcar la columna de Acme, ni pasando su id a mano",
+      (await marcarTerminal(bruno, columnaDeAna)) === 0,
+    );
+    check(
+      "Carla tampoco, aunque sea de la misma organización pero no del workspace",
+      (await marcarTerminal(carla, columnaDeAna)) === 0,
+    );
+
     // --- Adjuntos de una tarea (0028) ---------------------------------------
     //
     // La columna `files.task_id` abre una puerta nueva: un archivo puede
