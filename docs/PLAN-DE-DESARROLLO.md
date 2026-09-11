@@ -20,7 +20,8 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 6 | **Las capturas de error mudas** del camino que se usa a diario | **Hecho, en parte** |
 | 7 | **Las primeras pruebas de `apps/web`**, y fuera una duplicación | **Hecho** |
 | 8 | **El embudo pintaba el día anterior**, y nadie lo veía | **Hecho** |
-| 9 | Una superficie por nivel, y el acento reservado | Después |
+| 9 | **Grabar una llamada dejó de ser invisible** | **Hecho** |
+| 10 | Una superficie por nivel, y el acento reservado | Después |
 
 **Cómo se verifica desde aquí.** No hay Docker ni Postgres en el entorno donde
 se escribe esto, así que `test:rls` no se puede correr en local — pero **sí
@@ -151,6 +152,24 @@ solución viviera dentro de un componente es justo por lo que el segundo sitio
 volvió a caer. Ahora vive en `lib/fechas.ts`, con 24 comprobaciones que **fijan
 la zona horaria a una del oeste** — sin eso la prueba pasaría en Madrid y el
 fallo seguiría en Bogotá, que es exactamente cómo dura meses.
+
+---
+
+## 9 · Grabar una llamada dejó de ser invisible
+
+`recording` era el único tipo de aviso declarado y **nunca emitido**. Tirando
+del hilo salió que el agujero era mayor: `GET /channels/:id/recordings` existe y
+no lo llama nadie, y `files.call_session_id` se escribía desde la 0004 sin que
+nadie lo leyera.
+
+Resultado: grababas una llamada, el archivo se subía, y para todos los demás era
+como si no hubiera pasado — ni aviso, ni pantalla que las liste, ni forma de
+distinguirla de cualquier otro archivo de la biblioteca.
+
+Ahora se avisa **solo a quien dio su consentimiento** —avisar a quien dijo que
+no sería contarle que se guardó una grabación en la que decidió no salir— y en
+la biblioteca lleva su marca. El enlace va a los archivos y no a una pantalla de
+grabaciones, porque una grabación es un archivo más y esa pantalla no existe.
 
 ---
 

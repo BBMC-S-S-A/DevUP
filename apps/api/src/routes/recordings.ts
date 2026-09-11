@@ -1,8 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
-import { withUser } from "../db/pool.js";
+import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { notificar } from "./notifications.js";
 
 const uuid = z.string().uuid();
 
@@ -78,7 +79,66 @@ export async function recordingRoutes(app: FastifyInstance): Promise<void> {
         rows[0].session_id,
       ]);
 
+      await avisarDeLaGrabacion(db, recordingId, rows[0].session_id, userId, request.log);
+
       return { ok: true };
     });
   });
+}
+
+/**
+ * Avisa a quien salió en la grabación de que ya está guardada.
+ *
+ * ERA EL ÚNICO TIPO DE AVISO DECLARADO Y NUNCA EMITIDO. `notifications.kind`
+ * admite `recording` desde la 0004 y no se emitía ni una vez, así que grabar
+ * una llamada era, para todos los demás, como si no hubiera pasado.
+ *
+ * Y el agujero era mayor de lo que parecía: `GET /channels/:id/recordings`
+ * existe y no lo llama nadie. Sin este aviso, una grabación se sube y se queda
+ * en la biblioteca sin que nadie sepa que está ahí. Por eso el enlace lleva a
+ * los archivos del espacio, que es donde de verdad aparece — una grabación es
+ * un archivo más, con las mismas políticas.
+ *
+ * SOLO A QUIEN DIJO QUE SÍ. Avisar a quien no dio su consentimiento sería
+ * contarle que se guardó una grabación en la que decidió no salir. Y no a quien
+ * la sube, que ya lo sabe.
+ */
+async function avisarDeLaGrabacion(
+  db: Db,
+  recordingId: string,
+  sessionId: string,
+  quienSube: string,
+  log: FastifyBaseLogger,
+): Promise<void> {
+  const { rows: destino } = await db.query<{ workspace_id: string; channel_name: string }>(
+    `select c.workspace_id::text as workspace_id, c.name as channel_name
+       from call_sessions s
+       join channels c on c.id = s.channel_id
+      where s.id = $1`,
+    [sessionId],
+  );
+  const donde = destino[0];
+  if (!donde) return;
+
+  const { rows: gente } = await db.query<{ user_id: string }>(
+    `select distinct user_id
+       from call_recording_consents
+      where recording_id = $1 and granted and user_id is not null and user_id <> $2`,
+    [recordingId, quienSube],
+  );
+
+  for (const { user_id } of gente) {
+    await notificar(
+      db,
+      user_id,
+      "recording",
+      "Ya está la grabación",
+      `La grabación de la llamada en #${donde.channel_name} está en los archivos.`,
+      `/app/w/${donde.workspace_id}/archivos`,
+    ).catch((fallo: unknown) => {
+      // Como los demás avisos: no puede tirar la petición —la grabación ya
+      // está enlazada y no se va a desenlazar— pero no se traga en silencio.
+      log.warn({ err: fallo, recordingId, destinatario: user_id }, "no se pudo avisar de una grabación");
+    });
+  }
 }

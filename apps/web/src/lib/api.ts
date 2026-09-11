@@ -210,6 +210,8 @@ export type FileRecord = {
   channelId: string | null;
   /** Adjunto de una tarea del tablero, si cuelga de una. */
   taskId: string | null;
+  /** De qué llamada salió, si es la grabación de una. */
+  callSessionId: string | null;
   name: string;
   description: string;
   mimeType: string;
