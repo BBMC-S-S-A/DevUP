@@ -63,6 +63,24 @@ export function useOrgId(): string {
  * Falla en vez de caer a la organización a propósito. Caer sería reproducir
  * exactamente el fallo que esto viene a arreglar, y además en silencio.
  */
+/**
+ * El workspace actual, o `null` si esta pantalla no está dentro de ninguno.
+ *
+ * La versión que no falla, para quien pregunta desde un sitio que se pinta en
+ * los dos armazones — la campana de notificaciones, por ejemplo, que vive en
+ * la barra de arriba y necesita saber si hay workspace para decidir a dónde
+ * lleva un enlace, no para exigir que lo haya.
+ *
+ * `useWorkspaceId` sigue fallando, y debe seguir haciéndolo: son dos preguntas
+ * distintas. «Estoy en un workspace, ¿cuál?» es un error si no lo estás; «¿hay
+ * workspace?» es una pregunta legítima con dos respuestas válidas.
+ */
+export function useWorkspaceIdOpcional(): string | null {
+  const params = useParams<{ workspaceId?: string }>();
+  const workspace = useContext(WorkspaceContext);
+  return params.workspaceId ?? workspace?.id ?? null;
+}
+
 export function useWorkspaceId(): string {
   const params = useParams<{ workspaceId?: string }>();
   const workspace = useContext(WorkspaceContext);

@@ -7,6 +7,38 @@ import { type Notification, api } from "@/lib/api";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { buildWsUrl, requestTicket } from "@/lib/ws";
+import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
+
+/**
+ * Las herramientas de la organización viven en las dos URLs: `/app/o/[orgId]/x`
+ * y `/app/w/[workspaceId]/x`, con el mismo componente detrás. Lo que cambia es
+ * el armazón — la de workspace conserva la barra del espacio.
+ *
+ * Una notificación la escribe el servidor, que no sabe en qué workspace estará
+ * quien la lea, ni puede averiguarlo: el aislamiento le impide ver a qué
+ * espacios pertenece otra persona. Así que guarda la forma larga y es aquí,
+ * con el contexto de quien lee delante, donde se traduce.
+ *
+ * Ese era el fallo de «Noticias te saca del espacio»: el enlace mandaba a
+ * `/app/o/…` y cambiaba de armazón, tirando el sitio donde estabas.
+ */
+/**
+ * Solo las que de verdad existen bajo `/app/o/[orgId]/`. GitHub,
+ * Infraestructura, Base de datos e Integraciones ya no están ahí: la migración
+ * 0035 les dio un workspace propio a cada una y viven únicamente bajo `/app/w/`.
+ * Listarlas aquí sería traducir rutas que nadie escribe.
+ */
+const HERRAMIENTAS_DE_ORGANIZACION = new Set(["noticias", "ventas"]);
+
+function enlaceDentroDelEspacio(link: string, workspaceId: string | null): string {
+  if (!workspaceId) return link;
+  // `/app/o/<orgId>/<herramienta>` → `/app/w/<workspaceId>/<herramienta>`.
+  const partes = link.split("/");
+  // ["", "app", "o", orgId, herramienta, ...resto]
+  if (partes[1] !== "app" || partes[2] !== "o" || !partes[4]) return link;
+  if (!HERRAMIENTAS_DE_ORGANIZACION.has(partes[4])) return link;
+  return ["", "app", "w", workspaceId, ...partes.slice(4)].join("/");
+}
 
 const ICONOS = {
   mention: AtSign,
@@ -57,6 +89,7 @@ function hace(iso: string): string {
  * caso en el que una notificación sirve para algo.
  */
 export function NotificationBell() {
+  const workspaceActual = useWorkspaceIdOpcional();
   const [abierta, setAbierta] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [pendientes, setPendientes] = useState(0);
@@ -219,7 +252,7 @@ export function NotificationBell() {
                 return (
                   <li key={item.id}>
                     <Link
-                      href={item.link || "/app"}
+                      href={enlaceDentroDelEspacio(item.link || "/app", workspaceActual)}
                       onClick={async () => {
                         setAbierta(false);
                         if (!item.readAt) {
