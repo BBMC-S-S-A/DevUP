@@ -7,7 +7,7 @@ import { type Notification, api } from "@/lib/api";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { buildWsUrl, requestTicket } from "@/lib/ws";
-import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
+import { useOrgIdOpcional, useWorkspaceIdOpcional } from "@/lib/workspace-context";
 import { enlaceDentroDelEspacio } from "@/lib/enlaces";
 import { ignorar } from "@/lib/fallo";
 import { toast } from "sonner";
@@ -62,6 +62,7 @@ function hace(iso: string): string {
  */
 export function NotificationBell() {
   const workspaceActual = useWorkspaceIdOpcional();
+  const orgActual = useOrgIdOpcional();
   const [abierta, setAbierta] = useState(false);
   const [items, setItems] = useState<Notification[]>([]);
   const [pendientes, setPendientes] = useState(0);
@@ -229,7 +230,7 @@ export function NotificationBell() {
                 return (
                   <li key={item.id}>
                     <Link
-                      href={enlaceDentroDelEspacio(item.link || "/app", workspaceActual)}
+                      href={enlaceDentroDelEspacio(item.link || "/app", workspaceActual, orgActual)}
                       onClick={async () => {
                         setAbierta(false);
                         if (!item.readAt) {

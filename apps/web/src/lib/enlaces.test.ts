@@ -103,38 +103,54 @@ console.log("\nUna notificación no te saca del espacio de trabajo");
 
 check(
   "Noticias se traduce a la ruta del espacio",
-  enlaceDentroDelEspacio(`/app/o/${ORG}/noticias`, ESPACIO),
+  enlaceDentroDelEspacio(`/app/o/${ORG}/noticias`, ESPACIO, ORG),
   `/app/w/${ESPACIO}/noticias`,
 );
 
 check(
   "y conserva lo que venga detrás",
-  enlaceDentroDelEspacio(`/app/o/${ORG}/ventas/algo`, ESPACIO),
+  enlaceDentroDelEspacio(`/app/o/${ORG}/ventas/algo`, ESPACIO, ORG),
   `/app/w/${ESPACIO}/ventas/algo`,
 );
 
 check(
   "fuera de un espacio se queda como está",
-  enlaceDentroDelEspacio(`/app/o/${ORG}/noticias`, null),
+  enlaceDentroDelEspacio(`/app/o/${ORG}/noticias`, null, ORG),
   `/app/o/${ORG}/noticias`,
 );
 
 check(
   "una herramienta que ya no vive bajo la organización no se traduce",
-  enlaceDentroDelEspacio(`/app/o/${ORG}/github`, ESPACIO),
+  enlaceDentroDelEspacio(`/app/o/${ORG}/github`, ESPACIO, ORG),
   `/app/o/${ORG}/github`,
 );
 
 check(
   "una ruta que ya es del espacio no se toca",
-  enlaceDentroDelEspacio(`/app/w/otro/noticias`, ESPACIO),
+  enlaceDentroDelEspacio(`/app/w/otro/noticias`, ESPACIO, ORG),
   `/app/w/otro/noticias`,
 );
 
 check(
   "y una que no es de la aplicación, tampoco",
-  enlaceDentroDelEspacio("/login", ESPACIO),
+  enlaceDentroDelEspacio("/login", ESPACIO, ORG),
   "/login",
+);
+
+// El caso que faltaba, y el que de verdad duele: quien pertenece a dos
+// empresas, mirando un espacio de una, pulsa la notificación de la otra.
+// Traducirlo lo dejaba en las noticias de la empresa equivocada, donde esa
+// noticia no está y nada lo explica.
+check(
+  "la noticia de OTRA organización no se traduce al espacio donde estás",
+  enlaceDentroDelEspacio("/app/o/otra-empresa/noticias", ESPACIO, ORG),
+  "/app/o/otra-empresa/noticias",
+);
+
+check(
+  "y tampoco si no se sabe en qué organización estás",
+  enlaceDentroDelEspacio(`/app/o/${ORG}/noticias`, ESPACIO, null),
+  `/app/o/${ORG}/noticias`,
 );
 
 console.log(
