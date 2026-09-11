@@ -418,6 +418,32 @@ export type Entorno = {
   ultimo: Despliegue | null;
 };
 
+export type TipoNodoArquitectura =
+  | "servicio"
+  | "base_datos"
+  | "cola"
+  | "cache"
+  | "almacenamiento"
+  | "api_externa"
+  | "otro";
+
+export type NodoArquitectura = {
+  id: string;
+  kind: TipoNodoArquitectura;
+  name: string;
+  description: string;
+  posX: number;
+  posY: number;
+  createdAt: string;
+};
+
+export type EnlaceArquitectura = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label: string;
+};
+
 /**
  * Una sesión abierta. `isAgent` distingue las conexiones de agente —la
  * credencial con la que alguien conecta su Claude por MCP— de los navegadores

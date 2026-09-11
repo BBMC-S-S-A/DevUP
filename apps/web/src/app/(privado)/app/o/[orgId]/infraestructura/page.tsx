@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { DiagramaArquitectura } from "@/components/arquitectura/Diagrama";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Desplegable, Entrada } from "@/components/ui/Field";
@@ -21,6 +22,12 @@ import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Sup
 import { useOrgId } from "@/lib/workspace-context";
 import type { Connection, Entorno, EstadoDespliegue } from "@/lib/api";
 import { api, invalidar, useMutacion, useRecurso } from "@/lib/datos";
+
+const PESTANAS = [
+  { id: "entornos", texto: "Entornos" },
+  { id: "arquitectura", texto: "Arquitectura" },
+] as const;
+type Pestana = (typeof PESTANAS)[number]["id"];
 
 /**
  * La vista unificada de infraestructura.
@@ -76,6 +83,7 @@ function hace(iso: string | null): string {
 export default function InfraestructuraPage() {
   const orgId = useOrgId();
   const [creando, setCreando] = useState(false);
+  const [pestana, setPestana] = useState<Pestana>("entornos");
 
   const entornos = useRecurso<{ environments: Entorno[] }>(
     `/organizations/${orgId}/environments`,
@@ -95,46 +103,68 @@ export default function InfraestructuraPage() {
         icono={<Server size={20} />}
         ancho="lg"
         acciones={
-          <Boton
-            variante="primario"
-            tamano="sm"
-            icono={<Plus size={13} />}
-            onClick={() => setCreando(true)}
-          >
-            Añadir entorno
-          </Boton>
+          pestana === "entornos" ? (
+            <Boton
+              variante="primario"
+              tamano="sm"
+              icono={<Plus size={13} />}
+              onClick={() => setCreando(true)}
+            >
+              Añadir entorno
+            </Boton>
+          ) : undefined
         }
       >
-        {entornos.error && (
-          <Fallo className="mb-5" onReintentar={() => void entornos.recargar()}>
-            {entornos.error}
-          </Fallo>
-        )}
+        <div className="mb-5 flex gap-1 border-b border-line">
+          {PESTANAS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPestana(p.id)}
+              className={`presionable -mb-px border-b-2 px-3 py-2 text-xs font-semibold transition-colors
+                ${pestana === p.id ? "border-accent text-ink" : "border-transparent text-faint hover:text-muted"}`}
+            >
+              {p.texto}
+            </button>
+          ))}
+        </div>
 
-        {entornos.cargando ? (
-          <Cargando etiqueta="Cargando entornos" />
-        ) : lista.length === 0 ? (
-          <EstadoVacio
-            icono={<Server size={20} />}
-            titulo="Todavía no hay ningún entorno"
-            pista="Un entorno es un sitio donde corre lo que escribís: producción, pruebas, una demo. DevUP no lo despliega — pregunta a quien lo despliega y enseña cómo quedó."
-            accion={
-              <Boton variante="primario" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
-                Añadir el primero
-              </Boton>
-            }
-          />
+        {pestana === "arquitectura" ? (
+          <DiagramaArquitectura orgId={orgId} />
         ) : (
-          <div className="space-y-3">
-            {lista.map((entorno, indice) => (
-              <TarjetaEntorno
-                key={entorno.id}
-                entorno={entorno}
-                indice={indice}
-                clave={`/organizations/${orgId}/environments`}
+          <>
+            {entornos.error && (
+              <Fallo className="mb-5" onReintentar={() => void entornos.recargar()}>
+                {entornos.error}
+              </Fallo>
+            )}
+
+            {entornos.cargando ? (
+              <Cargando etiqueta="Cargando entornos" />
+            ) : lista.length === 0 ? (
+              <EstadoVacio
+                icono={<Server size={20} />}
+                titulo="Todavía no hay ningún entorno"
+                pista="Un entorno es un sitio donde corre lo que escribís: producción, pruebas, una demo. DevUP no lo despliega — pregunta a quien lo despliega y enseña cómo quedó."
+                accion={
+                  <Boton variante="primario" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
+                    Añadir el primero
+                  </Boton>
+                }
               />
-            ))}
-          </div>
+            ) : (
+              <div className="space-y-3">
+                {lista.map((entorno, indice) => (
+                  <TarjetaEntorno
+                    key={entorno.id}
+                    entorno={entorno}
+                    indice={indice}
+                    clave={`/organizations/${orgId}/environments`}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </Pagina>
 
