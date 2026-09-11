@@ -20,7 +20,7 @@ import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useWorkspaceId } from "@/lib/workspace-context";
-import type { Connection, Entorno, EstadoDespliegue } from "@/lib/api";
+import type { Connection, Despliegue, Entorno, EstadoDespliegue } from "@/lib/api";
 import { api, invalidar, useMutacion, useRecurso } from "@/lib/datos";
 
 const PESTANAS = [
@@ -310,6 +310,8 @@ function TarjetaEntorno({
               </a>
             )}
           </div>
+
+          <Historial entorno={entorno} />
         </div>
       ) : (
         <p className="mt-3 border-t border-line pt-3 text-xs text-faint">
@@ -319,6 +321,75 @@ function TarjetaEntorno({
         </p>
       )}
     </Tarjeta>
+  );
+}
+
+/**
+ * Los despliegues anteriores, bajo petición.
+ *
+ * `GET /environments/:envId/deployments` devuelve los últimos treinta y **no lo
+ * llamaba nadie**: se sincronizaban del proveedor, se guardaban con
+ * `upsert_deployment` y solo se enseñaba el más reciente. Toda la historia
+ * estaba en la base y no había forma de verla — que es justo lo que se mira
+ * cuando algo se rompió y hay que saber desde cuándo.
+ *
+ * SE PIDE AL ABRIR, NO AL PINTAR LA TARJETA. Con varios entornos en pantalla,
+ * cargar treinta despliegues de cada uno por si acaso es mucha consulta para
+ * algo que casi nunca se mira. `useRecurso` con clave nula no pide nada hasta
+ * que se abre.
+ */
+function Historial({ entorno }: { entorno: Entorno }) {
+  const [abierto, setAbierto] = useState(false);
+  const historial = useRecurso<{ deployments: Despliegue[] }>(
+    abierto ? `/environments/${entorno.id}/deployments` : null,
+  );
+
+  // El más reciente ya está arriba: repetirlo aquí haría dudar de si son dos
+  // despliegues o el mismo dos veces.
+  const anteriores = (historial.datos?.deployments ?? []).filter((d) => d.id !== entorno.ultimo?.id);
+
+  return (
+    <div className="mt-2.5">
+      <button
+        type="button"
+        onClick={() => setAbierto((a) => !a)}
+        className="presionable inline-flex items-center gap-1 text-[11px] text-faint hover:text-accent"
+      >
+        {abierto ? "Ocultar el historial" : "Ver despliegues anteriores"}
+      </button>
+
+      {abierto && (
+        <div className="mt-2">
+          {historial.cargando ? (
+            <p className="text-[11px] text-faint">cargando…</p>
+          ) : historial.error ? (
+            <p className="text-[11px] text-danger">{historial.error}</p>
+          ) : anteriores.length === 0 ? (
+            <p className="text-[11px] text-faint">No hay ninguno anterior a este.</p>
+          ) : (
+            <ul className="space-y-1">
+              {anteriores.map((d) => {
+                const e = ESTADOS[d.state];
+                return (
+                  <li key={d.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <e.icono size={10} className="shrink-0 translate-y-px text-faint" />
+                    {d.commitSha && (
+                      <code className="font-mono text-[10px] text-faint">
+                        {d.commitSha.slice(0, 7)}
+                      </code>
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
+                      {d.commitMessage || e.texto}
+                    </span>
+                    <span className="text-[10px] text-faint">{hace(d.startedAt)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
