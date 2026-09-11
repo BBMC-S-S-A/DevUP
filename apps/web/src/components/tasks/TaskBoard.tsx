@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, KanbanSquare, Paperclip, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  KanbanSquare,
+  Paperclip,
+  Plus,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   type BoardColumn,
@@ -301,6 +309,11 @@ export function TaskBoard({
                         <button
                           type="button"
                           onClick={() => setOpen(task)}
+                          // Las dos cosas que se pueden hacer con una tarjeta
+                          // solo se descubrían probando: el cursor `grab` pide
+                          // arrastrar pero no dice a dónde, y que abra un
+                          // diálogo con responsable y fecha no lo anuncia nada.
+                          title="Abrir para editar · arrastrar para cambiarla de columna"
                           // Sin `presionable`: su hundido del 3 % se dispara
                           // mientras se arrastra (el botón sigue :active) y
                           // pelearía con el levantado, que es la señal que
@@ -342,30 +355,44 @@ export function TaskBoard({
                             </span>
                           )}
 
-                          {(task.assigneeName || task.dueDate) && (
-                            <span className="mt-2.5 flex items-center gap-2">
-                              {task.assigneeName && (
-                                <span className="flex min-w-0 items-center gap-1.5">
-                                  <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-elevated font-display text-[9px] font-semibold text-muted">
-                                    {iniciales(task.assigneeName)}
-                                  </span>
-                                  <span className="truncate text-[11px] text-muted">
-                                    {task.assigneeName}
-                                  </span>
+                          {/* Este bloque ya no se condiciona a que haya
+                              responsable o fecha: una tarjeta sin responsable
+                              no dibujaba nada, y por eso nadie descubría que
+                              asignar existe. El uso real dio la función por
+                              ausente estando construida desde hace meses. */}
+                          <span className="mt-2.5 flex items-center gap-2">
+                            {task.assigneeName ? (
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-elevated font-display text-[9px] font-semibold text-muted">
+                                  {iniciales(task.assigneeName)}
                                 </span>
-                              )}
-                              {task.dueDate && (
-                                <span
-                                  className={`flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono text-[10px] tabular-nums
-                                    ${task.assigneeName ? "ml-auto" : ""}
-                                    ${tonoVencimiento(task.dueDate, hoy)}`}
-                                >
-                                  <CalendarClock size={10} />
-                                  {fechaCorta(task.dueDate, anioActual)}
+                                <span className="truncate text-[11px] text-muted">
+                                  {task.assigneeName}
                                 </span>
-                              )}
-                            </span>
-                          )}
+                              </span>
+                            ) : (
+                              // Hueco discreto, no una llamada a la acción: la
+                              // mayoría de las tarjetas de un tablero vivo no
+                              // tienen responsable, y gritarlo en todas sería
+                              // peor que callarlo. El borde discontinuo es el
+                              // idioma de «esto se rellena».
+                              <span className="flex min-w-0 items-center gap-1.5 text-faint">
+                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong">
+                                  <UserPlus size={10} />
+                                </span>
+                                <span className="truncate text-[11px]">Sin responsable</span>
+                              </span>
+                            )}
+                            {task.dueDate && (
+                              <span
+                                className={`ml-auto flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono text-[10px] tabular-nums
+                                  ${tonoVencimiento(task.dueDate, hoy)}`}
+                              >
+                                <CalendarClock size={10} />
+                                {fechaCorta(task.dueDate, anioActual)}
+                              </span>
+                            )}
+                          </span>
                         </button>
 
                         {marcaAbajo && <Hueco lado="abajo" />}

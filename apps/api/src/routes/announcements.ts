@@ -94,7 +94,16 @@ export async function announcementRoutes(app: FastifyInstance): Promise<void> {
           "Noticia nueva",
           body.title,
           `/app/o/${orgId}/noticias`,
-        ).catch(() => {});
+        ).catch((fallo: unknown) => {
+          // Se sigue sin tirar la petición —la noticia ya está publicada y no
+          // se va a deshacer porque a una persona no le llegue el aviso—, pero
+          // deja de ser invisible. Un aviso que no sale y que nadie registra
+          // es indistinguible de uno que nadie leyó.
+          request.log.warn(
+            { err: fallo, destinatario, announcementId: announcement.id },
+            "no se pudo notificar una noticia nueva",
+          );
+        });
       }
     });
 
