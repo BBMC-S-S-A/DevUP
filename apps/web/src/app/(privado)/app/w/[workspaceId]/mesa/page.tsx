@@ -13,6 +13,7 @@ import { Cargando, Fallo } from "@/components/ui/Pagina";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import type { Channel, Workspace } from "@/lib/api";
 import { api, useRecurso } from "@/lib/datos";
+import { toast } from "sonner";
 
 /**
  * La mesa de trabajo.
@@ -71,7 +72,15 @@ export default function MesaPage() {
       setMesa({ zonas, fracciones });
       // Al soltar, no en cada fotograma: guardar durante el arrastre sería una
       // escritura por movimiento del ratón.
-      void api.put(`/me/mesa/${workspaceId}`, { zonas, fracciones }).catch(() => {});
+      // Si esto falla en silencio, la mesa se ve bien hasta que recargas y
+      // entonces vuelve a la de antes, sin que nada explique por qué. Es un
+      // aviso y no una anotación en la consola porque la persona acaba de
+      // colocar sus zonas a mano: callarse aquí es mentirle.
+      void api.put(`/me/mesa/${workspaceId}`, { zonas, fracciones }).catch(() => {
+        toast.error("no se pudo guardar la disposición de la mesa", {
+          description: "Se ve bien ahora, pero al volver estará como antes.",
+        });
+      });
     },
     [workspaceId],
   );

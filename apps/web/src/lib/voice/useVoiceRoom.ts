@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { buildWsUrl, requestTicket } from "../ws";
 import { type RecordingHandle, createRecorder } from "./recorder";
+import { ignorar } from "@/lib/fallo";
 
 /**
  * Sala de voz y vídeo en malla, sin servidor de medios.
@@ -414,7 +415,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
 
     // Si estaba grabando, se descarta lo grabado: irse a mitad no es «guardar
     // lo que haya», es cancelar.
-    void recorder.current?.stop().catch(() => {});
+    void recorder.current?.stop().catch(ignorar("no se pudo cerrar la grabación al salir"));
     recorder.current = null;
 
     for (const pc of peers.current.values()) pc.close();

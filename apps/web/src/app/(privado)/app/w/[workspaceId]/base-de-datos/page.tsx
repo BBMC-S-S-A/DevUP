@@ -80,7 +80,7 @@ export default function BaseDeDatosPage() {
       titulo="Base de datos"
       rotulo="Las migraciones del repositorio, contra el criterio"
       icono={<Database size={20} />}
-      ancho="lg"
+      ancho="xl"
       acciones={
         lista.length > 1 ? (
           <Desplegable

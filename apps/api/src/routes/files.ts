@@ -18,6 +18,12 @@ const uuid = z.string().uuid();
 const FILE_COLUMNS = `
   f.id, f.organization_id as "organizationId", f.workspace_id as "workspaceId",
   f.channel_id as "channelId", f.task_id as "taskId",
+  -- De qué llamada salió, si salió de una. La columna existía desde la 0004 y
+  -- se escribía al enlazar una grabación, pero no la leía nadie: en la
+  -- biblioteca una grabación era indistinguible de cualquier otro archivo, y
+  -- como tampoco se avisaba de que existía, grabar una llamada era para los
+  -- demás como si no hubiera pasado.
+  f.call_session_id as "callSessionId",
   f.name, f.description, f.mime_type as "mimeType",
   f.size_bytes::bigint as "sizeBytes", f.status, f.uploaded_by as "uploadedBy",
   f.created_at as "createdAt",

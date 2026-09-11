@@ -44,6 +44,10 @@ export async function uploadFile(
   } catch (error) {
     // Retirar la reserva ahora evita que el usuario vea un archivo a medias en
     // su biblioteca hasta que pase el barrendero.
+    // Si tampoco se puede retirar la reserva, la fila se queda en estado
+    // «pendiente» y la recoge el barrendero. Por eso no se avisa: lo que se
+    // está atendiendo aquí ya es el fallo de la subida, y encadenar un segundo
+    // mensaje sobre la limpieza del primero no ayuda a nadie.
     await api.delete(`/files/${reserved.fileId}`).catch(() => {});
     throw error;
   }

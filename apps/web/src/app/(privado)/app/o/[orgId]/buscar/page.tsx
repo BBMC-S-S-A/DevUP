@@ -21,6 +21,7 @@ import { BotonIcono } from "@/components/ui/Boton";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { ApiError, type SearchResult, api } from "@/lib/api";
 import { useOrgId } from "@/lib/workspace-context";
+import { destinoDeResultado } from "@/lib/enlaces";
 
 /**
  * Búsqueda global (S6): mensajes, archivos, tareas, clientes, servicios y
@@ -66,26 +67,6 @@ const ORDEN: SearchResult["entity"][] = [
   "opportunity",
 ];
 
-function destino(orgId: string, result: SearchResult): string {
-  switch (result.entity) {
-    case "message":
-      return result.workspaceId && result.channelId
-        ? `/app/w/${result.workspaceId}/c/${result.channelId}`
-        : `/app`;
-    case "file":
-      // La raíz del workspace dejó de ser la biblioteca — ver
-      // `w/[workspaceId]/page.tsx` — así que un resultado de archivo tiene
-      // que decir «archivos» explícitamente o aterriza en un canal de chat.
-      return result.workspaceId ? `/app/w/${result.workspaceId}/archivos` : `/app`;
-    case "task":
-      return result.workspaceId ? `/app/w/${result.workspaceId}/board` : `/app`;
-    case "client":
-    case "service":
-    case "opportunity":
-      return `/app/o/${orgId}/ventas`;
-  }
-}
-
 export default function BuscarPage() {
   return (
     <Suspense fallback={null}>
@@ -112,8 +93,12 @@ function Buscador() {
       setLoading(true);
       setError(null);
       try {
+        // Sin organización: se busca en todo lo que alcanza esta cuenta. La
+        // pantalla decía «todo lo de la organización» y quien pertenece a
+        // varias tenía que acertar de antemano en cuál estaba lo que buscaba.
+        // El aislamiento no cambia — ver la migración 0036.
         const { results } = await api.get<{ results: SearchResult[] }>(
-          `/organizations/${orgId}/search?q=${encodeURIComponent(termino)}`,
+          `/search?q=${encodeURIComponent(termino)}`,
         );
         setResults(results);
       } catch (caught) {
@@ -163,7 +148,7 @@ function Buscador() {
           <div className="mt-8 text-center">
             <Rotulo>Búsqueda global</Rotulo>
             <h1 className="mt-2.5 text-2xl font-semibold">
-              Todo lo de la <span className="texto-plasma">organización</span>
+              Todo lo <span className="texto-plasma">tuyo</span>
             </h1>
           </div>
 
@@ -180,7 +165,7 @@ function Buscador() {
               autoFocus
               value={q}
               onChange={(event) => setQ(event.target.value)}
-              aria-label="Buscar en la organización"
+              aria-label="Buscar en todo lo tuyo"
               placeholder="Buscar mensajes, archivos, tareas, clientes, ventas…"
               className="h-14 w-full rounded-2xl border border-line bg-canvas/70 pl-12 pr-12 text-base outline-none
                 transition-[border-color,box-shadow,background-color] duration-200
@@ -212,12 +197,15 @@ function Buscador() {
               ? "buscando…"
               : results !== null
                 ? `${results.length} ${results.length === 1 ? "resultado" : "resultados"}`
-                : "6 tipos · todos los workspaces"}
+                : "6 tipos · todas tus organizaciones"}
           </p>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-6 py-8">
+      {/* El campo se queda estrecho arriba —una caja de búsqueda de 1200 px no
+          se lee mejor, se lee peor— pero los resultados no: son una lista densa
+          y en un monitor ancho cabían menos de la mitad de los que caben. */}
+      <main className="mx-auto max-w-5xl px-6 py-8">
         {error && (
           <div className="devup-entrada mb-5 flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger/[0.07] px-3.5 py-2.5">
             <SearchX size={14} className="mt-px shrink-0 text-danger" />
@@ -228,8 +216,8 @@ function Buscador() {
         {results === null && !loading && (
           <EstadoVacio
             icono={<ScanSearch size={20} />}
-            titulo="Escribe y busca en toda la organización"
-            pista="Un solo campo para lo que está repartido por todos los workspaces. Los resultados llegan agrupados por tipo."
+            titulo="Escribe y busca en todo lo tuyo"
+            pista="Un solo campo para lo que está repartido por todas tus organizaciones y espacios de trabajo. Los resultados llegan agrupados por tipo."
             accion={
               <div className="flex flex-wrap justify-center gap-1.5">
                 {ORDEN.map((entity) => {
@@ -308,7 +296,7 @@ function Buscador() {
                         }
                       >
                         <Link
-                          href={destino(orgId, result)}
+                          href={destinoDeResultado(result, { orgId })}
                           className="presionable group flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3
                             hover:border-line-strong hover:bg-raised"
                         >

@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import { LogoAnimado } from "@/components/marca/LogoAnimado";
 import { MusicaBar } from "@/components/spotify/MusicaBar";
 import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
+import { ProveedorRiel } from "@/components/ui/RielOrganizaciones";
 import { Rotulo } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
 import { SpotifyProvider } from "@/lib/spotify/SpotifyProvider";
@@ -52,10 +53,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // la llamada y la música sobrevivan a navegar por la aplicación. La música va
   // por dentro porque su barra se apoya en si hay llamada abierta para saber
   // dónde colocarse y no taparla.
+  //
+  // Y el riel de organizaciones, por exactamente el mismo motivo: este armazón
+  // es el padre común de `/app/o/…` y `/app/w/…`, así que lo que se monta aquí
+  // sobrevive a navegar entre ellos. Es lo que convierte tres armazones que se
+  // repintan en un marco que se queda.
   return (
     <VoiceCallProvider>
       <SpotifyProvider>
-        {children}
+        <ProveedorRiel>{children}</ProveedorRiel>
         <ActiveCallBar />
         <MusicaBar />
       </SpotifyProvider>

@@ -1,4 +1,5 @@
 "use client";
+import { ignorar } from "@/lib/fallo";
 
 import {
   AlertTriangle,
@@ -85,7 +86,9 @@ export function ChannelChat({ channelId }: { channelId: string }) {
     setMessages(messages);
     setLoading(false);
     setExhausted(messages.length < 50);
-    await api.post(`/channels/${channelId}/read`).catch(() => {});
+    await api
+      .post(`/channels/${channelId}/read`)
+      .catch(ignorar("no se pudo marcar el canal como leído al abrirlo"));
   }, [channelId]);
 
   useEffect(() => {
@@ -105,7 +108,11 @@ export function ChannelChat({ channelId }: { channelId: string }) {
         }
         return [...current, incoming];
       });
-      if (action === "created") void api.post(`/channels/${channelId}/read`).catch(() => {});
+      if (action === "created") {
+        void api
+          .post(`/channels/${channelId}/read`)
+          .catch(ignorar("no se pudo marcar como leído un mensaje recién llegado"));
+      }
     },
     [channelId],
   );

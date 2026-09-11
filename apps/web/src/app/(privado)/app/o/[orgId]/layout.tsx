@@ -11,11 +11,13 @@ import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
+import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
 import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
+import { ignorar } from "@/lib/fallo";
 
 /**
  * El armazón de organización.
@@ -43,6 +45,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();
   const pathname = usePathname();
   const { user, signOut } = useSession();
+  const hayRiel = useHayRiel();
 
   const [organizacion, setOrganizacion] = useState<Organization | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -91,7 +94,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
       .then(({ url }) => {
         if (vigente) setLogo(url);
       })
-      .catch(() => {});
+      .catch(ignorar("no se pudo cargar el logo de la organización"));
     return () => {
       vigente = false;
     };
@@ -112,7 +115,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
         <div className="text-center">
           <p className="text-sm text-muted">{error ?? "No se pudo cargar la organización."}</p>
           <Link
-            href="/app"
+            href="/app/organizaciones"
             className="presionable mt-4 inline-flex items-center gap-1.5 text-xs text-accent"
           >
             <ArrowLeft size={13} />
@@ -132,16 +135,21 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
       <>
 
         <header className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
-          {/* «Organizaciones», una sola vez y en un solo sitio. Es el nombre que
-              usaban cuatro de las cinco cabeceras copiadas. */}
-          <Link
-            href="/app"
-            className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
-              text-[11px] text-muted hover:text-accent-bright"
-          >
-            <ArrowLeft size={12} />
-            Organizaciones
-          </Link>
+          {/* Con el riel puesto este enlace sobra: la vuelta a todas las
+              organizaciones está en su pie, y dos caminos al mismo sitio en la
+              misma pantalla es la duplicación que este armazón vino a quitar.
+              Sin riel —una sola organización, o móvil— sigue siendo la única
+              salida y se queda. */}
+          {!hayRiel && (
+            <Link
+              href="/app/organizaciones"
+              className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
+                text-[11px] text-muted hover:text-accent-bright"
+            >
+              <ArrowLeft size={12} />
+              Organizaciones
+            </Link>
+          )}
 
           <div className="flex items-center gap-2.5">
             {logo ? (
@@ -201,7 +209,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             {workspaces.length === 0 ? (
               <p className="px-3 py-1.5 text-[11px] leading-relaxed text-faint">
                 Todavía no hay ninguno. Se crean desde{" "}
-                <Link href="/app" className="text-accent hover:underline">
+                <Link href="/app/organizaciones" className="text-accent hover:underline">
                   organizaciones
                 </Link>
                 .

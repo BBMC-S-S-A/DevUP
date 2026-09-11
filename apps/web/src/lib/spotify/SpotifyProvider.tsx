@@ -14,6 +14,7 @@ import { api, type SpotifyQueueTrack, type SpotifySession } from "../api";
 import { useSpotifyPlayer } from "./reproductor";
 import { esDeYoutube, useYoutubePlayer } from "../youtube/reproductor";
 import { toast } from "sonner";
+import { ignorar } from "@/lib/fallo";
 
 /**
  * La música vive aquí, no en la página del canal.
@@ -166,7 +167,15 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
   /** Saca una pista de la cola, en pantalla y en la base. */
   const quitar = useCallback(async (id: string) => {
     setCola((previa) => previa.filter((t) => t.id !== id));
-    await api.delete(`/spotify/queue/${id}`).catch(() => {});
+    await api.delete(`/spotify/queue/${id}`).catch(() => {
+      // Ya se quitó de la pantalla arriba. Si la baja no llega a la base, la
+      // pista sigue en la cola que ve el resto de la sala y vuelve en el
+      // siguiente refresco: quien la quitó vería reaparecer algo que borró sin
+      // que nada lo explicara.
+      toast.error("no se pudo quitar de la cola", {
+        description: "Sigue en la lista que ve el resto.",
+      });
+    });
   }, []);
 
   /**
@@ -346,11 +355,11 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       // necesita, y exigirlo dejaría la cola quieta justo para quien añadimos
       // YouTube en primer lugar.
       if (esDeYoutube(pista.trackUri) && !youtube.estado.reproduciendo) {
-        await poner(pista).catch(() => {});
+        await poner(pista).catch(ignorar("no se pudo poner la pista de YouTube en cola"));
         return;
       }
       if (puedeSonar && (!uriSonando || !sonando)) {
-        await poner(pista).catch(() => {});
+        await poner(pista).catch(ignorar("no se pudo poner la pista de YouTube en cola"));
         return;
       }
       // Y si ya suena algo, va detrás en la cola de Spotify para que enlace.
@@ -373,7 +382,9 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       colaRef.current = siguiente;
       // Y se limpia de la base, que es la lista que ve el resto de la sala.
       for (const ida of previa.filter((t) => t.trackUri === uri)) {
-        void api.delete(`/spotify/queue/${ida.id}`).catch(() => {});
+        void api
+          .delete(`/spotify/queue/${ida.id}`)
+          .catch(ignorar("no se pudo limpiar de la cola una pista ya sonada"));
       }
       return siguiente;
     });
@@ -398,7 +409,11 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
       setPistaYt(null);
       return;
     }
-    void poner(siguiente).catch(() => {});
+    // Sin aviso: esto es el avance automático al terminar una pista, y un
+    // aviso por cada salto convertiría una sala con la cola larga en una
+    // pantalla llena de mensajes. Queda anotado, que es lo que hace falta para
+    // entender un «se paró solo».
+    void poner(siguiente).catch(ignorar("no se pudo avanzar a la siguiente de la cola"));
   };
 
   /**
@@ -426,7 +441,10 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         positionMs: Math.round(player.estado.posicionMs),
         isPlaying: player.estado.reproduciendo,
       })
-      .catch(() => {});
+      // Es lo que hace que el resto de la sala vea qué suena. Si falla, la
+      // música se oye igual aquí y los demás ven la anterior: molesto, no
+      // bloqueante, y muy difícil de entender sin este rastro.
+      .catch(ignorar("no se pudo compartir con la sala qué está sonando"));
     // `posicionMs` viaja en el cuerpo como instantánea pero queda fuera de las
     // dependencias: si entrara, publicaríamos sin parar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -476,7 +494,7 @@ export function SpotifyProvider({ children }: { children: ReactNode }) {
         positionMs: Math.round(youtube.estado.posicionMs),
         isPlaying: youtube.estado.reproduciendo,
       })
-      .catch(() => {});
+      .catch(ignorar("no se pudo compartir con la sala el vídeo que está sonando"));
     // Igual que arriba: la posición viaja en el cuerpo pero no como
     // dependencia, o se publicaría dos veces por segundo.
     // eslint-disable-next-line react-hooks/exhaustive-deps

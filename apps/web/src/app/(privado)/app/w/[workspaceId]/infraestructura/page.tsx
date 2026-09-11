@@ -101,7 +101,7 @@ export default function InfraestructuraPage() {
         titulo="Infraestructura"
         rotulo="Entornos y despliegues"
         icono={<Server size={20} />}
-        ancho="lg"
+        ancho="completo"
         acciones={
           pestana === "entornos" ? (
             <Boton

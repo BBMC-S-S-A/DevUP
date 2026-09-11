@@ -231,6 +231,40 @@ async function main(): Promise<void> {
     check("Carla no ve ni las columnas de su tablero", (await count(carla, "task_columns")) === 3);
     check("Ana sí ve las columnas de los dos tableros", (await count(ana, "task_columns")) === 6);
 
+    // Marcar una columna como «aquí se termina» (migración 0037). No es una
+    // tabla nueva, así que no hay política nueva — pero sí una escritura nueva,
+    // y una escritura que nadie comprueba es una que se descubre el día que
+    // alguien de otra organización cierra las tareas de la tuya.
+    // Del workspace PERSONAL de Ana, no del compartido: Carla pertenece al
+    // compartido —ve sus tres columnas, se comprueba arriba— así que marcar una
+    // columna suya sería legítimo. Lo que no puede tocar es el espacio personal.
+    const columnaDeAna = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.soloWs],
+      );
+      return rows[0]!.id;
+    });
+
+    const marcarTerminal = (user: string, columnId: string): Promise<number> =>
+      withUser(user, async (db) => {
+        const { rowCount } = await db.query(
+          "update task_columns set is_terminal = true where id = $1",
+          [columnId],
+        );
+        return rowCount ?? 0;
+      });
+
+    check("Ana puede marcar su columna como terminal", (await marcarTerminal(ana, columnaDeAna)) === 1);
+    check(
+      "Bruno no puede marcar la columna de Acme, ni pasando su id a mano",
+      (await marcarTerminal(bruno, columnaDeAna)) === 0,
+    );
+    check(
+      "Carla tampoco, aunque sea de la misma organización: el espacio personal no es suyo",
+      (await marcarTerminal(carla, columnaDeAna)) === 0,
+    );
+
     // --- Adjuntos de una tarea (0028) ---------------------------------------
     //
     // La columna `files.task_id` abre una puerta nueva: un archivo puede
@@ -920,6 +954,51 @@ async function main(): Promise<void> {
     check("Bruno no encuentra el cliente por búsqueda", (await search(bruno, "Confidencial")).length === 0);
     check("Bruno no encuentra el servicio por búsqueda", (await search(bruno, "Auditoría")).length === 0);
     check("Bruno no encuentra la oportunidad por búsqueda", (await search(bruno, "backend")).length === 0);
+
+    // Buscar SIN acotar a ninguna organización (migración 0036). Es el caso
+    // que de verdad importa de ese cambio: pasarle nulo quita el `where
+    // organization_id`, y si el aislamiento dependiera de ese `where` —y no de
+    // las políticas, como está escrito— esto sería una fuga entre clientes.
+    // Aquí es donde se ve que no lo es.
+    // Devuelve los TÍTULOS y no solo el tipo. Sin acotar, «no ve nada» es la
+    // comprobación equivocada: Bruno tiene su propio `secreto-de-bruno.png` y
+    // encontrarlo es lo correcto. Lo que hay que demostrar es que no aparece lo
+    // de Acme, que es una afirmación distinta y mucho más fuerte.
+    const buscarEnTodo = (user: string, term: string): Promise<string[]> =>
+      withUser(user, async (db) => {
+        const { rows } = await db.query<{ title: string }>(
+          "select title from public.global_search(null, $1, 50)",
+          [term],
+        );
+        return rows.map((r) => r.title ?? "");
+      });
+
+    const deBruno = await buscarEnTodo(bruno, "secreto");
+
+    check(
+      "Sin acotar, Carla sigue encontrando lo suyo",
+      (await buscarEnTodo(carla, "equipo")).length > 0,
+    );
+    check(
+      "Sin acotar, Bruno SÍ encuentra su propio archivo",
+      deBruno.includes("secreto-de-bruno.png"),
+    );
+    check(
+      "Sin acotar, Bruno NO ve el archivo de Acme — y esto es lo que importa",
+      !deBruno.includes("secreto-de-ana.png"),
+    );
+    check(
+      "Sin acotar, Bruno NO ve el mensaje de Acme",
+      (await buscarEnTodo(bruno, "equipo")).length === 0,
+    );
+    check(
+      "Sin acotar, Bruno NO ve el cliente de Acme",
+      (await buscarEnTodo(bruno, "Confidencial")).length === 0,
+    );
+    check(
+      "Sin acotar, Carla tampoco ve el canal privado ajeno",
+      !(await buscarEnTodo(carla, "dirección")).some((t) => t.includes("dirección")),
+    );
 
     // --- Bóveda de credenciales ------------------------------------------------
     //

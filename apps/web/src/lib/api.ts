@@ -210,6 +210,8 @@ export type FileRecord = {
   channelId: string | null;
   /** Adjunto de una tarea del tablero, si cuelga de una. */
   taskId: string | null;
+  /** De qué llamada salió, si es la grabación de una. */
+  callSessionId: string | null;
   name: string;
   description: string;
   mimeType: string;
@@ -242,6 +244,8 @@ export type BoardColumn = {
   id: string;
   name: string;
   position: number;
+  /** Si terminar en esta columna cuenta como terminar. Migración 0037. */
+  isTerminal: boolean;
   tasks: Task[];
 };
 
@@ -250,6 +254,8 @@ export type OrganizationMember = {
   role: "owner" | "admin" | "member";
   displayName: string;
   avatarUrl: string | null;
+  /** A qué se dedica, escrito por la propia persona en su perfil. */
+  title: string | null;
   presence: Presencia;
 };
 
@@ -371,6 +377,8 @@ export type SearchResult = {
   id: string;
   title: string;
   snippet: string;
+  /** De qué organización sale. Lo que permite buscar en todas sin confundirlas. */
+  organizationId: string | null;
   workspaceId: string | null;
   channelId: string | null;
   rank: number;

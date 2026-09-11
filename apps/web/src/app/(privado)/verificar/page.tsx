@@ -107,7 +107,7 @@ function Verificar() {
                 Tu dirección queda confirmada. No hace falta hacer nada más aquí.
               </p>
               <Link
-                href="/app"
+                href="/app/organizaciones"
                 className="presionable mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl
                   bg-gradient-to-b from-accent-bright to-accent px-4 text-sm font-medium text-canvas
                   shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)]

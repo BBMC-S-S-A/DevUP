@@ -63,6 +63,10 @@ export async function withUser<T>(
     await client.query("commit");
     return result;
   } catch (error) {
+    // Este sí se traga a propósito y sin anotar: si el `rollback` falla es
+    // porque la conexión ya está rota, y el error que importa es el que trae
+    // `error` —el que provocó el fallo—, no este. Anotarlo aquí taparía la
+    // causa con su consecuencia.
     await client.query("rollback").catch(() => {});
     throw error;
   } finally {

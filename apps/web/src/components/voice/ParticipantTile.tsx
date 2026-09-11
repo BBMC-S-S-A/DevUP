@@ -11,6 +11,7 @@ import {
 import { Rotulo } from "@/components/ui/Superficies";
 import type { Participant } from "@/lib/voice/useVoiceRoom";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
+import { ignorar } from "@/lib/fallo";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
@@ -41,7 +42,11 @@ export function HiddenAudio({ stream }: { stream: MediaStream | null }) {
     const element = media.current;
     if (!element || !stream) return;
     element.srcObject = stream;
-    void element.play().catch(() => {});
+    // Normalmente funciona: para llegar aquí ya has pulsado «entrar a la
+    // llamada», que es el gesto que la política de reproducción automática
+    // pide. Si aun así falla, no oyes a alguien — y «no oigo a Ana» es de las
+    // quejas más difíciles de rastrear si no queda nada escrito.
+    void element.play().catch(ignorar("no se pudo reproducir el audio de un participante"));
     return () => {
       element.srcObject = null;
     };
@@ -148,7 +153,7 @@ function ParticipantTile({
     const element = media.current;
     if (!element || !videoStream) return;
     element.srcObject = videoStream;
-    void element.play().catch(() => {});
+    void element.play().catch(ignorar("no se pudo reproducir el vídeo de un participante"));
     return () => {
       element.srcObject = null;
     };

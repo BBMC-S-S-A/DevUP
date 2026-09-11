@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   LayoutGrid,
   Plus,
+  Radio,
   Rows3,
   Search,
   SearchX,
@@ -363,6 +364,21 @@ function TarjetaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => vo
         {file.name}
       </span>
 
+      {/* Una grabación es un archivo más —mismas políticas, misma URL
+          firmada— pero encontrarla entre cien no lo era: la columna que dice de
+          qué llamada salió se escribía desde la 0004 y no la leía nadie. Sin
+          esto, buscar «la grabación de la reunión» es mirar nombres uno a uno. */}
+      {file.callSessionId && (
+        <span
+          title="Grabación de una llamada"
+          className="mt-2 inline-flex w-fit items-center gap-1 rounded-lg border border-line
+            bg-canvas/60 px-1.5 py-0.5 text-[10px] text-muted"
+        >
+          <Radio size={9} className="shrink-0" />
+          Grabación
+        </span>
+      )}
+
       <span className="mt-auto flex items-baseline gap-1.5 pt-2 text-[11px]">
         <span className="font-mono tabular-nums text-muted">{formatBytes(file.sizeBytes)}</span>
         <span className="text-faint" aria-hidden>
@@ -396,6 +412,9 @@ function FilaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => void 
 
       <span className="flex min-w-0 flex-1 items-center gap-2">
         <span className="min-w-0 truncate text-xs text-ink">{file.name}</span>
+        {file.callSessionId && (
+          <Radio size={10} className="shrink-0 text-faint" aria-label="Grabación de una llamada" />
+        )}
         {file.tags.slice(0, 2).map((tag) => (
           <TagBadge key={tag.id} tag={tag} />
         ))}

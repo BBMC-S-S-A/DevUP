@@ -29,6 +29,8 @@ import { useRecurso } from "@/lib/datos";
 import { useSession } from "@/lib/session";
 import { useSpotify } from "@/lib/spotify/SpotifyProvider";
 import { tinte } from "@/lib/tinte";
+import { diasHasta, hoyLocal } from "@/lib/fechas";
+import { dineroRedondo } from "@/lib/dinero";
 
 /**
  * El panel personal.
@@ -93,12 +95,6 @@ const PRESENCIA: Record<Presencia, { color: string; label: string }> = {
   do_not_disturb: { color: "var(--c-danger)", label: "no molestar" },
 };
 
-/** Días que faltan para una fecha, contra un único «hoy» por pantalla. */
-function diasRestantes(iso: string, hoy: Date): number {
-  const msPorDia = 1000 * 60 * 60 * 24;
-  return Math.round((new Date(iso).getTime() - hoy.getTime()) / msPorDia);
-}
-
 const UMBRAL_URGENCIA = 3;
 
 type Venta = {
@@ -122,10 +118,9 @@ const ICONO_NOTIFICACION: Record<Notification["kind"], typeof AtSign> = {
   announcement: Megaphone,
 };
 
-const money = (cents: number): string =>
-  new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
-    cents / 100,
-  );
+// Sin decimales, que es lo que pide una cifra de cabecera. La regla vive en
+// `lib/dinero.ts` junto con la del embudo, para que no vuelvan a separarse.
+const money = dineroRedondo;
 
 export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -159,12 +154,16 @@ export default function PanelPage() {
 
   if (espacio.cargando || !espacio.datos) return <EsqueletoPanel />;
 
-  const hoy = new Date();
+  // En calendario, no un instante. `expectedClose` es una columna `date` y
+  // llega sin hora: `new Date(iso)` la sitúa en medianoche UTC, y restar eso
+  // contra la hora actual daba un día de más o de menos según cuándo se
+  // mirara. Era la tercera copia de esta misma cuenta. Ver `lib/fechas.ts`.
+  const hoy = hoyLocal();
 
   // Ventas abiertas a punto de vencer, la más urgente primero.
   const ventasUrgentes: Espera[] = (ventas.datos?.opportunities ?? [])
     .filter((v) => v.stage !== "won" && v.stage !== "lost" && v.expectedClose)
-    .map((v) => ({ ...v, dias: diasRestantes(v.expectedClose!, hoy) }))
+    .map((v) => ({ ...v, dias: diasHasta(v.expectedClose!, hoy) }))
     .filter((v) => v.dias <= UMBRAL_URGENCIA)
     .sort((a, b) => a.dias - b.dias)
     .map((v) => ({

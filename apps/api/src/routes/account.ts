@@ -166,7 +166,12 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
             `${contexto.quien} te ha invitado a unirte.`,
             "/app",
           ])
-          .catch(() => {});
+          // El correo ya salió y la invitación ya existe: que la campana no
+          // suene no deshace nada. Pero queda anotado, porque «no me llegó
+          // nada» es una queja que hay que poder rastrear.
+          .catch((fallo: unknown) => {
+            request.log.warn({ err: fallo, destinatario }, "no se pudo avisar de una invitación");
+          });
       });
 
       // El enlace va también en la respuesta, no solo en el correo: mientras

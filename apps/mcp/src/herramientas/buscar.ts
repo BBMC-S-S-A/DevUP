@@ -47,14 +47,16 @@ export const esquemaBuscar = {
     .string()
     .optional()
     .describe(
-      "Nombre de la organización. Omitir si la persona solo pertenece a una, " +
-        "que es lo normal.",
+      "Nombre de la organización, para acotar. Omitir para buscar en todas las " +
+        "de esta cuenta, que es lo que casi siempre se quiere: al buscar algo " +
+        "por su nombre todavía no se sabe en cuál está.",
     ),
   limite: z.number().int().min(1).max(100).optional().describe("Cuántos resultados. Por defecto 30."),
 };
 
 export const descripcionBuscar = [
-  "Busca por texto en todo el contenido de una organización de DevUP a la vez:",
+  "Busca por texto en todo el contenido de DevUP a la vez, en TODAS las",
+  "organizaciones de esta cuenta salvo que se acote a una:",
   "mensajes de canales, archivos, tareas del tablero, clientes, servicios y",
   "oportunidades de venta.",
   "",
@@ -73,12 +75,27 @@ export async function buscar(
   cliente: ClienteApi,
   entrada: { texto: string; organizacion?: string; limite?: number },
 ): Promise<string> {
-  const organizacion = await resolverOrganizacion(cliente, entrada.organizacion);
   const parametros = new URLSearchParams({
     q: entrada.texto,
     limit: String(entrada.limite ?? 30),
   });
 
+  // SIN ORGANIZACIÓN SE BUSCA EN TODAS, Y ANTES ESTO FALLABA. `resolverOrganizacion`
+  // lanza cuando hay varias y no se dijo cuál, así que quien pertenece a tres
+  // recibía un error pidiéndole que eligiera — justo lo que no se puede saber
+  // antes de buscar. Buscar es el caso donde no elegir es la respuesta
+  // correcta, y la migración 0036 lo permite sin tocar el aislamiento.
+  //
+  // Se sigue admitiendo decir cuál: acotar a propósito es útil cuando ya sabes
+  // dónde está y quieres menos ruido.
+  if (!entrada.organizacion) {
+    const { results } = await cliente.get<{ results: Resultado[] }>(
+      `/search?${parametros.toString()}`,
+    );
+    return formatear(results, entrada.texto, "tus organizaciones");
+  }
+
+  const organizacion = await resolverOrganizacion(cliente, entrada.organizacion);
   const { results } = await cliente.get<{ results: Resultado[] }>(
     `/organizations/${organizacion.id}/search?${parametros.toString()}`,
   );

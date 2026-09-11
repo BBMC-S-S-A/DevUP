@@ -22,7 +22,7 @@ export default function DevPage() {
 
         <div className="relative mx-auto max-w-5xl px-6 pb-7 pt-5">
           <Link
-            href="/app"
+            href="/app/organizaciones"
             className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
           >
             <ArrowLeft size={13} />

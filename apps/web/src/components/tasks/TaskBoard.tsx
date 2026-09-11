@@ -1,7 +1,18 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, KanbanSquare, Paperclip, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  KanbanSquare,
+  Paperclip,
+  Plus,
+  CircleCheck,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { toast } from "sonner";
+import { fechaCorta, hoyLocal, iniciales } from "@/lib/fechas";
 import {
   type BoardColumn,
   type OrganizationMember,
@@ -16,39 +27,6 @@ import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { AreaTexto, Desplegable } from "@/components/ui/Field";
-
-const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-/**
- * La fecha se parte a mano en vez de pasarla por `Date`: `new Date("2026-08-17")`
- * es medianoche UTC, así que al oeste de Greenwich un vencimiento se mostraría
- * el día anterior. Aquí solo se lee el trozo de calendario que llega y no se
- * reinterpreta nada.
- */
-function fechaCorta(iso: string, anioActual: string): string {
-  const [anio, mes, dia] = iso.slice(0, 10).split("-");
-  const nombre = MESES[Number(mes) - 1];
-  if (!nombre || !dia) return iso;
-  return `${Number(dia)} ${nombre}${anio === anioActual ? "" : ` ${anio.slice(2)}`}`;
-}
-
-/** Hoy en calendario local, en el mismo formato que llega del servidor. */
-function hoyLocal(): string {
-  const ahora = new Date();
-  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
-  const dia = String(ahora.getDate()).padStart(2, "0");
-  return `${ahora.getFullYear()}-${mes}-${dia}`;
-}
-
-/**
- * Dos letras del responsable. En una tarjeta de 300 px el nombre completo se
- * corta casi siempre; el disco con las iniciales es lo que de verdad se
- * reconoce de un vistazo, y el nombre queda al lado para desempatar.
- */
-function iniciales(nombre: string): string {
-  const partes = nombre.trim().split(/\s+/).slice(0, 2);
-  return partes.map((parte) => parte[0]?.toUpperCase() ?? "").join("") || "?";
-}
 
 /** Tono del vencimiento: vencido grita, hoy avisa, el resto solo informa. */
 function tonoVencimiento(dueDate: string, hoy: string): string {
@@ -120,6 +98,28 @@ export function TaskBoard({
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Marca o desmarca una columna como «aquí se termina».
+   *
+   * Optimista y sin recargar el tablero: es un interruptor y devolverlo a su
+   * sitio si falla se nota menos que esperar una vuelta entera de la red para
+   * ver moverse un icono.
+   */
+  const marcarTerminal = async (column: BoardColumn) => {
+    const valor = !column.isTerminal;
+    setColumns((previas) =>
+      previas.map((c) => (c.id === column.id ? { ...c, isTerminal: valor } : c)),
+    );
+    try {
+      await api.patch(`/columns/${column.id}`, { isTerminal: valor });
+    } catch {
+      setColumns((previas) =>
+        previas.map((c) => (c.id === column.id ? { ...c, isTerminal: !valor } : c)),
+      );
+      toast.error("no se pudo cambiar la columna");
+    }
+  };
 
   const drop = async (columnId: string, afterTaskId: string | null) => {
     const info = dragging.current;
@@ -229,6 +229,30 @@ export function TaskBoard({
                   <h3 className="min-w-0 flex-1 truncate font-display text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
                     {column.name}
                   </h3>
+                  {/* Que esta columna cierra tareas se dice aquí y se cambia
+                      aquí. Antes «hecho» era solo el nombre que alguien
+                      escribió, y nada del producto podía leerlo: el MCP
+                      devolvía las terminadas al preguntar qué queda pendiente.
+                      Es un botón y no un ajuste escondido porque es la clase
+                      de cosa que hay que poder corregir en el sitio — la
+                      migración la adivina por el nombre y puede fallar. */}
+                  <button
+                    type="button"
+                    onClick={() => void marcarTerminal(column)}
+                    title={
+                      column.isTerminal
+                        ? "Las tareas que llegan aquí cuentan como terminadas. Pulsa para quitarlo."
+                        : "Marcar esta columna como «terminadas»"
+                    }
+                    aria-pressed={column.isTerminal}
+                    className={`presionable shrink-0 rounded-lg p-0.5 transition-colors ${
+                      column.isTerminal
+                        ? "text-live"
+                        : "text-line-strong hover:text-muted"
+                    }`}
+                  >
+                    <CircleCheck size={13} />
+                  </button>
                   <span className="shrink-0 rounded-lg border border-line bg-canvas/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted">
                     {column.tasks.length}
                   </span>
@@ -301,6 +325,11 @@ export function TaskBoard({
                         <button
                           type="button"
                           onClick={() => setOpen(task)}
+                          // Las dos cosas que se pueden hacer con una tarjeta
+                          // solo se descubrían probando: el cursor `grab` pide
+                          // arrastrar pero no dice a dónde, y que abra un
+                          // diálogo con responsable y fecha no lo anuncia nada.
+                          title="Abrir para editar · arrastrar para cambiarla de columna"
                           // Sin `presionable`: su hundido del 3 % se dispara
                           // mientras se arrastra (el botón sigue :active) y
                           // pelearía con el levantado, que es la señal que
@@ -318,7 +347,16 @@ export function TaskBoard({
                             hover:brightness-125 active:cursor-grabbing motion-reduce:transition-none
                             ${viajando ? "panel-vivo scale-[1.03] opacity-45" : ""}`}
                         >
-                          <span className="block text-[13px] font-medium leading-snug text-ink">
+                          {/* Terminada se ve terminada. Tachado y apagada, no
+                              escondida: sigue estando en su columna porque el
+                              tablero cuenta una historia, y borrarla de la
+                              vista haría que «¿esto se hizo?» dejara de tener
+                              respuesta. */}
+                          <span
+                            className={`block text-[13px] font-medium leading-snug ${
+                              column.isTerminal ? "text-muted line-through" : "text-ink"
+                            }`}
+                          >
                             {task.title}
                           </span>
 
@@ -342,30 +380,44 @@ export function TaskBoard({
                             </span>
                           )}
 
-                          {(task.assigneeName || task.dueDate) && (
-                            <span className="mt-2.5 flex items-center gap-2">
-                              {task.assigneeName && (
-                                <span className="flex min-w-0 items-center gap-1.5">
-                                  <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-elevated font-display text-[9px] font-semibold text-muted">
-                                    {iniciales(task.assigneeName)}
-                                  </span>
-                                  <span className="truncate text-[11px] text-muted">
-                                    {task.assigneeName}
-                                  </span>
+                          {/* Este bloque ya no se condiciona a que haya
+                              responsable o fecha: una tarjeta sin responsable
+                              no dibujaba nada, y por eso nadie descubría que
+                              asignar existe. El uso real dio la función por
+                              ausente estando construida desde hace meses. */}
+                          <span className="mt-2.5 flex items-center gap-2">
+                            {task.assigneeName ? (
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-elevated font-display text-[9px] font-semibold text-muted">
+                                  {iniciales(task.assigneeName)}
                                 </span>
-                              )}
-                              {task.dueDate && (
-                                <span
-                                  className={`flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono text-[10px] tabular-nums
-                                    ${task.assigneeName ? "ml-auto" : ""}
-                                    ${tonoVencimiento(task.dueDate, hoy)}`}
-                                >
-                                  <CalendarClock size={10} />
-                                  {fechaCorta(task.dueDate, anioActual)}
+                                <span className="truncate text-[11px] text-muted">
+                                  {task.assigneeName}
                                 </span>
-                              )}
-                            </span>
-                          )}
+                              </span>
+                            ) : (
+                              // Hueco discreto, no una llamada a la acción: la
+                              // mayoría de las tarjetas de un tablero vivo no
+                              // tienen responsable, y gritarlo en todas sería
+                              // peor que callarlo. El borde discontinuo es el
+                              // idioma de «esto se rellena».
+                              <span className="flex min-w-0 items-center gap-1.5 text-faint">
+                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-line-strong">
+                                  <UserPlus size={10} />
+                                </span>
+                                <span className="truncate text-[11px]">Sin responsable</span>
+                              </span>
+                            )}
+                            {task.dueDate && (
+                              <span
+                                className={`ml-auto flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-0.5 font-mono text-[10px] tabular-nums
+                                  ${tonoVencimiento(task.dueDate, hoy)}`}
+                              >
+                                <CalendarClock size={10} />
+                                {fechaCorta(task.dueDate, anioActual)}
+                              </span>
+                            )}
+                          </span>
                         </button>
 
                         {marcaAbajo && <Hueco lado="abajo" />}

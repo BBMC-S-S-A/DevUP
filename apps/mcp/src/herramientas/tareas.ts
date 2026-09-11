@@ -28,7 +28,13 @@ export type Tarea = {
   adjuntos: number;
 };
 
-type Columna = { id: string; name: string; tasks: Tarea[] };
+type Columna = {
+  id: string;
+  name: string;
+  /** Si terminar aquí cuenta como terminar. Migración 0037. */
+  isTerminal?: boolean;
+  tasks: Tarea[];
+};
 
 /** Hoy en calendario local, como lo guarda el servidor. */
 function hoy(): string {
@@ -66,6 +72,13 @@ export const esquemaMisTareas = {
     .boolean()
     .optional()
     .describe("Traer las imágenes pegadas a cada tarea. Por defecto sí."),
+  incluir_hechas: z
+    .boolean()
+    .optional()
+    .describe(
+      "Incluir también las que están en una columna de terminadas. Por defecto " +
+        "NO: quien pregunta qué tiene pendiente no quiere ver lo que ya cerró.",
+    ),
 };
 
 export const descripcionMisTareas = [
@@ -73,7 +86,8 @@ export const descripcionMisTareas = [
   "sus espacios de trabajo o en uno concreto.",
   "",
   "Es la herramienta para «¿qué tareas tengo?», «¿qué me toca?», «¿qué tengo",
-  "pendiente?» y «¿qué se me vence?». Devuelve de cada tarea en qué columna",
+  "pendiente?» y «¿qué se me vence?». Deja fuera lo que está en una columna de",
+  "terminadas, salvo que se pida `incluir_hechas`. Devuelve de cada tarea en qué columna",
   "está, cuándo vence —marcando las vencidas—, sus etiquetas y, salvo que se",
   "pida lo contrario, **las imágenes que lleva pegadas, una por una**, no un",
   "enlace a ellas.",
@@ -85,7 +99,12 @@ export const descripcionMisTareas = [
 
 export async function misTareas(
   cliente: ClienteApi,
-  entrada: { espacio?: string; organizacion?: string; con_imagenes?: boolean },
+  entrada: {
+    espacio?: string;
+    organizacion?: string;
+    con_imagenes?: boolean;
+    incluir_hechas?: boolean;
+  },
 ): Promise<Bloque[]> {
   const { user } = await cliente.get<{ user: { id: string } }>("/auth/me");
   const userId = user?.id;
@@ -96,6 +115,7 @@ export async function misTareas(
     : (await todosLosEspacios(cliente, entrada.organizacion)).espacios;
 
   const conImagenes = entrada.con_imagenes ?? true;
+  const incluirHechas = entrada.incluir_hechas ?? false;
   let cupo = conImagenes ? TOPE_POR_LLAMADA : 0;
   let omitidas = 0;
   const bloques: Bloque[] = [];
@@ -106,9 +126,14 @@ export async function misTareas(
       .get<{ columns: Columna[] }>(`/workspaces/${espacio.id}/board`)
       .catch(() => ({ columns: [] as Columna[] }));
 
-    const mias = columns.flatMap((c) =>
-      c.tasks.filter((t) => t.assigneeId === userId).map((t) => ({ tarea: t, columna: c.name })),
-    );
+    // Lo terminado se deja fuera salvo que se pida. Antes no se podía: una
+    // columna solo tenía nombre, así que esto devolvía también lo ya cerrado y
+    // preguntar «qué tengo pendiente» listaba lo hecho. Ver la migración 0037.
+    const mias = columns
+      .filter((c) => incluirHechas || !c.isTerminal)
+      .flatMap((c) =>
+        c.tasks.filter((t) => t.assigneeId === userId).map((t) => ({ tarea: t, columna: c.name })),
+      );
     if (mias.length === 0) continue;
 
     total += mias.length;
@@ -130,7 +155,10 @@ export async function misTareas(
 
   if (total === 0) {
     const donde = entrada.espacio ? `en ${entrada.espacio}` : "en ninguno de tus espacios";
-    return [{ type: "text", text: `No tienes ninguna tarea asignada ${donde}.` }];
+    // Se dice que hay un filtro puesto. Sin esto, «no tienes ninguna» se lee
+    // como que el tablero está vacío cuando puede estar lleno de terminadas.
+    const filtro = incluirHechas ? "" : " sin terminar";
+    return [{ type: "text", text: `No tienes ninguna tarea asignada${filtro} ${donde}.` }];
   }
 
   bloques.unshift({
