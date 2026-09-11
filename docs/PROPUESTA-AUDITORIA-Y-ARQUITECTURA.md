@@ -174,7 +174,77 @@ y pasa a ser la promesa que ya estabais cumpliendo.
 
 ---
 
-## 6. En una frase
+## 7. Addendum — buena parte de esto ya aterrizó mientras se escribía
+
+33 commits entraron a la base. Releído contra ellos, **la mitad de esta
+propuesta ya no es propuesta**.
+
+### Enlazar arquitecturas (§2): existe
+
+`0033_arquitectura.sql` crea `architecture_nodes` y `architecture_links`, con
+`Diagrama.tsx` (469 líneas) para dibujarlas y arrastrarlas, y el MCP también las
+dibuja. El enlace lleva su etiqueta libre —«llama a», «lee de»— porque *«el
+vocabulario de cada equipo es suyo, no nuestro»*, que es la decisión correcta.
+
+**Y el aislamiento del enlace, que era mi reserva grande, está bien resuelto
+para lo que hay hoy.** La política de INSERT exige que los dos extremos sean de
+la misma organización; la de SELECT comprueba el origen, y basta porque todo
+nodo es de organización.
+
+> **Pero mi advertencia sigue en pie para el paso siguiente.** Funciona porque
+> hoy *todos* los nodos son de organización. En cuanto un nodo apunte a un canal
+> privado, a una tarea o a un mensaje —que es justo lo que pide «enlazar
+> estructuras y demás»— comprobar solo el origen deja de bastar, y hace falta
+> `puede_ver_nodo(tipo, id)`. **La tabla ya está creada, así que esto pasa de
+> ser una decisión previa a ser una migración pendiente.**
+
+### Crear desde la plataforma (§3): empezó, por dentro
+
+`apps/mcp` es la puerta agéntica, con OAuth 2.1 propio y transporte HTTP. El
+agente ya escribe en el tablero **y queda marcado como agente** — que es
+exactamente la procedencia que hacía aceptable todo este modelo.
+
+**La barrera que describí sigue intacta, pero hay que decirla mejor:** DevUP ya
+escribe **hacia dentro** (su tablero, su arquitectura). Lo que sigue sin existir
+es escribir **hacia fuera**, al repositorio del cliente. El §3 se lee entero
+cambiando «no escribe nada» por «no escribe nada fuera de sí mismo», y su
+conclusión no cambia: la salida es abrir PRs, nunca commits directos.
+
+### La zona de auditoría (§1): sigue siendo la mejor apuesta, y ahora más
+
+Los dos analizadores siguen escondidos en dos pantallas que se llaman otra cosa.
+Pero ahora hay dos motivos más para juntarlos:
+
+- **El MCP les daría salida sin pantalla.** Auditar desde el Claude de cada uno,
+  sin abrir DevUP, es la versión buena de esto.
+- **`GRAFO.md` ya se genera leyendo el código.** Es el mismo gesto —leer un
+  repositorio y contar qué hay— aplicado al nuestro. Auditar el del cliente es
+  el mismo motor apuntando a otro sitio.
+
+### Migrar bases de datos (§4): mi freno se refuerza solo
+
+Encontrado en `routes/github.ts`, escrito por quien construyó el analizador:
+
+> «SE LEEN, NO SE EJECUTAN. Ni se conecta a la base del cliente ni se corre
+> nada: se piden los archivos y se analiza el texto. **Ejecutar para averiguar
+> si algo es seguro es el orden equivocado.**»
+
+Esa frase ya está en el código y dice lo mismo que el §4 por su cuenta. No es
+una opinión mía sobre el producto: es una regla que el producto ya tiene.
+
+### El orden del §5, corregido
+
+| | Qué | Estado |
+|---|---|---|
+| 1 | Pantalla de Auditoría agregando los dos analizadores | **Sigue siendo lo primero, y ahora con salida por MCP** |
+| 2 | Escritura como PR hacia el repositorio del cliente | Sin empezar. Sigue siendo la segunda |
+| 3 | Grafo con arquitectura como nodo | **Hecho para nodos de organización.** Falta `puede_ver_nodo` antes de enlazar canales, tareas o mensajes |
+| 4 | Generar migraciones y entregarlas como PR | Depende de 2 |
+| — | Ejecutar migraciones contra la base del cliente | No se planifica. El código ya dice por qué |
+
+---
+
+## 8. En una frase
 
 Tres de las cuatro cosas que pides están más cerca de lo que parece: la
 auditoría **ya está escrita** y solo le falta un sitio con su nombre, enlazar

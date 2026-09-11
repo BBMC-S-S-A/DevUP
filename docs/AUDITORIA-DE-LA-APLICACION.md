@@ -209,7 +209,53 @@ arregla. Ese correo sale hoy.
 
 ---
 
-## 5. En una frase
+## 6. Addendum — 33 commits llegaron a la base mientras esto se escribía
+
+Releído contra la base nueva. Tres cosas de arriba dejan de ser ciertas, y hay
+que decirlo antes de que alguien actúe sobre ellas.
+
+### 6.1 · El §2.7 ya no es un fallo. Es una decisión, y es la correcta
+
+Decía que `routes/github.ts` inserta el repositorio antes de comprobar que se
+puede leer, y que eso deja filas rotas. **Sigue insertando antes — y ahora está
+bien.** El commit que trajo «conectar un repositorio pegando su enlace, sin
+token» lo convirtió en deliberado, y lo explica:
+
+> «si esa lectura falla, el repositorio se queda igualmente con su error escrito
+> —`refreshRepo` lo anota en vez de tirar la petición—, porque un enlace de un
+> repositorio privado sin token tiene que poder verse en pantalla y arreglarse
+> conectando el token, no desaparecer.»
+
+Con el camino sin token, desaparecer es peor que quedarse con el error a la
+vista. Mi hallazgo era correcto para el código de ayer y es incorrecto para el
+de hoy. **Retirado.**
+
+### 6.2 · Lo que yo proponía para el día 1 y 2 ya está hecho
+
+«El camino sin token, para lo público» era el punto 3 del plan de la semana.
+Está construido, con pruebas propias (`connectors/github.test.ts`) y su
+migración (`0034_github_sin_token.sql`). Además, cada repositorio ahora cuelga
+del workspace y no de la organización (`0035_cada_workspace_aislado.sql`).
+
+**La semana del cliente empieza con menos trabajo del que decía el plan.**
+
+### 6.3 · Hay tres aplicaciones, no dos
+
+`apps/mcp` existe: la puerta agéntica, con OAuth 2.1 propio, transporte HTTP y
+pruebas en CI. Todos los recuentos del §1 y del §2 son de `api` y `web`, y por
+tanto **están cortos**. El typecheck de los tres paquetes pasa limpio.
+
+### 6.4 · Lo que sigue siendo cierto, comprobado de nuevo
+
+- La deuda de la capa de datos (§2.1), las 44 capturas en silencio (§2.2), el
+  responsive (§2.3), `ventas` creciendo (§2.4) y **cero pruebas de interfaz**
+  (§2.5) siguen exactamente igual.
+- El §0 —Infraestructura construida, no vacía— se confirma y se refuerza: ahora
+  además tiene diagrama.
+
+---
+
+## 7. En una frase
 
 Los cimientos son sólidos —el aislamiento es de los mejores que he visto contar
 tabla por tabla, y el CI protege lo correcto—; lo que está mal es todo de la

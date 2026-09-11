@@ -63,10 +63,12 @@ Eso es todo lo que ve quien conecta: «GitHub respondió 404 para
 significa «no existe»: significa **«existe y tu token no lo puede ver»**, que
 es una cosa completamente distinta y con solución conocida.
 
-Hay además un segundo problema, en `routes/github.ts`: el repositorio se
-**inserta en la base antes** de comprobar que se puede leer. Si el refresco
-falla, queda una fila de un repositorio que no funciona, y la pantalla arranca
-con un repo roto dentro.
+~~Hay además un segundo problema, en `routes/github.ts`: el repositorio se
+inserta en la base antes de comprobar que se puede leer.~~ **Corregido el 11 de
+septiembre: no era un problema, o dejó de serlo.** Insertar antes es ahora una
+decisión escrita y explicada — sin token, la fila con su error a la vista es
+recuperable y la desaparición no. Ver el §6.1 de
+[AUDITORIA-DE-LA-APLICACION.md](AUDITORIA-DE-LA-APLICACION.md).
 
 ---
 
@@ -86,9 +88,16 @@ Todo el esfuerzo en el conector, porque es el único camino a las otras tres.
    reales, cada uno con qué hacer: token sin ese repositorio autorizado,
    organización que bloquea tokens de alcance fino, y repositorio que de
    verdad no existe.
-2. **Comprobar el acceso antes de insertar**, para que un fallo no deje un
-   repositorio roto en la lista.
-3. **El camino sin token, para lo público.** Pegar el enlace e intentar leerlo
+2. ~~**Comprobar el acceso antes de insertar.**~~ **RETIRADO.** Con el camino
+   sin token, insertar primero pasó a ser deliberado y es lo correcto: un
+   repositorio privado sin credencial tiene que quedarse en pantalla con su
+   error escrito y arreglarse conectando el token, no desaparecer. Lo explica
+   el propio `routes/github.ts`.
+3. ~~**El camino sin token, para lo público.**~~ **HECHO** (11 de septiembre,
+   `0034_github_sin_token.sql` y `connectors/github.test.ts`). Se pega el enlace
+   y, si el repositorio es público, funciona sin credencial. Los días 1 y 2
+   empiezan con un tercio menos de trabajo. Se conserva el texto original
+   porque la advertencia de abajo sigue valiendo: Pegar el enlace e intentar leerlo
    sin credencial: si el repositorio es público, funciona y el token no hace
    falta. **Ojo con la expectativa**: si el repositorio del cliente es privado
    —lo más probable— el token sigue siendo obligatorio. Esto no elimina el
