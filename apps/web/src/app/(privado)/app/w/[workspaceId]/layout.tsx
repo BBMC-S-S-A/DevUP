@@ -25,6 +25,7 @@ import { ApiError, type Channel, type Organization, type Workspace, api } from "
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { useHayRiel } from "@/components/ui/RielOrganizaciones";
+import { guardarUltimoEspacio } from "@/lib/ultimo-espacio";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
@@ -47,6 +48,14 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, signOut } = useSession();
   const hayRiel = useHayRiel();
+
+  // Lo que hace que `/app` te devuelva donde estabas. Va aquí y no en cada
+  // pantalla porque este armazón envuelve a todas las del espacio: entrar por
+  // un canal, por el tablero o por la auditoría cuenta igual como «estuve
+  // aquí».
+  useEffect(() => {
+    guardarUltimoEspacio(workspaceId);
+  }, [workspaceId]);
   const { mode, setMode, ready: modeReady } = useViewMode();
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -147,7 +156,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           pista="Puede que ya no exista, o que esta cuenta no tenga acceso."
           accion={
             <Link
-              href="/app"
+              href="/app/organizaciones"
               className="presionable inline-flex h-8 items-center gap-1.5 rounded-lg border border-line
                 bg-raised/60 px-3 text-xs text-ink hover:border-line-strong hover:bg-raised"
             >
@@ -202,7 +211,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               salida y se queda. */}
           {!hayRiel && (
             <Link
-              href="/app"
+              href="/app/organizaciones"
               className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
                 text-[11px] text-muted hover:text-accent-bright"
             >

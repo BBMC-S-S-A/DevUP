@@ -109,12 +109,16 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
   // fija con un único botón que lleva a donde ya estás. Aparece cuando hay algo
   // entre lo que elegir.
   //
-  // Y no se pinta en dos sitios. En `/app` la lista de organizaciones ES el
-  // contenido, así que el riel sería la misma lista dos veces; y el entorno de
+  // Y no se pinta en tres sitios. En `/app/organizaciones` la lista ES el
+  // contenido, así que el riel sería la misma lista dos veces; en `/app`, que
+  // es solo la puerta, no hay nada a lo que ponerle marco; y el entorno de
   // desarrollo se sirve a pantalla completa con las cabeceras de aislamiento
   // que exige WebContainer, donde no hay barra de la que colgarse.
   const visible =
-    organizaciones.length >= 2 && pathname !== "/app" && !pathname.endsWith("/dev");
+    organizaciones.length >= 2 &&
+    pathname !== "/app" &&
+    pathname !== "/app/organizaciones" &&
+    !pathname.endsWith("/dev");
 
   useEffect(() => {
     onVisible(visible);
@@ -144,7 +148,7 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
       <span aria-hidden className="my-1 h-px w-6 bg-line-strong" />
 
       <Link
-        href="/app"
+        href="/app/organizaciones"
         title="Todas las organizaciones"
         aria-label="Todas las organizaciones"
         className="presionable grid size-10 place-items-center rounded-xl border border-dashed

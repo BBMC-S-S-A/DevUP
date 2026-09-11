@@ -114,7 +114,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
         <div className="text-center">
           <p className="text-sm text-muted">{error ?? "No se pudo cargar la organización."}</p>
           <Link
-            href="/app"
+            href="/app/organizaciones"
             className="presionable mt-4 inline-flex items-center gap-1.5 text-xs text-accent"
           >
             <ArrowLeft size={13} />
@@ -141,7 +141,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
               salida y se queda. */}
           {!hayRiel && (
             <Link
-              href="/app"
+              href="/app/organizaciones"
               className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
                 text-[11px] text-muted hover:text-accent-bright"
             >
@@ -208,7 +208,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             {workspaces.length === 0 ? (
               <p className="px-3 py-1.5 text-[11px] leading-relaxed text-faint">
                 Todavía no hay ninguno. Se crean desde{" "}
-                <Link href="/app" className="text-accent hover:underline">
+                <Link href="/app/organizaciones" className="text-accent hover:underline">
                   organizaciones
                 </Link>
                 .
