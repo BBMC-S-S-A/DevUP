@@ -3,6 +3,7 @@
 import { CircleAlert, FileCode, Lightbulb, ScanSearch, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { AuditoriaDelEquipo } from "@/components/auditoria/Equipo";
 import { Desplegable } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -134,9 +135,25 @@ function filasDeIntegraciones(datos: RespuestaIntegraciones | null | undefined):
   }));
 }
 
+/**
+ * Dos mitades, y las dos son auditoría.
+ *
+ * «El equipo» es lo que se pedía cuando se pidió esta pantalla: cómo trabaja
+ * la gente junta. «El repositorio» es lo que se construyó primero, porque la
+ * palabra se leyó en su sentido técnico. Las dos valen, así que conviven en
+ * vez de sustituirse — y el equipo va delante, que es la pregunta que se hace
+ * más veces.
+ */
+const MITADES = [
+  { id: "equipo", texto: "El equipo" },
+  { id: "repositorio", texto: "El repositorio" },
+] as const;
+type Mitad = (typeof MITADES)[number]["id"];
+
 export default function AuditoriaPage() {
   const workspaceId = useWorkspaceId();
   const [repoId, setRepoId] = useState("");
+  const [mitad, setMitad] = useState<Mitad>("equipo");
 
   const repos = useRecurso<{ repos: GithubRepo[] }>(`/workspaces/${workspaceId}/github/repos`);
   const lista = repos.datos?.repos ?? [];
@@ -169,11 +186,15 @@ export default function AuditoriaPage() {
   return (
     <Pagina
       titulo="Auditoría"
-      rotulo="Todo lo que hay que mirar en este repositorio, junto"
+      rotulo={
+        mitad === "equipo"
+          ? "Cómo trabaja el equipo junto"
+          : "Todo lo que hay que mirar en este repositorio, junto"
+      }
       icono={<ScanSearch size={20} />}
       ancho="xl"
       acciones={
-        lista.length > 1 ? (
+        mitad === "repositorio" && lista.length > 1 ? (
           <Desplegable
             tamano="sm"
             value={elegido}
@@ -189,6 +210,24 @@ export default function AuditoriaPage() {
         ) : undefined
       }
     >
+      <div className="mb-5 flex gap-1 border-b border-line">
+        {MITADES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setMitad(m.id)}
+            className={`presionable -mb-px border-b-2 px-3 py-2 text-xs font-semibold transition-colors
+              ${mitad === m.id ? "border-accent text-ink" : "border-transparent text-faint hover:text-muted"}`}
+          >
+            {m.texto}
+          </button>
+        ))}
+      </div>
+
+      {mitad === "equipo" ? (
+        <AuditoriaDelEquipo workspaceId={workspaceId} />
+      ) : (
+        <>
       {repos.error && (
         <Fallo className="mb-5" onReintentar={() => void repos.recargar()}>
           {repos.error}
@@ -251,6 +290,8 @@ export default function AuditoriaPage() {
               </div>
             </>
           )}
+        </>
+      )}
         </>
       )}
     </Pagina>
