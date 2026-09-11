@@ -1065,16 +1065,20 @@ async function main(): Promise<void> {
     //
     // github_repo_stats no tiene ninguna política de escritura: solo
     // `upsert_github_repo_stats` (security definer) puede escribir en ella.
-    // Lo que se prueba aquí es lectura —hereda de la visibilidad del repo,
-    // que a su vez hereda de la conexión— y que solo un admin de la
-    // organización puede añadir o quitar un repositorio.
+    // Lo que se prueba aquí es lectura —hereda de la visibilidad del repo— y
+    // que solo un admin de la organización puede añadir o quitar uno.
+    //
+    // DESDE 0034 EL DUEÑO ES `organization_id`, NO LA CONEXIÓN: un repositorio
+    // público se añade pegando su enlace y no tiene conexión ninguna. El caso
+    // sin token se prueba aquí abajo aparte, porque es el que no existía
+    // cuando se escribieron estas comprobaciones.
     console.log("\nConector de GitHub");
 
     const acmeRepo = await withUser(ana, async (db) => {
       const { rows } = await db.query<{ id: string }>(
-        `insert into github_repos (connection_id, full_name, added_by)
-         values ($1,'acme/producto',$2) returning id`,
-        [acmeConnection, ana],
+        `insert into github_repos (connection_id, organization_id, full_name, added_by)
+         values ($1,$2,'acme/producto',$3) returning id`,
+        [acmeConnection, acme.org, ana],
       );
       const id = rows[0]!.id;
       await db.query("select public.upsert_github_repo_stats($1, $2::jsonb, null)", [
@@ -1094,22 +1098,59 @@ async function main(): Promise<void> {
     await denied("Carla, que es miembro raso, no puede conectar un repositorio", () =>
       withUser(carla, (db) =>
         db.query(
-          `insert into github_repos (connection_id, full_name, added_by)
-           values ($1,'acme/colado',$2)`,
-          [acmeConnection, carla],
+          `insert into github_repos (connection_id, organization_id, full_name, added_by)
+           values ($1,$2,'acme/colado',$3)`,
+          [acmeConnection, acme.org, carla],
         ),
       ),
     );
 
-    await denied("Bruno no puede conectar un repositorio contra la conexión de Acme", () =>
+    await denied("Bruno no puede conectar un repositorio en la organización de Acme", () =>
       withUser(bruno, (db) =>
         db.query(
-          `insert into github_repos (connection_id, full_name, added_by)
-           values ($1,'bruno/intruso',$2)`,
-          [acmeConnection, bruno],
+          `insert into github_repos (connection_id, organization_id, full_name, added_by)
+           values ($1,$2,'bruno/intruso',$3)`,
+          [acmeConnection, acme.org, bruno],
         ),
       ),
     );
+
+    // --- Un repositorio público, sin token detrás (0034) ----------------------
+    //
+    // Es el caso nuevo y el que más importa comprobar: sin conexión, lo único
+    // que aísla la fila es su `organization_id`. Si esa política estuviera mal,
+    // un repositorio añadido pegando un enlace sería visible para cualquiera.
+    const acmePublico = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into github_repos (connection_id, organization_id, full_name, added_by)
+         values (null,$1,'acme/publico',$2) returning id`,
+        [acme.org, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    check("Ana ve el repositorio público que añadió sin token", (await count(ana, "github_repos")) === 2);
+    check("Carla, de la misma organización, también lo ve", (await count(carla, "github_repos")) === 2);
+    check("Bruno sigue sin ver ninguno", (await count(bruno, "github_repos")) === 0);
+
+    await denied("Bruno no puede colar un repositorio sin token en Acme", () =>
+      withUser(bruno, (db) =>
+        db.query(
+          `insert into github_repos (connection_id, organization_id, full_name, added_by)
+           values (null,$1,'bruno/publico',$2)`,
+          [acme.org, bruno],
+        ),
+      ),
+    );
+
+    const brunoAdopto = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "update github_repos set connection_id = null where id = $1",
+        [acmePublico],
+      );
+      return rowCount ?? 0;
+    });
+    check("un UPDATE de Bruno sobre un repositorio de Acme afecta a cero filas", brunoAdopto === 0);
 
     const brunoDeletedRepo = await withUser(bruno, async (db) => {
       const { rowCount } = await db.query("delete from github_repos where id = $1", [acmeRepo]);

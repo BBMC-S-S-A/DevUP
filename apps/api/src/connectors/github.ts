@@ -12,12 +12,65 @@ const API = "https://api.github.com";
  *   separado exige `search/issues` con `type:pr` y `type:issue`, no leer ese
  *   campo directamente.
  */
-const headers = (token: string) => ({
-  Authorization: `Bearer ${token}`,
+const headers = (token: string | null) => ({
+  // Sin token también se puede: la API de GitHub contesta a cualquiera para
+  // lo público. Lo que cambia es el cupo —60 peticiones por hora y por IP en
+  // vez de 5.000— y que lo privado deja de existir para quien pregunta.
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
   "User-Agent": "DevUP",
 });
+
+/**
+ * Saca «organización/repositorio» de lo que sea que haya pegado alguien.
+ *
+ * POR QUÉ ACEPTA TANTAS FORMAS. Nadie tiene a mano «organización/repositorio»:
+ * lo que tiene es la barra de direcciones del navegador, o el botón de copiar
+ * de GitHub, que da la URL de clonar terminada en `.git`, o la de SSH, que ni
+ * siquiera es una URL. Rechazar cualquiera de esas es mandar a la persona a
+ * editar a mano un texto que ya tenía bien — que es exactamente el paso que
+ * esto viene a quitar.
+ *
+ * Se queda con los dos primeros tramos de la ruta porque `/tree/main/src` y
+ * `/pull/42` son direcciones normales de las que alguien copia sin pensar, y
+ * todas apuntan al mismo repositorio.
+ */
+const TRAMO = /^[\w.-]+$/;
+
+export function nombreDeRepo(entrada: string): string | null {
+  let texto = entrada.trim();
+  if (!texto) return null;
+
+  // La forma SSH (`git@github.com:org/repo.git`) no es una URL para nadie más
+  // que para git, así que se convierte antes de mirarla como tal.
+  texto = texto.replace(/^git@([^:]+):/, "https://$1/");
+  if (!/^https?:\/\//i.test(texto) && /^[^/]*github\.com\//i.test(texto)) {
+    texto = `https://${texto}`;
+  }
+
+  let ruta = texto;
+  if (/^https?:\/\//i.test(texto)) {
+    let url: URL;
+    try {
+      url = new URL(texto);
+    } catch {
+      return null;
+    }
+    // Solo GitHub: un enlace de GitLab que se colara aquí acabaría en un 404
+    // de GitHub y en un mensaje que no explica nada.
+    if (!/^(www\.)?github\.com$/i.test(url.hostname)) return null;
+    ruta = url.pathname;
+  }
+
+  const tramos = ruta.split("/").filter(Boolean);
+  const duenyo = tramos[0];
+  const repo = tramos[1]?.replace(/\.git$/i, "");
+  if (!duenyo || !repo) return null;
+  if (!TRAMO.test(duenyo) || !TRAMO.test(repo)) return null;
+
+  return `${duenyo}/${repo}`;
+}
 
 export type GithubStats = {
   defaultBranch: string;
@@ -33,9 +86,42 @@ export type GithubTreeEntry = {
   size?: number;
 };
 
-async function get(url: string, token: string): Promise<unknown> {
+/**
+ * Los dos fallos que de verdad le pasan a quien pega un enlace sin token
+ * merecen un mensaje suyo, porque el código de estado a secas dice lo
+ * contrario de lo que pasa:
+ *
+ * - **404 no significa «no existe»**. GitHub contesta 404 y no 403 a un
+ *   repositorio privado cuando quien pregunta no tiene permiso — a propósito,
+ *   para no confirmar que existe. Sin el matiz, la pantalla acusaría de
+ *   escribir mal un nombre que está perfecto.
+ * - **403 casi siempre es el cupo**, no un permiso. Sin credencial son 60
+ *   peticiones por hora Y POR IP, compartidas por todo DevUP.
+ */
+function traducirFallo(status: number, fullName: string, conToken: boolean): string {
+  if (status === 404 && !conToken) {
+    return `no encontré «${fullName}». Si existe, es privado: para esos sí hace falta un token.`;
+  }
+  if (status === 404) {
+    return `no encontré «${fullName}», o el token no alcanza a ese repositorio.`;
+  }
+  if ((status === 403 || status === 429) && !conToken) {
+    return "GitHub cortó por límite de peticiones. Sin token son 60 por hora para todo DevUP; con uno, 5.000.";
+  }
+  if (status === 401) return "el token no vale: caducado, revocado o mal pegado.";
+  return `GitHub respondió ${status}`;
+}
+
+/** El nombre del repositorio dentro de una URL de la API, para el mensaje. */
+function repoDeUrl(url: string): string {
+  return url.match(/repos\/([^/?]+\/[^/?]+)/)?.[1] ?? url.replace(`${API}/`, "");
+}
+
+async function get(url: string, token: string | null): Promise<unknown> {
   const response = await fetch(url, { headers: headers(token) });
-  if (!response.ok) throw new Error(`GitHub respondió ${response.status} para ${url}`);
+  if (!response.ok) {
+    throw new Error(traducirFallo(response.status, repoDeUrl(url), Boolean(token)));
+  }
   return response.json();
 }
 
@@ -45,7 +131,7 @@ async function get(url: string, token: string): Promise<unknown> {
  * de tirar todo el resto — es información de menos, no un error del
  * conector entero.
  */
-export async function fetchGithubStats(token: string, fullName: string): Promise<GithubStats> {
+export async function fetchGithubStats(token: string | null, fullName: string): Promise<GithubStats> {
   const repo = (await get(`${API}/repos/${fullName}`, token)) as { default_branch: string };
 
   const [prs, issues, commits, runs] = await Promise.all([
@@ -94,7 +180,11 @@ export async function fetchGithubStats(token: string, fullName: string): Promise
  * un `sha` o una rama, y quien llama a esto normalmente solo tiene el nombre
  * del repositorio, no su rama.
  */
-export async function fetchGithubTree(token: string, fullName: string, ref?: string): Promise<GithubTreeEntry[]> {
+export async function fetchGithubTree(
+  token: string | null,
+  fullName: string,
+  ref?: string,
+): Promise<GithubTreeEntry[]> {
   const branch =
     ref ?? ((await get(`${API}/repos/${fullName}`, token)) as { default_branch: string }).default_branch;
 
@@ -122,7 +212,7 @@ export async function fetchGithubTree(token: string, fullName: string, ref?: str
  * de más de 1 MB no es el caso común de "abrir para editar" de esta semilla.
  */
 export async function fetchGithubFileContent(
-  token: string,
+  token: string | null,
   fullName: string,
   path: string,
   ref?: string,

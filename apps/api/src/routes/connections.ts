@@ -65,6 +65,25 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
         [id, encryptSecret(body.secret)],
       );
+
+      /**
+       * Un token de GitHub adopta los repositorios que se añadieron sin él.
+       *
+       * Desde 0034 se puede pegar el enlace de un repositorio público sin
+       * conectar nada. Quien luego conecta un token lo hace precisamente para
+       * que eso funcione mejor —alcanzar lo privado, y entrar en la pasada
+       * automática, que se salta los que no tienen credencial—. Sin esto, el
+       * token quedaría conectado y sin efecto sobre lo que ya está en la
+       * pantalla: la peor clase de fallo, el que no se ve.
+       */
+      if (body.provider === "github") {
+        await db.query(
+          `update github_repos set connection_id = $1
+            where organization_id = $2 and connection_id is null`,
+          [id, orgId],
+        );
+      }
+
       const { rows: full } = await db.query(
         `select ${CONNECTION_COLUMNS} from connections where id = $1`,
         [id],

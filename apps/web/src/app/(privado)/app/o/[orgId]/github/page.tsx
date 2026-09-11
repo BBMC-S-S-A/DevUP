@@ -173,9 +173,7 @@ export default function GithubPage() {
 
         {connection === undefined && <Cargando />}
 
-        {connection === null && <ConectarGithub orgId={orgId} onConnected={load} />}
-
-        {connection && (
+        {connection !== undefined && (
           <>
             {repos.length > 0 && (
               <Tarjeta
@@ -202,7 +200,7 @@ export default function GithubPage() {
               <EstadoVacio
                 icono={<Github size={20} />}
                 titulo="Ningún repositorio en el panel"
-                pista="Añade uno por su nombre completo y el servidor empezará a leer sus pull requests, issues y ejecuciones de CI."
+                pista="Pega abajo el enlace de un repositorio y el servidor empezará a leer sus pull requests, issues y ejecuciones de CI. Si es público, no hace falta ningún token."
               />
             ) : (
               <div className="space-y-3">
@@ -227,11 +225,12 @@ export default function GithubPage() {
               </div>
             )}
 
-            <NuevoRepo
-              orgId={orgId}
-              connectionId={connection.id}
-              onAdded={(repo) => setRepos((prev) => [...prev, repo])}
-            />
+            <NuevoRepo orgId={orgId} onAdded={(repo) => setRepos((prev) => [...prev, repo])} />
+
+            {/* El token va al final y plegado: es lo que hace falta para lo
+                privado, no para empezar. Arriba, como puerta, era donde se
+                caía la gente. */}
+            {!connection && <ConectarGithub orgId={orgId} onConnected={load} />}
           </>
         )}
     </Pagina>
@@ -313,22 +312,51 @@ function Cargando() {
   );
 }
 
+/**
+ * Conectar un token, que ya no es la puerta de entrada.
+ *
+ * ANTES ESTA TARJETA TAPABA LA PANTALLA ENTERA y no se podía hacer nada sin
+ * rellenarla. Para un repositorio público el token no hace ninguna falta — la
+ * API de GitHub contesta sin credencial—, así que pedirlo por adelantado era
+ * mandar a la gente a otra web a entender qué es «alcance fino» antes de
+ * poder ver nada. Ahora va plegada y al final: se abre quien la necesita.
+ */
 function ConectarGithub({ orgId, onConnected }: { orgId: string; onConnected: () => Promise<void> }) {
+  const [abierto, setAbierto] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [secret, setSecret] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="presionable mt-4 flex w-full items-center gap-2.5 rounded-xl border border-line bg-raised/30 px-3.5 py-3 text-left hover:border-line-strong"
+      >
+        <KeyRound size={14} className="shrink-0 text-faint" />
+        <span className="min-w-0 flex-1 text-xs leading-relaxed text-muted">
+          ¿Es privado, o vas a mirar muchos? <span className="text-ink">Conecta un token</span> —
+          da acceso a lo privado y sube el límite de lecturas de 60 a 5.000 por hora.
+        </span>
+      </button>
+    );
+  }
+
   return (
-    <Tarjeta className="devup-entrada mx-auto max-w-lg p-6">
+    <Tarjeta className="devup-entrada mt-4 p-6">
       <div className="flex items-center gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-accent/30 bg-accent-soft/60 text-accent">
           <KeyRound size={16} />
         </span>
-        <div>
-          <h2 className="text-sm font-semibold">Conectar GitHub</h2>
-          <Rotulo className="mt-0.5 block">Instrumento sin señal</Rotulo>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold">Conectar un token</h2>
+          <Rotulo className="mt-0.5 block">Solo para repositorios privados</Rotulo>
         </div>
+        <BotonIcono etiqueta="Cerrar" onClick={() => setAbierto(false)}>
+          <XCircle size={15} />
+        </BotonIcono>
       </div>
 
       {/* El aviso del alcance fino va antes del formulario y con su propio
@@ -407,16 +435,16 @@ function ConectarGithub({ orgId, onConnected }: { orgId: string; onConnected: ()
   );
 }
 
-function NuevoRepo({
-  orgId,
-  connectionId,
-  onAdded,
-}: {
-  orgId: string;
-  connectionId: string;
-  onAdded: (repo: GithubRepo) => void;
-}) {
-  const [fullName, setFullName] = useState("");
+/**
+ * Añadir un repositorio pegando su enlace.
+ *
+ * SE ACEPTA LO QUE LA GENTE TIENE A MANO, no un formato nuestro: la URL de la
+ * barra de direcciones, la de clonar terminada en `.git`, la de SSH, o
+ * «organización/repositorio» si alguien lo escribe así. Quien traduce es el
+ * servidor (`nombreDeRepo`), no la persona.
+ */
+function NuevoRepo({ orgId, onAdded }: { orgId: string; onAdded: (repo: GithubRepo) => void }) {
+  const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -429,14 +457,14 @@ function NuevoRepo({
         try {
           const { repo } = await api.post<{ repo: GithubRepo }>(
             `/organizations/${orgId}/github/repos`,
-            { connectionId, fullName },
+            { url },
           );
           if (repo.lastError) {
             toast.warning(`Añadido, pero la primera lectura falló: ${repo.lastError}`);
           } else {
             toast.success(`«${repo.fullName}» conectado`);
           }
-          setFullName("");
+          setUrl("");
           onAdded(repo);
         } catch (caught) {
           setError(caught instanceof ApiError ? caught.message : "no se pudo añadir");
@@ -450,9 +478,9 @@ function NuevoRepo({
         <label className="min-w-0 flex-1">
           <Rotulo className="mb-1.5 block">Añadir repositorio</Rotulo>
           <input
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            placeholder="organización/repositorio"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://github.com/organización/repositorio"
             className="h-10 w-full rounded-xl border border-line bg-canvas/60 px-3.5 font-mono text-sm outline-none
               transition-[border-color,box-shadow,background-color] duration-200
               placeholder:font-sans placeholder:text-faint
@@ -463,7 +491,7 @@ function NuevoRepo({
         <Boton
           type="submit"
           cargando={busy}
-          disabled={fullName.trim().length === 0}
+          disabled={url.trim().length === 0}
           icono={<Plus size={15} />}
         >
           Añadir

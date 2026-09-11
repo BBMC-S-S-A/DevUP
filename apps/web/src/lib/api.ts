@@ -301,7 +301,8 @@ export type GithubStats = {
 
 export type GithubRepo = {
   id: string;
-  connectionId: string;
+  /** Null = repositorio público, leído sin credencial (migración 0034). */
+  connectionId: string | null;
   fullName: string;
   createdAt: string;
   data: GithubStats | null;

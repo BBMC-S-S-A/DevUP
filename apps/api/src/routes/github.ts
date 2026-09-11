@@ -1,7 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
-import { fetchGithubFileContent, fetchGithubStats, fetchGithubTree } from "../connectors/github.js";
+import {
+  fetchGithubFileContent,
+  fetchGithubStats,
+  fetchGithubTree,
+  nombreDeRepo,
+} from "../connectors/github.js";
 import {
   CARPETAS,
   analizarMigracion,
@@ -9,11 +14,10 @@ import {
 } from "../connectors/migraciones.js";
 import { ARCHIVOS_DE_INTERES, diagnosticar } from "../connectors/integraciones.js";
 import { type Db, withUser } from "../db/pool.js";
-import { badGateway, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { badGateway, badRequest, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
 
 const uuid = z.string().uuid();
-const FULL_NAME = /^[\w.-]+\/[\w.-]+$/;
 
 const REPO_COLUMNS = `
   r.id, r.connection_id as "connectionId", r.full_name as "fullName", r.created_at as "createdAt",
@@ -24,7 +28,12 @@ const REPO_COLUMNS = `
  * llamada a GitHub falla — un error visible en pantalla es mejor que una
  * pantalla que no dice por qué lleva vacía desde que se conectó.
  */
-export async function refreshRepo(db: Db, repoId: string, token: string, fullName: string): Promise<void> {
+export async function refreshRepo(
+  db: Db,
+  repoId: string,
+  token: string | null,
+  fullName: string,
+): Promise<void> {
   try {
     const stats = await fetchGithubStats(token, fullName);
     await db.query("select public.upsert_github_repo_stats($1, $2::jsonb, null)", [
@@ -39,6 +48,30 @@ export async function refreshRepo(db: Db, repoId: string, token: string, fullNam
   }
 }
 
+/**
+ * El repositorio y la credencial con la que se lee, si la tiene.
+ *
+ * `token` en null no es un fallo: es un repositorio público añadido pegando su
+ * enlace, sin conexión detrás (migración 0034). Las seis rutas que hablan con
+ * GitHub necesitaban exactamente esto, y repetir la comprobación de nulo en
+ * cada una es donde se olvida en la séptima.
+ */
+async function repoConCredencial(
+  db: Db,
+  repoId: string,
+): Promise<{ token: string | null; fullName: string }> {
+  const { rows } = await db.query<{ connection_id: string | null; full_name: string }>(
+    "select connection_id, full_name from github_repos where id = $1",
+    [repoId],
+  );
+  const fila = rows[0];
+  if (!fila) throw notFound("repositorio no encontrado");
+  return {
+    token: fila.connection_id ? await getDecryptedSecret(db, fila.connection_id) : null,
+    fullName: fila.full_name,
+  };
+}
+
 export async function githubRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
@@ -46,12 +79,13 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     return withUser(userId, async (db) => {
+      // Por `organization_id` y no cruzando con la conexión: desde 0034 un
+      // repositorio público no tiene ninguna, y aquel `join` lo escondía.
       const { rows } = await db.query(
         `select ${REPO_COLUMNS}
            from github_repos r
-           join connections c on c.id = r.connection_id
            left join github_repo_stats s on s.github_repo_id = r.id
-          where c.organization_id = $1
+          where r.organization_id = $1
           order by r.created_at`,
         [orgId],
       );
@@ -60,34 +94,57 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
-   * Añadir un repositorio hace también la primera lectura, en la misma
-   * petición: esperar a la siguiente pasada del barrendero dejaría la
-   * pantalla vacía varios minutos justo después de conectar algo, que es
-   * cuando más se está mirando.
+   * Añadir un repositorio: se pega su enlace y ya.
+   *
+   * NO SE PIDE CONEXIÓN, se busca. Si la organización tiene un token guardado
+   * se usa —más cupo y alcanza a lo privado—; si no, se lee sin credencial,
+   * que para un repositorio público basta. Obligar a elegir una conexión que
+   * casi siempre es la única que hay es preguntar por algo que ya se sabe.
+   *
+   * La primera lectura va en la misma petición: esperar a la siguiente pasada
+   * del barrendero dejaría la tarjeta vacía justo cuando más se mira. Y si esa
+   * lectura falla, el repositorio se queda igualmente con su error escrito —
+   * `refreshRepo` lo anota en vez de tirar la petición—, porque un enlace de
+   * un repositorio privado sin token tiene que poder verse en pantalla y
+   * arreglarse conectando el token, no desaparecer.
    */
   app.post("/organizations/:orgId/github/repos", async (request, reply) => {
     const userId = requireUser(request);
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     const body = parseBody(
-      z.object({
-        connectionId: uuid,
-        fullName: z.string().trim().regex(FULL_NAME, "escribe «organización/repositorio»"),
-      }),
+      z.object({ url: z.string().trim().min(1).max(300) }),
       request.body,
     );
 
-    const { repoId, token } = await withUser(userId, async (db) => {
-      const { rows } = await db.query<{ id: string }>(
-        `insert into github_repos (connection_id, full_name, added_by)
-         values ($1,$2,$3) returning id`,
-        [body.connectionId, body.fullName, userId],
+    const fullName = nombreDeRepo(body.url);
+    if (!fullName) {
+      throw badRequest(
+        "eso no parece un repositorio de GitHub. Pega su enlace, por ejemplo " +
+          "https://github.com/organización/repositorio",
       );
-      const id = rows[0]!.id;
-      const token = await getDecryptedSecret(db, body.connectionId);
-      return { repoId: id, token };
+    }
+
+    const { repoId, token } = await withUser(userId, async (db) => {
+      const { rows: conexiones } = await db.query<{ id: string }>(
+        `select id from connections
+          where organization_id = $1 and provider = 'github'
+          order by created_at limit 1`,
+        [orgId],
+      );
+      const connectionId = conexiones[0]?.id ?? null;
+
+      const { rows } = await db.query<{ id: string }>(
+        `insert into github_repos (connection_id, organization_id, full_name, added_by)
+         values ($1,$2,$3,$4) returning id`,
+        [connectionId, orgId, fullName, userId],
+      );
+      return {
+        repoId: rows[0]!.id,
+        token: connectionId ? await getDecryptedSecret(db, connectionId) : null,
+      };
     });
 
-    await withUser(userId, (db) => refreshRepo(db, repoId, token, body.fullName));
+    await withUser(userId, (db) => refreshRepo(db, repoId, token, fullName));
 
     const repo = await withUser(userId, async (db) => {
       const { rows } = await db.query(
@@ -121,17 +178,7 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
 
-    const { token, fullName } = await withUser(userId, async (db) => {
-      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
-        "select connection_id, full_name from github_repos where id = $1",
-        [repoId],
-      );
-      if (!rows[0]) throw notFound("repositorio no encontrado");
-      return {
-        token: await getDecryptedSecret(db, rows[0].connection_id),
-        fullName: rows[0].full_name,
-      };
-    });
+    const { token, fullName } = await withUser(userId, (db) => repoConCredencial(db, repoId));
 
     // Un fallo al hablar con GitHub —token caducado, repo renombrado— no es
     // un fallo nuestro: se traduce a un mensaje que la pantalla ya sabe
@@ -150,7 +197,18 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
       };
     }
 
-    const TOPE = 40;
+    /**
+     * Sin token se leen muchas menos.
+     *
+     * El cupo anónimo de GitHub son 60 peticiones por hora Y POR IP: las
+     * comparte todo DevUP, no cada organización. Con el tope de cuarenta, una
+     * sola visita a esta pantalla desde un repositorio sin token dejaría sin
+     * lecturas a las demás organizaciones durante una hora — y ellas verían un
+     * fallo que no causaron y no pueden arreglar. Doce deja ver lo que se
+     * acaba de escribir, que es para lo que se abre esto, sin secuestrar el
+     * cupo de nadie. Con token el límite es de 5.000 y no hace falta encogerse.
+     */
+    const TOPE = token ? 40 : 12;
     const omitidas = Math.max(0, todas.length - TOPE);
     const aLeer = todas.slice(-TOPE);
 
@@ -200,17 +258,7 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
 
-    const { token, fullName } = await withUser(userId, async (db) => {
-      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
-        "select connection_id, full_name from github_repos where id = $1",
-        [repoId],
-      );
-      if (!rows[0]) throw notFound("repositorio no encontrado");
-      return {
-        token: await getDecryptedSecret(db, rows[0].connection_id),
-        fullName: rows[0].full_name,
-      };
-    });
+    const { token, fullName } = await withUser(userId, (db) => repoConCredencial(db, repoId));
 
     const arbol = await fetchGithubTree(token, fullName).catch((error: unknown) => {
       throw badGateway(error instanceof Error ? error.message : "no se pudo leer el repositorio");
@@ -250,13 +298,8 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
 
     await withUser(userId, async (db) => {
-      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
-        "select connection_id, full_name from github_repos where id = $1",
-        [repoId],
-      );
-      if (!rows[0]) throw notFound("repositorio no encontrado");
-      const token = await getDecryptedSecret(db, rows[0].connection_id);
-      await refreshRepo(db, repoId, token, rows[0].full_name);
+      const { token, fullName } = await repoConCredencial(db, repoId);
+      await refreshRepo(db, repoId, token, fullName);
     });
 
     return withUser(userId, async (db) => {
@@ -282,13 +325,8 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
 
     return withUser(userId, async (db) => {
-      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
-        "select connection_id, full_name from github_repos where id = $1",
-        [repoId],
-      );
-      if (!rows[0]) throw notFound("repositorio no encontrado");
-      const token = await getDecryptedSecret(db, rows[0].connection_id);
-      const tree = await fetchGithubTree(token, rows[0].full_name);
+      const { token, fullName } = await repoConCredencial(db, repoId);
+      const tree = await fetchGithubTree(token, fullName);
       return { tree };
     });
   });
@@ -300,13 +338,8 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const { path } = parseBody(z.object({ path: z.string().min(1) }), request.query);
 
     return withUser(userId, async (db) => {
-      const { rows } = await db.query<{ connection_id: string; full_name: string }>(
-        "select connection_id, full_name from github_repos where id = $1",
-        [repoId],
-      );
-      if (!rows[0]) throw notFound("repositorio no encontrado");
-      const token = await getDecryptedSecret(db, rows[0].connection_id);
-      const content = await fetchGithubFileContent(token, rows[0].full_name, path);
+      const { token, fullName } = await repoConCredencial(db, repoId);
+      const content = await fetchGithubFileContent(token, fullName, path);
       return { path, content };
     });
   });
