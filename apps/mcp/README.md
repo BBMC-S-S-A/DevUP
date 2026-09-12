@@ -28,6 +28,7 @@ apuntes también en la lista que comprueba el registro.
 | `ver_tablero` | El tablero de un espacio, con sus columnas y tarjetas. |
 | `ver_tarea` | Una tarea con su detalle, y sus imágenes adjuntas incrustadas. |
 | `ver_arquitectura` | Los componentes del diagrama de un espacio y cómo se conectan. |
+| `que_ha_pasado` | La historia de un espacio o de la organización: quién creó, movió, cerró o asignó qué, y cuándo. Agrupada por día y en el orden en que ocurrió. Distingue lo que hizo una persona de lo que hizo su asistente. |
 
 ### Escribir
 
@@ -39,6 +40,7 @@ borrando deja trabajo perdido.
 | Herramienta | Qué hace |
 |---|---|
 | `crear_tarea` | Una tarea en el tablero, con responsable y fecha si se dicen. |
+| `crear_area` | Un área del tablero, con su delegado. Lo que se cree en ella se le asigna solo. |
 | `crear_columna` | Una columna nueva en el tablero. |
 | `mover_tarea` | Pasa una tarea de columna. |
 | `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |

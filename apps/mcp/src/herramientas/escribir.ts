@@ -89,7 +89,7 @@ export function resolverColumna(columnas: Columna[], nombre?: string): Columna {
 }
 
 /** Resuelve una persona por nombre, para asignar sin pedir uuid. */
-async function resolverPersona(
+export async function resolverPersona(
   cliente: ClienteApi,
   nombre: string,
   organizacion?: string,

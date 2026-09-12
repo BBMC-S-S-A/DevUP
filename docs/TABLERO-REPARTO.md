@@ -62,6 +62,12 @@ trabaja, no como una lista de deseos.
   abierta.
 - **Áreas del tablero, con delegado por defecto** — La 0039 y `crear_area` en el
   MCP.
+- **«¿Qué ha pasado aquí desde…?» en el MCP** — `que_ha_pasado`. Entiende
+  «ayer», «la semana pasada» o una fecha; agrupa por día y cuenta hacia
+  adelante, porque una historia leída al revés se resume al revés sin que nada
+  falle; y dice cuándo algo lo hizo el asistente de alguien y no esa persona.
+  No resume a propósito: devuelve los hechos para que los resuma quien tiene el
+  contexto de la conversación.
 - **Código corto de invitación** — La 0040. Ocho símbolos del alfabeto de
   Crockford, que se puede dictar por teléfono. Guardado cifrado igual que el
   token, con una ruta para pedir otro si se pierde. No sustituye al enlace: la
@@ -129,7 +135,6 @@ trabaja, no como una lista de deseos.
 
 - **El «+» del riel, ahora que el código existe** — La API ya está (0040); falta
   la pantalla: pegar un código, ver de qué organización es y entrar.
-- **«¿Qué ha pasado aquí desde…?» en el MCP** — Ya tiene de dónde leer.
 - **La pantalla de auditoría por persona** — Qué cerró, cuánto y cuánto tardó,
   sobre el recuento que ya devuelve la API.
 - **Tope de sala para compartir pantalla, y decirlo** — En malla, compartir con

@@ -10,6 +10,11 @@ import {
 } from "./herramientas/arquitectura.js";
 import { buscar, descripcionBuscar, esquemaBuscar } from "./herramientas/buscar.js";
 import {
+  descripcionQueHaPasado,
+  esquemaQueHaPasado,
+  queHaPasado,
+} from "./herramientas/historia.js";
+import {
   descripcionMisTareas,
   descripcionVerTablero,
   descripcionVerTarea,
@@ -109,6 +114,15 @@ export function registrarHerramientas(
     descripcionVerTarea,
     esquemaVerTarea,
     herramienta((cliente, entrada) => verTarea(cliente, entrada)),
+  );
+
+  servidor.tool(
+    "que_ha_pasado",
+    descripcionQueHaPasado,
+    esquemaQueHaPasado,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await queHaPasado(cliente, entrada) },
+    ]),
   );
 
   servidor.tool(
