@@ -98,6 +98,15 @@ jobs:
         # no debía sin que nadie abra una incidencia.
         run: npm run test:codigo --workspace apps/api
 
+      - name: Los enlaces del grafo
+        # Tres formas de estar mal que las políticas no pueden cazar, porque
+        # ninguna falla: dibujar las flechas al revés, devolver solo los
+        # vecinos de salida —y dejar media red invisible según por dónde se
+        # entre—, y que tejer dos veces reviente la petición cuando en realidad
+        # decía «esto ya estaba bien». Más la que sí es de seguridad: que
+        # enlazar hacia algo que no se ve falle Y no deje rastro a medias.
+        run: npm run test:grafo --workspace apps/api
+
       - name: El criterio de migraciones
         # Comprueba el analizador que se le aplica al repositorio de un
         # cliente, y lo hace contra nuestras propias migraciones: si a las

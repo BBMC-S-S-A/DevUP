@@ -38,6 +38,7 @@
     "test:youtube": "npm run test:youtube --workspace apps/api",
     "test:puerta": "npm run test:puerta --workspace apps/api",
     "test:mcp": "npm run test:mcp --workspace apps/mcp",
+    "test:grafo": "npm run test:grafo --workspace apps/api",
     "test:codigo": "npm run test:codigo --workspace apps/api && npm run test:invitacion --workspace apps/api",
     "test:asistente": "npm run test:asistente --workspace apps/api",
     "test:web": "npm run test:enlaces --workspace apps/web && npm run test:fechas --workspace apps/web && npm run test:dinero --workspace apps/web && npm run test:invitacion --workspace apps/web && npm run test:trazado --workspace apps/web && npm run test:agente-ia --workspace apps/web && npm run test:riel --workspace apps/web && npm run test:quien-entro --workspace apps/web && npm run test:actividad --workspace apps/web",

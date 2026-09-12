@@ -165,6 +165,44 @@ demás de esa lista es de un espacio de trabajo concreto. Inicio no: es lo que
 contesta «¿qué tengo, en todos?». Ponerlo entre los de un espacio lo convierte
 en una pantalla más de ese espacio, que es justo lo que no es.
 
+### El grafo: ya tiene rutas (tu punto 8 queda desbloqueado a medias)
+
+`RedDeTrabajo.tsx` dice en su propio comentario que no dibuja tarea↔commit ni
+tarea↔mensaje porque le faltaba el registro. Ya tiene por dónde leerlas:
+
+```
+GET    /grafo/:tipo/:id?limite=200   → { tipo, id, vecinos: [...] }
+POST   /grafo/enlaces                → { vecinos }   (enlazar a mano)
+DELETE /grafo/enlaces/:enlaceId      → 204
+```
+
+Cada vecino trae lo que hace falta para pintarlo sin pedir nada más:
+
+```
+{ id, etiqueta, procedencia, creadoEn,
+  direccion: "sale" | "entra",   // respecto al nodo por el que preguntaste
+  tipo, nodoId, nombre }
+```
+
+Los ocho tipos son `espacio`, `canal`, `mensaje`, `tarea`, `archivo`,
+`componente`, `repositorio`, `entorno`.
+
+**Dos cosas que conviene saber antes de dibujar.** La primera: `vecinos` viene
+en **las dos direcciones** —un nodo tiene aristas por donde sale y por donde
+entra—, y `direccion` dice cuál es cuál. Dibujarlas todas como salientes pondría
+la mitad de las flechas al revés, y seguiría pareciendo un grafo razonable.
+
+La segunda: **una lista vacía no significa que el nodo no tenga enlaces.**
+Puede ser eso, o que el nodo no exista, o que no esté a tu alcance — las tres
+contestan igual a propósito, porque distinguirlas convertiría la ruta en un
+detector de lo que hay en canales privados. No escribas «este nodo no tiene
+relaciones»; escribe que no hay nada que enseñar.
+
+**Y está a medias, con honestidad:** las rutas existen y nadie teje todavía. El
+grafo estará casi vacío hasta que entre el punto 2 de mi lista —tejer desde
+donde ya pasan las cosas—, así que la pantalla tiene que aguantar bien el caso
+de cero aristas. Aviso aquí cuando empiece a llenarse.
+
 ### Lo que `GET /me/inicio?dias=30` devuelve
 
 ```
