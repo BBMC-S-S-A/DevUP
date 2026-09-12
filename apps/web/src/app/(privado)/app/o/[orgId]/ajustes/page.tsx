@@ -32,6 +32,7 @@ import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Fallo, Pagina } from "@/components/ui/Pagina";
+import { IdentidadOrganizacion } from "@/components/organizacion/IdentidadOrganizacion";
 import { TarjetaPersona } from "@/components/perfil/TarjetaPersona";
 import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
 
@@ -88,6 +89,11 @@ export default function OrganizationSettingsPage() {
           <Fallo onReintentar={() => void load()}>{error}</Fallo>
         )}
 
+        <IdentidadOrganizacion
+          orgId={orgId}
+          puedeEditar={administro}
+          esPropietario={yo?.role === "owner"}
+        />
         <FotoOrganizacion orgId={orgId} puedeEditar={administro} />
         <Miembros orgId={orgId} members={members} yo={user?.id ?? null} administro={administro} onChange={load} />
         <Enlaces orgId={orgId} puedeEditar={administro} />

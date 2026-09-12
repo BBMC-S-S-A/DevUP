@@ -108,7 +108,11 @@ export const api = {
   // completo siempre, y mandarlo completo por PATCH invita a que el día que
   // alguien mande media pieza el servidor tenga que adivinar el resto.
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  // Con cuerpo opcional. Casi ningún borrado lo necesita, pero el de una
+  // organización pide escribir su identificador para confirmar cuál se está
+  // borrando, y esa confirmación tiene que viajar en el cuerpo: en la URL
+  // acabaría en los registros del servidor y en el historial del navegador.
+  delete: <T>(path: string, body?: unknown) => request<T>(path, { method: "DELETE", body }),
 };
 
 // --- Tipos compartidos con la API -------------------------------------------
