@@ -2651,6 +2651,63 @@ async function main(): Promise<void> {
     check("borrar un area no borra sus tareas", sobrevive !== undefined);
     check("solo las deja sin clasificar", sobrevive?.category_id === null);
 
+    console.log("\nLos gerentes de una rama (0050)");
+
+    // La tabla no lleva `workspace_id` propio: se apoya en la de la rama. Si el
+    // subselect de la politica estuviera mal escrito, los gerentes de un tablero
+    // ajeno se verian sin que nada fallara — que es como se rompe RLS siempre.
+    const ramaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_categories (workspace_id, name, position, created_by)
+         values ($1,'frontend',1000,$2) returning id`,
+        [acme.ws, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    await withUser(ana, (db) =>
+      db.query("select public.set_category_owner($1,$2,true)", [ramaDeAcme, ana]),
+    );
+
+    check(
+      "quien gestiona el espacio puede nombrar gerente",
+      (await count(ana, "task_category_owners")) === 1,
+    );
+    check(
+      "y quien no llega a ese espacio no ve ni quien lo lleva",
+      (await count(bruno, "task_category_owners")) === 0,
+    );
+
+    // Nombrar a quien responde de un area es repartir poder, no clasificar: no
+    // basta con pertenecer al espacio.
+    await denied("un miembro raso no puede nombrar gerente", () =>
+      withUser(carla, (db) =>
+        db.query("select public.set_category_owner($1,$2,true)", [ramaDeAcme, carla]),
+      ),
+    );
+    await denied("y alguien de fuera tampoco", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.set_category_owner($1,$2,true)", [ramaDeAcme, bruno]),
+      ),
+    );
+
+    // Y no se puede colar de gerente a quien no llega al espacio: seria darle
+    // un sitio en un tablero que no puede abrir.
+    await denied("no se puede nombrar gerente a quien no tiene acceso", () =>
+      withUser(ana, (db) =>
+        db.query("select public.set_category_owner($1,$2,true)", [ramaDeAcme, bruno]),
+      ),
+    );
+
+    const ajenoEscribe = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "insert into task_category_owners (category_id, user_id) values ($1,$2) on conflict do nothing",
+        [ramaDeAcme, bruno],
+      ).catch(() => ({ rowCount: 0 }));
+      return rowCount ?? 0;
+    });
+    check("ni escribiendo la tabla a mano por otra puerta", ajenoEscribe === 0);
+
     console.log("\nRamas y evidencia de una tarea");
 
     // Las dos tablas de la 0042 NO llevan `workspace_id` propio: se apoyan en

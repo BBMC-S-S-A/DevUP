@@ -32,9 +32,13 @@ import type { Db } from "../db/pool.js";
  * que se quería.
  */
 
-/** Los ocho tipos de nodo de la 0043. Que un tipo nuevo obligue a tocar esto
- *  es la misma decisión que en `puede_ver_nodo`: lo que nadie enseñó a tratar,
- *  no se trata. */
+/** Los tipos de nodo. Que uno nuevo obligue a tocar esto es la misma decisión
+ *  que en `puede_ver_nodo`: lo que nadie enseñó a tratar, no se trata.
+ *
+ *  Ocho en la 0043; `area` y `persona` entraron en la 0050. Los dos últimos son
+ *  los que hacen contestables dos preguntas que antes no lo eran: «qué cuelga de
+ *  esta rama» y «de qué sabe esta persona» — la segunda no es lo mismo que
+ *  contar sus tareas, que dice qué le tocó y no qué domina. */
 export const TIPOS_DE_NODO = [
   "espacio",
   "canal",
@@ -44,6 +48,8 @@ export const TIPOS_DE_NODO = [
   "componente",
   "repositorio",
   "entorno",
+  "area",
+  "persona",
 ] as const;
 
 export type TipoDeNodo = (typeof TIPOS_DE_NODO)[number];
@@ -89,6 +95,8 @@ const NOMBRE_DEL_NODO = `
     when 'componente'  then (select n.name from architecture_nodes n where n.id = $ID)
     when 'repositorio' then (select r.full_name from github_repos r where r.id = $ID)
     when 'entorno'     then (select e.name from environments e where e.id = $ID)
+    when 'area'        then (select c.name from task_categories c where c.id = $ID)
+    when 'persona'     then (select p.display_name from profiles p where p.id = $ID)
   end`;
 
 /** La misma expresión, apuntando a un extremo o al otro. */
