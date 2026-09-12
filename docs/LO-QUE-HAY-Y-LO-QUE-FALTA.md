@@ -149,10 +149,19 @@ Ordenado por lo que más duele.
   descubre el día que hace falta, que es el único día en que no se arregla.
   **Queda por poner los secretos `RAILWAY_TOKEN` y `POSTGRES_PASSWORD`** en el
   repositorio; hasta entonces el trabajo para en el primer paso y lo dice.
-- **`search_path` fijo** en seis funciones que no lo llevan (`current_user_id`,
-  `global_search`, `mark_channel_read`, `touch_opportunity`, `touch_task`,
-  `unread_counts`). Ninguna es `security definer`, así que es higiene, no un
-  agujero.
+- ~~**`search_path` fijo** en seis funciones que no lo llevan~~ — **hecho** el
+  12 de septiembre de 2026 (migración 0039). Y eran **siete**, no seis: esta
+  lista, mantenida a mano, se había quedado corta. Faltaban las cinco de
+  siempre más `touch_task` —que se daba por arreglada y no lo estaba— y
+  `touch_architecture_node`, que nació con la 0033 después de escribirse esto.
+  Ninguna era `security definer`, así que era higiene y no un agujero; las 55
+  que sí lo son ya lo llevaban todas.
+
+  La migración no las nombra una a una: le pregunta a `pg_proc` cuáles son las
+  nuestras y se lo pone, porque una lista escrita a mano vuelve a quedarse
+  corta con la octava. Y desde hoy **la prueba de aislamiento comprueba que
+  ninguna función nueva nazca sin él**, que es lo único que impide que esto se
+  repita.
 - ~~**`user_tokens` es una tabla muerta**~~ — **era falso, y borrarla habría
   roto producción.** `account.ts` la usa para verificar el correo y para
   restablecer la contraseña, a través de `issue_user_token` y

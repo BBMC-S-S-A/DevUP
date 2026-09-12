@@ -1510,6 +1510,65 @@ async function main(): Promise<void> {
       ),
     );
 
+    console.log("\nHigiene del esquema");
+
+    /**
+     * Que ninguna función nuestra nazca sin `search_path` fijo.
+     *
+     * POR QUÉ ES UNA PRUEBA Y NO UNA MIGRACIÓN MÁS. La 0039 se lo puso a las
+     * siete que faltaban, pero una migración arregla el pasado: la número ocho
+     * la escribe alguien el mes que viene y vuelve a nacer sin él. Esto lo caza
+     * el mismo día.
+     *
+     * Y la cuenta hay que hacerla contra la BASE y no contra una lista: el
+     * documento decía seis, la tarea decía cinco, y `pg_proc` decía siete. Una
+     * lista de esto mantenida a mano se queda corta siempre.
+     *
+     * Las de las extensiones (`citext`, `pgcrypto`) quedan fuera: son suyas,
+     * las reinstala `create extension` y no las mantenemos nosotros.
+     */
+    const sinSearchPath = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ firma: string }>(
+        `select p.oid::regprocedure::text as firma
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.proconfig is null
+            and not exists (
+              select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e'
+            )
+          order by 1`,
+      );
+      return rows.map((r) => r.firma);
+    });
+    check(
+      sinSearchPath.length === 0
+        ? "ninguna función nuestra se queda sin search_path"
+        : `estas funciones nacieron sin search_path: ${sinSearchPath.join(", ")}`,
+      sinSearchPath.length === 0,
+    );
+
+    /**
+     * Y la que de verdad importa: que ninguna `security definer` se quede sin
+     * él. Esas corren con los permisos de quien las creó y se saltan RLS, así
+     * que ahí `search_path` deja de ser higiene y pasa a ser la puerta.
+     */
+    const definerSinRuta = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ firma: string }>(
+        `select p.oid::regprocedure::text as firma
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prosecdef and p.proconfig is null`,
+      );
+      return rows.map((r) => r.firma);
+    });
+    check(
+      definerSinRuta.length === 0
+        ? "y ninguna security definer, que ahí sí sería una puerta"
+        : `security definer sin search_path: ${definerSinRuta.join(", ")}`,
+      definerSinRuta.length === 0,
+    );
+
     console.log("\nRegistro de actividad (0038)");
 
     // Lo que hace que este registro sirva para responder de algo: que nadie
