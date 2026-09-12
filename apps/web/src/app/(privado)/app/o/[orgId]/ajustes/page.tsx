@@ -384,17 +384,21 @@ function Invitar({ orgId }: { orgId: string }) {
           event.preventDefault();
           setBusy(true);
           try {
-            const { url, code } = await api.post<{
+            // `codigo` y no `code`: al fusionar los dos caminos ganó el
+            // nombre del tronco. Mientras estuvo mal, el código se generaba,
+            // viajaba en la respuesta y la pantalla lo tiraba — la función
+            // entera invisible sin que nada fallara.
+            const { url, codigo: recien } = await api.post<{
               sent: boolean;
               url: string;
-              code: string | null;
+              codigo: string | null;
             }>(`/organizations/${orgId}/invitations`, {
               email,
               role: rol,
               workspaceId: workspaceId || null,
             });
             setEnlace(url);
-            setCodigo(code);
+            setCodigo(recien);
             setCopiado(null);
             toast.success(`Invitación creada para ${email}`);
             setEmail("");
@@ -538,15 +542,20 @@ function Invitar({ orgId }: { orgId: string }) {
                   qué en vez de borrarlo. Los dos lados escribieron el código
                   corto a la vez con esquemas distintos; ganó el del tronco
                   porque su migración ya está aplicada y el checksum no deja
-                  reescribirla. Pero el del tronco guarda el hash y NO trae las
-                  funciones que este botón necesita —`set_invitation_code` y
-                  `invitation_by_code`—, así que la ruta no existe. Dejarlo vivo
-                  sería un botón que da 404: mejor que se vea apagado y que
-                  diga por qué. La migración que lo revive está delegada. */}
+                  reescribirla.
+
+                  LO QUE FALTA ES SOLO RENOVAR. Canjear por código sí funciona:
+                  la 0041 lo resuelve por el mismo sitio que el enlace
+                  —`invitation_by_token` y `accept_invitation` miran las dos
+                  columnas—, y está comprobado en `invitacion-codigo.test.ts`.
+                  Lo que no existe es `set_invitation_code`, así que dar otro
+                  código a una invitación que ya existe no tiene ruta detrás.
+                  Mientras tanto la salida es reinvitar, que genera uno nuevo e
+                  invalida el anterior. */}
               <button
                 type="button"
                 disabled
-                title="Los códigos cortos están a medias: el tronco guarda el código pero todavía no hay función para renovarlo ni para canjearlo. Delegado."
+                title="Todavía no se puede renovar un código: falta `set_invitation_code`. Mientras tanto, vuelve a invitar — el nuevo código invalida el anterior."
                 onClick={() => {
                   /* sin ruta detrás hasta que entre la migración */
                 }}

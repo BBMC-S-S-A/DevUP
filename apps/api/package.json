@@ -25,7 +25,7 @@
     "test:youtube": "tsx src/connectors/youtube.test.ts",
     "test:puerta": "tsx src/routes/auth.puerta.test.ts",
     "test:asistente": "tsx src/routes/asistente.test.ts",
-    "test:codigo": "tsx src/routes/invitacion-codigo.test.ts"
+    "test:invitacion": "tsx src/routes/invitacion-codigo.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

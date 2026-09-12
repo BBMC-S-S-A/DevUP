@@ -2500,20 +2500,20 @@ async function main(): Promise<void> {
     // que es como un registro deja de serlo.
     console.log("\nEl registro de actividad");
 
-    const anotarComo = (quien: string, workspace: string | null, org: string, resumen: string) =>
+    const anotarComo = (quien: string, workspace: string | null, org: string, sujeto: string) =>
       withUser(quien, async (db) => {
         const { rows } = await db.query<{ id: string }>(
           `insert into activity
              (organization_id, workspace_id, actor_id, verb, subject_type, subject_id, subject_label)
            values ($1, $2, $3, 'cerro', 'tarea', $4, $5)
            returning id`,
-          [org, workspace, quien, acme.soloTask, resumen],
+          [org, workspace, quien, acme.soloTask, sujeto],
         );
         return rows[0]!.id;
       });
 
-    const enElCuaderno = await anotarComo(ana, acme.soloWs, acme.org, "cerró algo privado");
-    const enElCompartido = await anotarComo(ana, acme.ws, acme.org, "cerró algo del equipo");
+    const enElCuaderno = await anotarComo(ana, acme.soloWs, acme.org, "algo privado");
+    const enElCompartido = await anotarComo(ana, acme.ws, acme.org, "algo del equipo");
 
     const veActividad = (quien: string, id: string) =>
       withUser(quien, async (db) => {

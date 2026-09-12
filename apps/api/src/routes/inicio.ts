@@ -105,9 +105,15 @@ export async function inicioRoutes(app: FastifyInstance): Promise<void> {
 
       /** Los últimos hechos míos, para «¿en qué andaba yo?» al volver. */
       const { rows: ultimos } = await db.query(
+        // `sujetoNombre` y no `resumen`, que es como se llamaba antes: ya no
+        // es una frase, es el nombre que la cosa tenía entonces. Conservar el
+        // nombre viejo haría que la pantalla pintara títulos sueltos donde
+        // antes había oraciones —«Arreglar el 415», sin verbo— y nadie sabría
+        // si eso se creó, se movió o se cerró.
         `select a.verb as "verbo", a.source as "origen",
-                a.subject_label as "resumen", a.at as "ocurridoEn",
-                a.subject_type as "objetoTipo", a.subject_id as "objetoId",
+                a.subject_label as "sujetoNombre",
+                a.subject_type as "sujetoTipo", a.subject_id as "sujetoId",
+                a.at as "ocurridoEn",
                 w.id as "espacioId", w.name as espacio
            from activity a
            left join workspaces w on w.id = a.workspace_id

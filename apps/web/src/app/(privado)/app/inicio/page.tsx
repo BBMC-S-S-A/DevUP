@@ -66,7 +66,10 @@ type TareaDeInicio = {
 type Hecho = {
   verbo: string;
   origen: "persona" | "regla" | "agente";
-  resumen: string;
+  /** Cómo se llamaba la cosa ENTONCES (ver la 0038). No es una frase: la frase
+   *  la compone esta pantalla, porque el registro guarda hechos, no prosa. */
+  sujetoNombre: string;
+  sujetoTipo: string;
   ocurridoEn: string;
   espacioId: string | null;
   espacio: string | null;
@@ -79,13 +82,38 @@ type Inicio = {
   ultimos: Hecho[];
 };
 
-/** Los verbos que se enseñan, en el orden en que se quieren leer. */
+/**
+ * Los verbos que se enseñan, en el orden en que se quieren leer.
+ *
+ * Cerrar primero porque es lo que se busca al abrir esto. Y no están todos: el
+ * registro guarda una docena de verbos y enseñarlos todos convertiría un
+ * recuento que se lee de un vistazo en una tabla que no lee nadie.
+ */
 const VERBOS: { verbo: string; texto: string }[] = [
-  { verbo: "tarea.cerrada", texto: "cerradas" },
-  { verbo: "tarea.creada", texto: "creadas" },
-  { verbo: "tarea.movida", texto: "movidas" },
-  { verbo: "tarea.evidencia", texto: "con prueba" },
+  { verbo: "cerro", texto: "cerradas" },
+  { verbo: "creo", texto: "creadas" },
+  { verbo: "movio", texto: "movidas" },
+  { verbo: "evidencio", texto: "con prueba" },
 ];
+
+/** La frase de un renglón, compuesta aquí. En pasado, como el verbo guardado. */
+const EN_CASTELLANO: Record<string, string> = {
+  creo: "creó",
+  movio: "movió",
+  cerro: "cerró",
+  reabrio: "reabrió",
+  asigno: "asignó",
+  desasigno: "quitó el responsable de",
+  renombro: "renombró",
+  comento: "comentó en",
+  adjunto: "adjuntó a",
+  etiqueto: "etiquetó",
+  borro: "borró",
+  reclasifico: "cambió de área",
+  priorizo: "repriorizó",
+  enlazo: "enlazó una rama a",
+  evidencio: "dejó prueba en",
+};
 
 const PERIODOS = [7, 30, 90] as const;
 
@@ -427,7 +455,10 @@ function LoUltimo({ hechos, dias }: { hechos: Hecho[]; dias: number }) {
               {h.ocurridoEn.slice(5, 10)}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="text-ink">{h.resumen}</span>
+              {/* El verbo en gris y el nombre en tinta: lo que se busca al
+                  repasar es QUÉ cosa, no qué se le hizo. */}
+              <span className="text-muted">{EN_CASTELLANO[h.verbo] ?? h.verbo}</span>{" "}
+              <span className="text-ink">{h.sujetoNombre || "algo sin nombre"}</span>
               {h.espacio && <span className="ml-1.5 text-faint">· {h.espacio}</span>}
             </span>
             {h.origen === "agente" && (

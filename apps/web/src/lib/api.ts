@@ -157,9 +157,18 @@ export type PendingInvitation = {
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
-  /** Si tiene código corto vivo. El código en sí no viaja: en la base solo
-   *  está su hash (ver la 0040), así que ni la API puede volver a leerlo. */
-  hasCode: boolean;
+  /**
+   * Si tiene código corto vivo.
+   *
+   * OPCIONAL A PROPÓSITO: la ruta que lista invitaciones todavía no lo
+   * devuelve. Marcarlo obligatorio mentiría al tipo —sería `undefined` en
+   * tiempo de ejecución y TypeScript no diría nada—, que es justo cómo un
+   * `boolean` acaba pintando siempre la misma mitad de un rótulo.
+   *
+   * El código en sí no viaja ni viajará: en la base solo está su hash (0041),
+   * así que ni la API puede volver a leerlo.
+   */
+  hasCode?: boolean;
 };
 
 export type Notification = {
