@@ -105,6 +105,16 @@ jobs:
         # El script de la raíz encadena las dos.
         run: npm run test:codigo
 
+      - name: Los datos de los widgets
+        # Un panel es la primera pantalla de un espacio y esta hecho de trozos
+        # independientes, asi que todo lo que se rompe aqui sale en pantalla
+        # como un panel perfectamente normal: un canal privado ajeno colado en
+        # los no leidos —una linea de mas, no un error—, «atascada» convertida
+        # en «vencida» —y una tarea sin fecha no vence nunca, que es justo la
+        # que el widget existe para sacar a la superficie— y que se calcule lo
+        # que no se pidio, que deshace en silencio la unica razon de esta ruta.
+        run: npm run test:widgets --workspace apps/api
+
       - name: El panel por espacio
         # La 0049 junto el Panel con la Mesa dandole alcance de espacio, y para
         # eso solto la clave primaria de user_dashboard_prefs. Dos cosas se

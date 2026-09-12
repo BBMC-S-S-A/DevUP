@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
+import { WIDGETS_CON_DATOS, datosDeWidgets } from "../lib/widgets.js";
 import { parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
 
 /**
@@ -112,6 +113,42 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
       // como «sin widgets» y no como «sin personalizar».
       return rows[0] ?? DEFECTO;
     });
+  });
+
+  /**
+   * Los datos de los widgets de un espacio, de una vez.
+   *
+   * SE PIDEN LOS WIDGETS EN LA URL en vez de deducirlos del panel guardado, y
+   * no es por comodidad: quien pide esto acaba de leer su panel, así que ya
+   * sabe cuáles tiene. Deducirlos aquí obligaría a leer `panel_de` otra vez y,
+   * peor, a servir los widgets guardados aunque la pantalla esté enseñando
+   * otros —al colocar uno nuevo, antes de guardar—.
+   *
+   * Un nombre que no esté en el catálogo se RECHAZA en vez de ignorarse. Es una
+   * lista cerrada de seis: que una errata devuelva un panel a medias sin decir
+   * nada es justo la clase de fallo que luego se busca en el sitio equivocado.
+   */
+  app.get("/workspaces/:workspaceId/panel", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(
+      z.object({ workspaceId: z.string().uuid() }),
+      request.params,
+    );
+    const { widgets, dias } = parseQuery(
+      z.object({
+        widgets: z
+          .string()
+          .transform((texto) => texto.split(",").map((w) => w.trim()).filter(Boolean))
+          .pipe(z.array(z.enum(WIDGETS_CON_DATOS)).min(1).max(WIDGETS_CON_DATOS.length)),
+        dias: z.coerce.number().int().min(1).max(90).default(7),
+      }),
+      request.query,
+    );
+
+    return withUser(userId, async (db) => ({
+      dias,
+      datos: await datosDeWidgets(db, { workspaceId, widgets, dias }),
+    }));
   });
 
   /**

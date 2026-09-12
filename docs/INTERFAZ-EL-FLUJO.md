@@ -255,9 +255,44 @@ En este orden, y el motivo de cada puesto:
 ## 8. Lo que esta sesión debe antes de que §0 se pueda montar
 
 - La migración que le dé alcance de espacio al panel, **si se decide fusionar**.
-- El catálogo de widgets crece con lo que ya tiene API y todavía no es widget:
-  actividad reciente, el diario (`/workspaces/:id/diario`), lo atascado
-  (`/organizations/:id/panorama`), el contexto de una tarea
-  (`/tasks/:id/contexto`) y la portada global (`/me/inicio`). El catálogo vive en
-  el cliente a propósito (0019): añadir uno no pide migración, así que esa parte
-  es de interfaz.
+- ~~El catálogo de widgets crece~~ **Hecho.** Los datos de los widgets van por
+  **una sola ruta**, y ese es el punto:
+
+```
+GET /workspaces/:id/panel?widgets=resumen,mis_tareas,atascadas&dias=7
+  → { dias, datos: { resumen: {...}, mis_tareas: [...], atascadas: [...] } }
+```
+
+  Seis con datos: `resumen`, `mis_tareas`, `atascadas`, `actividad`,
+  `no_leidos`, `repositorios`. Un widget que se pinte solo —un reloj, unas
+  notas— no está en la lista y no necesita tocar nada.
+
+  **Los widgets se mandan en la URL, y hay que mandarlos.** Un panel de ocho
+  widgets serían ocho peticiones al abrirlo: ocho barras de carga y ocho
+  oportunidades de que una llegue tarde y deje un hueco que no se distingue de
+  un widget vacío. Pero servir siempre las seis consultas para pintar dos no es
+  una mejora, es el mismo trabajo con menos avisos — de ahí el filtro. Manda los
+  que **estás pintando ahora**, no los que hay guardados: al colocar uno nuevo
+  antes de guardar, no coinciden.
+
+  Un nombre que no esté en el catálogo se rechaza en vez de ignorarse: una
+  errata que devolviera el panel a medias sin decir nada se busca después en el
+  sitio equivocado.
+
+  Tres cosas que el servidor decide y conviene no repintar distinto:
+
+  - **`atascadas` no son las vencidas.** Una tarea sin fecha no vence nunca y
+    puede llevar un mes quieta; es justo la que el widget existe para sacar a la
+    superficie. Y lo que solo está apuntado no está atascado — está esperando.
+  - **`resumen` trae los tres números juntos** (pendientes, en curso, cerradas
+    en la ventana) porque «12 pendientes» a secas no distingue un proyecto vivo
+    de uno parado. Un widget de una sola cifra grande es el que mejor queda y el
+    que menos dice.
+  - **`repositorios` trae `refrescado` y `fallo`.** Las estadísticas las trae un
+    barrendero cada diez minutos, y un número sin fecha al lado se lee como si
+    fuera de ahora. Si el refresco lleva dos días fallando, el widget tiene que
+    poder decirlo en vez de enseñar con confianza la cifra de anteayer.
+
+  El catálogo de qué widgets existen y cómo se pintan sigue viviendo en el
+  cliente (decisión de 0019): añadir uno que no necesite servidor no pide
+  migración ni tocar la API.
