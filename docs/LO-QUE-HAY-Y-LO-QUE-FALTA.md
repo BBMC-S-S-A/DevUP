@@ -138,8 +138,17 @@ Ordenado por lo que más duele.
 - **Respaldo del almacén de archivos.** El volcado automático de GitHub Actions
   es solo de la base. Hoy no urge —el almacén está vacío— pero en cuanto haya
   archivos de verdad hace falta.
-- **El respaldo de la base apunta a Supabase**, de donde ya nos fuimos. Hay que
-  rehacerlo contra Railway, que es red privada y pide un túnel.
+- ~~**El respaldo de la base apunta a Supabase**~~ — **rehecho contra Railway**
+  el 12 de septiembre de 2026. Iba roto por partida doble: apuntaba a una base
+  de la que el producto ya se había ido, y volcaba con `pg_dump` 17 contra un
+  servidor 18, que se niega. Ahora abre un túnel con la CLI de Railway —y no un
+  proxy TCP público: una base expuesta para que la respalde un cron es la clase
+  de puerta que nadie recuerda haber abierto— y **se restaura a sí mismo en un
+  Postgres de usar y tirar antes de guardarse**, comprobando que trae
+  organizaciones y no solo tablas. Un respaldo que nadie ha restaurado nunca se
+  descubre el día que hace falta, que es el único día en que no se arregla.
+  **Queda por poner los secretos `RAILWAY_TOKEN` y `POSTGRES_PASSWORD`** en el
+  repositorio; hasta entonces el trabajo para en el primer paso y lo dice.
 - **`search_path` fijo** en seis funciones que no lo llevan (`current_user_id`,
   `global_search`, `mark_channel_read`, `touch_opportunity`, `touch_task`,
   `unread_counts`). Ninguna es `security definer`, así que es higiene, no un

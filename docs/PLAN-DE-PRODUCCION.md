@@ -123,9 +123,11 @@ migración, y el despliegue inmediatamente después.
 ## En qué orden hacer lo que falta
 
 ### Ahora
-1. **Respaldo del almacén de archivos**, y rehacer el de la base contra Railway
-   (el actual apunta a Supabase, de donde ya nos fuimos). Es lo único que hoy
-   nos dejaría sin red si algo se cae.
+1. **Respaldo del almacén de archivos.** El de la base ya está rehecho contra
+   Railway (12 de septiembre de 2026) y se restaura a sí mismo antes de
+   guardarse; falta poner `RAILWAY_TOKEN` y `POSTGRES_PASSWORD` en los secretos
+   del repositorio. El almacén sigue sin copia: es lo único que hoy nos dejaría
+   sin red si algo se cae.
 2. **Apuntar `hytrex.co` a la landing.** Está desplegada y el apex da 530.
 
 ### Después
