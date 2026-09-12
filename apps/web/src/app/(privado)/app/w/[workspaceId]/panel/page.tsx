@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { YoutubeWidget } from "@/components/spotify/YoutubeWidget";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
@@ -27,6 +28,7 @@ import { useSpotify } from "@/lib/spotify/SpotifyProvider";
 import { tinte } from "@/lib/tinte";
 import { diasHasta, hoyLocal } from "@/lib/fechas";
 import { dineroRedondo } from "@/lib/dinero";
+import { TarjetaPersona } from "@/components/perfil/TarjetaPersona";
 
 /**
  * El panel personal.
@@ -129,6 +131,8 @@ export default function PanelPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { canal, sesion, pistaYt, youtube } = useSpotify();
   const { user } = useSession();
+  /** A quién se le está mirando la ficha, si a alguien. */
+  const [mirando, setMirando] = useState<OrganizationMember | null>(null);
 
   const espacio = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
   const orgId = espacio.datos?.workspace.organizationId ?? null;
@@ -381,7 +385,16 @@ export default function PanelPage() {
                 listaMiembros.slice(0, 5).map((miembro) => {
                   const p = PRESENCIA[miembro.presence];
                   return (
-                    <div key={miembro.userId} className="flex items-center gap-2.5">
+                    // Pulsar a alguien enseña quién es y en qué anda, sin salir
+                    // de aquí. El tablero ya está cargado en esta pantalla, así
+                    // que se le pasa: pedirlo otra vez sería una consulta por
+                    // cada clic para enseñar lo mismo.
+                    <button
+                      type="button"
+                      key={miembro.userId}
+                      onClick={() => setMirando(miembro)}
+                      className="presionable -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 text-left hover:bg-raised/60"
+                    >
                       <span
                         aria-hidden
                         style={{ backgroundImage: tinte(miembro.displayName) }}
@@ -390,13 +403,18 @@ export default function PanelPage() {
                         {miembro.displayName.trim().charAt(0).toUpperCase() || "?"}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-xs">{miembro.displayName}</span>
+                      {miembro.title && (
+                        <span className="hidden shrink-0 truncate text-[10px] text-faint xl:block">
+                          {miembro.title}
+                        </span>
+                      )}
                       <span
                         aria-hidden
                         className="size-1.5 shrink-0 rounded-full"
                         style={{ background: p.color, boxShadow: `0 0 7px ${p.color}` }}
                         title={p.label}
                       />
-                    </div>
+                    </button>
                   );
                 })
               )}
@@ -442,6 +460,14 @@ export default function PanelPage() {
           </section>
         </div>
       </div>
+      {mirando && (
+        <TarjetaPersona
+          miembro={mirando}
+          workspaceId={workspaceId}
+          columnas={tablero.datos?.columns}
+          onCerrar={() => setMirando(null)}
+        />
+      )}
     </div>
   );
 }
