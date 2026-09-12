@@ -2504,7 +2504,7 @@ async function main(): Promise<void> {
       withUser(quien, async (db) => {
         const { rows } = await db.query<{ id: string }>(
           `insert into activity
-             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id, resumen)
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_id, subject_label)
            values ($1, $2, $3, 'cerro', 'tarea', $4, $5)
            returning id`,
           [org, workspace, quien, acme.soloTask, resumen],
@@ -2541,7 +2541,7 @@ async function main(): Promise<void> {
       try {
         await db.query(
           `insert into activity
-             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, resumen)
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_label)
            values ($1, $2, $3, 'cerro', 'tarea', 'lo hizo Ana, dice Carla')`,
           [acme.org, acme.ws, ana],
         );

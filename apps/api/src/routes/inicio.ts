@@ -94,25 +94,26 @@ export async function inicioRoutes(app: FastifyInstance): Promise<void> {
        * solos convertiría esta cifra en una que nadie debería tomarse en serio.
        */
       const { rows: resumen } = await db.query(
-        `select a.verbo, a.origen, count(*)::int as veces
+        `select a.verb as "verbo", a.source as "origen", count(*)::int as veces
            from activity a
           where a.actor_id = public.current_user_id()
-            and a.ocurrido_en > now() - ($1::int || ' days')::interval
-          group by a.verbo, a.origen
+            and a.at > now() - ($1::int || ' days')::interval
+          group by a.verb, a.source
           order by veces desc`,
         [dias],
       );
 
       /** Los últimos hechos míos, para «¿en qué andaba yo?» al volver. */
       const { rows: ultimos } = await db.query(
-        `select a.verbo, a.origen, a.resumen, a.ocurrido_en as "ocurridoEn",
-                a.objeto_tipo as "objetoTipo", a.objeto_id as "objetoId",
+        `select a.verb as "verbo", a.source as "origen",
+                a.subject_label as "resumen", a.at as "ocurridoEn",
+                a.subject_type as "objetoTipo", a.subject_id as "objetoId",
                 w.id as "espacioId", w.name as espacio
            from activity a
            left join workspaces w on w.id = a.workspace_id
           where a.actor_id = public.current_user_id()
-            and a.ocurrido_en > now() - ($1::int || ' days')::interval
-          order by a.ocurrido_en desc
+            and a.at > now() - ($1::int || ' days')::interval
+          order by a.at desc
           limit 20`,
         [dias],
       );
