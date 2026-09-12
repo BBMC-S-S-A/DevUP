@@ -2302,6 +2302,67 @@ async function main(): Promise<void> {
     check("borrar un area no borra sus tareas", sobrevive !== undefined);
     check("solo las deja sin clasificar", sobrevive?.category_id === null);
 
+    console.log("\nNadie se invita solo a una organizacion ajena");
+
+    // ESTO ES UNA REGRESION, NO UNA COMPROBACION DE RUTINA. Hasta la 0041,
+    // `is_org_admin` devolvia NULL —no `false`— para quien no es miembro, y
+    // un `if not NULL` de PL/pgSQL no entra en el bloque: la comprobacion de
+    // permisos de `create_invitation` no fallaba, se saltaba. Bruno, que es de
+    // otra organizacion, podia crear una invitacion de ADMINISTRADOR a Acme
+    // con el token que el eligiera y canjearla. Hacerse dueño de la casa de
+    // otro sabiendo solo el numero del portal.
+    //
+    // En RLS no se notaba porque alli NULL y `false` niegan igual. Por eso vive
+    // aqui: es el unico sitio del repositorio donde se prueban permisos contra
+    // la base de verdad, y es donde alguien mirara el dia que vuelva a pasar.
+    await denied("un extraño no puede crear invitaciones en una organizacion ajena", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.create_invitation($1,$2,$3,$4,$5,$6)", [
+          acme.org,
+          `colado-${suffix}@devup.test`,
+          "admin",
+          `hash-colado-${suffix}`,
+          new Date(Date.now() + 86_400_000).toISOString(),
+          null,
+        ]),
+      ),
+    );
+
+    // La misma trampa por la puerta nueva de la 0040.
+    const invitacionDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ create_invitation: string }>(
+        "select public.create_invitation($1,$2,$3,$4,$5,$6)",
+        [
+          acme.org,
+          `elena-${suffix}@devup.test`,
+          "member",
+          `hash-elena-${suffix}`,
+          new Date(Date.now() + 86_400_000).toISOString(),
+          null,
+        ],
+      );
+      return rows[0]!.create_invitation;
+    });
+    await denied("ni ponerle codigo corto a una invitacion que no es suya", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.set_invitation_code($1,$2)", [
+          invitacionDeAcme,
+          `hash-codigo-colado-${suffix}`,
+        ]),
+      ),
+    );
+
+    // Y la comprobacion directa de lo que causaba todo: la funcion contesta
+    // «no», no «no lo se».
+    const respuesta = await withUser(bruno, async (db) => {
+      const { rows } = await db.query<{ is_org_admin: boolean | null }>(
+        "select public.is_org_admin($1)",
+        [acme.org],
+      );
+      return rows[0]!.is_org_admin;
+    });
+    check("`is_org_admin` contesta false a un extraño, nunca null", respuesta === false);
+
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

@@ -62,6 +62,17 @@ trabaja, no como una lista de deseos.
   abierta.
 - **Áreas del tablero, con delegado por defecto** — La 0039 y `crear_area` en el
   MCP.
+- **Código corto de invitación** — La 0040. Ocho símbolos del alfabeto de
+  Crockford, que se puede dictar por teléfono. Guardado cifrado igual que el
+  token, con una ruta para pedir otro si se pierde. No sustituye al enlace: la
+  misma invitación tiene las dos puertas.
+- **Arreglo: `is_org_admin` devolvía NULL en vez de `false`** — La 0041.
+  Encontrado escribiendo lo de arriba, y era grave: cualquiera con sesión podía
+  crear una invitación de administrador a una organización ajena sabiendo solo
+  su id, y canjearla. `if not NULL` en PL/pgSQL no entra en el bloque, así que
+  la comprobación de permisos no fallaba: se saltaba. En RLS no se notaba
+  porque allí NULL y `false` niegan igual. Con su caso de regresión en
+  `isolation.test.ts`.
 
 ### Workflow y flujos · Juan Medina
 
@@ -116,9 +127,8 @@ trabaja, no como una lista de deseos.
 
 ### Profundización de funcionalidades · Juan Bonilla
 
-- **Código corto de invitación** — Las invitaciones ya existen con su token y su
-  canje; falta un código que se pueda dictar por teléfono. Una columna en
-  `invitations` y un campo donde pegarlo. Es lo que necesita el «+» del riel.
+- **El «+» del riel, ahora que el código existe** — La API ya está (0040); falta
+  la pantalla: pegar un código, ver de qué organización es y entrar.
 - **«¿Qué ha pasado aquí desde…?» en el MCP** — Ya tiene de dónde leer.
 - **La pantalla de auditoría por persona** — Qué cerró, cuánto y cuánto tardó,
   sobre el recuento que ya devuelve la API.

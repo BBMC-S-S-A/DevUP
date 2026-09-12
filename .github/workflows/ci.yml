@@ -88,6 +88,16 @@ jobs:
         # siempre parece verdad.
         run: npm run test:actividad --workspace apps/api
 
+      - name: El código corto de invitación
+        # Dos mitades: que normalizar perdone lo que se teclea al dictado
+        # (minúsculas, guiones, la O por el cero) sin volver iguales dos
+        # códigos distintos, y que en la base solo un administrador pueda
+        # poner código, que renovarlo mate al anterior, y que canjear por
+        # código no dé más acceso que canjear por enlace. Es una puerta de
+        # entrada a una organización: lo que falle aquí mete a alguien donde
+        # no debía sin que nadie abra una incidencia.
+        run: npm run test:codigo --workspace apps/api
+
       - name: El criterio de migraciones
         # Comprueba el analizador que se le aplica al repositorio de un
         # cliente, y lo hace contra nuestras propias migraciones: si a las
