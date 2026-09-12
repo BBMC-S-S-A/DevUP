@@ -43,6 +43,7 @@ import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { AreaTexto, Desplegable } from "@/components/ui/Field";
+import { invalidar, useRecurso } from "@/lib/datos";
 
 /** Tono del vencimiento: vencido grita, hoy avisa, el resto solo informa. */
 function tonoVencimiento(dueDate: string, hoy: string): string {
@@ -77,10 +78,60 @@ export function TaskBoard({
   workspaceId: string;
   organizationId: string;
 }) {
-  const [columns, setColumns] = useState<BoardColumn[]>([]);
-  const [members, setMembers] = useState<OrganizationMember[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [areas, setAreas] = useState<AreaDeTablero[]>([]);
+  /**
+   * El tablero, ya por la capa de datos.
+   *
+   * LO QUE SE GANA, Y NO ES SOLO MENOS CÓDIGO: al volver de otra pantalla el
+   * tablero aparece puesto en vez de en blanco medio segundo, dos componentes
+   * que pidan la misma clave piden una sola vez, y al volver a la pestaña se
+   * comprueba solo. Antes esto eran tres `useState`, un `load` y un efecto en
+   * cada pantalla que quisiera lo mismo.
+   */
+  const claveTablero = `/workspaces/${workspaceId}/board`;
+  const tablero = useRecurso<{ columns: BoardColumn[]; categories: AreaDeTablero[] }>(claveTablero);
+  const equipo = useRecurso<{ members: OrganizationMember[] }>(
+    `/organizations/${organizationId}/members`,
+  );
+  const etiquetas = useRecurso<{ tags: Tag[] }>(`/organizations/${organizationId}/tags`);
+
+  /**
+   * El tablero tal y como se está viendo MIENTRAS una acción va por la red.
+   *
+   * POR QUÉ HACE FALTA UNA CAPA ENCIMA DE LA CACHÉ. Arrastrar una tarjeta tiene
+   * que verse en el sitio nuevo antes de que el servidor conteste; si no, la
+   * tarjeta se queda quieta medio segundo y el arrastre se siente roto. Eso es
+   * estado local por definición: no es lo que el servidor dice, es lo que
+   * estamos apostando a que va a decir.
+   *
+   * Se suelta en cuanto llega la respuesta de verdad (`useEffect` de abajo), y
+   * esa es la regla que lo hace seguro: **lo optimista nunca sobrevive a un
+   * dato fresco**. Si la apuesta era mala, el servidor gana sin que nadie
+   * tenga que acordarse de deshacerla.
+   */
+  const [optimista, setOptimista] = useState<BoardColumn[] | null>(null);
+  const servidor = tablero.datos?.columns;
+  useEffect(() => {
+    if (servidor) setOptimista(null);
+  }, [servidor]);
+
+  const columns = optimista ?? servidor ?? [];
+  const areas = tablero.datos?.categories ?? [];
+  const members = equipo.datos?.members ?? [];
+  const tags = etiquetas.datos?.tags ?? [];
+  const loading = tablero.cargando;
+  const error = tablero.error;
+
+  /** Cambia lo que se ve ahora, sin tocar lo que dice el servidor. */
+  const pintar = (cambio: (previas: BoardColumn[]) => BoardColumn[]) =>
+    setOptimista((previas) => cambio(previas ?? servidor ?? []));
+
+  /** Vuelve a pedir el tablero y suelta lo optimista. Es lo que se llama
+   *  después de cualquier escritura que no se haya pintado a mano. */
+  const load = useCallback(async () => {
+    setOptimista(null);
+    await tablero.recargar();
+  }, [tablero]);
+
   /**
    * Por qué área se está mirando el tablero, o `null` por todas.
    *
@@ -92,8 +143,6 @@ export function TaskBoard({
    * sigue siendo el tablero y se puede mirar «solo lo de DevVerse» en un clic.
    */
   const [area, setArea] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Task | null>(null);
   /** Columna donde se está creando una tarea, si es que se está creando. */
   const [creandoEn, setCreandoEn] = useState<{ id: string; nombre: string } | null>(null);
@@ -116,31 +165,6 @@ export function TaskBoard({
    */
   const [categorias, setCategorias] = useState<string[]>([]);
 
-  const load = useCallback(async () => {
-    try {
-      const [board, memberList, tagList] = await Promise.all([
-        api.get<{ columns: BoardColumn[]; categories: AreaDeTablero[] }>(
-          `/workspaces/${workspaceId}/board`,
-        ),
-        api.get<{ members: OrganizationMember[] }>(`/organizations/${organizationId}/members`),
-        api.get<{ tags: Tag[] }>(`/organizations/${organizationId}/tags`),
-      ]);
-      setColumns(board.columns);
-      setAreas(board.categories ?? []);
-      setMembers(memberList.members);
-      setTags(tagList.tags);
-      setError(null);
-    } catch {
-      setError("no se pudo cargar el tablero");
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId, organizationId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   const confirmarEnTablero = useConfirmar();
 
   /**
@@ -159,11 +183,12 @@ export function TaskBoard({
   const renombrarColumna = async (column: BoardColumn, propuesto: string) => {
     const nombre = propuesto.trim();
     if (!nombre || nombre === column.name) return;
-    setColumns((previas) => previas.map((c) => (c.id === column.id ? { ...c, name: nombre } : c)));
+    pintar((previas) => previas.map((c) => (c.id === column.id ? { ...c, name: nombre } : c)));
     try {
       await api.patch(`/columns/${column.id}`, { name: nombre });
+      invalidar(claveTablero);
     } catch {
-      setColumns((previas) =>
+      pintar((previas) =>
         previas.map((c) => (c.id === column.id ? { ...c, name: column.name } : c)),
       );
       toast.error("no se pudo renombrar la columna");
@@ -211,13 +236,14 @@ export function TaskBoard({
    */
   const marcarTerminal = async (column: BoardColumn) => {
     const valor = !column.isTerminal;
-    setColumns((previas) =>
+    pintar((previas) =>
       previas.map((c) => (c.id === column.id ? { ...c, isTerminal: valor } : c)),
     );
     try {
       await api.patch(`/columns/${column.id}`, { isTerminal: valor });
+      invalidar(claveTablero);
     } catch {
-      setColumns((previas) =>
+      pintar((previas) =>
         previas.map((c) => (c.id === column.id ? { ...c, isTerminal: !valor } : c)),
       );
       toast.error("no se pudo cambiar la columna");
@@ -234,7 +260,7 @@ export function TaskBoard({
 
     // Movimiento optimista: la tarjeta salta donde se soltó y la petición va
     // detrás.
-    setColumns((current) => {
+    pintar((current) => {
       const task = current.flatMap((c) => c.tasks).find((t) => t.id === info.taskId);
       if (!task) return current;
       return current.map((column) => {
@@ -250,8 +276,18 @@ export function TaskBoard({
 
     try {
       await api.post(`/tasks/${info.taskId}/move`, { columnId, afterTaskId });
+      // INVALIDAR AUNQUE HAYA SALIDO BIEN, y es lo que el cambio a la caché
+      // obliga a recordar: antes `columns` era estado local y moría con la
+      // pantalla, así que pintar a mano bastaba. Ahora lo que se pintó vive
+      // encima de algo GUARDADO, y si no se marca viejo, volver al tablero
+      // dentro de la ventana de frescura enseñaría el orden de antes del
+      // arrastre. Lo optimista sigue en pantalla hasta que llegue lo fresco.
+      invalidar(claveTablero);
     } catch {
-      setError("no se pudo mover la tarjeta");
+      // La apuesta salió mal: se suelta lo optimista y manda el servidor. Un
+      // aviso flotante y no un cartel fijo, siguiendo la regla: el error de un
+      // CAMPO va junto al campo; el de una ACCIÓN, flotando.
+      toast.error("no se pudo mover la tarjeta");
       await load();
     }
   };
@@ -731,16 +767,13 @@ export function TaskBoard({
           anioActual={anioActual}
           onRecargar={async () => {
             // Las ramas y la evidencia se guardan solas, así que hay que
-            // recargar el tablero Y refrescar la tarjeta abierta: si solo se
-            // recargara el tablero, el diálogo seguiría enseñando la lista de
-            // antes y parecería que no se guardó nada.
-            const { columns: frescas } = await api.get<{ columns: BoardColumn[] }>(
-              `/workspaces/${workspaceId}/board`,
-            );
-            setColumns(frescas);
-            const abierta = frescas.flatMap((c) => c.tasks).find((t) => t.id === open?.id);
-            if (abierta) {
-              const { task: completa } = await api.get<{ task: Task }>(`/tasks/${abierta.id}`);
+            // refrescar las dos cosas: el tablero —de eso se encarga ya la
+            // caché— y la tarjeta abierta, que el tablero no trae entera.
+            // Sin lo segundo, el diálogo seguiría enseñando la lista de antes
+            // y parecería que no se guardó nada.
+            invalidar(claveTablero);
+            if (open) {
+              const { task: completa } = await api.get<{ task: Task }>(`/tasks/${open.id}`);
               setOpen(completa);
             }
           }}
