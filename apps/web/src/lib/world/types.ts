@@ -132,4 +132,12 @@ export type Peer = {
 export type LiveData = {
   board: { name: string; count: number }[];
   channels: { channelId: string; files: number; lastMessageAt: string | null }[];
+  /**
+   * En qué anda el agente de QUIEN PREGUNTA, o nulo si está libre.
+   *
+   * Viaja por aquí porque es exactamente la misma clase de dato que el resto:
+   * algo que cambia cada poco y que el mundo ya sondea. Lo pinta el muñeco de
+   * la sala «Agente IA» — ver `lib/world/agente-ia.ts`.
+   */
+  agente: string | null;
 };

@@ -18,6 +18,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { ClienteApi } from "./api.js";
+import { FRASES_POR_HERRAMIENTA, SIN_FRASE_PROPIA } from "./frases.js";
 import { registrarHerramientas } from "./registro.js";
 
 let total = 0;
@@ -56,6 +57,7 @@ const ESPERADAS = [
   "actualizar_tarea",
   "dibujar_arquitectura",
   "crear_entorno",
+  "estoy_haciendo",
 ];
 
 console.log("\nRegistro de herramientas");
@@ -70,6 +72,28 @@ const registradas = Object.keys(
 check(`se registran las ${ESPERADAS.length}`, registradas.length === ESPERADAS.length);
 for (const nombre of ESPERADAS) {
   check(`está «${nombre}»`, registradas.includes(nombre));
+}
+
+/**
+ * Que ninguna herramienta se quede sin frase para DevVerse.
+ *
+ * POR QUE ES UNA PRUEBA Y NO UN COMENTARIO. El mapa de frases vive en
+ * `frases.ts`, separado del registro, asi que anadir una herramienta y
+ * olvidarse de su frase no rompe nada visible: el muñeco de la sala se calla
+ * cuando el agente la usa, y nadie lo relaciona con el cambio de hace dos
+ * semanas. Esto lo pone rojo el mismo dia.
+ */
+console.log("\nTodas tienen frase para el muñeco");
+
+for (const nombre of registradas) {
+  if (SIN_FRASE_PROPIA.has(nombre)) continue;
+  check(`«${nombre}» tiene frase`, typeof FRASES_POR_HERRAMIENTA[nombre] === "string");
+}
+
+// Y al reves: una frase para una herramienta que ya no existe es un nombre
+// viejo que alguien copiara creyendo que sigue vivo.
+for (const nombre of Object.keys(FRASES_POR_HERRAMIENTA)) {
+  check(`la frase «${nombre}» corresponde a una herramienta`, registradas.includes(nombre));
 }
 
 console.log("\nEl transporte remoto se compone");
