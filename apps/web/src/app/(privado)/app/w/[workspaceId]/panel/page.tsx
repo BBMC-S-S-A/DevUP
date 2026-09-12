@@ -1,15 +1,11 @@
 "use client";
 
 import {
-  AtSign,
   CalendarClock,
   ClipboardList,
-  Megaphone,
   Music,
-  Rocket,
   Server,
   TriangleAlert,
-  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -17,10 +13,10 @@ import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { YoutubeWidget } from "@/components/spotify/YoutubeWidget";
 import { EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import {
+  type BoardColumn,
   type Despliegue,
   type Entorno,
   type EstadoDespliegue,
-  type Notification,
   type OrganizationMember,
   type Presencia,
   type Workspace,
@@ -45,10 +41,17 @@ import { dineroRedondo } from "@/lib/dinero";
  * cada quien se armaba.
  *
  * LAS TRES COLUMNAS Y DE DÓNDE SALE CADA UNA:
- *  - «Te espera»: notificaciones sin leer (`/notifications`) y ventas abiertas
- *    que vencen pronto (`/organizations/:id/pipeline`, el mismo umbral de tres
- *    días que ya usa el embudo). No hay menciones de PR ni de commits porque
- *    no existe ese dato en el producto — el mock lo dibuja, aquí no se inventa.
+ *  - «Te espera»: TUS tareas sin terminar (`/workspaces/:id/board`, columnas
+ *    sin la marca de terminal de la 0037) y ventas abiertas que vencen pronto
+ *    (`/organizations/:id/pipeline`, el mismo umbral de tres días que ya usa el
+ *    embudo). No hay menciones de PR ni de commits porque no existe ese dato en
+ *    el producto — el mock lo dibuja, aquí no se inventa.
+ *
+ *    ANTES ERAN NOTIFICACIONES SIN LEER, y estaba mal: un aviso es un hecho que
+ *    ocurrió y se queda aunque la tarea esté hecha, así que lo ya terminado
+ *    seguía apareciendo como pendiente. Lo que se completa desaparece al
+ *    completarlo; lo que solo se lee desaparece al leerlo. Los avisos están en
+ *    la campana, que es suya.
  *  - «Infraestructura»: los entornos reales (`/organizations/:id/environments`),
  *    los mismos que ve la pantalla de infraestructura.
  *  - «Quién está»: los miembros de la organización con su presencia
@@ -108,15 +111,15 @@ type Venta = {
 
 type Espera =
   | { tipo: "venta"; id: string; dias: number; titulo: string; subtitulo: string }
-  | { tipo: "notificacion"; id: string; kind: Notification["kind"]; titulo: string; subtitulo: string; link: string };
+  | {
+      tipo: "tarea";
+      id: string;
+      titulo: string;
+      columna: string;
+      /** Días hasta el vencimiento, o `null` si no tiene fecha. */
+      dias: number | null;
+    };
 
-const ICONO_NOTIFICACION: Record<Notification["kind"], typeof AtSign> = {
-  mention: AtSign,
-  task_assigned: ClipboardList,
-  invitation: UserPlus,
-  recording: Rocket,
-  announcement: Megaphone,
-};
 
 // Sin decimales, que es lo que pide una cifra de cabecera. La regla vive en
 // `lib/dinero.ts` junto con la del embudo, para que no vuelvan a separarse.
@@ -130,7 +133,20 @@ export default function PanelPage() {
   const espacio = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
   const orgId = espacio.datos?.workspace.organizationId ?? null;
 
-  const notis = useRecurso<{ notifications: Notification[] }>("/notifications?unreadOnly=true&limit=6");
+  // El tablero, para saber qué tienes SIN TERMINAR. Antes esta columna listaba
+  // notificaciones sin leer, y eso es otra cosa: un aviso es un hecho que
+  // ocurrió —«te han asignado una tarea»— y se queda ahí aunque la tarea esté
+  // hecha, porque lo que pasó pasó. Por eso una tarea ya cerrada seguía
+  // apareciendo como pendiente.
+  //
+  // Lo que se puede completar desaparece al completarlo; lo que solo se puede
+  // leer desaparece al leerlo. No son lo mismo y no comparten sitio: los avisos
+  // están en la campana, que es suya.
+  //
+  // Se puede hacer desde la migración 0037, que es la que dio a una columna la
+  // marca de «aquí se termina». Sin ella no había forma de saber qué está
+  // pendiente sin adivinar por el nombre de la columna.
+  const tablero = useRecurso<{ columns: BoardColumn[] }>(`/workspaces/${workspaceId}/board`);
   const ventas = useRecurso<{ opportunities: Venta[] }>(
     orgId ? `/organizations/${orgId}/pipeline` : null,
   );
@@ -174,16 +190,29 @@ export default function PanelPage() {
       subtitulo: `${v.clientName} · ${money(v.amountCents)}`,
     }));
 
-  const avisos: Espera[] = (notis.datos?.notifications ?? []).map((n) => ({
-    tipo: "notificacion" as const,
-    id: n.id,
-    kind: n.kind,
-    titulo: n.title,
-    subtitulo: n.body,
-    link: n.link,
-  }));
+  // Tuyas y sin terminar. El orden es por urgencia real: lo vencido primero,
+  // después lo que vence pronto, y al final lo que no tiene fecha — que no es
+  // menos importante, es que no hay nada que diga cuándo.
+  const mias: Espera[] = (tablero.datos?.columns ?? [])
+    .filter((c) => !c.isTerminal)
+    .flatMap((c) =>
+      c.tasks
+        .filter((t) => t.assigneeId === user?.id)
+        .map((t) => ({
+          tipo: "tarea" as const,
+          id: t.id,
+          titulo: t.title,
+          columna: c.name,
+          dias: t.dueDate ? diasHasta(t.dueDate, hoy) : null,
+        })),
+    )
+    .sort((a, b) => {
+      if (a.dias === null) return b.dias === null ? 0 : 1;
+      if (b.dias === null) return -1;
+      return a.dias - b.dias;
+    });
 
-  const espera = [...ventasUrgentes, ...avisos].slice(0, 5);
+  const espera = [...ventasUrgentes, ...mias].slice(0, 5);
 
   const lista = entornos.datos?.environments ?? [];
   const todoEnPie = lista.length > 0 && lista.every((e) => e.ultimo?.state !== "failure");
@@ -223,8 +252,8 @@ export default function PanelPage() {
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
             {espera.length === 0 ? (
               <p className="mt-2 text-xs leading-relaxed text-faint">
-                Nada de esto lo anotó nadie: se deduce de lo que pasó, y ahora mismo no pasa nada
-                urgente.
+                No tienes tareas sin terminar ni ventas a punto de vencer. Los avisos están en la
+                campana.
               </p>
             ) : (
               espera.map((item) =>
@@ -244,18 +273,28 @@ export default function PanelPage() {
                   </div>
                 ) : (
                   <Link
-                    key={`noti-${item.id}`}
-                    href={item.link || "#"}
+                    key={`tarea-${item.id}`}
+                    href={`/app/w/${workspaceId}/board`}
                     className="presionable block rounded-xl bg-raised/40 p-3 hover:bg-raised/70"
                   >
                     <div className="flex items-center gap-2">
-                      {(() => {
-                        const Icono = ICONO_NOTIFICACION[item.kind];
-                        return <Icono size={12} className="shrink-0 text-accent" />;
-                      })()}
-                      <Rotulo>{item.titulo}</Rotulo>
+                      <ClipboardList size={12} className="shrink-0 text-accent" />
+                      <Rotulo>{item.columna}</Rotulo>
+                      {item.dias !== null && (
+                        <span
+                          className={`ml-auto shrink-0 font-mono text-[10px] tabular-nums ${
+                            item.dias < 0 ? "text-danger" : item.dias <= UMBRAL_URGENCIA ? "text-warn" : "text-faint"
+                          }`}
+                        >
+                          {item.dias < 0
+                            ? `${-item.dias} d de retraso`
+                            : item.dias === 0
+                              ? "hoy"
+                              : `${item.dias} d`}
+                        </span>
+                      )}
                     </div>
-                    <p className="mt-1.5 line-clamp-2 text-xs text-muted">{item.subtitulo}</p>
+                    <p className="mt-1.5 line-clamp-2 text-sm font-medium text-ink">{item.titulo}</p>
                   </Link>
                 ),
               )
