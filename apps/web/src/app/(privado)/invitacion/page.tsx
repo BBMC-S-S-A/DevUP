@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Building2, CheckCircle2, Clock, LogIn, UserPlus } from "lucide-react";
+import { AlertCircle, Building2, CheckCircle2, Clock, LogIn, LogOut, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -53,7 +53,7 @@ export default function InvitacionPage() {
 function Invitacion() {
   const token = useSearchParams().get("token") ?? "";
   const router = useRouter();
-  const { user, loading } = useSession();
+  const { user, loading, signOut } = useSession();
 
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -195,13 +195,34 @@ function Invitacion() {
         ) : (
           // Aceptarla con otra cuenta metería a quien no toca en la
           // organización, y el correo iba dirigido a una persona concreta.
-          <p className="flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 px-3 py-2.5 text-xs leading-relaxed text-warn">
-            <AlertCircle size={14} className="mt-0.5 shrink-0" />
-            <span>
-              La invitación es para <strong>{invitation.email}</strong> y ahora mismo estás dentro
-              como <strong>{user.email}</strong>. Cierra sesión y vuelve a abrir este enlace.
-            </span>
-          </p>
+          //
+          // EXPLICARLO NO BASTA. Hasta ahora esto era solo el aviso, y la
+          // salida era irse de la pantalla, cerrar sesión por el menú y volver
+          // a buscar el correo — tres pasos fuera de aquí para algo que se
+          // resuelve con un botón. El aviso se queda, porque hay que decir por
+          // qué no se puede aceptar; lo que faltaba era la acción.
+          <div className="space-y-2.5">
+            <p className="flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 px-3 py-2.5 text-xs leading-relaxed text-warn">
+              <AlertCircle size={14} className="mt-0.5 shrink-0" />
+              <span>
+                La invitación es para <strong>{invitation.email}</strong> y ahora mismo estás dentro
+                como <strong>{user.email}</strong>.
+              </span>
+            </p>
+            <Boton
+              type="button"
+              variante="secundario"
+              className="w-full"
+              icono={<LogOut size={15} />}
+              // Vuelve a ESTA misma invitación, no a /login: quien llega aquí
+              // no quiere salir de la aplicación, quiere entrar con la otra
+              // cuenta. Mandarle al acceso le hace buscar el correo otra vez,
+              // que es exactamente el paso que sobra.
+              onClick={() => void signOut(`/invitacion?token=${encodeURIComponent(token)}`)}
+            >
+              Cerrar sesión y seguir con esta invitación
+            </Boton>
+          </div>
         )
       ) : (
         <>

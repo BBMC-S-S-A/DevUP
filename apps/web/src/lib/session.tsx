@@ -19,7 +19,15 @@ type SessionState = {
   /** Devuelve a quién encontró, para que quien acaba de entrar sepa si de
    *  verdad hay sesión antes de navegar — ver el comentario en login/page.tsx. */
   refresh: () => Promise<User | null>;
-  signOut: () => Promise<void>;
+  /**
+   * Cierra la sesión y lleva a `destino`, o a /login si no se dice otro.
+   *
+   * El parámetro existe por la pantalla de invitación: quien abre un enlace
+   * dirigido a otro correo tiene que cerrar sesión **y volver a este mismo
+   * enlace**, y mandarle a /login le hace buscar otra vez el correo. Es el
+   * único caso donde salir no significa «me voy».
+   */
+  signOut: (destino?: string) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -44,7 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (destino?: string) => {
     // A propósito, y es importante que siga así: cerrar sesión tiene que
     // funcionar aunque el servidor no conteste. Lo que pasa justo después
     // —borrar el usuario de memoria— es lo que de verdad saca a la persona de
@@ -58,7 +66,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // RLS— pero es la misma persona la que sobra en la ecuación.
     olvidarUltimoEspacio();
     setUser(null);
-    router.push("/login");
+    router.push(destino ?? "/login");
   }, [router]);
 
   useEffect(() => {

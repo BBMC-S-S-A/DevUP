@@ -32,6 +32,7 @@ import {
 } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Boton } from "@/components/ui/Boton";
+import { useConfirmar } from "@/components/ui/Confirmar";
 import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
 import { Chip, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -366,6 +367,7 @@ function Invitaciones({
   // fiable: se enseña aquí para que quien invita lo mande por su cuenta.
   const [enlace, setEnlace] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const confirmar = useConfirmar();
 
   const cargar = useCallback(async () => {
     const { invitations } = await api
@@ -511,6 +513,20 @@ function Invitaciones({
               <button
                 type="button"
                 onClick={async () => {
+                  // Revocar es irreversible: el enlace que ya se mandó queda
+                  // muerto y hay que invitar otra vez. El diálogo nombra el
+                  // correo concreto porque en una lista de cuatro
+                  // invitaciones pendientes, «¿estás seguro?» no dice cuál se
+                  // está a punto de tirar — y el botón de al lado también
+                  // dice «Revocar».
+                  const seguro = await confirmar({
+                    titulo: `¿Revocar la invitación de ${invitacion.email}?`,
+                    descripcion:
+                      "El enlace que ya se envió dejará de funcionar. Para volver a invitar a esta persona habrá que mandarle uno nuevo.",
+                    accion: "Revocar",
+                    peligro: true,
+                  });
+                  if (!seguro) return;
                   try {
                     await api.delete(`/invitations/${invitacion.id}`);
                     toast.success("Invitación revocada");
