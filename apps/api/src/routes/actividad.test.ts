@@ -23,6 +23,7 @@
  */
 import { closePool, withUser } from "../db/pool.js";
 import { crearTareaEnDb, moverTareaEnDb } from "./tasks.js";
+import { cierresPorPersona } from "../lib/actividad.js";
 
 let total = 0;
 const fallos: string[] = [];
@@ -261,6 +262,60 @@ async function main(): Promise<void> {
       return rows[0]!.veces;
     });
     check("«¿cuántas cerró Ana esta semana?» ya tiene respuesta", cerradas === 1);
+
+    console.log("\nCuánto tarda en cerrarse lo que cierra cada uno");
+
+    // Es la única consulta del registro que CALCULA algo en vez de contarlo, y
+    // por eso es la única que puede estar mal sin devolver un error: una
+    // mediana equivocada sigue siendo un número, y un número parece verdad.
+    //
+    // Se fabrican tres cierres con duraciones conocidas —1, 3 y 10 días—
+    // escribiendo en el registro directamente, que es lo que permite fijar las
+    // fechas. La mediana de esas tres es 3.
+    const medido = await withUser(ana, async (db) => {
+      for (const [dias, n] of [
+        [1, "a"],
+        [3, "b"],
+        [10, "c"],
+      ] as const) {
+        const objeto = (
+          await db.query<{ id: string }>("select gen_random_uuid() as id")
+        ).rows[0]!.id;
+        await db.query(
+          `insert into activity
+             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id,
+              resumen, ocurrido_en)
+           values ($1,$2,$3,'tarea.creada','tarea',$4,$5, now() - ($6::int || ' days')::interval),
+                  ($1,$2,$3,'tarea.cerrada','tarea',$4,$5, now())`,
+          [org, ws, ana, objeto, `medida ${n}`, dias],
+        );
+      }
+      return cierresPorPersona(db, { organizationId: org, dias: 30, workspaceId: ws });
+    });
+
+    const deAna = medido.find((c) => c.actorId === ana);
+    // Las tres fabricadas más la que se cerró de verdad más arriba, que se
+    // creó y se cerró en el mismo segundo.
+    check("cuenta los cierres que tienen creación en el registro", deAna?.cerradas === 4);
+    // Con 0, 1, 3 y 10 días, la mediana es el punto medio entre 1 y 3.
+    check("y la mediana es la mediana, no la media", deAna?.diasMediana === 2);
+
+    // Lo que no tiene `tarea.creada` en el registro no se puede medir, y eso
+    // incluye todo lo anterior a la 0038. Queda fuera en vez de estimarse: un
+    // número honesto y parcial se puede interpretar; uno inventado, no.
+    const huerfana = await withUser(ana, async (db) => {
+      await db.query(
+        `insert into activity
+           (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id, resumen)
+         values ($1,$2,$3,'tarea.cerrada','tarea',gen_random_uuid(),'sin creación')`,
+        [org, ws, ana],
+      );
+      return cierresPorPersona(db, { organizationId: org, dias: 30, workspaceId: ws });
+    });
+    check(
+      "una tarea cerrada sin creación anotada no se mide ni se estima",
+      huerfana.find((c) => c.actorId === ana)?.cerradas === 4,
+    );
   } finally {
     await admin.query("delete from public.organizations where slug like $1", [
       `%-actividad-${sufijo}`,

@@ -80,6 +80,69 @@ export async function anotar(db: Db, a: Anotacion): Promise<void> {
 }
 
 /**
+ * Cuánto tarda en cerrarse lo que cierra cada uno, contado del registro.
+ *
+ * ESTO ES LO QUE `auditoria.ts` NO PODÍA CONTESTAR, y lo dice en su cabecera:
+ * allí lo más cercano a «cuándo se terminó» es `updated_at`, que es cuándo se
+ * tocó por última vez. Para una tarea movida a «hecho» y no tocada más
+ * coinciden; para una editada después, no. Aquí las dos fechas son hechos con
+ * su hora: cuándo se creó y cuándo se cerró.
+ *
+ * LA MEDIANA Y NO LA MEDIA. Una tarea que se quedó abierta cuatro meses —las
+ * hay siempre— arrastra una media hasta volverla inútil; la mediana contesta
+ * «lo normal», que es lo que se pregunta. Y viaja con su recuento al lado: una
+ * mediana de dos casos no es un dato, es una anécdota, y sin el número nadie
+ * puede saberlo.
+ *
+ * LO QUE DEJA FUERA, Y HAY QUE DECIRLO EN LA PANTALLA: una tarea sin
+ * `tarea.creada` en el registro no se puede medir. Eso incluye todas las
+ * anteriores a la 0038, así que durante las primeras semanas este número habla
+ * solo de lo nuevo. Es preferible a estimarlo: un número honesto y parcial se
+ * puede interpretar; uno inventado, no.
+ *
+ * REABRIR Y VOLVER A CERRAR CUENTA DOS VECES, y las dos se miden desde que se
+ * creó. Es lo correcto: la segunda vez la tarea llevaba abierta todo ese
+ * tiempo de verdad.
+ *
+ * VIVE AQUÍ Y NO EN LA RUTA para poder probarla sin levantar el servidor. Es
+ * la única consulta del registro que CALCULA algo en vez de contarlo, así que
+ * es también la única que puede estar mal sin devolver un error.
+ */
+export type Cierre = { actorId: string; cerradas: number; diasMediana: number | null };
+
+export async function cierresPorPersona(
+  db: Db,
+  filtro: { organizationId: string; dias: number; workspaceId?: string | null },
+): Promise<Cierre[]> {
+  const { rows } = await db.query<Cierre>(
+    `with cerradas as (
+       select c.actor_id,
+              extract(epoch from (c.ocurrido_en - cr.creada)) / 86400 as dias
+         from activity c
+         join lateral (
+           select min(a2.ocurrido_en) as creada
+             from activity a2
+            where a2.objeto_id = c.objeto_id
+              and a2.verbo = 'tarea.creada'
+         ) cr on cr.creada is not null
+        where c.organization_id = $1
+          and c.verbo = 'tarea.cerrada'
+          and c.ocurrido_en > now() - ($2::int || ' days')::interval
+          and ($3::uuid is null or c.workspace_id = $3)
+          and c.actor_id is not null
+     )
+     select actor_id as "actorId",
+            count(*)::int as cerradas,
+            round((percentile_cont(0.5) within group (order by dias))::numeric, 1)::float8
+              as "diasMediana"
+       from cerradas
+      group by actor_id`,
+    [filtro.organizationId, filtro.dias, filtro.workspaceId ?? null],
+  );
+  return rows;
+}
+
+/**
  * Recorta un título para meterlo en un resumen sin que se coma la línea.
  *
  * Los títulos llegan hasta 200 caracteres y el resumen cabe en 300; sin esto,

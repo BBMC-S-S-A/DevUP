@@ -68,6 +68,12 @@ trabaja, no como una lista de deseos.
   falle; y dice cuándo algo lo hizo el asistente de alguien y no esa persona.
   No resume a propósito: devuelve los hechos para que los resuma quien tiene el
   contexto de la conversación.
+- **La pantalla de auditoría por persona** — Tercera vista de Auditoría, «El
+  registro», leída de la 0038. Desglose por verbo y no un total —cuánto vale
+  cerrar frente a crear sigue sin decidirse—, lo del asistente aparte, y
+  «cuánto tarda en cerrarse» calculado de hechos fechados en vez de la
+  aproximación por `updated_at` que la propia `auditoria.ts` avisaba de que
+  era. Con su letra pequeña en pantalla, no solo en el código.
 - **Código corto de invitación** — La 0040. Ocho símbolos del alfabeto de
   Crockford, que se puede dictar por teléfono. Guardado cifrado igual que el
   token, con una ruta para pedir otro si se pierde. No sustituye al enlace: la
@@ -135,8 +141,6 @@ trabaja, no como una lista de deseos.
 
 - **El «+» del riel, ahora que el código existe** — La API ya está (0040); falta
   la pantalla: pegar un código, ver de qué organización es y entrar.
-- **La pantalla de auditoría por persona** — Qué cerró, cuánto y cuánto tardó,
-  sobre el recuento que ya devuelve la API.
 - **Tope de sala para compartir pantalla, y decirlo** — En malla, compartir con
   seis son cinco subidas de vídeo desde un portátil. Hay que poner el tope y
   que se vea, no descubrirlo en una reunión.

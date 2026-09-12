@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
 import { parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { cierresPorPersona } from "../lib/actividad.js";
 
 /**
  * La lectura del registro de actividad.
@@ -145,7 +146,17 @@ export async function actividadRoutes(app: FastifyInstance): Promise<void> {
           order by veces desc`,
         [organizationId, q.dias ?? DIAS_POR_DEFECTO, q.workspaceId ?? null],
       );
-      return { resumen: rows };
+
+      // El cálculo vive en `lib/actividad.ts` para poder probarlo sin levantar
+      // el servidor: es la única consulta del registro que calcula algo en vez
+      // de contarlo, y por tanto la única que puede estar mal sin fallar.
+      const cierres = await cierresPorPersona(db, {
+        organizationId,
+        dias: q.dias ?? DIAS_POR_DEFECTO,
+        workspaceId: q.workspaceId ?? null,
+      });
+
+      return { resumen: rows, cierres };
     });
   });
 
