@@ -8,6 +8,7 @@ import {
   Hash,
   KanbanSquare,
   LayoutDashboard,
+  PhoneCall,
   LayoutGrid,
   Loader2,
   Lock,
@@ -38,6 +39,7 @@ import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
 import { WorkspaceProvider } from "@/lib/workspace-context";
+import { toast } from "sonner";
 
 // `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`, donde está
 // también el porqué del tope del índice.
@@ -296,6 +298,20 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                 listas es el mapa y cuál es el contenido. */}
             <ul className="capa space-y-0.5 rounded-2xl p-1.5">
               <li>
+                {/* DevCall va el primero del grupo porque es lo único de esta
+                    lista donde hay alguien esperando. El resto —el panel, la
+                    mesa, el tablero— sigue ahí dentro de una hora; una sala con
+                    gente dentro, no. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/devcall`}
+                  icono={<PhoneCall size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/devcall`}
+                  indice={0}
+                >
+                  DevCall
+                </ItemNav>
+              </li>
+              <li>
                 {/* El panel es la única pieza de esta lista que no es de este
                     workspace en sentido estricto —vive por persona, ver
                     /me/dashboard— pero entrar desde aquí es lo natural: es donde
@@ -398,26 +414,25 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
               Y la voz antes que el texto: un canal de voz es gente esperando,
               y un canal de texto espera a que llegues. */}
-          {voice.length > 0 && (
-            <ChannelGroup
-              title="Voz"
-              channels={voice}
-              workspaceId={workspaceId}
-              pathname={pathname}
-              unread={unread}
-            />
-          )}
-          {text.length > 0 && (
-            <ChannelGroup
-              title="Texto"
-              channels={text}
-              workspaceId={workspaceId}
-              pathname={pathname}
-              unread={unread}
-            />
-          )}
+          <ChannelGroup
+            title="Voz"
+            kind="voice"
+            channels={voice}
+            workspaceId={workspaceId}
+            pathname={pathname}
+            unread={unread}
+            onCreated={load}
+          />
+          <ChannelGroup
+            title="Texto"
+            kind="text"
+            channels={text}
+            workspaceId={workspaceId}
+            pathname={pathname}
+            unread={unread}
+            onCreated={load}
+          />
 
-          <NewChannel workspaceId={workspaceId} onCreated={load} />
 
           {/* DOS GRUPOS Y NO UNO, porque no son lo mismo.
               GitHub, Infraestructura, Base de datos, Integraciones y Auditoría
@@ -496,7 +511,16 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }) {
+function GrupoRotulo({
+  titulo,
+  contador,
+  accion,
+}: {
+  titulo: string;
+  contador?: number;
+  /** A la derecha del rotulo: crear algo de este grupo, sin salir de el. */
+  accion?: ReactNode;
+}) {
   return (
     <div className="mb-1.5 flex items-center gap-2 px-3">
       <Rotulo>{titulo}</Rotulo>
@@ -504,30 +528,81 @@ function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }
       {contador !== undefined && (
         <span className="font-mono text-[10px] tabular-nums text-faint">{contador}</span>
       )}
+      {accion}
     </div>
   );
 }
 
 // `ItemNav` vivía aquí duplicado. Ahora es de `@/components/ui/ItemNav`.
 
+/**
+ * Un grupo de canales, con su boton de crear dentro.
+ *
+ * EL BOTON SUELTO DE «NUEVO CANAL» ERA EL PROBLEMA DEL FLUJO. Estaba debajo de
+ * las dos listas, no decia de que tipo iba a ser el canal, y hacer una sala de
+ * voz consistia en pulsarlo, escribir el nombre y acordarse de cambiar el tipo
+ * —que salia en «Texto» por defecto—. Casi todas las salas de voz nacian asi,
+ * por descarte.
+ *
+ * Ahora el «+» esta en la cabecera del grupo, y el grupo ya dice el tipo: el
+ * de Voz crea una sala, el de Texto crea un canal. No hay nada que elegir
+ * porque la eleccion ya la hiciste al decidir donde pulsar.
+ *
+ * Y los dos grupos se pintan aunque esten vacios: antes, un espacio sin
+ * canales de voz no ensenaba la seccion, asi que tampoco ensenaba por donde se
+ * crea el primero.
+ */
 function ChannelGroup({
   title,
+  kind,
   channels,
   workspaceId,
   pathname,
   unread,
+  onCreated,
 }: {
   title: string;
+  kind: "text" | "voice";
   channels: Channel[];
   workspaceId: string;
   pathname: string;
   unread: Record<string, number>;
+  onCreated: () => Promise<void>;
 }) {
+  const [creando, setCreando] = useState(false);
+  const esVoz = kind === "voice";
+
   return (
     <div>
-      <GrupoRotulo titulo={title} contador={channels.length} />
+      <GrupoRotulo
+        titulo={title}
+        contador={channels.length}
+        accion={
+          <BotonIcono
+            etiqueta={esVoz ? "Nueva sala de voz" : "Nuevo canal de texto"}
+            onClick={() => setCreando((a) => !a)}
+            aria-expanded={creando}
+          >
+            <Plus size={13} />
+          </BotonIcono>
+        }
+      />
+
+      {creando && (
+        <div className="mb-1.5">
+          <NewChannel
+            workspaceId={workspaceId}
+            kind={kind}
+            onCreated={onCreated}
+            onCerrar={() => setCreando(false)}
+          />
+        </div>
+      )}
+
       {channels.length === 0 ? (
-        <p className="px-3 text-[11px] text-faint">Ninguno todavía.</p>
+        <p className="px-3 text-[11px] text-faint">
+          {esVoz ? "Ninguna sala todavia." : "Ninguno todavia."}
+        </p>
       ) : (
         <ul className="space-y-0.5">
           {channels.map((channel, indice) => {
@@ -576,39 +651,36 @@ function ChannelGroup({
   );
 }
 
+/**
+ * El formulario, ya sin selector de tipo: lo trae puesto quien lo abre.
+ *
+ * Sigue quedando la casilla de privado, que si es una decision —y una que no
+ * se deduce de donde hayas pulsado—. Si falla la creacion se dice: antes el
+ * `finally` apagaba el indicador y el canal simplemente no aparecia.
+ */
 function NewChannel({
   workspaceId,
+  kind,
   onCreated,
+  onCerrar,
 }: {
   workspaceId: string;
+  kind: "text" | "voice";
   onCreated: () => Promise<void>;
+  onCerrar: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"text" | "voice">("text");
   const [isPrivate, setIsPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="presionable flex w-full items-center gap-2 rounded-xl border border-dashed border-line
-          px-3 py-2 text-[13px] text-faint
-          hover:border-line-strong hover:bg-raised/40 hover:text-muted"
-      >
-        <Plus size={14} className="shrink-0" />
-        Nuevo canal
-      </button>
-    );
-  }
-
   return (
-    // Crece desde el borde de arriba, que es donde estaba el botón que lo abrió:
-    // un panel que nace de su propio centro se despega de lo que lo invocó.
+    // Crece desde el borde de arriba, que es donde esta la cabecera que lo
+    // abrio: un panel que nace de su propio centro se despega de lo que lo
+    // invoco.
     <Tarjeta className="devup-emerge origin-top p-2.5">
-      <Rotulo className="mb-2 block">Nuevo canal</Rotulo>
+      <Rotulo className="mb-2 block">
+        {kind === "voice" ? "Nueva sala de voz" : "Nuevo canal de texto"}
+      </Rotulo>
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -620,10 +692,11 @@ function NewChannel({
               isPrivate,
             });
             setName("");
-            setKind("text");
             setIsPrivate(false);
-            setOpen(false);
+            onCerrar();
             await onCreated();
+          } catch (caught) {
+            toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear el canal");
           } finally {
             setBusy(false);
           }
@@ -631,34 +704,14 @@ function NewChannel({
         className="space-y-2.5"
       >
         {/* Mono porque el nombre de canal es un identificador, no una frase: se
-            escribe en minúsculas y con guiones y así se ve mientras se teclea. */}
+            escribe en minusculas y con guiones y asi se ve mientras se teclea. */}
         <Entrada
           autoFocus
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="nombre-del-canal"
+          placeholder={kind === "voice" ? "sala-de-equipo" : "nombre-del-canal"}
           className="font-mono"
         />
-
-        <div className="flex gap-1.5">
-          {(["text", "voice"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setKind(option)}
-              aria-pressed={kind === option}
-              className={`presionable flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-1.5
-                font-display text-[10px] font-semibold uppercase tracking-wider ${
-                  kind === option
-                    ? "border-accent/40 bg-accent-soft text-accent"
-                    : "border-line text-faint hover:border-line-strong hover:text-muted"
-                }`}
-            >
-              {option === "text" ? <Hash size={11} /> : <Volume2 size={11} />}
-              {option === "text" ? "Texto" : "Voz"}
-            </button>
-          ))}
-        </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted hover:text-ink">
           <input
@@ -672,8 +725,8 @@ function NewChannel({
         </label>
 
         <div className="flex items-center gap-1.5 pt-0.5">
-          {/* El ancho lo pone el envoltorio: Boton trae `shrink-0` de fábrica y
-              un `flex-1` encima sería una carrera de utilidades. */}
+          {/* El ancho lo pone el envoltorio: Boton trae `shrink-0` de fabrica y
+              un `flex-1` encima seria una carrera de utilidades. */}
           <div className="flex-1">
             <Boton
               type="submit"
@@ -686,7 +739,7 @@ function NewChannel({
               Crear
             </Boton>
           </div>
-          <Boton type="button" variante="fantasma" tamano="sm" onClick={() => setOpen(false)}>
+          <Boton type="button" variante="fantasma" tamano="sm" onClick={onCerrar}>
             Cancelar
           </Boton>
         </div>
