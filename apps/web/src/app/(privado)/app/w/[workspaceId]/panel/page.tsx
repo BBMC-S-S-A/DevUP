@@ -228,7 +228,18 @@ export default function PanelPage() {
   const listaMiembros = miembros.datos?.members ?? [];
 
   return (
-    <div className="mx-auto flex h-full min-h-0 max-w-[100rem] flex-col gap-4 px-6 py-6">
+    // `alto-util-fijo` y no `h-full`. `h-full` es `height: 100%`, y el `<main>`
+    // que lo contiene solo declara `min-height`: sin una altura definida en el
+    // padre, ese 100 % resuelve a `auto`. Resultado, el panel no llenaba la
+    // pantalla — las tres columnas se quedaban del alto de su contenido, con
+    // todo el hueco de abajo vacío, y sus `flex-1` y `overflow-y-auto` no
+    // hacían nada porque no había altura que repartir.
+    //
+    // La clase existía desde el principio para esto, y lo dice su propio
+    // comentario: «para lo que se desplaza por dentro y no debe crecer con su
+    // contenido». El panel es exactamente eso y era el único sitio que no la
+    // usaba.
+    <div className="alto-util-fijo mx-auto flex min-h-0 max-w-[100rem] flex-col gap-4 px-6 py-6">
       <header className="flex flex-wrap items-end gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
