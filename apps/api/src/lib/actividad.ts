@@ -31,6 +31,7 @@ export const VERBOS = [
   "comento",
   "adjunto",
   "etiqueto",
+  "borro",
 ] as const;
 
 export type Verbo = (typeof VERBOS)[number];
