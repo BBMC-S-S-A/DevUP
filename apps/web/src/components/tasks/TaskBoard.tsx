@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { toast } from "sonner";
 import { fechaCorta, hoyLocal, iniciales } from "@/lib/fechas";
 import {
+  ApiError,
   type BoardColumn,
   type OrganizationMember,
   type Tag,
@@ -79,6 +80,15 @@ export function TaskBoard({
   const [huecoTras, setHuecoTras] = useState<string | null>(null);
   /** Qué columna se está renombrando ahora mismo, si alguna. */
   const [renombrando, setRenombrando] = useState<string | null>(null);
+  /**
+   * Categorías seleccionadas. Vacío = todas.
+   *
+   * EN MEMORIA Y NO GUARDADO, a propósito. Un filtro que sobrevive a la recarga
+   * se convierte en «mis tareas desaparecieron» la próxima vez que se abra el
+   * tablero sin acordarse de que estaba puesto. Mientras no haya un sitio donde
+   * se vea con claridad qué filtro hay activo desde fuera, se olvida al salir.
+   */
+  const [categorias, setCategorias] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -224,7 +234,19 @@ export function TaskBoard({
   // El medidor de cada columna se lee contra la columna más cargada: dice de un
   // vistazo dónde se está acumulando el trabajo, que es la pregunta que se le
   // hace a un tablero desde lejos.
-  const carga = columns.reduce((maximo, columna) => Math.max(maximo, columna.tasks.length), 0);
+  // El filtro se aplica ANTES de todo lo demás: así el medidor de carga, los
+  // contadores de cada columna y el vacío de una columna hablan de lo que se
+  // está viendo. Filtrar solo al pintar las tarjetas dejaría un tablero
+  // diciendo «7» encima de una columna con dos tarjetas.
+  const visibles =
+    categorias.length === 0
+      ? columns
+      : columns.map((c) => ({
+          ...c,
+          tasks: c.tasks.filter((t) => t.tags.some((g) => categorias.includes(g.id))),
+        }));
+
+  const carga = visibles.reduce((maximo, columna) => Math.max(maximo, columna.tasks.length), 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -235,6 +257,15 @@ export function TaskBoard({
         </p>
       )}
 
+      <BarraCategorias
+        tags={tags}
+        columnas={columns}
+        elegidas={categorias}
+        onElegir={setCategorias}
+        organizationId={organizationId}
+        onCreada={load}
+      />
+
       {columns.length === 0 ? (
         <EstadoVacio
           icono={<KanbanSquare size={20} />}
@@ -244,7 +275,7 @@ export function TaskBoard({
         />
       ) : (
         <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-2">
-          {columns.map((column, indice) => {
+          {visibles.map((column, indice) => {
             const sobrevolada = dropTarget === column.id;
 
             return (
@@ -913,5 +944,152 @@ function TaskDialog({
         </div>
       </form>
     </Dialogo>
+  );
+}
+
+/**
+ * Las categorías del tablero, y el filtro por ellas.
+ *
+ * SON LAS ETIQUETAS QUE YA EXISTÍAN. `tags` está en la base desde la 0002, es
+ * de la organización, tiene color y ya se podía poner en una tarea desde su
+ * diálogo. Lo que no había era **filtrar por ellas**, así que poner una
+ * etiqueta no servía para nada: se veía, y ya.
+ *
+ * Y había un callejón sin salida: la sección de etiquetas del diálogo solo
+ * aparece si ya existe alguna (`tags.length > 0`), y el único sitio donde se
+ * podía crear la primera era la biblioteca de archivos. Desde el tablero no se
+ * podía empezar. Por eso el «+» está aquí.
+ *
+ * VARIAS A LA VEZ SUMAN, no restan: elegir «workflow» y «devverse» enseña las
+ * de las dos. Es lo que se espera de un filtro de categorías —«enséñame estas
+ * dos áreas»— y no lo que se espera de uno de propiedades, donde sumar daría
+ * cero resultados casi siempre.
+ *
+ * EL CONTADOR DE CADA CATEGORÍA ES SU NÚMERO DE TAREAS SIN TERMINAR, no el
+ * total. Un «12» que incluye lo cerrado hace meses no dice nada sobre dónde
+ * está el trabajo ahora.
+ */
+function BarraCategorias({
+  tags,
+  columnas,
+  elegidas,
+  onElegir,
+  organizationId,
+  onCreada,
+}: {
+  tags: Tag[];
+  columnas: BoardColumn[];
+  elegidas: string[];
+  onElegir: (ids: string[]) => void;
+  organizationId: string;
+  onCreada: () => Promise<void>;
+}) {
+  const [creando, setCreando] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  // Pendientes por categoría, contra las columnas que no terminan nada.
+  const pendientes = new Map<string, number>();
+  for (const columna of columnas) {
+    if (columna.isTerminal) continue;
+    for (const tarea of columna.tasks) {
+      for (const tag of tarea.tags) {
+        pendientes.set(tag.id, (pendientes.get(tag.id) ?? 0) + 1);
+      }
+    }
+  }
+
+  const alternar = (id: string) =>
+    onElegir(elegidas.includes(id) ? elegidas.filter((x) => x !== id) : [...elegidas, id]);
+
+  const crear = async () => {
+    const limpio = nombre.trim();
+    if (!limpio) return;
+    setGuardando(true);
+    try {
+      await api.post(`/organizations/${organizationId}/tags`, { name: limpio });
+      setNombre("");
+      setCreando(false);
+      await onCreada();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo crear la categoría");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+      <Rotulo className="mr-0.5">Categorías</Rotulo>
+
+      <button
+        type="button"
+        onClick={() => onElegir([])}
+        aria-pressed={elegidas.length === 0}
+        className={`presionable rounded-lg border px-2 py-0.5 text-[11px] transition-colors ${
+          elegidas.length === 0
+            ? "border-accent/50 bg-accent-soft/60 text-accent-bright"
+            : "border-line text-faint hover:text-muted"
+        }`}
+      >
+        Todas
+      </button>
+
+      {tags.map((tag) => {
+        const activa = elegidas.includes(tag.id);
+        const cuantas = pendientes.get(tag.id) ?? 0;
+        return (
+          <button
+            key={tag.id}
+            type="button"
+            onClick={() => alternar(tag.id)}
+            aria-pressed={activa}
+            className={`presionable flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[11px]
+              transition-colors ${
+                activa
+                  ? "border-accent/50 bg-accent-soft/60 text-accent-bright"
+                  : "border-line text-muted hover:border-line-strong"
+              }`}
+          >
+            {tag.name}
+            {cuantas > 0 && (
+              <span className="font-mono text-[10px] tabular-nums text-faint">{cuantas}</span>
+            )}
+          </button>
+        );
+      })}
+
+      {creando ? (
+        <input
+          autoFocus
+          value={nombre}
+          maxLength={40}
+          placeholder="Nombre de la categoría"
+          aria-label="Nombre de la categoría"
+          onChange={(e) => setNombre(e.target.value)}
+          onBlur={() => (nombre.trim() ? void crear() : setCreando(false))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") {
+              setNombre("");
+              setCreando(false);
+            }
+          }}
+          disabled={guardando}
+          className="w-44 rounded-lg border border-accent/50 bg-canvas px-2 py-0.5 text-[11px] text-ink outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setCreando(true)}
+          title="Crear una categoría"
+          aria-label="Crear una categoría"
+          className="presionable grid size-5 place-items-center rounded-lg border border-dashed
+            border-line-strong text-faint transition-colors hover:border-accent hover:text-accent-bright"
+        >
+          <Plus size={11} />
+        </button>
+      )}
+    </div>
   );
 }

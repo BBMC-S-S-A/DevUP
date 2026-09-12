@@ -32,6 +32,8 @@ import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Fallo, Pagina } from "@/components/ui/Pagina";
+import { TarjetaPersona } from "@/components/perfil/TarjetaPersona";
+import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
 
 const ROLES: Record<OrganizationMember["role"], string> = {
   owner: "Propietario",
@@ -208,8 +210,22 @@ function Miembros({
   onChange: () => Promise<void>;
 }) {
   const confirmar = useConfirmar();
+  /** A quién se le está mirando la ficha, si a alguien. */
+  const [mirando, setMirando] = useState<OrganizationMember | null>(null);
+  // Esta pantalla se monta también bajo `/app/w/…`, y entonces sí hay espacio
+  // del que hablar. Bajo `/app/o/…` no lo hay, y la tarjeta se calla lo que
+  // esa persona está haciendo en vez de contarlo de un espacio cualquiera.
+  const espacio = useWorkspaceIdOpcional();
+
   return (
     <Tarjeta className="p-4">
+      {mirando && (
+        <TarjetaPersona
+          miembro={mirando}
+          workspaceId={espacio ?? undefined}
+          onCerrar={() => setMirando(null)}
+        />
+      )}
       <div className="mb-3 flex items-center gap-2">
         <Rotulo>Miembros</Rotulo>
         <span className="font-mono text-[10px] tabular-nums text-faint">{members?.length ?? ""}</span>
@@ -228,10 +244,18 @@ function Miembros({
               key={member.userId}
               className="flex items-center gap-2.5 rounded-xl border border-line/70 bg-surface/60 px-3 py-2"
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[11px] font-semibold text-muted">
-                {(member.displayName || "?").trim().charAt(0).toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1">
+              {/* Pulsar a alguien enseña quién es y, si se mira desde un
+                  espacio, en qué anda. El mismo gesto que en el panel: una
+                  persona debería poder mirarse desde donde aparezca. */}
+              <button
+                type="button"
+                onClick={() => setMirando(member)}
+                className="presionable flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[11px] font-semibold text-muted">
+                  {(member.displayName || "?").trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">
                   {member.displayName}
                   {member.userId === yo && <span className="ml-1.5 text-xs text-faint">(tú)</span>}
@@ -241,10 +265,11 @@ function Miembros({
                     DevVerse — o sea, casi nunca. Es lo que contesta «¿a quién
                     le pregunto esto?» sin tener que preguntar primero a quién
                     preguntar. */}
-                {member.title && (
-                  <span className="block truncate text-[11px] text-faint">{member.title}</span>
-                )}
-              </span>
+                  {member.title && (
+                    <span className="block truncate text-[11px] text-faint">{member.title}</span>
+                  )}
+                </span>
+              </button>
 
               {administro && member.role !== "owner" && member.userId !== yo ? (
                 <Desplegable
