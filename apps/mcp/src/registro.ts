@@ -27,6 +27,7 @@ import {
   esquemaEstoyHaciendo,
   estoyHaciendo,
 } from "./herramientas/estado.js";
+import { descripcionQueHaPasado, esquemaQueHaPasado, queHaPasado } from "./herramientas/pasado.js";
 import {
   descripcionMisTareas,
   descripcionVerTablero,
@@ -165,6 +166,20 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
     esquemaEstoyHaciendo,
     async (cliente, entrada) => [
       { type: "text" as const, text: await estoyHaciendo(cliente, entrada) },
+    ],
+  );
+
+  /**
+   * La del contexto compartido: qué ha hecho el equipo desde un momento.
+   * Va con las de leer porque no escribe nada — solo pregunta al registro
+   * de actividad, que es de solo añadir. Ver `herramientas/pasado.ts`.
+   */
+  registrar(
+    "que_ha_pasado",
+    descripcionQueHaPasado,
+    esquemaQueHaPasado,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await queHaPasado(cliente, entrada) },
     ],
   );
 

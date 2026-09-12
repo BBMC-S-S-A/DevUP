@@ -20,6 +20,7 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   ver_tablero: "mirando el tablero",
   ver_tarea: "leyendo una tarea",
   ver_arquitectura: "mirando la arquitectura",
+  que_ha_pasado: "poniéndose al día con lo que hizo el equipo",
   crear_tarea: "anotando una tarea nueva",
   crear_columna: "añadiendo una columna al tablero",
   mover_tarea: "moviendo una tarjeta",

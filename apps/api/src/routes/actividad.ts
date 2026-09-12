@@ -65,9 +65,15 @@ export async function actividadRoutes(app: FastifyInstance): Promise<void> {
   app.get("/workspaces/:workspaceId/actividad", async (request) => {
     const userId = requireUser(request);
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
-    const { antes, limite } = parseQuery(
+    const { antes, desde, limite } = parseQuery(
       z.object({
         antes: z.string().datetime().optional(),
+        /**
+         * Desde cuándo mirar. Es lo que contesta «¿qué ha pasado desde ayer?»,
+         * que es la pregunta con la que alguien vuelve al trabajo — y la que
+         * usa `que_ha_pasado` desde el MCP.
+         */
+        desde: z.string().datetime().optional(),
         limite: z.coerce.number().int().min(1).max(POR_PAGINA).default(POR_PAGINA),
       }),
       request.query,
@@ -80,9 +86,10 @@ export async function actividadRoutes(app: FastifyInstance): Promise<void> {
            left join profiles p on p.id = a.actor_id
           where a.workspace_id = $1
             and ($2::timestamptz is null or a.at < $2::timestamptz)
+            and ($3::timestamptz is null or a.at >= $3::timestamptz)
           order by a.at desc
-          limit $3`,
-        [workspaceId, antes ?? null, limite],
+          limit $4`,
+        [workspaceId, antes ?? null, desde ?? null, limite],
       );
       // `hayMas` sale de haber llenado la página, no de contar el total: contar
       // una tabla que solo crece es caro y a nadie le sirve el número.
