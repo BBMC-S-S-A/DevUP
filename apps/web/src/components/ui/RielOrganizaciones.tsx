@@ -55,8 +55,19 @@ export function ProveedorRiel({ children }: { children: ReactNode }) {
 function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => void }) {
   const pathname = usePathname();
   const [organizaciones, setOrganizaciones] = useState<Organization[]>([]);
-  /** Por organización, a dónde lleva su chapa. Se resuelve una vez. */
-  const [destinos, setDestinos] = useState<Record<string, string>>({});
+  /**
+   * De qué organización es cada espacio de trabajo.
+   *
+   * ES LO QUE ARREGLA QUE EL RIEL PARECIERA MUERTO. La chapa activa se marcaba
+   * solo con `/app/o/<id>` en la URL, y bajo `/app/w/<id>` —que es donde se
+   * está casi siempre— no coincidía ninguna: se trabajaba una hora entera con
+   * el riel sin una sola marca, como si no supiera dónde estás.
+   *
+   * No hace falta contexto nuevo para saberlo: el riel ya pide los espacios de
+   * cada organización para otra cosa, así que de paso se apunta a quién
+   * pertenece cada uno.
+   */
+  const [orgDeEspacio, setOrgDeEspacio] = useState<Record<string, string>>({});
   const [logos, setLogos] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -69,22 +80,17 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
       if (!vigente) return;
       setOrganizaciones(organizations);
 
-      // El destino de cada chapa es su primer espacio de trabajo, no la
-      // organización: entrar a una organización para elegir espacio es
-      // exactamente el salto de dos pasos que este riel viene a quitar. Si no
-      // tiene ninguno, cae a la organización, que es donde se crea el primero.
-      const resueltos: Record<string, string> = {};
+      // A quién pertenece cada espacio, para saber qué chapa marcar.
+      const deQuien: Record<string, string> = {};
       await Promise.all(
         organizations.map(async (o) => {
           const { workspaces } = await api
             .get<{ workspaces: Workspace[] }>(`/organizations/${o.id}/workspaces`)
             .catch(() => ({ workspaces: [] as Workspace[] }));
-          resueltos[o.id] = workspaces[0]
-            ? `/app/w/${workspaces[0].id}`
-            : `/app/o/${o.id}/ventas`;
+          for (const w of workspaces) deQuien[w.id] = o.id;
         }),
       );
-      if (vigente) setDestinos(resueltos);
+      if (vigente) setOrgDeEspacio(deQuien);
 
       // Los logos van después y por separado: son una petición por
       // organización que puede fallar sin impedir nada. Sin ellos queda la
@@ -125,6 +131,12 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
     onVisible(visible);
   }, [visible, onVisible]);
 
+  // Qué organización se está mirando: la de la URL si es de organización, y si
+  // no, la del espacio en el que se está.
+  const enEspacio = pathname.match(/^\/app\/w\/([^/]+)/)?.[1];
+  const enOrganizacion = pathname.match(/^\/app\/o\/([^/]+)/)?.[1];
+  const activaEs = enOrganizacion ?? (enEspacio ? orgDeEspacio[enEspacio] : undefined);
+
   if (!visible) return null;
 
   return (
@@ -155,11 +167,13 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
           key={o.id}
           organizacion={o}
           logo={logos[o.id]}
-          href={destinos[o.id] ?? `/app/o/${o.id}/ventas`}
-          // Activa por la organización que hay en la URL. Bajo `/app/w/…` no
-          // está, así que ahí no se marca ninguna: marcar la equivocada sería
-          // peor que no marcar, y la cabecera de la barra ya dice dónde estás.
-          activa={pathname.startsWith(`/app/o/${o.id}`)}
+          // A la organización, no a uno de sus espacios. Antes saltaba al
+          // primero que tuviera, y eso está mal cuando hay varios: elegir por
+          // alguien cuál abre es peor que el paso de más que se ahorraba.
+          // Ahora pulsar una organización enseña LO QUE TIENE, y desde ahí se
+          // entra al espacio que toque.
+          href={`/app/o/${o.id}`}
+          activa={activaEs === o.id}
         />
       ))}
 

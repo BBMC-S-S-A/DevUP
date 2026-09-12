@@ -57,10 +57,31 @@ borrando deja trabajo perdido.
 | Para quién | Cualquiera del equipo | Quien ya desarrolla aquí |
 
 **El remoto es el camino normal.** Se pega
-`https://api.hytrex.co/mcp` en Claude → Connectors → Add custom connector, y
-Claude hace el resto: descubre el servidor de autorización, se registra, y
-manda a DevUP a pedir el consentimiento. No hay token que copiar ni archivo
-que editar.
+
+    https://api-production-7b95.up.railway.app/mcp
+
+en Claude → Conectores → Añadir conector personalizado, y Claude hace el resto:
+descubre el servidor de autorización, se registra, y manda a DevUP a pedir el
+consentimiento. No hay token que copiar ni archivo que editar.
+
+**La URL es la fea a propósito.** `api.hytrex.co` todavía no sirve: sus
+certificados se quedaron atascados en Railway con el DNS ya correcto, y todo
+apunta mientras tanto a `*.up.railway.app` — está contado en
+`docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md`. El día que el dominio bonito emita, se
+cambia aquí y en el `.mcp.json` de la raíz.
+
+**Y es el que usa el repositorio.** El `.mcp.json` de la raíz apunta a esta
+misma URL, así que quien abra el proyecto en Claude Code tiene las herramientas
+sin instalar ni configurar nada: las autoriza una vez con su propia cuenta y
+listo. Antes arrancaba el paquete local, que exige un archivo de token que casi
+nadie tiene creado — y el síntoma era «no hay token con el que entrar a DevUP»
+sin que nada dijera qué token ni de dónde.
+
+> **Ojo, y es deliberado:** esa URL es **producción**. Una sesión de desarrollo
+> que use estas herramientas escribe en el tablero de verdad. Es lo que se
+> quiere para trabajar, pero si lo que hace falta es probar la puerta contra
+> una API local, entonces sí es el camino de abajo — y entonces el token local
+> tiene sentido.
 
 Lo sirve `apps/api` (`src/routes/mcp.ts`), con las herramientas de este mismo
 paquete —la lista está en `src/registro.ts` y no se escribe dos veces— y hace
