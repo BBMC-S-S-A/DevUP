@@ -46,8 +46,30 @@ export function ProveedorRiel({ children }: { children: ReactNode }) {
   const [hayRiel, setHayRiel] = useState(false);
   return (
     <RielContext.Provider value={hayRiel}>
-      <RielOrganizaciones onVisible={setHayRiel} />
-      {children}
+      {/* ESTE `div` ES EL ARREGLO, Y NO ES DECORACIÓN.
+       *
+       * `globals.css` tiene `body > * { position: relative; z-index: 1 }` fuera
+       * de toda capa CSS. Sin este envoltorio, el riel y el armazón de la
+       * aplicación eran DOS hijos de `body`: los dos recibían `z-index: 1` —esa
+       * regla gana a las utilidades de Tailwind sin importar la especificidad,
+       * igual que le ganaba a `fixed`— y con el mismo nivel manda el orden del
+       * documento. El armazón viene después y ocupa la pantalla entera, así que
+       * cubría el riel con una caja transparente.
+       *
+       * De ahí el síntoma que se reportó cinco veces: el riel SE VE —nada lo
+       * tapa a la vista, porque esa caja no pinta nada— y no se puede pulsar,
+       * porque los clics los recoge ella.
+       *
+       * Metidos los dos aquí dentro, el envoltorio es el único hijo de `body` y
+       * dentro de él el apilado vuelve a funcionar como está escrito: el riel en
+       * su z-30, los diálogos en su z-50 por encima. Subirle el z-index al riel
+       * en línea habría arreglado el clic y roto lo otro — el riel habría
+       * quedado por encima de cualquier diálogo abierto.
+       */}
+      <div>
+        <RielOrganizaciones onVisible={setHayRiel} />
+        {children}
+      </div>
     </RielContext.Provider>
   );
 }
@@ -314,7 +336,7 @@ function Mas() {
           // A la derecha del riel y no debajo: debajo se saldría de la pantalla
           // cuando el riel está cerca del borde inferior, que es donde vive
           // este botón.
-          className="devup-emerge cristal absolute bottom-0 left-full z-40 ml-2 w-56 overflow-hidden rounded-xl p-1"
+          className="devup-emerge panel-emergente absolute bottom-0 left-full z-40 ml-2 w-56 overflow-hidden rounded-xl p-1"
         >
           <Link
             href="/app/organizaciones"

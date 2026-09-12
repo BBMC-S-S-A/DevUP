@@ -111,7 +111,7 @@ export function SelectorDeEspacio({
       {abierto && (
         <div
           role="menu"
-          className="devup-emerge cristal absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[60svh] overflow-y-auto rounded-xl p-1.5"
+          className="devup-emerge panel-emergente absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[60svh] overflow-y-auto rounded-xl p-1.5"
         >
           {cargando && orgs.length === 0 ? (
             <p className="px-2 py-2 text-[11px] text-faint">cargando…</p>
