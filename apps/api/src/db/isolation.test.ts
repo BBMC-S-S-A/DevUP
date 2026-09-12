@@ -1510,6 +1510,94 @@ async function main(): Promise<void> {
       ),
     );
 
+    console.log("\nEl grafo, que es donde el aislamiento cuesta más (0043)");
+
+    /**
+     * Un enlace toca DOS extremos, y quien ve uno puede no ver el otro.
+     *
+     * Carla está en el workspace y ve su tablero, pero NO está en el canal
+     * privado «dirección». Un enlace entre ese canal y una tarea suya, visible
+     * para ella, le revelaría que el canal existe — que es la misma fuga que el
+     * producto ya se cuidó de evitar en las menciones.
+     */
+    const tareaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from tasks where workspace_id = $1 limit 1",
+        [acme.ws],
+      );
+      return rows[0]?.id ?? null;
+    });
+
+    check("puede_ver_nodo dice que sí a un canal del que se es miembro", Boolean(
+      await withUser(ana, async (db) => {
+        const { rows } = await db.query<{ r: boolean }>(
+          "select public.puede_ver_nodo('canal', $1) as r",
+          [acme.privateChannel],
+        );
+        return rows[0]!.r;
+      }),
+    ));
+
+    const carlaVeElCanal = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ r: boolean }>(
+        "select public.puede_ver_nodo('canal', $1) as r",
+        [acme.privateChannel],
+      );
+      return rows[0]!.r;
+    });
+    check("y que no a uno privado del que no se es", carlaVeElCanal === false);
+
+    // Lo que NO puede pasar nunca: que un tipo desconocido, o un id que no
+    // existe, devuelva NULL. NULL dentro de un `if not` se lee como «adelante»
+    // — ver 0042, que es exactamente como se coló lo de las invitaciones.
+    const inexistente = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ r: boolean | null }>(
+        "select public.puede_ver_nodo('tarea', gen_random_uuid()) as r",
+      );
+      return rows[0]!.r;
+    });
+    check("un nodo que no existe da false, nunca NULL", inexistente === false);
+
+    if (tareaDeAcme) {
+      await withUser(ana, (db) =>
+        db.query(
+          `insert into graph_links (source_kind, source_id, target_kind, target_id, label, created_by)
+           values ('canal',$1,'tarea',$2,'se habló en',$3)`,
+          [acme.privateChannel, tareaDeAcme, ana],
+        ),
+      );
+      check("Ana teje un enlace entre su canal privado y una tarea", true);
+
+      check("y lo ve, porque ve los dos extremos", (await count(ana, "graph_links")) === 1);
+
+      // EL CASO DE LA TAREA: Carla ve la tarea y no el canal. El enlace tiene
+      // que desaparecer entero para ella, no enseñarse a medias.
+      check(
+        "Carla, que ve la tarea pero no el canal, no ve el enlace",
+        (await count(carla, "graph_links")) === 0,
+      );
+      check("y Bruno, de otra organización, tampoco", (await count(bruno, "graph_links")) === 0);
+
+      // Y al revés: tampoco puede TEJER hacia algo que no ve. Si pudiera,
+      // probaría a enlazar y sabría que existe por si la escritura pasa.
+      await denied("Carla no puede tejer un enlace hacia el canal que no ve", () =>
+        withUser(carla, (db) =>
+          db.query(
+            `insert into graph_links (source_kind, source_id, target_kind, target_id, created_by)
+             values ('tarea',$1,'canal',$2,$3)`,
+            [tareaDeAcme, acme.privateChannel, carla],
+          ),
+        ),
+      );
+
+      const carlaBorra = await withUser(carla, async (db) => {
+        const { rowCount } = await db.query("delete from graph_links");
+        return rowCount ?? 0;
+      });
+      check("ni borrarlo, que sería otra forma de saber que está", carlaBorra === 0);
+      check("y después del intento sigue ahí", (await count(ana, "graph_links")) === 1);
+    }
+
     console.log("\nEl guardián que no guardaba (0042)");
 
     /**
