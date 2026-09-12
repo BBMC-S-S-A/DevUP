@@ -187,3 +187,36 @@ sienta conectado no es más pantalla: es que **el producto recuerde lo que pasa*
 —quién hizo qué y cuándo— porque de ahí salen a la vez la auditoría del tablero,
 la tarjeta de una persona y el «qué me he perdido» que hace que trabajar en
 grupo con IA no empiece de cero cada vez.
+
+---
+
+## Estado de la parte A · 12 de septiembre
+
+| Trabajo | Estado |
+|---|---|
+| «Te espera» con trabajo real, no avisos | **Hecho** |
+| Tarjeta de persona al pulsar su nombre | **Hecho** |
+| Categorías en el tablero, con filtro | **Hecho** |
+| El «+» del riel: crear o entrar con código | **Hecho** |
+| Compartir pantalla | **Ya existía** — ver abajo |
+| El panel no llenaba la pantalla | **Hecho** |
+| Una superficie por nivel | **Retirado** — la premisa era falsa |
+
+**Compartir pantalla no había que construirlo.** Está entero desde hace meses:
+`getDisplayMedia`, publicar la pista en las conexiones que ya hay, anunciarla,
+pintarla con su distintivo, y un botón «Pantalla» junto al de cámara dentro de
+cualquier canal de voz. Lo que faltaba era saberlo, y eso costó una frase en el
+panel.
+
+**«Una superficie por nivel» se retira porque la premisa era falsa.** Di por
+hecho que había tarjeta dentro de tarjeta dentro de panel; al medirlo, el
+sistema ya separa `.capa` —anidada, sin sombra proyectada— de `.capa-flotante`
+y `.panel`, con el razonamiento escrito y el contraste medido. No hay nada que
+arreglar.
+
+**Lo que sí queda de aquello, y no se hace a ciegas:** el acento se usa 267
+veces frente a 605 de los colores neutros de texto. Reservarlo es una decisión
+de mirar la pantalla, no de contar clases.
+
+**Bloqueado y no por código:** cargar el tablero. La puerta MCP no tiene token
+en esta máquina — ver `REPARTO-DE-TAREAS.md`.
