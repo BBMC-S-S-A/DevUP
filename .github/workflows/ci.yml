@@ -105,6 +105,15 @@ jobs:
         # El script de la raíz encadena las dos.
         run: npm run test:codigo
 
+      - name: La portada de una organización
+        # Lo que se vigila no es que salga, es lo que NO sale. Desde 0035 cada
+        # espacio se aísla por sí mismo, así que pertenecer a una organización
+        # no es pertenecer a todos sus espacios — y una portada que resume la
+        # organización entera es justo donde esa diferencia se pierde. La fuga
+        # no sería un error visible: sería una línea de más con el nombre del
+        # proyecto de un cliente que no es suyo.
+        run: npm run test:panorama --workspace apps/api
+
       - name: El diario del proyecto
         # Tres formas de contar una historia falsa con datos verdaderos, y
         # ninguna falla: saltarse las semanas vacías —que comprime el tiempo y

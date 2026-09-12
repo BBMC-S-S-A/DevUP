@@ -28,6 +28,7 @@
     "test:invitacion": "tsx src/routes/invitacion-codigo.test.ts",
     "arranca": "tsx src/arranca.test.ts",
     "test:diario": "tsx src/routes/diario.test.ts",
+    "test:panorama": "tsx src/routes/panorama.test.ts",
     "test:grafo": "tsx src/routes/grafo.test.ts"
   },
   "dependencies": {
