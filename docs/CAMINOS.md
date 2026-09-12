@@ -198,10 +198,28 @@ contestan igual a propósito, porque distinguirlas convertiría la ruta en un
 detector de lo que hay en canales privados. No escribas «este nodo no tiene
 relaciones»; escribe que no hay nada que enseñar.
 
-**Y está a medias, con honestidad:** las rutas existen y nadie teje todavía. El
-grafo estará casi vacío hasta que entre el punto 2 de mi lista —tejer desde
-donde ya pasan las cosas—, así que la pantalla tiene que aguantar bien el caso
-de cero aristas. Aviso aquí cuando empiece a llenarse.
+**Ya no está a medias: las reglas tejen.** Esto es el aviso que dejé prometido
+arriba. Desde `d166601`, una tarea gana aristas sola en tres sitios, sin que
+nadie las dibuje a mano:
+
+| Qué pasa | Arista que aparece |
+|---|---|
+| Se confirma un adjunto con `taskId` | `tarea —lleva pegado→ archivo` |
+| Se apunta una rama con repositorio | `tarea —se toca en→ repositorio` |
+| Se deja evidencia con URL de un repo **conectado** | `tarea —se probó en→ repositorio` |
+
+Todas salen **de la tarea**, siempre, y llegan con `procedencia: "regla"`. Eso
+te da lo que necesitas para pintar: las de `"regla"` son deducidas y se pueden
+rehacer, las de `"persona"` las escribió alguien. **Si vas a dejar quitar
+aristas desde la pantalla, ofrécelo solo sobre las de `"persona"`** — borrar una
+de regla no sirve de nada, porque vuelve sola en el siguiente recálculo, y el
+botón parecería roto.
+
+Lo que todavía **no** teje, para que no lo esperes: `tarea↔mensaje` y
+`tarea↔commit`. Las menciones de hoy solo resuelven personas, así que no hay de
+dónde deducir la primera sin adivinar, y adivinar en un grafo es peor que no
+dibujar. Sigue aguantando bien el caso de cero aristas: una tarea recién creada
+no tiene ninguna.
 
 ### Lo que `GET /me/inicio?dias=30` devuelve
 
@@ -287,10 +305,19 @@ tarea y un mensaje de un canal privado no puede revelar que ese canal existe.
 *Va primero porque desbloquea a la otra sesión.* Sin esto, la red de trabajo no
 puede dibujar más de lo que ya dibuja.
 
-**2. Tejer enlaces desde donde ya pasan las cosas.** Al adjuntar un archivo a
-una tarea, al enlazarle una rama, al mencionarla en un mensaje. Un grafo que hay
-que rellenar a mano se queda vacío; uno que se teje solo crece. Es la diferencia
-entre una función que existe y una que sirve.
+~~**2. Tejer enlaces desde donde ya pasan las cosas.**~~ **Hecho** (`d166601`).
+Teje en tres sitios: adjunto confirmado, rama con repositorio, evidencia que
+apunta a un repositorio conectado. La cuarta que decía esta línea —al mencionar
+la tarea en un mensaje— **no se hizo y no se va a hacer así**: las menciones de
+hoy solo resuelven personas, así que deducirla obligaría a adivinar, y una
+arista adivinada en un grafo miente con la misma cara con la que las otras
+dicen la verdad. Queda para cuando las menciones sepan apuntar a una tarea.
+
+Lo que salió de aquí y no estaba previsto: borrar una fila **no** se lleva sus
+enlaces —`graph_links` no puede tener clave ajena, el extremo es polimórfico— y
+la política de borrado exige ver los dos extremos, así que una vez ida la fila
+sus aristas quedan inalcanzables para siempre. Hay que limpiarlas antes
+(`olvidarNodo`). Está en `lib/grafo.ts` con su comprobación al revés.
 
 **3. Renovar el código corto de invitación.** Falta `set_invitation_code`: hoy
 el botón de la pantalla de ajustes está **desactivado** porque no hay ruta
