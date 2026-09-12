@@ -94,11 +94,6 @@ export function ImportarTerraform({
               >
                 <Github size={13} className="shrink-0 text-muted" />
                 <span className="min-w-0 flex-1 truncate font-mono">{repo.fullName}</span>
-                {/* Sin token se leen muchas menos: conviene saberlo ANTES de
-                    mirar un diagrama al que le faltan cajas. */}
-                {!repo.connectionId && (
-                  <span className="shrink-0 text-[10px] text-faint">sin token · 12 archivos</span>
-                )}
               </button>
             ))}
           </div>
@@ -141,6 +136,11 @@ function LoQueNoLee() {
         <li>
           Se lee el <strong>texto</strong> de los <code className="font-mono">.tf</code>: no se
           ejecuta nada, no hacen falta credenciales de la nube y no se toca el estado remoto.
+        </li>
+        <li>
+          Se lee <strong>con el enlace y nada más</strong>, sin usar ningún token de GitHub. De un
+          repositorio privado no se puede importar, y se leen hasta{" "}
+          <strong>12 archivos</strong> <code className="font-mono">.tf</code>.
         </li>
         <li>
           Un nombre que venga de una <code className="font-mono">var</code> o de un{" "}
@@ -212,8 +212,9 @@ function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onC
         <div className="space-y-1.5 rounded-xl border border-line bg-canvas/40 p-3 text-[11px] leading-relaxed text-muted">
           {omitidos > 0 && (
             <p>
-              Quedaron <strong>{omitidos}</strong> archivo(s) sin leer por el límite de peticiones a
-              GitHub. Con un token conectado el límite sube de 12 a 40.
+              Quedaron <strong>{omitidos}</strong> archivo(s) <code className="font-mono">.tf</code>{" "}
+              sin leer: se leen los doce primeros para no agotar el cupo de lecturas que GitHub da
+              sin credencial, que es el mismo para todo DevUP.
             </p>
           )}
           {ilegibles.length > 0 && (

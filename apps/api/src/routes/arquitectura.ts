@@ -6,7 +6,7 @@ import { fetchGithubFileContent, fetchGithubTree } from "../connectors/github.js
 import { leerTerraform, terraformDelArbol } from "../connectors/terraform.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
-import { repoConCredencial } from "./github.js";
+import { repoSinCredencial } from "./github.js";
 
 /**
  * El diagrama de arquitectura: nodos y enlaces.
@@ -351,6 +351,13 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
    * está escrito en `connectors/terraform.ts`, y la pantalla lo repite, porque
    * un mapa que se cree completo engaña más que no tenerlo.
    *
+   * Y SE LEE CON EL ENLACE, SIN TOKEN. Aunque la organización tenga una
+   * credencial de GitHub guardada, esta ruta no la toca: dibujar un diagrama
+   * no es motivo para descifrar el secreto de nadie ni para mandarlo a un
+   * tercero. La consecuencia se acepta y se dice en pantalla — de un
+   * repositorio privado no se puede importar— y es preferible a que una
+   * función de dibujo tenga acceso a lo privado «por si acaso».
+   *
    * NO BORRA NI RECOLOCA. Importar dos veces deja el mismo diagrama, y lo que
    * alguien hubiera movido a mano sigue donde lo dejó: ver
    * `fusionarArquitectura`.
@@ -360,13 +367,18 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const { repoId } = parseBody(z.object({ repoId: uuid }), request.body);
 
-    const { token, fullName, workspaceId: suEspacio } = await withUser(userId, (db) =>
-      repoConCredencial(db, repoId),
+    const { fullName, workspaceId: suEspacio } = await withUser(userId, (db) =>
+      repoSinCredencial(db, repoId),
     );
     // Quien pertenece a dos proyectos ve los repositorios de los dos, así que
     // RLS no puede impedir esto: lo impide el código. Traerse el Terraform de
     // un proyecto al diagrama de otro es la mezcla que 0035 vino a evitar.
     if (suEspacio !== workspaceId) throw notFound("repositorio no encontrado");
+
+    /** Sin credencial y sin excepciones: se lee como lo leería cualquiera con
+     *  el enlace. Un repositorio privado responde 404 y el conector ya traduce
+     *  ese 404 a «o no existe o es privado», que es lo que hay que decir. */
+    const token = null;
 
     const arbol = await fetchGithubTree(token, fullName).catch((error: unknown) => {
       throw badGateway(error instanceof Error ? error.message : "no se pudo leer el repositorio");
@@ -387,10 +399,18 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
       };
     }
 
-    // El mismo tope y por la misma razón que en las migraciones: el cupo
-    // anónimo de GitHub son 60 peticiones por hora y POR IP, compartidas por
-    // todo DevUP. Ver la cabecera de esa ruta en `github.ts`.
-    const TOPE = token ? 40 : 12;
+    /**
+     * Cuántos `.tf` se leen, y por qué son doce y no cuarenta.
+     *
+     * Al leer sin credencial, el cupo de GitHub son 60 peticiones por hora Y
+     * POR IP: no por organización, sino compartidas por todo DevUP. Una sola
+     * importación con tope de cuarenta dejaría sin lecturas a las demás
+     * organizaciones durante una hora, y ellas verían un fallo que no causaron
+     * y no pueden arreglar. Doce deja ver la infraestructura de un repositorio
+     * normal —que rara vez pasa de unos pocos `.tf`— sin secuestrar el cupo de
+     * nadie, y lo que no entre se dice en pantalla.
+     */
+    const TOPE = 12;
     const omitidos = Math.max(0, todos.length - TOPE);
     const aLeer = todos.slice(0, TOPE);
 
