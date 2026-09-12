@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   ImagePlus,
+  KeyRound,
   Link2,
   Loader2,
   Mail,
@@ -14,7 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Desplegable, Entrada } from "@/components/ui/Field";
@@ -28,6 +29,7 @@ import {
   api,
 } from "@/lib/api";
 import { useOrgId } from "@/lib/workspace-context";
+import { useRecurso } from "@/lib/datos";
 import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -56,23 +58,15 @@ export default function OrganizationSettingsPage() {
   const orgId = useOrgId();
   const { user } = useSession();
 
-  const [members, setMembers] = useState<OrganizationMember[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const { members } = await api.get<{ members: OrganizationMember[] }>(
-        `/organizations/${orgId}/members`,
-      );
-      setMembers(members);
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "no se pudo cargar");
-    }
-  }, [orgId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Cuatro lecturas de esta pantalla estaban escritas a mano, cada una con su
+  // `useState`, su `useCallback` y su efecto — unas quince líneas por sitio
+  // para hacer lo mismo. Por la capa de datos son una línea, y además comparten
+  // caché con quien pida lo mismo desde otra pantalla.
+  const equipo = useRecurso<{ members: OrganizationMember[] }>(
+    `/organizations/${orgId}/members`,
+  );
+  const members = equipo.datos?.members ?? null;
+  const load = equipo.recargar;
 
   const yo = members?.find((m) => m.userId === user?.id);
   const administro = yo ? yo.role === "owner" || yo.role === "admin" : false;
@@ -84,8 +78,8 @@ export default function OrganizationSettingsPage() {
       icono={<Settings size={20} />}
     >
       <div className="space-y-5">
-        {error && (
-          <Fallo onReintentar={() => void load()}>{error}</Fallo>
+        {equipo.error && (
+          <Fallo onReintentar={() => void load()}>{equipo.error}</Fallo>
         )}
 
         <FotoOrganizacion orgId={orgId} puedeEditar={administro} />
@@ -101,20 +95,15 @@ export default function OrganizationSettingsPage() {
  * ========================================================================= */
 
 function FotoOrganizacion({ orgId, puedeEditar }: { orgId: string; puedeEditar: boolean }) {
-  const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [subiendo, setSubiendo] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const cargar = useCallback(async () => {
-    const { url } = await api
-      .get<{ url: string | null }>(`/organizations/${orgId}/logo-url`)
-      .catch(() => ({ url: null }));
-    setUrl(url);
-  }, [orgId]);
-
-  useEffect(() => {
-    void cargar();
-  }, [cargar]);
+  const logo = useRecurso<{ url: string | null }>(`/organizations/${orgId}/logo-url`);
+  // `undefined` mientras carga y `null` cuando no hay foto: son dos estados
+  // distintos y la pantalla los pinta distinto —esqueleto o hueco—, así que no
+  // se pueden colapsar en uno.
+  const url = logo.cargando ? undefined : (logo.datos?.url ?? null);
+  const cargar = logo.recargar;
 
   const subir = async (file: File) => {
     setSubiendo(true);
@@ -132,7 +121,7 @@ function FotoOrganizacion({ orgId, puedeEditar }: { orgId: string; puedeEditar: 
   const quitar = async () => {
     try {
       await api.delete(`/organizations/${orgId}/logo`);
-      setUrl(null);
+      await cargar();
       toast.success("Foto quitada");
     } catch (caught) {
       toast.error(caught instanceof ApiError ? caught.message : "no se pudo quitar");
@@ -339,7 +328,7 @@ function Miembros({
 
 function Invitar({ orgId }: { orgId: string }) {
   const [abierto, setAbierto] = useState(false);
-  const [pendientes, setPendientes] = useState<PendingInvitation[]>([]);
+
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<"member" | "admin">("member");
   const [busy, setBusy] = useState(false);
@@ -347,28 +336,32 @@ function Invitar({ orgId }: { orgId: string }) {
   // fiable: se enseña aquí para que quien invita lo mande por su cuenta,
   // en vez de confiar en que el correo llegue.
   const [enlace, setEnlace] = useState<string | null>(null);
-  const [copiado, setCopiado] = useState(false);
+  /**
+   * El código corto que devuelve la 0040, y que hasta ahora se tiraba.
+   *
+   * SOLO EXISTE AQUÍ Y AHORA. En la base vive su hash, no él, así que ni la API
+   * puede volver a leerlo: esta respuesta es la única vez que se ve. Por eso se
+   * enseña grande y con su botón de copiar, y por eso la lista de pendientes de
+   * abajo ofrece pedir otro en vez de enseñar el que hubo.
+   */
+  const [codigo, setCodigo] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState<"enlace" | "codigo" | null>(null);
   // Vacío = toda la organización. Los personales no salen: a un workspace
   // personal no se invita a nadie, es de una sola persona por definición.
   const [workspaceId, setWorkspaceId] = useState("");
-  const [compartidos, setCompartidos] = useState<Workspace[]>([]);
 
-  const cargar = useCallback(async () => {
-    const [{ invitations }, { workspaces }] = await Promise.all([
-      api
-        .get<{ invitations: PendingInvitation[] }>(`/organizations/${orgId}/invitations`)
-        .catch(() => ({ invitations: [] })),
-      api
-        .get<{ workspaces: Workspace[] }>(`/organizations/${orgId}/workspaces`)
-        .catch(() => ({ workspaces: [] })),
-    ]);
-    setPendientes(invitations.filter((i) => !i.acceptedAt));
-    setCompartidos(workspaces.filter((w) => w.visibility === "shared"));
-  }, [orgId]);
-
-  useEffect(() => {
-    if (abierto) void cargar();
-  }, [abierto, cargar]);
+  // Clave `null` mientras el panel está cerrado: `useRecurso` entonces no pide
+  // nada. Es lo mismo que hacía el `if (abierto)` del efecto de antes, pero sin
+  // efecto — y al abrirlo la segunda vez ya está en caché y sale puesto.
+  const invitaciones = useRecurso<{ invitations: PendingInvitation[] }>(
+    abierto ? `/organizations/${orgId}/invitations` : null,
+  );
+  const espacios = useRecurso<{ workspaces: Workspace[] }>(
+    abierto ? `/organizations/${orgId}/workspaces` : null,
+  );
+  const pendientes = (invitaciones.datos?.invitations ?? []).filter((i) => !i.acceptedAt);
+  const compartidos = (espacios.datos?.workspaces ?? []).filter((w) => w.visibility === "shared");
+  const cargar = invitaciones.recargar;
 
   if (!abierto) {
     return (
@@ -385,12 +378,18 @@ function Invitar({ orgId }: { orgId: string }) {
           event.preventDefault();
           setBusy(true);
           try {
-            const { url } = await api.post<{ sent: boolean; url: string }>(
-              `/organizations/${orgId}/invitations`,
-              { email, role: rol, workspaceId: workspaceId || null },
-            );
+            const { url, code } = await api.post<{
+              sent: boolean;
+              url: string;
+              code: string | null;
+            }>(`/organizations/${orgId}/invitations`, {
+              email,
+              role: rol,
+              workspaceId: workspaceId || null,
+            });
             setEnlace(url);
-            setCopiado(false);
+            setCodigo(code);
+            setCopiado(null);
             toast.success(`Invitación creada para ${email}`);
             setEmail("");
             await cargar();
@@ -447,15 +446,51 @@ function Invitar({ orgId }: { orgId: string }) {
           onClick={() => {
             setAbierto(false);
             setEnlace(null);
+            setCodigo(null);
           }}
         >
           Cerrar
         </Boton>
       </form>
 
+      {/*
+        EL CÓDIGO VA PRIMERO Y MÁS GRANDE QUE EL ENLACE, y no es una cuestión
+        de gusto: las dos puertas llevan a la misma invitación, pero el enlace
+        ya va en el correo y el código no va a ninguna parte. Si alguien cierra
+        este panel sin apuntarlo, no se recupera — en la base solo está su
+        hash—. Lo que se pierde por no verse tiene que verse antes.
+      */}
+      {codigo && (
+        <div className="devup-entrada mt-3 rounded-lg border border-accent/30 bg-accent-soft/30 px-3 py-2.5">
+          <div className="flex items-center gap-3">
+            <KeyRound size={14} className="shrink-0 text-accent" />
+            <span className="min-w-0 flex-1 font-mono text-lg font-semibold tracking-[0.2em] text-ink">
+              {codigo}
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(codigo);
+                setCopiado("codigo");
+                toast.success("Código copiado");
+              }}
+              className="presionable flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-accent hover:bg-accent/10"
+            >
+              {copiado === "codigo" ? <Check size={12} /> : <Copy size={12} />}
+              {copiado === "codigo" ? "Copiado" : "Copiar"}
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+            Se puede dictar por teléfono. <span className="text-faint">No se guarda en claro:
+            esta es la única vez que se ve. Si se pierde, se pide otro desde la lista de abajo
+            y el anterior deja de valer.</span>
+          </p>
+        </div>
+      )}
+
       {enlace && (
-        <div className="devup-entrada mt-3 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent-soft/30 px-2.5 py-2">
-          <Link2 size={13} className="shrink-0 text-accent" />
+        <div className="devup-entrada mt-2 flex items-center gap-2 rounded-lg border border-line bg-canvas/40 px-2.5 py-2">
+          <Link2 size={13} className="shrink-0 text-faint" />
           <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
             {enlace}
           </span>
@@ -463,13 +498,13 @@ function Invitar({ orgId }: { orgId: string }) {
             type="button"
             onClick={async () => {
               await navigator.clipboard.writeText(enlace);
-              setCopiado(true);
+              setCopiado("enlace");
               toast.success("Enlace copiado");
             }}
             className="presionable flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-accent hover:bg-accent/10"
           >
-            {copiado ? <Check size={12} /> : <Copy size={12} />}
-            {copiado ? "Copiado" : "Copiar"}
+            {copiado === "enlace" ? <Check size={12} /> : <Copy size={12} />}
+            {copiado === "enlace" ? "Copiado" : "Copiar"}
           </button>
         </div>
       )}
@@ -487,6 +522,40 @@ function Invitar({ orgId }: { orgId: string }) {
               </span>
               {invitacion.workspaceName && <Chip tono="accent">{invitacion.workspaceName}</Chip>}
               <Chip>{invitacion.role}</Chip>
+              {/* PEDIR OTRO CÓDIGO, no ver el que hubo: el que hubo no existe
+                  en ninguna parte. Es la consecuencia de guardarlo cifrado, y
+                  la alternativa —borrar la invitación y rehacerla— invalidaría
+                  también su enlace, que a estas alturas puede estar ya abierto
+                  en el móvil de la otra persona. */}
+              <button
+                type="button"
+                title={
+                  invitacion.hasCode
+                    ? "Dar un código nuevo. El anterior deja de valer."
+                    : "Esta invitación no tiene código corto. Pedir uno."
+                }
+                onClick={async () => {
+                  try {
+                    const { code } = await api.post<{ code: string }>(
+                      `/invitations/${invitacion.id}/code`,
+                      {},
+                    );
+                    await navigator.clipboard.writeText(code).catch(() => {});
+                    toast.success(`Código ${code} — copiado`);
+                    await cargar();
+                  } catch (caught) {
+                    toast.error(
+                      caught instanceof ApiError ? caught.message : "no se pudo dar un código",
+                    );
+                  }
+                }}
+                className="presionable flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-0.5
+                  font-display text-[10px] font-semibold uppercase tracking-wider
+                  text-faint hover:bg-accent/10 hover:text-accent"
+              >
+                <KeyRound size={11} />
+                {invitacion.hasCode ? "Otro código" : "Dar código"}
+              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -515,21 +584,13 @@ function Invitar({ orgId }: { orgId: string }) {
  * ========================================================================= */
 
 function Enlaces({ orgId, puedeEditar }: { orgId: string; puedeEditar: boolean }) {
-  const [links, setLinks] = useState<OrganizationLink[] | null>(null);
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    const { links } = await api
-      .get<{ links: OrganizationLink[] }>(`/organizations/${orgId}/links`)
-      .catch(() => ({ links: [] }));
-    setLinks(links);
-  }, [orgId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const recurso = useRecurso<{ links: OrganizationLink[] }>(`/organizations/${orgId}/links`);
+  const links = recurso.cargando ? null : (recurso.datos?.links ?? []);
+  const load = recurso.recargar;
 
   return (
     <Tarjeta className="p-4">
@@ -568,7 +629,7 @@ function Enlaces({ orgId, puedeEditar }: { orgId: string; puedeEditar: boolean }
                   onClick={async () => {
                     try {
                       await api.delete(`/organizations/${orgId}/links/${link.id}`);
-                      setLinks((prev) => prev?.filter((l) => l.id !== link.id) ?? null);
+                      await load();
                     } catch (caught) {
                       toast.error(caught instanceof ApiError ? caught.message : "no se pudo quitar");
                     }
@@ -589,11 +650,11 @@ function Enlaces({ orgId, puedeEditar }: { orgId: string; puedeEditar: boolean }
             event.preventDefault();
             setBusy(true);
             try {
-              const { link } = await api.post<{ link: OrganizationLink }>(
-                `/organizations/${orgId}/links`,
-                { label, url },
-              );
-              setLinks((prev) => [...(prev ?? []), link]);
+              await api.post<{ link: OrganizationLink }>(`/organizations/${orgId}/links`, {
+                label,
+                url,
+              });
+              await load();
               setLabel("");
               setUrl("");
             } catch (caught) {

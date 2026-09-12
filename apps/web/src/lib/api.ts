@@ -153,6 +153,9 @@ export type PendingInvitation = {
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
+  /** Si tiene código corto vivo. El código en sí no viaja: en la base solo
+   *  está su hash (ver la 0040), así que ni la API puede volver a leerlo. */
+  hasCode: boolean;
 };
 
 export type Notification = {
