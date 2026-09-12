@@ -30,6 +30,7 @@ import { ignorar } from "@/lib/fallo";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
+import { SelectorDeEspacio } from "@/components/ui/SelectorDeEspacio";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
@@ -234,28 +235,38 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             </Link>
           )}
 
-          <div className="flex items-center gap-2.5">
-            {/* La inicial en una chapa hace que dos workspaces con nombres
-                parecidos se distingan por la forma antes que por la lectura. */}
-            <span
-              aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong
-                bg-accent-soft/70 font-display text-sm font-semibold text-accent-bright"
-            >
-              {inicial}
+          {/* LA CABECERA ES EL SELECTOR. El riel son chapas de cuarenta
+              píxeles, y se reportó cuatro veces que no se podía cambiar de
+              organización con él. Sea cual sea el motivo exacto, la conclusión
+              es la misma: cambiar de contexto no puede depender de acertar en
+              una chapa pequeña. Aquí está donde el ojo ya está —esta cabecera
+              dice en qué espacio estás— con el nombre escrito y sitio para los
+              demás. El riel se queda: para quien lo usa es un clic, y las dos
+              cosas no se estorban. */}
+          <SelectorDeEspacio espacioActual={workspaceId}>
+            <span className="flex items-center gap-2.5">
+              {/* La inicial en una chapa hace que dos workspaces con nombres
+                  parecidos se distingan por la forma antes que por la lectura. */}
+              <span
+                aria-hidden
+                className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong
+                  bg-accent-soft/70 font-display text-sm font-semibold text-accent-bright"
+              >
+                {inicial}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold" title={workspace.name}>
+                  {workspace.name}
+                </span>
+                {workspace.visibility === "personal" && (
+                  <span className="mt-0.5 flex items-center gap-1 text-[10px] text-faint">
+                    <UserRound size={9} className="shrink-0" />
+                    Solo tú ves este workspace
+                  </span>
+                )}
+              </span>
             </span>
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold" title={workspace.name}>
-                {workspace.name}
-              </h1>
-              {workspace.visibility === "personal" && (
-                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-faint">
-                  <UserRound size={9} className="shrink-0" />
-                  Solo tú ves este workspace
-                </p>
-              )}
-            </div>
-          </div>
+          </SelectorDeEspacio>
         </header>
 
         {/* min-h-0 es lo que permite que el desplazamiento viva aquí dentro: sin
@@ -380,6 +391,36 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               usa a diario. Ahora es una sección más de esta misma barra, y el
               rol para «Ajustes» se pide aparte porque no hay ruta para una
               organización sola (mismo motivo que el armazón de organización). */}
+          {/* LOS CANALES ARRIBA, justo debajo del espacio. Estaban al final,
+              debajo de dieciséis destinos, y hacía falta desplazarse para
+              llegar a una conversación o a una llamada — que es lo que más se
+              abre en todo el día y lo que otra persona está esperando ahora
+              mismo. Las herramientas del proyecto y de la organización se
+              miran de vez en cuando; un canal, cada rato.
+
+              Y la voz antes que el texto: un canal de voz es gente esperando,
+              y un canal de texto espera a que llegues. */}
+          {voice.length > 0 && (
+            <ChannelGroup
+              title="Voz"
+              channels={voice}
+              workspaceId={workspaceId}
+              pathname={pathname}
+              unread={unread}
+            />
+          )}
+          {text.length > 0 && (
+            <ChannelGroup
+              title="Texto"
+              channels={text}
+              workspaceId={workspaceId}
+              pathname={pathname}
+              unread={unread}
+            />
+          )}
+
+          <NewChannel workspaceId={workspaceId} onCreated={load} />
+
           {/* DOS GRUPOS Y NO UNO, porque no son lo mismo.
               GitHub, Infraestructura, Base de datos, Integraciones y Auditoría
               son de ESTE proyecto desde la migración 0035 — el de al lado
@@ -426,30 +467,6 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             </>
           )}
 
-          {text.length > 0 && (
-            <ChannelGroup
-              title="Texto"
-              channels={text}
-              workspaceId={workspaceId}
-              pathname={pathname}
-              unread={unread}
-            />
-          )}
-          {/* La misma comprobación que ya tenía «Texto» tres líneas arriba:
-              un encabezado «Voz» sin ningún canal debajo es un hueco sin
-              sentido en cada workspace nuevo, y no había motivo para que las
-              dos listas se comportaran distinto. */}
-          {voice.length > 0 && (
-            <ChannelGroup
-              title="Voz"
-              channels={voice}
-              workspaceId={workspaceId}
-              pathname={pathname}
-              unread={unread}
-            />
-          )}
-
-          <NewChannel workspaceId={workspaceId} onCreated={load} />
         </nav>
 
         <footer className="relative shrink-0 px-3 py-3">
