@@ -94,7 +94,7 @@ export async function inicioRoutes(app: FastifyInstance): Promise<void> {
        * solos convertiría esta cifra en una que nadie debería tomarse en serio.
        */
       const { rows: resumen } = await db.query(
-        `select a.verb as verbo, a.source as origen, count(*)::int as veces
+        `select a.verb as "verbo", a.source as "origen", count(*)::int as veces
            from activity a
           where a.actor_id = public.current_user_id()
             and a.at > now() - ($1::int || ' days')::interval
@@ -105,7 +105,12 @@ export async function inicioRoutes(app: FastifyInstance): Promise<void> {
 
       /** Los últimos hechos míos, para «¿en qué andaba yo?» al volver. */
       const { rows: ultimos } = await db.query(
-        `select a.verb as verbo, a.source as origen,
+        // `sujetoNombre` y no `resumen`, que es como se llamaba antes: ya no
+        // es una frase, es el nombre que la cosa tenía entonces. Conservar el
+        // nombre viejo haría que la pantalla pintara títulos sueltos donde
+        // antes había oraciones —«Arreglar el 415», sin verbo— y nadie sabría
+        // si eso se creó, se movió o se cerró.
+        `select a.verb as "verbo", a.source as "origen",
                 a.subject_label as "sujetoNombre",
                 a.subject_type as "sujetoTipo", a.subject_id as "sujetoId",
                 a.at as "ocurridoEn",

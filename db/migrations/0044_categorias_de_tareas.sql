@@ -112,6 +112,11 @@ create policy task_categories_delete on public.task_categories for delete
 create or replace function public.check_task_category()
 returns trigger
 language plpgsql
+-- Con `search_path` fijo desde que nace. La 0039 del tronco cerró las cinco
+-- funciones que habían nacido sin él, y la prueba de aislamiento lo comprueba
+-- una por una: una función `security definer` sin camino fijo es una puerta
+-- para que alguien la resuelva a un esquema suyo.
+set search_path = public
 as $$
 begin
   if new.category_id is not null
