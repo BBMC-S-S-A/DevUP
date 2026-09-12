@@ -449,10 +449,17 @@ export default function PanelPage() {
                   <SpotifyWidget channelId={canal} variante="expandido" />
                 )
               ) : (
+                // Decía solo «para compartir música», y una sala de voz hace
+                // bastante más: cámara, compartir pantalla y grabar la llamada
+                // están construidos y con su botón desde hace meses, dentro del
+                // canal. Nombrarlos aquí es la diferencia entre tenerlos y que
+                // se usen — quien no entra nunca a un canal de voz no tiene
+                // forma de saber que ahí dentro hay algo más que música.
                 <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
                   <Music size={18} className="text-faint" />
                   <p className="text-[11px] leading-relaxed text-faint">
-                    Entra a un canal de voz para compartir música aquí.
+                    Entra a un canal de voz para hablar, poner la cámara, compartir pantalla o poner
+                    música para todos.
                   </p>
                 </div>
               )}
