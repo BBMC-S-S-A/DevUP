@@ -37,7 +37,14 @@ export type Verbo =
   | "tarea.reabierta"
   | "tarea.asignada"
   | "tarea.reclasificada"
-  | "tarea.borrada";
+  | "tarea.borrada"
+  // Los tres de la 0042. `tarea.priorizada` es el único cambio de campo que se
+  // anota: subir algo a urgente es una decisión que alguien tomó y que otro va
+  // a querer entender después. Cambiar el tipo o el contexto es corregir la
+  // ficha, no decidir nada, y anotarlo llenaría la historia de ruido.
+  | "tarea.priorizada"
+  | "tarea.rama"
+  | "tarea.evidencia";
 
 export type Anotacion = {
   /** Nulo para hechos de la organización que no cuelgan de un espacio. */

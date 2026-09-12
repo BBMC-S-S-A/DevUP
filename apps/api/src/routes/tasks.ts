@@ -13,7 +13,25 @@ const TASK_COLUMNS = `
   t.title, t.description, t.position, t.assignee_id as "assigneeId",
   t.due_date as "dueDate", t.created_at as "createdAt", t.updated_at as "updatedAt",
   t.category_id as "categoryId",
+  t.tipo, t.prioridad, t.contexto, t.criterio,
   p.display_name as "assigneeName",
+  -- Las ramas viajan enteras en el tablero y no solo contadas: son dos o tres
+  -- por tarjeta como mucho, y saber EN CUÁL se está tocando algo es justo lo
+  -- que se mira sin abrir la tarjeta. Contarlas habría obligado a abrir cada
+  -- una para responder «¿quién está en la rama de pagos?».
+  coalesce(
+    (select json_agg(json_build_object(
+              'id', b.id, 'nombre', b.nombre, 'estado', b.estado,
+              'repoId', b.github_repo_id, 'repo', r.full_name)
+            order by b.created_at)
+       from task_branches b
+       left join github_repos r on r.id = b.github_repo_id
+      where b.task_id = t.id),
+    '[]'::json
+  ) as ramas,
+  -- La evidencia sí va contada: puede ser larga y con notas de párrafos, y en
+  -- la tarjeta lo único que hace falta saber es si hay o no hay.
+  (select count(*) from task_evidence e where e.task_id = t.id)::int as "evidencias",
   coalesce(
     (select json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)
                      order by g.name)
@@ -28,15 +46,125 @@ const TASK_COLUMNS = `
     where f.task_id = t.id and f.status = 'ready' and f.deleted_at is null
   )::int as "adjuntos"`;
 
+/**
+ * La evidencia entera, que solo se pide al abrir una tarjeta.
+ *
+ * No va en `TASK_COLUMNS` a propósito: un tablero de cuarenta tarjetas cargaría
+ * cuarenta listas de notas que nadie está mirando. En la tarjeta basta con
+ * saber cuántas hay; al abrirla, se quieren leer.
+ */
+const EVIDENCIA = `
+  coalesce(
+    (select json_agg(json_build_object(
+              'id', e.id, 'tipo', e.tipo, 'url', e.url, 'titulo', e.titulo,
+              'nota', e.nota, 'autorId', e.created_by,
+              'autor', ep.display_name, 'creadaEn', e.created_at)
+            order by e.created_at)
+       from task_evidence e
+       left join profiles ep on ep.id = e.created_by
+      where e.task_id = t.id),
+    '[]'::json
+  ) as evidencia`;
+
 async function loadTask(db: Db, taskId: string): Promise<Record<string, unknown>> {
   const { rows } = await db.query(
-    `select ${TASK_COLUMNS} from tasks t
+    `select ${TASK_COLUMNS}, ${EVIDENCIA} from tasks t
        left join profiles p on p.id = t.assignee_id
       where t.id = $1`,
     [taskId],
   );
   if (!rows[0]) throw notFound("tarea no encontrada");
   return rows[0];
+}
+
+/**
+ * El vocabulario de la ficha, compartido por crear y editar.
+ *
+ * Escrito una vez porque son dos rutas que tienen que aceptar exactamente lo
+ * mismo: el día que se acepte un tipo nuevo al crear pero no al editar, el
+ * síntoma será una tarjeta que no se deja corregir y nadie sabrá por qué.
+ */
+const TIPOS = [
+  "funcionalidad",
+  "arreglo",
+  "mejora",
+  "deuda",
+  "investigacion",
+  "documentacion",
+  "diseno",
+  "infraestructura",
+] as const;
+
+/** 0 baja · 1 normal · 2 alta · 3 urgente. Ver la cabecera de la 0042. */
+const prioridadZ = z.number().int().min(0).max(3);
+const tipoZ = z.enum(TIPOS);
+
+const PRIORIDAD_EN_PALABRAS = ["baja", "normal", "alta", "urgente"] as const;
+
+/**
+ * Una evidencia, tal y como llega.
+ *
+ * La regla de «con algo dentro» la pone también la base (ver la 0042), y eso no
+ * es duplicar por duplicar: aquí se comprueba para poder decir QUÉ falta —«una
+ * nota sin texto no prueba nada»— en vez de devolver una violación de
+ * restricción que nadie puede leer. Abajo se comprueba para que siga siendo
+ * verdad aunque algún día alguien escriba por otra puerta.
+ */
+export const evidenciaZ = z
+  .object({
+    tipo: z.enum(["pr", "commit", "enlace", "nota"]),
+    url: z.string().trim().url().max(2000).nullish(),
+    titulo: z.string().trim().max(200).default(""),
+    nota: z.string().trim().max(2000).default(""),
+  })
+  .refine((e) => e.tipo === "nota" || Boolean(e.url), {
+    message: "una evidencia que no es una nota tiene que apuntar a algo: falta la URL",
+    path: ["url"],
+  })
+  .refine((e) => e.tipo !== "nota" || e.nota.length > 0, {
+    message: "una nota sin texto no prueba nada",
+    path: ["nota"],
+  });
+
+type Evidencia = z.infer<typeof evidenciaZ>;
+
+const COMO_SE_LLAMA_LA_PRUEBA: Record<Evidencia["tipo"], string> = {
+  pr: "un PR",
+  commit: "un commit",
+  enlace: "un enlace",
+  nota: "una nota",
+};
+
+/**
+ * Guarda una evidencia y la anota. Compartida por las dos puertas —añadirla
+ * suelta y cerrar con ella— para que las dos escriban lo mismo.
+ */
+export async function anotarEvidencia(
+  db: Db,
+  datos: {
+    taskId: string;
+    workspaceId: string;
+    titulo: string;
+    autor: string;
+    evidencia: Evidencia;
+  },
+): Promise<void> {
+  const e = datos.evidencia;
+  await db.query(
+    `insert into task_evidence (task_id, tipo, url, titulo, nota, created_by)
+     values ($1, $2::public.evidence_kind, $3, $4, $5, $6)`,
+    [datos.taskId, e.tipo, e.url ?? null, e.titulo, e.nota, datos.autor],
+  );
+
+  await anotar(db, {
+    workspaceId: datos.workspaceId,
+    actorId: datos.autor,
+    verbo: "tarea.evidencia",
+    objetoTipo: "tarea",
+    objetoId: datos.taskId,
+    resumen: `adjuntó ${COMO_SE_LLAMA_LA_PRUEBA[e.tipo]} a «${recorta(datos.titulo)}»`,
+    datos: { tipo: e.tipo, url: e.url ?? null },
+  });
 }
 
 /** Igual que en archivos: solo entran etiquetas de la organización del tablero. */
@@ -327,6 +455,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         dueDate: z.string().date().nullish(),
         tagIds: z.array(uuid).max(20).default([]),
         categoryId: uuid.nullish(),
+        tipo: tipoZ.nullish(),
+        prioridad: prioridadZ.optional(),
+        contexto: z.string().trim().max(4000).default(""),
+        criterio: z.string().trim().max(4000).default(""),
       }),
       request.body,
     );
@@ -343,6 +475,10 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           dueDate: body.dueDate ?? null,
           tagIds: body.tagIds,
           categoryId: body.categoryId ?? null,
+          tipo: body.tipo ?? null,
+          prioridad: body.prioridad,
+          contexto: body.contexto,
+          criterio: body.criterio,
           autor: userId,
         },
         request.log,
@@ -366,6 +502,12 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         dueDate: z.string().date().nullish(),
         tagIds: z.array(uuid).max(20).optional(),
         categoryId: uuid.nullish(),
+        // `tipo` usa el mismo truco que `assigneeId`: `null` explícito es
+        // «quitar el tipo», que no es lo mismo que no mandar el campo.
+        tipo: tipoZ.nullish(),
+        prioridad: prioridadZ.optional(),
+        contexto: z.string().trim().max(4000).optional(),
+        criterio: z.string().trim().max(4000).optional(),
       }),
       request.body,
     );
@@ -378,9 +520,15 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         title: string;
         workspace_id: string;
         category_id: string | null;
-      }>("select assignee_id, title, workspace_id, category_id from tasks where id = $1", [taskId]);
+        prioridad: number;
+      }>(
+        `select assignee_id, title, workspace_id, category_id, prioridad
+           from tasks where id = $1`,
+        [taskId],
+      );
       const anterior = previa[0]?.assignee_id ?? null;
       const areaAnterior = previa[0]?.category_id ?? null;
+      const prioridadAnterior = previa[0]?.prioridad ?? 1;
 
       const { rowCount } = await db.query(
         `update tasks set
@@ -388,7 +536,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
            description = coalesce($3, description),
            assignee_id = case when $4 then $5::uuid else assignee_id end,
            due_date    = case when $6 then $7::date else due_date end,
-           category_id = case when $8 then $9::uuid else category_id end
+           category_id = case when $8 then $9::uuid else category_id end,
+           tipo        = case when $10 then $11::public.task_kind else tipo end,
+           prioridad   = coalesce($12, prioridad),
+           contexto    = coalesce($13, contexto),
+           criterio    = coalesce($14, criterio)
          where id = $1`,
         [
           taskId,
@@ -400,9 +552,34 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           body.dueDate ?? null,
           "categoryId" in body_,
           body.categoryId ?? null,
+          "tipo" in body_,
+          body.tipo ?? null,
+          body.prioridad ?? null,
+          body.contexto ?? null,
+          body.criterio ?? null,
         ],
       );
       if (rowCount === 0) throw notFound("tarea no encontrada");
+
+      // El ÚNICO cambio de campo que deja rastro. Subir algo a urgente es una
+      // decisión que alguien tomó y que otro querrá entender después —«¿por qué
+      // se paró todo el martes?»—; corregir el tipo o el contexto es arreglar
+      // la ficha, y anotarlo llenaría la historia de ruido hasta esconder lo
+      // que importa.
+      if (body.prioridad !== undefined && body.prioridad !== prioridadAnterior) {
+        const sube = body.prioridad > prioridadAnterior;
+        await anotar(db, {
+          workspaceId: previa[0]!.workspace_id,
+          actorId: userId,
+          verbo: "tarea.priorizada",
+          objetoTipo: "tarea",
+          objetoId: taskId,
+          resumen:
+            `${sube ? "subió" : "bajó"} a ${PRIORIDAD_EN_PALABRAS[body.prioridad]} ` +
+            `«${recorta(previa[0]?.title ?? "")}»`,
+          datos: { prioridad: body.prioridad, anterior: prioridadAnterior },
+        });
+      }
 
       if (body.tagIds) {
         await db.query("delete from task_tags where task_id = $1 and tag_id <> all($2::uuid[])", [
@@ -477,6 +654,210 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     }));
   });
 
+  /**
+   * Una tarea entera, con su evidencia.
+   *
+   * El tablero no la trae —cuarenta tarjetas serían cuarenta listas de notas
+   * que nadie está mirando—, así que al abrir una tarjeta hace falta esta.
+   */
+  app.get("/tasks/:taskId", async (request) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+    return withUser(userId, async (db) => ({ task: await loadTask(db, taskId) }));
+  });
+
+  // --- Las ramas donde se está tocando --------------------------------------
+  //
+  // Varias por tarea a propósito (ver la 0042): un plan partido en dos caminos
+  // son dos ramas de la misma tarea, no dos tareas.
+
+  app.post("/tasks/:taskId/ramas", async (request, reply) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        nombre: z.string().trim().min(1).max(255),
+        repoId: uuid.nullish(),
+        estado: z.enum(["abierta", "fusionada", "descartada"]).default("abierta"),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows: previa } = await db.query<{ title: string; workspace_id: string }>(
+        "select title, workspace_id from tasks where id = $1",
+        [taskId],
+      );
+      if (!previa[0]) throw notFound("tarea no encontrada");
+
+      // `on conflict do update` y no `do nothing`: apuntar dos veces la misma
+      // rama es lo que hace alguien que quiere corregir su estado, y contestar
+      // «ya estaba» con un 200 vacío deja la pantalla enseñando lo viejo.
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_branches (task_id, nombre, github_repo_id, estado, created_by)
+         values ($1, $2, $3, $4::public.branch_state, $5)
+         on conflict (task_id, github_repo_id, nombre)
+           do update set estado = excluded.estado
+         returning id`,
+        [taskId, body.nombre, body.repoId ?? null, body.estado, userId],
+      );
+
+      await anotar(db, {
+        workspaceId: previa[0].workspace_id,
+        actorId: userId,
+        verbo: "tarea.rama",
+        objetoTipo: "tarea",
+        objetoId: taskId,
+        resumen: `enlazó la rama ${recorta(body.nombre, 40)} a «${recorta(previa[0].title)}»`,
+        datos: { rama: body.nombre, repoId: body.repoId ?? null, estado: body.estado },
+      });
+
+      return reply.status(201).send({ task: await loadTask(db, taskId), ramaId: rows[0]!.id });
+    });
+  });
+
+  /**
+   * Cambiar el estado de una rama.
+   *
+   * `descartada` no es lo mismo que borrarla, y por eso existe: un camino que
+   * se probó y se abandonó es información —quien lo vuelva a pensar ya sabe que
+   * se intentó— y borrar la fila la tira.
+   */
+  app.patch("/ramas/:ramaId", async (request) => {
+    const userId = requireUser(request);
+    const { ramaId } = parseParams(z.object({ ramaId: uuid }), request.params);
+    const body = parseBody(
+      z.object({ estado: z.enum(["abierta", "fusionada", "descartada"]) }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ task_id: string }>(
+        `update task_branches set estado = $2::public.branch_state
+          where id = $1 returning task_id`,
+        [ramaId, body.estado],
+      );
+      if (!rows[0]) throw notFound("esa rama no existe");
+      return { task: await loadTask(db, rows[0].task_id) };
+    });
+  });
+
+  app.delete("/ramas/:ramaId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { ramaId } = parseParams(z.object({ ramaId: uuid }), request.params);
+    await withUser(userId, (db) => db.query("delete from task_branches where id = $1", [ramaId]));
+    return reply.status(204).send();
+  });
+
+  // --- La evidencia ---------------------------------------------------------
+
+  app.post("/tasks/:taskId/evidencia", async (request, reply) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+    const body = parseBody(evidenciaZ, request.body);
+
+    return withUser(userId, async (db) => {
+      const { rows: previa } = await db.query<{ title: string; workspace_id: string }>(
+        "select title, workspace_id from tasks where id = $1",
+        [taskId],
+      );
+      if (!previa[0]) throw notFound("tarea no encontrada");
+
+      await anotarEvidencia(db, {
+        taskId,
+        workspaceId: previa[0].workspace_id,
+        titulo: previa[0].title,
+        autor: userId,
+        evidencia: body,
+      });
+
+      return reply.status(201).send({ task: await loadTask(db, taskId) });
+    });
+  });
+
+  /**
+   * Quitar una evidencia.
+   *
+   * Es la única forma de corregir una: la tabla no tiene política de UPDATE a
+   * propósito (ver la 0042), porque cambiar en silencio lo que alguien afirmó
+   * dejando su nombre debajo es justo lo que un registro de pruebas no puede
+   * permitir. Borrar y volver a poner sí deja rastro de las dos cosas.
+   */
+  app.delete("/evidencia/:evidenciaId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { evidenciaId } = parseParams(z.object({ evidenciaId: uuid }), request.params);
+    await withUser(userId, (db) =>
+      db.query("delete from task_evidence where id = $1", [evidenciaId]),
+    );
+    return reply.status(204).send();
+  });
+
+  /**
+   * Marcar como hecha, con su prueba en el mismo gesto.
+   *
+   * POR QUÉ NO BASTA CON ARRASTRARLA A «HECHO», que ya funciona. Porque son dos
+   * gestos distintos y esta ruta es la que hace que la evidencia exista de
+   * verdad: si adjuntar la prueba fuera un paso aparte —cerrar primero, abrir
+   * la tarjeta después y pegar el PR—, nadie daría el segundo. Aquí las dos
+   * cosas caen en la misma transacción: **o se cerró con su prueba, o no se
+   * cerró**.
+   *
+   * LA COLUMNA DESTINO NO SE PIDE, SE BUSCA. Quien cierra una tarea no está
+   * pensando en qué columna es la terminal de este tablero, está pensando en
+   * que ya está. Si hay varias terminales se coge la primera por posición, que
+   * es la que la pantalla enseña antes.
+   *
+   * Y NO SE EXIGE LA EVIDENCIA. Se ofrece. Hacerla obligatoria convertiría la
+   * primera tarea sin PR —una decisión, una llamada, algo que se resolvió
+   * hablando— en un callejón sin salida, y la respuesta de la gente a un campo
+   * obligatorio que estorba es escribir «ok» y seguir.
+   */
+  app.post("/tasks/:taskId/hecha", async (request) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+    const body = parseBody(
+      z.object({ evidencia: evidenciaZ.optional() }),
+      request.body ?? {},
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows: previa } = await db.query<{ title: string; workspace_id: string }>(
+        "select title, workspace_id from tasks where id = $1",
+        [taskId],
+      );
+      if (!previa[0]) throw notFound("tarea no encontrada");
+
+      const { rows: terminal } = await db.query<{ id: string }>(
+        `select id from task_columns
+          where workspace_id = $1 and is_terminal
+          order by position limit 1`,
+        [previa[0].workspace_id],
+      );
+      if (!terminal[0]) {
+        throw notFound(
+          "este tablero no tiene ninguna columna marcada como final: " +
+            "marca una en los ajustes de la columna y vuelve a intentarlo",
+        );
+      }
+
+      // La evidencia ANTES de mover: así, si algo falla al cerrar, no queda una
+      // prueba colgando de una tarea que sigue abierta. La transacción lo
+      // garantiza en los dos sentidos, pero el orden deja la intención clara.
+      if (body.evidencia) {
+        await anotarEvidencia(db, {
+          taskId,
+          workspaceId: previa[0].workspace_id,
+          titulo: previa[0].title,
+          autor: userId,
+          evidencia: body.evidencia,
+        });
+      }
+
+      await moverTareaEnDb(db, taskId, terminal[0].id, null, { actorId: userId });
+      return { task: await loadTask(db, taskId) };
+    });
+  });
+
   app.delete("/tasks/:taskId", async (request, reply) => {
     const userId = requireUser(request);
     const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
@@ -530,6 +911,10 @@ export async function crearTareaEnDb(
     dueDate: string | null;
     tagIds: string[];
     categoryId?: string | null;
+    tipo?: string | null;
+    prioridad?: number;
+    contexto?: string;
+    criterio?: string;
     autor: string;
     /** Quién lo pidió de verdad. El asistente pasa `agente` para que su
      *  trabajo no se sume al de la persona en la auditoría. */
@@ -554,11 +939,11 @@ export async function crearTareaEnDb(
   const { rows } = await db.query<{ id: string }>(
     `insert into tasks
        (workspace_id, column_id, title, description, assignee_id, due_date, position,
-        created_by, category_id)
+        created_by, category_id, tipo, prioridad, contexto, criterio)
      values (
        $1, $2, $3, $4, $5, $6,
        coalesce((select max(position) from tasks where column_id = $2), 0) + $7,
-       $8, $9
+       $8, $9, $10::public.task_kind, coalesce($11, 1), coalesce($12, ''), coalesce($13, '')
      )
      returning id`,
     [
@@ -571,6 +956,10 @@ export async function crearTareaEnDb(
       STEP,
       datos.autor,
       datos.categoryId ?? null,
+      datos.tipo ?? null,
+      datos.prioridad ?? null,
+      datos.contexto ?? null,
+      datos.criterio ?? null,
     ],
   );
   const taskId = rows[0]!.id;

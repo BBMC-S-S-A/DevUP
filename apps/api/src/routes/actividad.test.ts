@@ -22,7 +22,7 @@
  *   npm run test:actividad
  */
 import { closePool, withUser } from "../db/pool.js";
-import { crearTareaEnDb, moverTareaEnDb } from "./tasks.js";
+import { anotarEvidencia, crearTareaEnDb, evidenciaZ, moverTareaEnDb } from "./tasks.js";
 import { cierresPorPersona } from "../lib/actividad.js";
 
 let total = 0;
@@ -262,6 +262,81 @@ async function main(): Promise<void> {
       return rows[0]!.veces;
     });
     check("«¿cuántas cerró Ana esta semana?» ya tiene respuesta", cerradas === 1);
+
+    console.log("\nLa evidencia");
+
+    // Que una evidencia sea un hecho con autor y fecha es lo que la distingue
+    // de un adjunto, y por eso deja rastro en el registro: sin la anotación,
+    // «¿quién dijo que esto estaba probado?» vuelve a no tener respuesta.
+    const conPrueba = await withUser(ana, async (db) => {
+      const t = await crearTareaEnDb(db, {
+        workspaceId: ws,
+        columnId: pendiente,
+        title: "Pasarela de pagos",
+        description: "",
+        assigneeId: null,
+        dueDate: null,
+        tagIds: [],
+        autor: ana,
+        tipo: "funcionalidad",
+        prioridad: 3,
+        criterio: "un pago de prueba llega a la cuenta",
+      });
+      await anotarEvidencia(db, {
+        taskId: t.id as string,
+        workspaceId: ws,
+        titulo: t.title as string,
+        autor: ana,
+        evidencia: { tipo: "pr", url: "https://github.com/acme/x/pull/9", titulo: "", nota: "" },
+      });
+      return t.id as string;
+    });
+
+    filas = await leer();
+    check(
+      "adjuntar una prueba se anota en el registro",
+      filas.some((f) => f.verbo === "tarea.evidencia"),
+    );
+    check(
+      "y el resumen dice de qué clase de prueba se trata",
+      filas.some((f) => f.verbo === "tarea.evidencia" && f.resumen.startsWith("adjuntó un PR")),
+    );
+
+    const ficha = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{
+        tipo: string | null;
+        prioridad: number;
+        criterio: string;
+      }>("select tipo, prioridad, criterio from tasks where id = $1", [conPrueba]);
+      return rows[0]!;
+    });
+    check("la tarea guarda su tipo", ficha.tipo === "funcionalidad");
+    check("su prioridad", ficha.prioridad === 3);
+    check("y el criterio de cuándo está hecha", ficha.criterio.includes("un pago de prueba"));
+
+    // Las dos capas dicen lo mismo, y no por duplicar: arriba para poder
+    // explicar QUÉ falta, abajo para que siga siendo verdad si algún día se
+    // escribe por otra puerta.
+    check(
+      "un PR sin enlace no prueba nada, y se dice arriba",
+      evidenciaZ.safeParse({ tipo: "pr", titulo: "", nota: "" }).success === false,
+    );
+    check(
+      "una nota sin texto tampoco",
+      evidenciaZ.safeParse({ tipo: "nota", titulo: "", nota: "" }).success === false,
+    );
+    const enLaBase = await withUser(ana, async (db) => {
+      try {
+        await db.query(
+          "insert into task_evidence (task_id, tipo, created_by) values ($1,'pr',$2)",
+          [conPrueba, ana],
+        );
+        return "coló";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("y también abajo, en la base", enLaBase === "rechazado");
 
     console.log("\nCuánto tarda en cerrarse lo que cierra cada uno");
 

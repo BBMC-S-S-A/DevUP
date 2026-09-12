@@ -2302,6 +2302,104 @@ async function main(): Promise<void> {
     check("borrar un area no borra sus tareas", sobrevive !== undefined);
     check("solo las deja sin clasificar", sobrevive?.category_id === null);
 
+    console.log("\nRamas y evidencia de una tarea");
+
+    // Las dos tablas de la 0042 NO llevan `workspace_id` propio: se apoyan en
+    // la politica de `tasks`. Eso hay que comprobarlo aqui, porque si el
+    // `exists` de la politica estuviera mal escrito, las filas de una tarea
+    // ajena se verian sin que nada fallara — que es como se rompe RLS siempre.
+    const conRama = await withUser(ana, async (db) => {
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.ws],
+      );
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by, prioridad, tipo)
+         values ($1,$2,'pasarela de pagos',2000,$3,3,'funcionalidad') returning id`,
+        [acme.ws, col[0]!.id, ana],
+      );
+      const tarea = rows[0]!.id;
+      await db.query(
+        `insert into task_branches (task_id, nombre, created_by) values ($1,'feat/pagos',$2)`,
+        [tarea, ana],
+      );
+      await db.query(
+        `insert into task_evidence (task_id, tipo, url, created_by)
+         values ($1,'pr','https://github.com/acme/x/pull/1',$2)`,
+        [tarea, ana],
+      );
+      return tarea;
+    });
+
+    const veBruno = await withUser(bruno, async (db) => {
+      const ramas = await db.query("select id from task_branches where task_id = $1", [conRama]);
+      const pruebas = await db.query("select id from task_evidence where task_id = $1", [conRama]);
+      return { ramas: ramas.rowCount, pruebas: pruebas.rowCount };
+    });
+    check("Bruno no ve las ramas de una tarea que no puede ver", veBruno.ramas === 0);
+    check("ni sus evidencias", veBruno.pruebas === 0);
+
+    await denied("ni puede colgarle una rama", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into task_branches (task_id, nombre) values ($1,'intrusa')", [conRama]),
+      ),
+    );
+    await denied("ni una evidencia", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into task_evidence (task_id, tipo, nota) values ($1,'nota','yo lo vi')", [
+          conRama,
+        ]),
+      ),
+    );
+
+    // Firmar con el nombre de otro es la unica forma que tiene esta tabla de
+    // mentir: atribuirle a alguien una comprobacion que no hizo.
+    await denied("nadie firma una evidencia con el nombre de otro", () =>
+      withUser(carla, (db) =>
+        db.query(
+          "insert into task_evidence (task_id, tipo, nota, created_by) values ($1,'nota','fui yo',$2)",
+          [conRama, ana],
+        ),
+      ),
+    );
+
+    // Sin politica de UPDATE, a proposito: cambiar en silencio lo que alguien
+    // afirmo, dejando su nombre debajo, es lo que un registro de pruebas no
+    // puede permitir. Corregir es borrar y volver a poner.
+    const reescribio = await withUser(ana, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          "update task_evidence set url = 'https://otro' where task_id = $1",
+          [conRama],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("ni la propia Ana puede reescribir una evidencia", reescribio !== 1);
+
+    const carlaVe = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("select id from task_branches where task_id = $1", [
+        conRama,
+      ]);
+      return rowCount;
+    });
+    check("Carla, del mismo espacio, si ve la rama", carlaVe === 1);
+
+    // Borrar la tarea se lleva las dos por delante: son de la tarea, no cosas
+    // con vida propia. Lo contrario dejaria pruebas huerfanas apuntando a algo
+    // que ya no existe.
+    await withUser(ana, (db) => db.query("delete from tasks where id = $1", [conRama]));
+    const quedan = await admin.query("select id from task_branches where task_id = $1", [conRama]);
+    const quedanPruebas = await admin.query("select id from task_evidence where task_id = $1", [
+      conRama,
+    ]);
+    check(
+      "borrar la tarea se lleva sus ramas y sus evidencias",
+      quedan.rowCount === 0 && quedanPruebas.rowCount === 0,
+    );
+
     console.log("\nNadie se invita solo a una organizacion ajena");
 
     // ESTO ES UNA REGRESION, NO UNA COMPROBACION DE RUTINA. Hasta la 0041,
