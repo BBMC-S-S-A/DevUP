@@ -108,23 +108,35 @@ trabaja, no como una lista de deseos.
 
 ### Workflow y flujos · Juan Medina
 
+**Partida en dos caminos**, porque hay dos sesiones trabajándola a la vez desde
+equipos distintos. El reparto está en [`CAMINOS.md`](CAMINOS.md) y es **por
+archivos, no por temas**: ningún archivo pertenece a los dos caminos, que es lo
+único que evita un conflicto de fusión en cada tanda. Cada tarea lleva enlazada
+su rama, `camino-a` o `camino-b`, así que desde el tablero se ve quién está en
+qué sin preguntar.
+
+#### Camino A — el armazón y la navegación (`layout.tsx`, `Armazon`, `Pagina`)
+
 - **Decidir qué pantalla es la portada** — Va ANTES de construir el armazón. Con
   el registro ya hecho, la línea de tiempo tiene más papeletas que un panel de
   tarjetas. Es una decisión, no una tarea de código.
-- **«Te espera» con trabajo real, no avisos** — Hoy lista notificaciones sin
-  leer, que son hechos que ocurrieron, no trabajo pendiente. Con `is_terminal`
-  ya se puede construir de las tareas en columnas no terminales.
 - **El armazón de organización, naciendo con cajón para móvil** — Seis pantallas
   viven hoy sin barra. Construirlo con barra fija y desmontarlo después es justo
   lo que hay que evitar.
 - **Marco de página: una cabecera, no cinco copiadas** — Y con él los tres
   finales de una carga: cargando, fallo, vacío.
+
+#### Camino B — los datos y las piezas (`lib/`, primitivas, `page.tsx`)
+
 - **Las primitivas que faltan, empezando por el diálogo de confirmación** — Ocho
   acciones irreversibles se deciden hoy en el cuadro gris del sistema operativo.
   Es lo que mejor relación esfuerzo/resultado tiene de todo el plan.
 - **Capa de datos: acabar con los 88 `api.*` y 71 efectos sueltos** — Y escribir
   de paso la regla de errores: el de un campo junto al campo, el de una acción
   en un aviso flotante.
+- **«Te espera» con trabajo real, no avisos** — Hoy lista notificaciones sin
+  leer, que son hechos que ocurrieron, no trabajo pendiente. Con `is_terminal`
+  ya se puede construir de las tareas en columnas no terminales.
 - **Partir las pantallas grandes** — Ventas tiene 1.273 líneas. Después de la
   capa de datos, no antes.
 
