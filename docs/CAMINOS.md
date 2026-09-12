@@ -6,15 +6,39 @@ qué es de cada uno y, sobre todo, **qué archivos no puede tocar el otro**.
 
 ---
 
-## 0. Lo que bloquea subirlo al tablero
+## 0. Por qué esto no está en el tablero todavía
 
-**El MCP de esta sesión sigue sin token**, así que el área y las tarjetas no
-están todavía en el tablero de verdad. Con el token puesto —Ajustes →
-Conexiones de agente, y pegarlo en `~/.devup/mcp.json`— son las llamadas del
-§4, en una tanda.
+**No es que falte un token. Es que no hay red.** Las sesiones de Claude Code que
+escribieron este plan corren en un contenedor en la nube, no en el portátil, y
+la política de salida de ese contenedor **deniega** `api.hytrex.co` y el
+despliegue de Railway — comprobado: el gateway contesta `403` al CONNECT. La
+puerta MCP no puede alcanzar DevUP desde ahí, con token o sin él.
 
-Hasta entonces este documento **es** el tablero: es lo que evita que las dos
-sesiones se pisen, y eso no puede esperar a un despliegue.
+Durante varios días esto se anotó aquí como «falta el token», que era la
+explicación cómoda y la equivocada: con el token puesto habría fallado igual, y
+el siguiente en intentarlo habría perdido la tarde buscando una credencial que
+ya estaba bien.
+
+**Lo que sí funciona**, y las dos son cosas que solo se pueden hacer fuera de
+esta sesión:
+
+1. **Ejecutar la siembra desde el portátil**, que es donde hay red:
+
+   ```
+   DEVUP_TOKEN=<el de Ajustes → Conexiones de agente> npm run sembrar:caminos -- --ver
+   ```
+
+   Con `--ver` no escribe nada y dice qué haría; sin `--ver`, lo hace. Es
+   repetible: lo que ya existe no se duplica. El guion
+   (`scripts/sembrar-caminos.ts`) usa las mismas funciones que el MCP
+   —`crear_area`, `crear_tarea`, `enlazar_rama`— así que siembra exactamente lo
+   mismo que sembraría el agente.
+
+2. **O abrir la salida** a `api.hytrex.co` en la configuración del entorno
+   remoto, y entonces el MCP conecta solo desde aquí.
+
+Hasta que se haga una de las dos, **este documento es el tablero**: es lo que
+evita que las dos sesiones se pisen, y eso no puede esperar.
 
 ---
 
@@ -168,18 +192,20 @@ de lo que hizo la primera sin que nadie tenga que contárselo.
 
 ---
 
-## 4. Las llamadas que faltan, para cuando haya token
+## 4. Qué siembra el guion
 
-```
-crear_area  nombre="Workflow"  responsable="Juan Medina"
-```
+El área **Workflow** y seis tareas —cuatro del camino A, dos del camino B—, cada
+una con su tipo, su prioridad, su contexto, su criterio de terminada y su rama
+(`camino-a` o `camino-b`) ya enlazada. Las listas viven en
+`scripts/sembrar-caminos.ts` y son las mismas del §2.
 
-Y después una `crear_tarea` por fila de las dos tablas del §2, con
-`area="Workflow"`, seguida de su `enlazar_rama` con `camino-a` o `camino-b`.
+Se escriben ahí y no se leen de este markdown a propósito: analizar una tabla
+para sacar tareas es un analizador más que mantener, y la primera vez que
+alguien reordenara una columna, el guion sembraría basura sin fallar. Cuando
+este documento cambie, esa lista sale en el mismo `git diff`.
 
-Las tareas del camino A **también las crea quien tenga el token primero**: un
-tablero donde solo está la mitad del plan es peor que uno vacío, porque parece
-completo.
+**Las del camino A también las crea quien tenga el token primero.** Un tablero
+donde solo está la mitad del plan es peor que uno vacío, porque parece completo.
 
 ---
 

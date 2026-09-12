@@ -42,7 +42,8 @@
     "test:web": "npm run test:enlaces --workspace apps/web && npm run test:fechas --workspace apps/web && npm run test:dinero --workspace apps/web && npm run test:invitacion --workspace apps/web && npm run test:quien-entro --workspace apps/web",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "sembrar:caminos": "tsx scripts/sembrar-caminos.ts"
   },
   "engines": {
     "node": ">=20.11"
