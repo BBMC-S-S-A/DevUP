@@ -174,6 +174,7 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
           // entra al espacio que toque.
           href={`/app/o/${o.id}`}
           activa={activaEs === o.id}
+          hermanas={organizaciones.filter((otra) => otra.id !== o.id).map((otra) => otra.name)}
         />
       ))}
 
@@ -189,18 +190,31 @@ function Chapa({
   logo,
   href,
   activa,
+  hermanas,
 }: {
   organizacion: Organization;
   logo: string | undefined;
   href: string;
   activa: boolean;
+  /** Los otros nombres del riel, para abreviar sin repetirse. */
+  hermanas: string[];
 }) {
-  const inicial = organizacion.name.trim().charAt(0).toUpperCase();
+  /**
+   * DOS LETRAS Y NO UNA, y no es cosmética: era el motivo de que el riel no
+   * sirviera para elegir. Con «Develovers», «DevUp» y «Hytrex» delante, una
+   * sola inicial pinta «D», «D» y «H» — dos chapas idénticas para dos empresas
+   * distintas. La única forma de distinguirlas era pasar el ratón y esperar a
+   * que el navegador decidiera enseñar el `title`.
+   *
+   * Con dos letras salen «DE», «DE»… que tampoco basta. Por eso se usan la
+   * primera letra y la primera que DIFIERE del resto de nombres: «Develovers»
+   * y «DevUp» dan «DE» y «DU», y se distinguen de un vistazo.
+   */
+  const abreviatura = distinguir(organizacion.name, hermanas);
 
   return (
     <Link
       href={href}
-      title={organizacion.name}
       aria-current={activa ? "page" : undefined}
       className="presionable group relative grid size-10 place-items-center rounded-xl
         border border-line-strong bg-canvas/60 transition-colors hover:border-accent"
@@ -222,11 +236,24 @@ function Chapa({
       ) : (
         <span
           aria-hidden
-          className={`font-display text-sm font-semibold ${activa ? "text-accent-bright" : "text-muted"}`}
+          className={`font-display text-[11px] font-semibold tracking-tight ${activa ? "text-accent-bright" : "text-muted"}`}
         >
-          {inicial}
+          {abreviatura}
         </span>
       )}
+
+      {/* El nombre entero al pasar por encima, y AL INSTANTE. El `title` del
+          navegador tarda casi un segundo y aparece donde el ratón decida; en
+          una lista de chapas que solo se distinguen por dos letras, ese segundo
+          es justo el que hace que no se use. */}
+      <span
+        role="tooltip"
+        className="cristal pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden
+          -translate-y-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] text-ink
+          group-hover:block"
+      >
+        {organizacion.name}
+      </span>
     </Link>
   );
 }
@@ -320,4 +347,32 @@ function Mas() {
       {codigo && <EntrarConCodigo onCerrar={() => setCodigo(false)} />}
     </div>
   );
+}
+
+/**
+ * Dos letras que distingan este nombre de los demás del riel.
+ *
+ * La primera siempre, y como segunda la primera letra en la que este nombre se
+ * separa de todos los demás. Si no se separa de ninguno —dos organizaciones que
+ * se llaman igual, que la base permite porque la unicidad es por slug— cae a
+ * las dos primeras, que al menos no miente.
+ */
+export function distinguir(nombre: string, hermanas: string[]): string {
+  const limpio = nombre.trim();
+  if (limpio.length <= 1) return limpio.toUpperCase() || "?";
+
+  const primera = limpio[0]!.toUpperCase();
+  const rivales = hermanas
+    .map((h) => h.trim())
+    .filter((h) => h.length > 0 && h[0]!.toUpperCase() === primera);
+
+  if (rivales.length === 0) return primera;
+
+  for (let i = 1; i < limpio.length; i += 1) {
+    const letra = limpio[i]!;
+    const iguales = rivales.some((r) => (r[i] ?? "").toLowerCase() === letra.toLowerCase());
+    if (!iguales) return (primera + letra).toUpperCase();
+  }
+
+  return limpio.slice(0, 2).toUpperCase();
 }

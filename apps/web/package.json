@@ -15,7 +15,8 @@
     "test:dinero": "tsx src/lib/dinero.test.ts",
     "test:trazado": "tsx src/components/arquitectura/Enlaces.test.ts",
     "test:invitacion": "tsx --tsconfig tsconfig.json src/lib/invitacion.test.ts",
-    "test:agente-ia": "tsx --tsconfig tsconfig.json src/lib/world/agente-ia.test.ts"
+    "test:agente-ia": "tsx --tsconfig tsconfig.json src/lib/world/agente-ia.test.ts",
+    "test:riel": "tsx --tsconfig tsconfig.json src/lib/riel.test.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
