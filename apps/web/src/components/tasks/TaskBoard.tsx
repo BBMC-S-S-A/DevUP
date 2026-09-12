@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import { TagBadge } from "@/components/files/TagBadge";
 import { AdjuntosTarea } from "./AdjuntosTarea";
+import { HistorialDeTarea } from "./HistorialDeTarea";
 import { uploadFile } from "@/lib/files/upload";
 import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -913,6 +914,11 @@ function TaskDialog({
           pendientes={pendientes}
           onPendientes={setPendientes}
         />
+
+        {/* Debajo de todo lo que se edita, porque no se edita: se lee. Y solo
+            si la tarea existe — una tarea que se está creando no tiene
+            historia que contar. */}
+        {task && <HistorialDeTarea taskId={task.id} />}
 
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
           {task ? (

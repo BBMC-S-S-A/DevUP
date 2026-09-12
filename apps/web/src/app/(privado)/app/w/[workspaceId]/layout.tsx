@@ -28,7 +28,7 @@ import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { guardarUltimoEspacio, olvidarUltimoEspacio } from "@/lib/ultimo-espacio";
 import { ignorar } from "@/lib/fallo";
-import { Boton } from "@/components/ui/Boton";
+import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { SelectorDeEspacio } from "@/components/ui/SelectorDeEspacio";
