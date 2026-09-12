@@ -105,6 +105,16 @@ jobs:
         # El script de la raíz encadena las dos.
         run: npm run test:codigo
 
+      - name: El panel por espacio
+        # La 0049 junto el Panel con la Mesa dandole alcance de espacio, y para
+        # eso solto la clave primaria de user_dashboard_prefs. Dos cosas se
+        # rompen ahi sin que los tipos digan nada: el destino del `on conflict`,
+        # que era `(user_id)` y ya no es un indice unico —compila, y falla en el
+        # segundo guardado—, y el panel de partida multiplicado, porque sin
+        # `nulls not distinct` dos filas con workspace_id nulo son distintas
+        # para Postgres y nadie se queja.
+        run: npm run test:panel --workspace apps/api
+
       - name: La portada de una organización
         # Lo que se vigila no es que salga, es lo que NO sale. Desde 0035 cada
         # espacio se aísla por sí mismo, así que pertenecer a una organización

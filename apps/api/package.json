@@ -29,6 +29,7 @@
     "arranca": "tsx src/arranca.test.ts",
     "test:diario": "tsx src/routes/diario.test.ts",
     "test:panorama": "tsx src/routes/panorama.test.ts",
+    "test:panel": "tsx src/routes/panel.test.ts",
     "test:grafo": "tsx src/routes/grafo.test.ts"
   },
   "dependencies": {

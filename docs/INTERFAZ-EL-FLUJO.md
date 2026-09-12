@@ -31,10 +31,27 @@ funciones y acomodarlas como quiera, donde DevUP cobra vida», se estaba pidiend
 añada a dos catálogos, y a que el usuario aprenda dos formas de colocar cosas que
 hacen lo mismo.
 
-**Recomendación:** que quede una sola, con la rejilla del Panel y el alcance de la
-Mesa. Eso necesita una migración (`user_dashboard_prefs` no tiene `workspace_id`),
-y la migración es de la sesión de funcionalidades. **Está esperando decisión — no
-se monte nada encima de ninguna de las dos hasta que se tome.**
+**DECIDIDO Y HECHO** (migración 0049). Queda **una sola**: la rejilla libre del
+Panel, con el alcance de la Mesa. La Mesa desaparece del menú.
+
+Cómo se pide y cómo se guarda:
+
+```
+GET /me/dashboard?espacio=<uuid>   → { widgets, spotifyMode, layout, esDePartida }
+PUT /me/dashboard                  → { espacio?, widgets, spotifyMode, layout? }
+```
+
+**`esDePartida` no es adorno.** Cada persona tiene un panel de partida —el que ya
+tenía antes de la 0049, que no se ha perdido— y ese vale en todo espacio que no
+tenga uno propio. La primera vez que alguien coloca algo estando en un espacio, se
+guarda uno de ese espacio y deja de aplicar el de partida. La pantalla debería
+decirlo («estás viendo tu panel de siempre»), porque si no, quien mueva una
+tarjeta creerá que la movió solo aquí y la habrá movido en todas partes.
+
+Sin `espacio`, las dos rutas hablan del de partida. La regla de cuál gana vive en
+`panel_de()` en la base, no en el cliente: escrita en cada cliente estaría
+repetida, y el síntoma de que divergieran sería que la misma persona ve un panel
+distinto según por dónde entre — que no se parece a un fallo.
 
 ---
 

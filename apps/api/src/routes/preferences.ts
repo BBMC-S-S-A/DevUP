@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
-import { parseBody, parseParams, requireUser } from "../lib/http.js";
+import { parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
 
 /**
  * Cómo quiere cada persona su panel.
@@ -75,17 +75,37 @@ const DEFECTO: {
 export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
+  /**
+   * El panel que toca.
+   *
+   * CON `espacio`, EL DE ESE ESPACIO; SIN ÉL, EL DE PARTIDA. La regla de cuál
+   * gana no está aquí sino en `panel_de` (0049), y a propósito: escrita en cada
+   * cliente estaría repetida, y la segunda copia es la que se queda atrás. El
+   * síntoma de que divergieran sería que la misma persona ve un panel distinto
+   * según por dónde entre, y eso no se parece a un fallo.
+   */
   app.get("/me/dashboard", async (request) => {
     const userId = requireUser(request);
+    const { espacio } = parseQuery(
+      z.object({ espacio: z.string().uuid().optional() }),
+      request.query,
+    );
+
     return withUser(userId, async (db) => {
       const { rows } = await db.query<{
         widgets: Widget[];
         spotifyMode: "boton" | "expandido";
         layout: Layout;
+        esDePartida: boolean;
       }>(
-        `select widgets, spotify_mode as "spotifyMode", layout
-           from user_dashboard_prefs where user_id = $1`,
-        [userId],
+        espacio
+          ? `select widgets, spotify_mode as "spotifyMode", layout,
+                    es_de_partida as "esDePartida"
+               from public.panel_de($2::uuid)`
+          : `select widgets, spotify_mode as "spotifyMode", layout, true as "esDePartida"
+               from user_dashboard_prefs
+              where user_id = $1 and workspace_id is null`,
+        espacio ? [userId, espacio] : [userId],
       );
       // Sin fila todavía: nadie ha tocado el panel. Se devuelve el catálogo
       // entero en el orden por defecto en vez de una lista vacía, que se leería
@@ -94,10 +114,18 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  /**
+   * Guardar el panel.
+   *
+   * CON `espacio` SE GUARDA EL DE ESE ESPACIO, y si no había, se crea — es el
+   * momento en que ese espacio deja de usar el de partida. Sin `espacio` se
+   * guarda el de partida, que es el que vale donde no haya uno propio.
+   */
   app.put("/me/dashboard", async (request) => {
     const userId = requireUser(request);
     const body = parseBody(
       z.object({
+        espacio: z.string().uuid().nullish(),
         widgets: z.array(z.enum(WIDGETS)).max(WIDGETS.length),
         spotifyMode: z.enum(["boton", "expandido"]),
         // Opcional: un cliente viejo que solo sepa de orden sigue funcionando y
@@ -116,9 +144,16 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
         spotifyMode: "boton" | "expandido";
         layout: Layout;
       }>(
-        `insert into user_dashboard_prefs (user_id, widgets, spotify_mode, layout)
-         values ($1, $2::jsonb, $3, coalesce($4::jsonb, '{}'::jsonb))
-         on conflict (user_id) do update
+        // `on conflict (user_id, workspace_id)` y no `(user_id)`: la 0049 soltó
+        // la clave primaria de `user_id` para que pueda haber un panel por
+        // espacio. Dejar aquí el destino viejo no habría dado ningún error de
+        // tipos — habría dado un 500 en el primer guardado, porque el destino
+        // de un `on conflict` tiene que coincidir con un índice único que ya no
+        // existe. El índice de la 0049 es `nulls not distinct`, que es lo que
+        // hace que el de partida (workspace_id nulo) sea uno solo.
+        `insert into user_dashboard_prefs (user_id, workspace_id, widgets, spotify_mode, layout)
+         values ($1, $5::uuid, $2::jsonb, $3, coalesce($4::jsonb, '{}'::jsonb))
+         on conflict (user_id, workspace_id) do update
            set widgets = excluded.widgets,
                spotify_mode = excluded.spotify_mode,
                -- Sin layout en el cuerpo se CONSERVA el que hubiera. Ponerlo a
@@ -132,6 +167,7 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
           JSON.stringify(body.widgets),
           body.spotifyMode,
           body.layout ? JSON.stringify(body.layout) : null,
+          body.espacio ?? null,
         ],
       );
       return rows[0]!;
