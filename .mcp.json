@@ -1,9 +1,8 @@
 {
   "mcpServers": {
     "devup": {
-      "command": "npx",
-      "args": ["-y", "tsx", "./apps/mcp/src/index.ts"],
-      "env": {}
+      "type": "http",
+      "url": "https://api-production-7b95.up.railway.app/mcp"
     }
   }
 }
