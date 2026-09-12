@@ -189,21 +189,11 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             Buscar
           </Link>
 
-          <div>
-            <GrupoRotulo titulo="Organización" />
-            {/* El rótulo va FUERA de la capa y los destinos dentro: la capa
-                agrupa lo que se puede pulsar, y meter el título ahí lo haría
-                parecer una fila más de la lista. */}
-            <div className="capa space-y-0.5 rounded-2xl p-1.5">
-              <NavegacionOrganizacion
-                orgId={orgId}
-                pathname={pathname}
-                puedeAjustar={puedeAjustar}
-                indiceInicial={1}
-              />
-            </div>
-          </div>
-
+{/* LOS ESPACIOS PRIMERO, y no debajo de las herramientas.
+              En este nivel la pregunta es «¿en qué proyecto entro?» — para eso
+              se pulsa una organización. Las herramientas de la empresa son lo
+              secundario aquí: Ventas y Noticias se miran de vez en cuando, y un
+              espacio se abre cada vez que se entra. Estaban al revés. */}
           <div className="space-y-0.5">
             <GrupoRotulo titulo="Espacios de trabajo" contador={workspaces.length} />
             {workspaces.length === 0 ? (
@@ -230,6 +220,21 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
               ))
             )}
           </div>
+          <div>
+            <GrupoRotulo titulo="Organización" />
+            {/* El rótulo va FUERA de la capa y los destinos dentro: la capa
+                agrupa lo que se puede pulsar, y meter el título ahí lo haría
+                parecer una fila más de la lista. */}
+            <div className="capa space-y-0.5 rounded-2xl p-1.5">
+              <NavegacionOrganizacion
+                orgId={orgId}
+                pathname={pathname}
+                puedeAjustar={puedeAjustar}
+                indiceInicial={1}
+              />
+            </div>
+          </div>
+
         </nav>
 
         <footer className="relative shrink-0 px-3 py-3">
