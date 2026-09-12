@@ -147,7 +147,9 @@ export function TaskBoard({
       titulo: `¿Eliminar la columna «${column.name}»?`,
       descripcion:
         cuantas > 0
-          ? `Se borran también sus ${cuantas} ${cuantas === 1 ? "tarea" : "tareas"}. No se puede deshacer.`
+          ? cuantas === 1
+            ? "Se borra también la tarea que tiene dentro. No se puede deshacer."
+            : `Se borran también sus ${cuantas} tareas. No se puede deshacer.`
           : "Está vacía, así que no se pierde ninguna tarea.",
       accion: "Eliminar",
       peligro: true,

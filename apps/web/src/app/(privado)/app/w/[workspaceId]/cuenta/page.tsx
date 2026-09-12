@@ -287,7 +287,6 @@ function ClaveDeIA() {
   const [abriendo, setAbriendo] = useState<Proveedor | null>(null);
   const [clave, setClave] = useState("");
   const [guardando, setGuardando] = useState(false);
-  const [reenviando, setReenviando] = useState(false);
 
   const cargar = useCallback(async () => {
     const { connections } = await api
