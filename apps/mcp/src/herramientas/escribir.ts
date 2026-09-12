@@ -55,6 +55,43 @@ async function etiquetaDeAgente(cliente: ClienteApi, organizacion?: string): Pro
   return tag.id;
 }
 
+/**
+ * Resuelve categorías por nombre, creando las que falten.
+ *
+ * LAS CATEGORÍAS SON LAS ETIQUETAS, que es la pieza que ya estaba: son de la
+ * organización, tienen color, se pintan en la tarjeta y desde el filtro del
+ * tablero sirven para quedarse con un área. Lo que faltaba era poder ponerlas
+ * desde aquí: se podía crear una tarea pero no decir de qué es, así que todo lo
+ * que entraba por la puerta caía en el montón común.
+ *
+ * Se crean si no existen, por el mismo motivo que la de procedencia: el alta ya
+ * es idempotente en la API, así que pedirla es más barato y más seguro que
+ * comprobar antes y competir con quien la esté creando a la vez.
+ *
+ * Sin normalizar el nombre a propósito: «Workflow» y «workflow» son etiquetas
+ * distintas para la base (`unique (organization_id, name)`), y decidir aquí que
+ * son la misma sería inventarse una regla que el resto del producto no aplica.
+ * Quien las escribe las ve en el tablero y las corrige ahí.
+ */
+async function categoriasPorNombre(
+  cliente: ClienteApi,
+  nombres: string[],
+  organizacion?: string,
+): Promise<string[]> {
+  if (nombres.length === 0) return [];
+  const org = await resolverOrganizacion(cliente, organizacion);
+  const ids: string[] = [];
+  for (const nombre of nombres) {
+    const limpio = nombre.trim();
+    if (!limpio) continue;
+    const { tag } = await cliente.post<{ tag: Etiqueta }>(`/organizations/${org.id}/tags`, {
+      name: limpio,
+    });
+    ids.push(tag.id);
+  }
+  return ids;
+}
+
 /** El tablero del espacio, que hace falta para resolver columnas por nombre. */
 async function tablero(cliente: ClienteApi, espacioId: string): Promise<Columna[]> {
   const { columns } = await cliente.get<{ columns: Columna[] }>(
@@ -135,6 +172,15 @@ export const esquemaCrearTarea = {
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("Fecha límite en formato AAAA-MM-DD."),
+  categorias: z
+    .array(z.string().trim().min(1).max(40))
+    .max(10)
+    .optional()
+    .describe(
+      "De qué áreas es, por su nombre. Se crean si no existen. Son las mismas " +
+        "etiquetas por las que filtra el tablero, así que conviene usar las que " +
+        "el equipo ya tenga en vez de inventar una parecida.",
+    ),
   organizacion: z.string().optional(),
 };
 
@@ -145,6 +191,10 @@ export const descripcionCrearTarea = [
   "Para convertir un plan en trabajo repartido. Se llama una vez por tarea, y",
   "conviene que cada una sea algo que alguien pueda terminar — no «hacer el",
   "módulo de pagos», sino los pasos en los que eso se parte.",
+  "",
+  "Acepta `categorias` para decir de qué área es —son las mismas etiquetas por",
+  "las que filtra el tablero—, y conviene usar las que el equipo ya tenga en vez",
+  "de inventar una parecida: «Workflow» y «workflow» son dos etiquetas distintas.",
   "",
   "Todo lo que se cree por aquí queda con la etiqueta «agente», para que el",
   "equipo vea de un vistazo qué salió de un modelo y pueda revisarlo o",
@@ -163,12 +213,18 @@ export async function crearTarea(
     espacio?: string;
     responsable?: string;
     vence?: string;
+    categorias?: string[];
     organizacion?: string;
   },
 ): Promise<string> {
   const espacio: Espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
   const columna = resolverColumna(await tablero(cliente, espacio.id), entrada.columna);
   const etiqueta = await etiquetaDeAgente(cliente, entrada.organizacion);
+  const categorias = await categoriasPorNombre(
+    cliente,
+    entrada.categorias ?? [],
+    entrada.organizacion,
+  );
   const responsable = entrada.responsable
     ? await resolverPersona(cliente, entrada.responsable, entrada.organizacion)
     : null;
@@ -181,14 +237,19 @@ export async function crearTarea(
       description: entrada.detalle ?? "",
       assigneeId: responsable,
       dueDate: entrada.vence ?? null,
-      tagIds: [etiqueta],
+      // La de procedencia siempre, y las categorías que se pidan. El orden no
+      // importa —la tarjeta las ordena por nombre— pero la de agente no es
+      // opcional: es lo que hace aceptable que un modelo escriba aquí.
+      tagIds: [etiqueta, ...categorias],
     },
   );
 
   const trozos = [`en ${espacio.name} / ${columna.name}`];
   if (entrada.responsable) trozos.push(`para ${entrada.responsable}`);
   if (entrada.vence) trozos.push(`vence el ${entrada.vence}`);
-  return `Creada «${task.title}» ${trozos.join(", ")}, con la etiqueta «${ETIQUETA_AGENTE}».  [tarea ${task.id}]`;
+  const puestas = entrada.categorias?.filter((c) => c.trim()) ?? [];
+  const conCategorias = puestas.length > 0 ? ` en ${puestas.join(" y ")},` : "";
+  return `Creada «${task.title}» ${trozos.join(", ")},${conCategorias} con la etiqueta «${ETIQUETA_AGENTE}».  [tarea ${task.id}]`;
 }
 
 // ---------------------------------------------------------------------------

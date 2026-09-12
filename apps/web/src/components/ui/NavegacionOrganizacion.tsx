@@ -5,6 +5,7 @@ import {
   KeyRound,
   Lightbulb,
   Megaphone,
+  Network,
   ScanSearch,
   Server,
   Settings,
@@ -45,12 +46,18 @@ export function NavegacionOrganizacion({
   pathname,
   puedeAjustar,
   indiceInicial = 0,
+  grupo,
 }: {
   orgId: string;
   workspaceId?: string;
   pathname: string;
   puedeAjustar: boolean;
   indiceInicial?: number;
+  /**
+   * Qué mitad pintar. Sin decir nada salen las dos seguidas, que es lo que
+   * hace falta fuera de un espacio de trabajo.
+   */
+  grupo?: "organizacion" | "proyecto";
 }) {
   const base = workspaceId ? `/app/w/${workspaceId}` : `/app/o/${orgId}`;
 
@@ -64,23 +71,52 @@ export function NavegacionOrganizacion({
    * una pregunta con sentido — y la pantalla que la contestaba enseñaba a los
    * tres proyectos de una empresa exactamente lo mismo.
    */
-  const pantallas = [
+  /**
+   * DE LA ORGANIZACIÓN DE VERDAD: lo que es igual mires desde el espacio que
+   * mires. El embudo de ventas y las noticias son de la empresa, no del
+   * proyecto.
+   */
+  const deLaOrganizacion = [
     { href: `${base}/ventas`, icono: <Target size={14} />, texto: "Ventas" },
     { href: `${base}/noticias`, icono: <Megaphone size={14} />, texto: "Noticias" },
-    ...(workspaceId
-      ? [
-          { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
-          { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
-          { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
-          { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
-          // Va la última porque es la portada de las dos de arriba, no una
-          // séptima pantalla: reúne lo que Base de datos e Integraciones ya
-          // analizan por su cuenta. Quien busca «auditar mi proyecto» no abre
-          // ninguna de las dos, y ese era todo el problema.
-          { href: `${base}/auditoria`, icono: <ScanSearch size={14} />, texto: "Auditoría" },
-        ]
-      : []),
   ];
+
+  /**
+   * DEL PROYECTO, y por eso solo salen dentro de uno.
+   *
+   * La migración 0035 les dio a cada espacio su git, su base y su
+   * infraestructura. Desde entonces estaban aquí, pero debajo de un rótulo que
+   * decía «Organización» — y eso es sencillamente falso: lo que enseñan es de
+   * ESTE proyecto y del de al lado enseñan otra cosa. Un rótulo que miente en
+   * la barra lateral cuesta más que uno que falta, porque nadie lo comprueba.
+   */
+  const delProyecto = workspaceId
+    ? [
+        { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
+        { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
+        { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
+        { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
+        // Va la última porque es la portada de las dos de arriba, no una
+        // quinta pantalla: reúne lo que Base de datos e Integraciones ya
+        // analizan por su cuenta. Quien busca «auditar mi proyecto» no abre
+        // ninguna de las dos, y ese era todo el problema.
+        { href: `${base}/auditoria`, icono: <ScanSearch size={14} />, texto: "Auditoría" },
+        // Las ramas de trabajo del proyecto: quién lleva qué área y cuánto
+        // queda en cada una. Va aquí y no en la organización porque lo que
+        // enseña son las tareas de ESTE tablero.
+        { href: `${base}/categorias`, icono: <Network size={14} />, texto: "Categorías" },
+      ]
+    : [];
+
+  // `grupo` deja que la barra pinte cada mitad bajo su propio rótulo. Sin él se
+  // devuelven las dos seguidas, que es lo que sigue necesitando el armazón de
+  // organización, donde no hay proyecto del que hablar.
+  const pantallas =
+    grupo === "proyecto"
+      ? delProyecto
+      : grupo === "organizacion"
+        ? deLaOrganizacion
+        : [...deLaOrganizacion, ...delProyecto];
 
   return (
     <>
@@ -105,7 +141,7 @@ export function NavegacionOrganizacion({
           Solo dentro de un workspace, como el resto de instrumentos: lo que
           abre son los repositorios del proyecto, y desde 0035 esos son suyos
           y no de la organización. */}
-      {workspaceId && (
+      {workspaceId && grupo !== "organizacion" && (
         <a
           href={`${base}/dev`}
           style={retraso(indiceInicial + pantallas.length)}
@@ -123,16 +159,18 @@ export function NavegacionOrganizacion({
           esconderlo porque es la organización, pero una conexión de agente la
           necesita cualquiera que quiera enchufar su Claude, y un miembro raso
           es justamente quien no tiene otra manera de llegar. */}
-      <ItemNav
-        href={`${base}/cuenta`}
-        icono={<KeyRound size={14} />}
-        indice={indiceInicial + pantallas.length + 1}
-        activo={pathname === `${base}/cuenta`}
-      >
-        Mi cuenta
-      </ItemNav>
+      {grupo !== "proyecto" && (
+        <ItemNav
+          href={`${base}/cuenta`}
+          icono={<KeyRound size={14} />}
+          indice={indiceInicial + pantallas.length + 1}
+          activo={pathname === `${base}/cuenta`}
+        >
+          Mi cuenta
+        </ItemNav>
+      )}
 
-      {puedeAjustar && (
+      {puedeAjustar && grupo !== "proyecto" && (
         <ItemNav
           href={`${base}/ajustes`}
           icono={<Settings size={14} />}
