@@ -48,11 +48,14 @@ const ESPERADAS = [
   "ver_tablero",
   "ver_tarea",
   "ver_arquitectura",
+  "ver_entornos",
+  "sincronizar_entornos",
   "crear_tarea",
   "crear_columna",
   "mover_tarea",
   "actualizar_tarea",
   "dibujar_arquitectura",
+  "crear_entorno",
 ];
 
 console.log("\nRegistro de herramientas");
