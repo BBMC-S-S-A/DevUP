@@ -11,6 +11,7 @@ import { LogoAnimado } from "@/components/marca/LogoAnimado";
 import { Logo } from "@/components/ui/Logo";
 import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
+import { leerUltimoCorreo, nombreDeCorreo, olvidarCorreo, recordarCorreo } from "@/lib/quien-entro";
 
 /**
  * El logotipo de Google, en línea.
@@ -120,6 +121,39 @@ function LoginForm() {
   const [policy, setPolicy] = useState<SignupPolicy | null>(null);
   const [forgotSent, setForgotSent] = useState(false);
 
+  /**
+   * Quién entró la última vez en este navegador.
+   *
+   * `undefined` mientras no se ha mirado, y eso importa: `localStorage` solo
+   * existe en el navegador, así que leerlo durante el renderizado del servidor
+   * daría una pantalla y otra distinta al hidratar — el parpadeo clásico. Se
+   * lee en un efecto y hasta entonces no se decide nada.
+   */
+  const [conocido, setConocido] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    const correo = leerUltimoCorreo();
+    setConocido(correo);
+    // El campo ya relleno es la mitad de la comodidad: quien vuelve solo tiene
+    // que poner la contraseña. Solo si no hay invitación de por medio — ahí el
+    // correo que importa es el de la invitación, no el de la última vez.
+    if (correo && !inviteToken) setEmail(correo);
+  }, [inviteToken]);
+
+  /**
+   * SI YA HA ENTRADO ALGUIEN AQUÍ, LA MITAD DE MARCA SOBRA.
+   *
+   * Es la decisión de esta pantalla. Media ventana explicando qué es DevUP está
+   * bien para quien llega por primera vez y es ruido para quien abre su
+   * herramienta de trabajo cada mañana — que en una herramienta de equipo es
+   * prácticamente todo el mundo, prácticamente siempre. A quien vuelve se le
+   * enseña la puerta de su casa; a quien llega, la explicación entera.
+   *
+   * Con invitación gana la explicación aunque el navegador conozca a alguien:
+   * quien abre un enlace de invitación está llegando a DevUP por primera vez
+   * aunque no sea su primera vez en este ordenador.
+   */
+  const vuelve = conocido !== null && conocido !== undefined && !inviteToken;
+
   const router = useRouter();
   const { user, loading, refresh } = useSession();
 
@@ -185,6 +219,10 @@ function LoginForm() {
       }
 
       if (quienEntro) {
+        // Se recuerda AL ENTRAR BIEN y no al teclear: guardar un correo que
+        // resultó no existir dejaría a la pantalla saludando mañana a una
+        // cuenta equivocada.
+        recordarCorreo(email);
         router.replace("/app");
       } else {
         setError("la sesión no llegó a confirmarse — inténtalo otra vez");
@@ -213,7 +251,9 @@ function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-[100svh] lg:grid-cols-2">
+    <main
+      className={`grid min-h-[100svh] ${vuelve ? "place-items-center px-6 py-12" : "lg:grid-cols-2"}`}
+    >
       {/* Panel de marca. Oculto en móvil: en una pantalla pequeña es la
           mitad del sitio gastada en algo que no ayuda a entrar.
           Sin fondo propio: el mock (SalaAcceso) es una sola atmósfera
@@ -221,7 +261,13 @@ function LoginForm() {
           `body::before` — pintar aquí un `bg-surface` opaco encima la
           taparía justo donde nace, igual que le pasaba al panel y a la
           mesa antes de dejarlos flotar. */}
-      <aside className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12">
+      {/* La explicación de qué es DevUP, solo para quien llega. Ver `vuelve`
+          arriba: a quien entra cada mañana esto le ocupa media pantalla para
+          contarle algo que ya sabe. */}
+      <aside
+        hidden={vuelve}
+        className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12"
+      >
 
         <div className="filo-luz relative pb-6 devup-entrada" style={retraso(0)}>
           <div className="flex items-center gap-3">
@@ -298,10 +344,16 @@ function LoginForm() {
       {/* Panel de formulario. Sin rejilla técnica ni fondo propio: el mock no
           lleva más textura que la atmósfera, y esa ya llega sola desde
           `body::before` en cualquier ancho, móvil incluido. */}
-      <div className="relative grid place-items-center overflow-hidden px-6 py-12">
+      <div
+        className={
+          vuelve
+            ? "relative w-full max-w-sm"
+            : "relative grid place-items-center overflow-hidden px-6 py-12"
+        }
+      >
         <div className="relative w-full max-w-sm">
           <div
-            className="devup-entrada mb-6 flex items-center gap-3 lg:hidden"
+            className={`devup-entrada mb-6 flex items-center gap-3 ${vuelve ? "" : "lg:hidden"}`}
             style={retraso(0)}
           >
             <Logo size={40} animated />
@@ -319,13 +371,44 @@ function LoginForm() {
           <Tarjeta flotante className="devup-entrada p-6" style={retraso(340)}>
             <div className="mb-5">
               <Rotulo>{inviteToken ? "Invitación" : "Acceso"}</Rotulo>
+              {/* SALUDAR POR SU NOMBRE A QUIEN VUELVE. Es la diferencia entre
+                  una puerta de servicio y la puerta de tu casa, y cuesta una
+                  línea. Se saluda con la parte de delante del correo, no con la
+                  dirección entera: el dominio no aporta nada al saludo y sí
+                  alarga la línea — la dirección completa sigue visible en su
+                  campo, que es donde se comprueba. */}
               <h1 className="mt-1.5 text-xl font-semibold tracking-tight">
-                {mode === "login" ? "Entrar" : "Crear cuenta"}
+                {mode === "register"
+                  ? "Crear cuenta"
+                  : conocido
+                    ? `Hola otra vez, ${nombreDeCorreo(conocido)}`
+                    : "Entrar"}
               </h1>
               <p className="mt-1 text-sm text-muted">
-                {mode === "login"
-                  ? "Con el correo y la contraseña de tu cuenta."
-                  : "Toma menos de un minuto."}
+                {mode === "register" ? (
+                  "Toma menos de un minuto."
+                ) : conocido ? (
+                  <>
+                    Solo falta tu contraseña.{" "}
+                    {/* LA SALIDA VA AQUÍ Y VISIBLE, no escondida en un menú.
+                        En un ordenador compartido, quien necesita esto es justo
+                        quien no va a ir a buscarlo. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        olvidarCorreo();
+                        setConocido(null);
+                        setEmail("");
+                        setPassword("");
+                      }}
+                      className="presionable text-accent underline-offset-2 hover:underline"
+                    >
+                      ¿No eres tú?
+                    </button>
+                  </>
+                ) : (
+                  "Con el correo y la contraseña de tu cuenta."
+                )}
               </p>
             </div>
 
@@ -401,6 +484,10 @@ function LoginForm() {
                 onChange={setPassword}
                 placeholder="mínimo 10 caracteres"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
+                // El cursor donde de verdad hay que escribir. Solo cuando ya
+                // sabemos el correo: en la pantalla de quien llega por primera
+                // vez, robarle el foco al primer campo es empezar por el medio.
+                autoFocus={vuelve && mode === "login"}
                 required
                 hint={mode === "register" ? "Diez caracteres o más." : undefined}
               />
