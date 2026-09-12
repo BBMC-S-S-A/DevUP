@@ -142,7 +142,16 @@ async function main(): Promise<void> {
     filas = await leer();
     const cerrada = filas.find((f) => f.verbo === "cerro");
     check("mover a una columna terminal anota `cerro`, no `movio`", Boolean(cerrada));
-    check("y el resumen lo dice en castellano", cerrada?.resumen.startsWith("cerró") === true);
+    // Antes esta comprobación miraba que el renglón empezara por «cerró»: allí
+    // la columna guardaba una frase compuesta. En el esquema que se queda,
+    // `subject_label` guarda el TÍTULO que la tarea tenía al cerrarla, y la
+    // frase se compone al pintarla. Lo que hay que fijar es lo que de verdad
+    // importaba: que ese título queda congelado y el renglón se puede leer
+    // aunque la tarea se renombre o se borre después.
+    check(
+      "y guarda el título que la tarea tenía en ese momento",
+      cerrada?.resumen === "Arreglar el 415 del túnel",
+    );
 
     await withUser(ana, (db) => moverTareaEnDb(db, taskId, pendiente, null, { userId: ana }));
     check(
