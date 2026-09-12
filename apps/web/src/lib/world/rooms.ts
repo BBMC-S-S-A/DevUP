@@ -24,7 +24,7 @@ const THEME_RULES: { theme: Theme; words: string[] }[] = [
   { theme: "music", words: ["music", "músic", "audio", "sonido", "radio", "podcast"] },
   { theme: "meeting", words: ["reuni", "junta", "daily", "meeting", "standup", "comit", "direcc"] },
   { theme: "lounge", words: ["general", "salón", "salon", "café", "cafe", "descanso", "random", "off", "social", "cocina"] },
-  { theme: "work", words: ["desarrollo", "dev", "código", "codigo", "code", "backend", "front", "trabajo", "ingenier", "producto", "diseño"] },
+  { theme: "work", words: ["desarrollo", "dev", "código", "codigo", "code", "backend", "front", "trabajo", "ingenier", "producto", "diseño", "agente", "asistente"] },
 ];
 
 /**

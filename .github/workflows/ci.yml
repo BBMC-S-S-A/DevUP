@@ -111,6 +111,14 @@ jobs:
         # uuid al modelo. Las tres se rompen en silencio.
         run: npm run test:mcp
 
+      - name: Lo que dice el muñeco del agente
+        # No necesita base ni servidor: es un mapa en memoria con caducidad.
+        # Lo que fija son dos afirmaciones sobre la verdad de lo que se pinta
+        # en la sala —que lo declarado gana a lo deducido, y que todo
+        # caduca—. Si la segunda se rompe, el muñeco sigue diciendo que
+        # trabaja un agente que se murió hace media hora, y nada se queja.
+        run: npm run test:agente
+
       - name: La lógica pura de la web
         # Las primeras pruebas de `apps/web`, y no son un trámite: la regla de
         # a dónde lleva cada resultado estaba escrita dos veces y ya había

@@ -7,6 +7,7 @@ import { ApiError, type Workspace, api } from "@/lib/api";
 import { useRecurso } from "@/lib/datos";
 import { useSession } from "@/lib/session";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
+import { esSalaDelAgente, peersConAgente } from "@/lib/world/agente-ia";
 import { TILE } from "@/lib/world/atlas";
 import { render, type Camera } from "@/lib/world/renderer";
 import { seatsOf } from "@/lib/world/props";
@@ -94,6 +95,17 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
    */
   const [live, setLive] = useState<LiveData | null>(null);
 
+  /**
+   * Dentro de la sala del agente se pregunta más seguido.
+   *
+   * Medio minuto está bien para un contador de tareas, pero ahí la respuesta
+   * trae la frase del muñeco: con esa cadencia, pedirle algo a Claude y ver
+   * que lo dice puede tardar treinta segundos, y en ese hueco parece roto.
+   * Sube solo mientras se está dentro, así que el coste es una petición cada
+   * cinco segundos de una sola persona en una sola sala.
+   */
+  const [enSalaAgente, setEnSalaAgente] = useState(false);
+
   useEffect(() => {
     const load = () =>
       api
@@ -101,9 +113,9 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         .then(setLive)
         .catch(() => {});
     void load();
-    const timer = setInterval(() => void load(), 30_000);
+    const timer = setInterval(() => void load(), enSalaAgente ? 5_000 : 30_000);
     return () => clearInterval(timer);
-  }, [workspaceId]);
+  }, [workspaceId, enSalaAgente]);
 
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const editingZone = map?.zones.find((z) => z.id === editingZoneId) ?? null;
@@ -307,6 +319,25 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
   zoneRef.current = world.zone;
 
+  // Un booleano y no la zona entera: `world.zone` es un objeto nuevo en cada
+  // renderizado, así que como dependencia reiniciaría el reloj del sondeo
+  // constantemente.
+  const dentroDelAgente = esSalaDelAgente(world.zone);
+  useEffect(() => setEnSalaAgente(dentroDelAgente), [dentroDelAgente]);
+
+  /**
+   * El mapa y los datos en vivo, para leerlos desde el bucle de animación.
+   *
+   * El muñeco del agente se recalcula en cada fotograma —su frase de reposo
+   * rota con el reloj y React no vuelve a dibujar por un temporizador—, así
+   * que el bucle necesita el valor de ahora sin figurar en sus dependencias:
+   * ponerlo ahí reconstruiría el bucle entero cada vez que llega el sondeo.
+   */
+  const liveRef = useRef<LiveData | null>(live);
+  liveRef.current = live;
+  const zonesRef = useRef<Zone[]>([]);
+  zonesRef.current = map?.zones ?? [];
+
   // --- Bucle de animación ---------------------------------------------------
   const { step, stateRef, avatars, sit, say, emote, selfBubbleRef, selfEmoteRef } = world;
   const emoteRef = useRef(emote);
@@ -374,7 +405,11 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
             ? Math.max(0, Math.min(1, 1 - (selfEmoteRef.current.until - now) / 2200))
             : 0,
         },
-        peers: [...stateRef.current.peers.values()],
+        // El agente se concatena aquí, en el array del render, y NO en
+        // `roster`: en la lista de personas heredaría el menú de «Llamar», y
+        // llamar a alguien que el servidor no conoce se queda colgado para
+        // siempre. Ver `lib/world/agente-ia.ts`.
+        peers: peersConAgente(stateRef.current.peers, zonesRef.current, liveRef.current),
         avatars,
         selfUserId,
         camera,
