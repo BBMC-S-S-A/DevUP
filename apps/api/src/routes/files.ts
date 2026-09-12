@@ -109,6 +109,62 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send({ tag });
   });
 
+  /**
+   * Renombrar una categoría, o cambiarle el color.
+   *
+   * NO SE PODÍA, y desde que las categorías filtran el tablero eso pesa: una
+   * escrita con una errata se quedaba así para siempre, porque la única salida
+   * era borrarla —y borrarla se lleva por delante su vínculo con todas las
+   * tareas y archivos que la llevaban, que es una pérdida real de trabajo por
+   * arreglar una letra.
+   *
+   * El `unique (organization_id, name)` de la 0002 sigue mandando: renombrar a
+   * uno que ya existe se rechaza, y hay que decirlo con una frase y no con un
+   * error de Postgres.
+   */
+  app.patch("/tags/:tagId", async (request) => {
+    const userId = requireUser(request);
+    const { tagId } = parseParams(z.object({ tagId: uuid }), request.params);
+    const body = parseBody(
+      z
+        .object({
+          name: z.string().trim().min(1).max(40).optional(),
+          color: z
+            .enum(["slate", "blue", "green", "amber", "red", "violet", "pink", "teal"])
+            .optional(),
+        })
+        // Un PATCH sin nada que cambiar devolvería un 200 indistinguible de
+        // haber funcionado. Se rechaza.
+        .refine((v) => v.name !== undefined || v.color !== undefined, {
+          message: "no hay nada que cambiar: manda «name», «color» o los dos",
+        }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db
+        .query<{ id: string; name: string; color: string }>(
+          `update tags
+              set name = coalesce($2, name),
+                  color = coalesce($3, color)
+            where id = $1
+        returning id, name, color`,
+          [tagId, body.name ?? null, body.color ?? null],
+        )
+        .catch((fallo: unknown) => {
+          // 23505 es la violación de unicidad. Traducirla aquí es la diferencia
+          // entre «ya tenéis una categoría con ese nombre» y un volcado de
+          // Postgres en la pantalla.
+          if (typeof fallo === "object" && fallo !== null && (fallo as { code?: string }).code === "23505") {
+            throw badRequest("ya hay una categoría con ese nombre en esta organización");
+          }
+          throw fallo;
+        });
+      if (!rows[0]) throw notFound("categoría no encontrada");
+      return { tag: rows[0] };
+    });
+  });
+
   app.delete("/tags/:tagId", async (request, reply) => {
     const userId = requireUser(request);
     const { tagId } = parseParams(z.object({ tagId: uuid }), request.params);

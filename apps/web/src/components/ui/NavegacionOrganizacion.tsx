@@ -5,6 +5,7 @@ import {
   KeyRound,
   Lightbulb,
   Megaphone,
+  Network,
   ScanSearch,
   Server,
   Settings,
@@ -100,6 +101,10 @@ export function NavegacionOrganizacion({
         // analizan por su cuenta. Quien busca «auditar mi proyecto» no abre
         // ninguna de las dos, y ese era todo el problema.
         { href: `${base}/auditoria`, icono: <ScanSearch size={14} />, texto: "Auditoría" },
+        // Las ramas de trabajo del proyecto: quién lleva qué área y cuánto
+        // queda en cada una. Va aquí y no en la organización porque lo que
+        // enseña son las tareas de ESTE tablero.
+        { href: `${base}/categorias`, icono: <Network size={14} />, texto: "Categorías" },
       ]
     : [];
 
