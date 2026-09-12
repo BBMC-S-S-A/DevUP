@@ -180,3 +180,35 @@ Y después una `crear_tarea` por fila de las dos tablas del §2, con
 Las tareas del camino A **también las crea quien tenga el token primero**: un
 tablero donde solo está la mitad del plan es peor que uno vacío, porque parece
 completo.
+
+---
+
+## 5. Lo único que el camino B necesita del camino A
+
+**Una entrada de menú, y nada más.** La portada global vive en
+`/app/inicio` —página, API y todo— pero el menú lateral es del camino A y
+ahora mismo lo estás reescribiendo: meter mano ahí sería el conflicto más caro
+que hay en el reparto. Así que queda pedido en vez de hecho.
+
+Donde están hoy «Panel», «Mesa», «Archivos»…, encima de todos ellos —porque no
+es de este espacio, es de todos—:
+
+```tsx
+<li>
+  <ItemNav
+    href="/app/inicio"
+    icono={<Home size={15} />}
+    activo={pathname === "/app/inicio"}
+    indice={0}
+  >
+    Inicio
+  </ItemNav>
+</li>
+```
+
+(y `Home` de `lucide-react`; los `indice` de abajo suben uno.)
+
+**VA ENCIMA Y NO DEBAJO, y es lo único que pido que no se cambie.** Todo lo
+demás de esa lista es de un espacio de trabajo concreto. Inicio no: es lo que
+contesta «¿qué tengo, en todos?». Ponerlo entre los de un espacio lo convierte
+en una pantalla más de ese espacio, que es justo lo que no es.

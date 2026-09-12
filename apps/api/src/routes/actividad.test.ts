@@ -79,15 +79,12 @@ async function main(): Promise<void> {
       }>("select id, is_terminal from task_columns where workspace_id = $1 order by position", [ws]);
 
       const pendiente = columnas.find((c) => !c.is_terminal)!.id;
-      const hecho =
-        columnas.find((c) => c.is_terminal)?.id ??
-        (
-          await db.query<{ id: string }>(
-            `insert into task_columns (workspace_id, name, position, is_terminal)
-             values ($1,'Hecho',9000,true) returning id`,
-            [ws],
-          )
-        ).rows[0]!.id;
+      // Desde la 0043 un tablero nuevo nace con su «Hecho» marcada. Que esto
+      // sea una comprobación y no un `??` con un inserto de respaldo es lo que
+      // convierte el arreglo en algo que no se puede volver a romper: antes,
+      // el respaldo tapaba justo el fallo que la 0043 corrige.
+      const hecho = columnas.find((c) => c.is_terminal)?.id;
+      if (!hecho) throw new Error("un tablero nuevo tiene que nacer con una columna terminal");
 
       return { org, ws, pendiente, hecho };
     });
