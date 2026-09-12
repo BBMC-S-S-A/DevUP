@@ -105,6 +105,14 @@ jobs:
         # entre—, y que tejer dos veces reviente la petición cuando en realidad
         # decía «esto ya estaba bien». Más la que sí es de seguridad: que
         # enlazar hacia algo que no se ve falle Y no deje rastro a medias.
+        #
+        # Y desde que las reglas tejen solas, lo que de verdad se vigila aquí es
+        # que DESTEJAN: que quitar una rama se lleve su arista, que recalcular
+        # no borre lo que escribió una persona —eso no se puede volver a
+        # deducir— y que borrar una fila limpie sus enlaces ANTES de irse. Lo
+        # último tiene su propia comprobación al revés, porque hacerlo en el
+        # orden equivocado no falla: deja enlaces que ya no se pueden ni ver ni
+        # borrar desde la API, apuntando a algo que no existe.
         run: npm run test:grafo --workspace apps/api
 
       - name: El criterio de migraciones

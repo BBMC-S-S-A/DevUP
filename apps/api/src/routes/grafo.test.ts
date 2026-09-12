@@ -27,7 +27,7 @@
  *   npm run test:grafo --workspace apps/api
  */
 import { closePool, withUser } from "../db/pool.js";
-import { tejer, vecinosDe } from "../lib/grafo.js";
+import { olvidarNodo, retejerTarea, tejer, vecinosDe } from "../lib/grafo.js";
 
 let total = 0;
 const fallos: string[] = [];
@@ -247,6 +247,158 @@ async function main(): Promise<void> {
       return rowCount ?? 0;
     });
     check("y Bruno no puede borrar los que no ve", brunoBorro === 0);
+
+    /* =======================================================================
+     * Las reglas que tejen solas
+     *
+     * Hasta aquí todo eran enlaces puestos a mano. Lo de abajo es lo que de
+     * verdad llena el grafo —nadie va a dibujar su red de trabajo a mano— y lo
+     * que se comprueba no es que teja, que es lo fácil: es que DESTEJA cuando
+     * el hecho deja de ser verdad, y que al hacerlo no se lleve por delante lo
+     * que escribió una persona. Un índice que solo suma acaba siendo un índice
+     * que miente, y miente con la misma cara con la que decía la verdad.
+     * ==================================================================== */
+
+    console.log("\nRetejer desde los hechos");
+
+    const repo = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into github_repos (connection_id, organization_id, workspace_id, full_name, added_by)
+         values (null,$1,$2,'acme/producto',$3) returning id`,
+        [acme.org, acme.ws, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const archivo = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into files
+           (organization_id, workspace_id, task_id, storage_key, name, mime_type,
+            size_bytes, uploaded_by, status)
+         values ($1,$2,$3,$4,'diagrama.png','image/png',10,$5,'ready') returning id`,
+        [acme.org, acme.ws, acme.login, `acme/${sufijo}/diagrama.png`, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const rama = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_branches (task_id, nombre, github_repo_id, estado, created_by)
+         values ($1,'feat/login',$2,'abierta',$3) returning id`,
+        [acme.login, repo, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const tejido = await withUser(ana, async (db) => {
+      await retejerTarea(db, acme.login);
+      return vecinosDe(db, "tarea", acme.login);
+    });
+    const etiquetas = (v: typeof tejido) => v.map((x) => x.etiqueta).sort();
+
+    check("el adjunto sale como enlace", tejido.some((v) => v.nodoId === archivo));
+    check("con la etiqueta de lo que es", tejido.find((v) => v.nodoId === archivo)?.etiqueta === "lleva pegado");
+    check("la rama trae el repositorio donde se toca", tejido.some((v) => v.nodoId === repo));
+    check("y lo que teje una regla queda marcado como tal", tejido.every((v) => v.procedencia === "regla"));
+
+    // Lo mismo dos veces, que es lo que hace una regla que corre en cada hecho.
+    const dosVeces = await withUser(ana, async (db) => {
+      await retejerTarea(db, acme.login);
+      return vecinosDe(db, "tarea", acme.login);
+    });
+    check("retejer no duplica nada", dosVeces.length === tejido.length);
+
+    console.log("\nY desteje cuando el hecho deja de serlo");
+
+    // Alguien pone un enlace a mano ANTES de que se quite el adjunto: es el que
+    // no se puede perder al recalcular, porque no está escrito en ningún otro
+    // sitio del que volver a deducirlo.
+    await withUser(ana, (db) =>
+      tejer(db, {
+        origenTipo: "tarea",
+        origenId: acme.login,
+        destinoTipo: "tarea",
+        destinoId: acme.pagos,
+        etiqueta: "espera a",
+        procedencia: "persona",
+        autorId: ana,
+      }),
+    );
+
+    const trasQuitar = await withUser(ana, async (db) => {
+      await db.query("delete from task_branches where id = $1", [rama]);
+      await retejerTarea(db, acme.login);
+      return vecinosDe(db, "tarea", acme.login);
+    });
+
+    check("quitada la rama, su enlace desaparece", !trasQuitar.some((v) => v.nodoId === repo));
+    check("pero el adjunto sigue", trasQuitar.some((v) => v.nodoId === archivo));
+    // La que justifica que el borrado mire `source`: sin eso, recalcular sería
+    // una herramienta de pérdida de datos con nombre de mantenimiento.
+    check(
+      "y lo que puso una persona sobrevive al recálculo",
+      trasQuitar.some((v) => v.nodoId === acme.pagos && v.procedencia === "persona"),
+    );
+    check("sin inventarse etiquetas por el camino", etiquetas(trasQuitar).join("|") === "espera a|lleva pegado");
+
+    console.log("\nCuando el nodo se va del todo");
+
+    /**
+     * LA TRAMPA QUE ESTO FIJA. `graph_links` no tiene clave ajena hacia las
+     * ocho tablas —no puede, el extremo es polimórfico— y la política de
+     * `delete` exige ver los DOS extremos. Así que si la fila se borra primero,
+     * sus enlaces dejan de poder borrarse: quedan en la tabla para siempre,
+     * apuntando a un identificador que ya no es de nadie, y saliendo en
+     * cualquier recuento que se haga como dueño. No falla nada; solo se pudre.
+     */
+    const olvidado = await withUser(ana, async (db) => {
+      await olvidarNodo(db, "archivo", archivo);
+      await db.query("delete from files where id = $1", [archivo]);
+      return (await vecinosDe(db, "tarea", acme.login)).length;
+    });
+    check("borrado el archivo, su enlace se fue con él", olvidado === 1);
+
+    const huerfanos = await admin.query(
+      "select 1 from graph_links where source_id = $1 or target_id = $1",
+      [archivo],
+    );
+    check("y no queda rastro ni mirando como dueño", huerfanos.rowCount === 0);
+
+    /**
+     * Y AL REVÉS, que es lo que hace que el orden de arriba no sea manía.
+     *
+     * Esto hace justo lo contrario —borra la fila primero y limpia después— y
+     * comprueba que el enlace SOBREVIVE. No es un comportamiento deseable que
+     * se esté fijando: es la trampa, escrita para que se vea. Si algún día
+     * alguien invierte las dos líneas en una ruta pensando que da igual, esto
+     * de aquí es lo único que lo va a decir, porque por fuera no falla nada.
+     */
+    const segundo = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into files
+           (organization_id, workspace_id, task_id, storage_key, name, mime_type,
+            size_bytes, uploaded_by, status)
+         values ($1,$2,$3,$4,'otro.png','image/png',10,$5,'ready') returning id`,
+        [acme.org, acme.ws, acme.login, `acme/${sufijo}/otro.png`, ana],
+      );
+      const id = rows[0]!.id;
+      await retejerTarea(db, acme.login);
+      await db.query("delete from files where id = $1", [id]);
+      // Ahora el extremo ya no se ve, así que la política de `delete` no deja
+      // tocar la fila: borra cero.
+      await olvidarNodo(db, "archivo", id);
+      return id;
+    });
+
+    const encallado = await admin.query("select 1 from graph_links where target_id = $1", [segundo]);
+    check(
+      "limpiar DESPUÉS de borrar la fila no limpia nada: el enlace queda encallado",
+      encallado.rowCount === 1,
+    );
+
+    // Y una vez encallado, ya no hay forma de llegar a él desde la API — ni
+    // para verlo ni para quitarlo. Solo el dueño de la base puede.
+    await admin.query("delete from graph_links where target_id = $1", [segundo]);
   } finally {
     await admin.query("delete from public.organizations where slug like $1", [`%-grafo-${sufijo}`]);
     await admin.query("delete from public.users where email like $1", [

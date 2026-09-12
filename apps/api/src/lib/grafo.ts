@@ -172,3 +172,146 @@ export async function vecinosDe(
   );
   return rows;
 }
+
+/**
+ * Quita del grafo todo lo que tocaba a un nodo, por las dos puntas.
+ *
+ * HAY QUE LLAMARLO **ANTES** DE BORRAR LA FILA, y no es una preferencia de
+ * estilo: es la única ventana que existe. `graph_links` no guarda claves ajenas
+ * hacia las ocho tablas —no puede, el extremo es polimórfico—, así que borrar
+ * una tarea no se lleva sus enlaces. Y la política de `delete` de la 0043 exige
+ * ver los dos extremos: en cuanto la fila desaparece, `puede_ver_nodo` contesta
+ * que no y esos enlaces quedan **inalcanzables para siempre** desde la API. No
+ * se pueden borrar ni leer; solo engordan la tabla y salen en cualquier recuento
+ * que se haga como dueño.
+ *
+ * Por eso quien llama tiene que asegurarse de que, si el borrado de la fila
+ * acaba no ocurriendo —porque RLS lo rechaza—, la transacción entera se
+ * deshace. Si no, se habrían tirado los enlaces de algo que sigue estando.
+ *
+ * AQUÍ SÍ SE BORRA LO QUE PUSO UNA PERSONA, al revés que en `retejerTarea`.
+ * Allí se conserva porque el nodo sigue ahí y lo que dijo alguien a mano no se
+ * puede volver a deducir. Aquí no hay nada que conservar: la cosa a la que
+ * apuntaba ya no existe.
+ */
+export async function olvidarNodo(db: Db, tipo: TipoDeNodo, id: string): Promise<void> {
+  await db.query(
+    `delete from graph_links
+      where (source_kind = $1::public.graph_node_kind and source_id = $2)
+         or (target_kind = $1::public.graph_node_kind and target_id = $2)`,
+    [tipo, id],
+  );
+}
+
+/* ===========================================================================
+ * Las reglas que tejen
+ * ======================================================================== */
+
+/**
+ * Rehace los enlaces de una tarea a partir de lo que hay AHORA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ *
+ * POR QUÉ «REHACER» Y NO «AÑADIR», que era lo obvio. El diseño
+ * (`DISENO-GRAFO-DEL-PROYECTO.md` §2) dice que **el grafo es un índice, no una
+ * fuente**, y que lo que lo hace valioso es poder rehacerlo entero si una regla
+ * estaba mal. Un tejido que solo añade no cumple ninguna de las dos cosas: en
+ * cuanto alguien quita un adjunto, la arista se queda ahí diciendo que existe.
+ * Y un índice que miente no se arregla mirándolo — hay que saber que miente.
+ *
+ * Así que esto borra y reescribe. Es idempotente por construcción, no por
+ * suerte: llamarlo diez veces seguidas deja lo mismo que llamarlo una.
+ *
+ * LO QUE NO BORRA, Y AHÍ ESTÁ LA COLUMNA `source` GANÁNDOSE EL SITIO: solo
+ * quita lo que tejió una regla. Lo que puso una persona a mano sobrevive, y
+ * tiene que sobrevivir — es lo único del grafo que no está escrito en ningún
+ * otro sitio y que no se puede volver a deducir. Perderlo al recalcular sería
+ * convertir una herramienta de mantenimiento en una de pérdida de datos.
+ *
+ * LA INVARIANTE QUE LO HACE SEGURO: todas las reglas ponen la TAREA como
+ * origen. Por eso el borrado de abajo puede mirar solo `source_id` y estar
+ * seguro de que no se lleva por delante un enlace ajeno que apuntara a esta
+ * tarea desde otro sitio. Si alguna regla futura invierte los extremos, este
+ * borrado deja de ser correcto — de ahí que esté dicho aquí y no solo en la
+ * cabeza de quien lo escribió.
+ *
+ * NO COMPRUEBA PERMISOS, y no le hace falta: cada `select` de abajo corre bajo
+ * RLS, así que solo ve lo que quien llama ve, y `tejer` pasa por las políticas
+ * de la 0043. Una regla no puede enlazar hacia algo que su dueño no alcanza.
+ */
+export async function retejerTarea(db: Db, tareaId: string): Promise<void> {
+  await db.query(
+    `delete from graph_links
+      where source_kind = 'tarea' and source_id = $1 and source = 'regla'`,
+    [tareaId],
+  );
+
+  // --- Lo que lleva pegado --------------------------------------------------
+  // `files.task_id` es la única arista de esta lista que el documento daba ya
+  // por existente: existía el dato, no el enlace. Ahora el grafo la ve.
+  const { rows: archivos } = await db.query<{ id: string }>(
+    `select id from files
+      where task_id = $1 and status = 'ready' and deleted_at is null`,
+    [tareaId],
+  );
+  for (const archivo of archivos) {
+    await tejer(db, {
+      origenTipo: "tarea",
+      origenId: tareaId,
+      destinoTipo: "archivo",
+      destinoId: archivo.id,
+      etiqueta: "lleva pegado",
+    });
+  }
+
+  // --- Dónde se está tocando ------------------------------------------------
+  // De las ramas apuntadas en la ficha (0045). Solo las que dicen en qué
+  // repositorio: una rama sin repositorio es un nombre, y un nombre no es un
+  // nodo del grafo.
+  const { rows: repos } = await db.query<{ github_repo_id: string }>(
+    `select distinct github_repo_id from task_branches
+      where task_id = $1 and github_repo_id is not null`,
+    [tareaId],
+  );
+  for (const repo of repos) {
+    await tejer(db, {
+      origenTipo: "tarea",
+      origenId: tareaId,
+      destinoTipo: "repositorio",
+      destinoId: repo.github_repo_id,
+      etiqueta: "se toca en",
+    });
+  }
+
+  /**
+   * --- Dónde quedó probada --------------------------------------------------
+   *
+   * De la evidencia (0045), cuando apunta a un repositorio CONECTADO.
+   *
+   * ES DETERMINISTA Y NO UNA ADIVINANZA, que es la raya que el diseño pide no
+   * cruzar (§7). No se interpreta la URL: se saca `owner/repo` de una dirección
+   * de GitHub y se busca una coincidencia EXACTA en los repositorios que esta
+   * organización ya conectó. Si no hay, no se teje nada — no se inventa un nodo
+   * ni se deja una arista «probablemente».
+   *
+   * El `join` corre bajo RLS, así que un repositorio de otra organización que
+   * se llamara igual no existiría para esta consulta.
+   */
+  const { rows: probada } = await db.query<{ id: string }>(
+    `select distinct r.id
+       from task_evidence e
+       join github_repos r
+         on lower(r.full_name) = lower(substring(e.url from 'github\\.com/([^/?#]+/[^/?#]+)'))
+      where e.task_id = $1 and e.url is not null`,
+    [tareaId],
+  );
+  for (const repo of probada) {
+    await tejer(db, {
+      origenTipo: "tarea",
+      origenId: tareaId,
+      destinoTipo: "repositorio",
+      destinoId: repo.id,
+      etiqueta: "se probó en",
+    });
+  }
+}

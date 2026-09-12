@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { olvidarNodo, retejerTarea } from "../lib/grafo.js";
 import { type Procedencia, anotar, recorta } from "../lib/actividad.js";
 import { announceBoardChange } from "../realtime/signaling.js";
 import { notificar } from "./notifications.js";
@@ -166,6 +167,12 @@ export async function anotarEvidencia(
     sujetoNombre: datos.titulo,
     detalle: { tipo: e.tipo, url: e.url ?? null },
   });
+
+  // Las dos puertas de la evidencia —añadirla suelta y cerrar con ella— pasan
+  // por aquí, así que tejer en este punto y no en cada ruta es lo que evita que
+  // cerrar una tarea con su PR deje el grafo sin la arista que sí aparece al
+  // adjuntar el mismo PR por separado.
+  await retejerTarea(db, datos.taskId);
 }
 
 /** Igual que en archivos: solo entran etiquetas de la organización del tablero. */
@@ -732,6 +739,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         detalle: { rama: recorta(body.nombre, 40), repoId: body.repoId ?? null, estado: body.estado },
       });
 
+      await retejerTarea(db, taskId);
+
       return reply.status(201).send({ task: await loadTask(db, taskId), ramaId: rows[0]!.id });
     });
   });
@@ -758,6 +767,9 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         [ramaId, body.estado],
       );
       if (!rows[0]) throw notFound("esa rama no existe");
+      // Sin retejer a propósito: el enlace dice «esta tarea se toca en este
+      // repositorio», y eso sigue siendo verdad cuando la rama se descarta. Un
+      // camino que se probó y se abandonó se tocó igual.
       return { task: await loadTask(db, rows[0].task_id) };
     });
   });
@@ -765,7 +777,15 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/ramas/:ramaId", async (request, reply) => {
     const userId = requireUser(request);
     const { ramaId } = parseParams(z.object({ ramaId: uuid }), request.params);
-    await withUser(userId, (db) => db.query("delete from task_branches where id = $1", [ramaId]));
+    await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ task_id: string }>(
+        "delete from task_branches where id = $1 returning task_id",
+        [ramaId],
+      );
+      // Quitarla sí, porque quitarla dice que nunca estuvo. Y si RLS no dejó
+      // borrar, no hay filas y no hay nada que rehacer.
+      if (rows[0]) await retejerTarea(db, rows[0].task_id);
+    });
     return reply.status(204).send();
   });
 
@@ -806,9 +826,13 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/evidencia/:evidenciaId", async (request, reply) => {
     const userId = requireUser(request);
     const { evidenciaId } = parseParams(z.object({ evidenciaId: uuid }), request.params);
-    await withUser(userId, (db) =>
-      db.query("delete from task_evidence where id = $1", [evidenciaId]),
-    );
+    await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ task_id: string }>(
+        "delete from task_evidence where id = $1 returning task_id",
+        [evidenciaId],
+      );
+      if (rows[0]) await retejerTarea(db, rows[0].task_id);
+    });
     return reply.status(204).send();
   });
 
@@ -881,39 +905,63 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/tasks/:taskId", async (request, reply) => {
     const userId = requireUser(request);
     const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
-    await withUser(userId, async (db) => {
-      // Se lee antes de borrar: después no queda de dónde sacar ni el título ni
-      // el espacio, y un renglón que dice «borró algo» no es un renglón.
-      const { rows } = await db.query<{
-        workspace_id: string;
-        organization_id: string;
-        title: string;
-      }>(
-        `select t.workspace_id, w.organization_id, t.title
-           from tasks t join workspaces w on w.id = t.workspace_id
-          where t.id = $1`,
-        [taskId],
-      );
-      const previa = rows[0];
+    try {
+      await withUser(userId, async (db) => {
+        // Se lee antes de borrar: después no queda de dónde sacar ni el título ni
+        // el espacio, y un renglón que dice «borró algo» no es un renglón.
+        const { rows } = await db.query<{
+          workspace_id: string;
+          organization_id: string;
+          title: string;
+        }>(
+          `select t.workspace_id, w.organization_id, t.title
+             from tasks t join workspaces w on w.id = t.workspace_id
+            where t.id = $1`,
+          [taskId],
+        );
+        const previa = rows[0];
+        if (!previa) return;
 
-      const { rowCount } = await db.query("delete from tasks where id = $1", [taskId]);
-      if (!rowCount || !previa) return;
+        // Antes del borrado, y no después: ver `olvidarNodo`. Cuando la fila ya
+        // no está, sus enlaces dejan de ser alcanzables —la política exige ver
+        // los dos extremos— y se quedan en la tabla para siempre.
+        await olvidarNodo(db, "tarea", taskId);
 
-      await anotar(db, {
-        workspaceId: previa.workspace_id,
-        organizationId: previa.organization_id,
-        actorId: userId,
-        verbo: "borro",
-        sujeto: "tarea",
-        // Sin `sujetoId`: la tarea ya no existe, y apuntar a una fila que no
-        // está invita a hacerle un `join` que no devolverá nada.
-        sujetoNombre: previa.title,
+        const { rowCount } = await db.query("delete from tasks where id = $1", [taskId]);
+        // Si RLS no dejó borrar, lo de arriba habría tirado los enlaces de una
+        // tarea que sigue existiendo. Se sale por excepción para que la
+        // transacción de `withUser` se deshaga entera; fuera se vuelve al 204 de
+        // siempre, que es lo que esta ruta contestaba ya en ese caso.
+        if (!rowCount) throw new NoSeBorro();
+
+        await anotar(db, {
+          workspaceId: previa.workspace_id,
+          organizationId: previa.organization_id,
+          actorId: userId,
+          verbo: "borro",
+          sujeto: "tarea",
+          // Sin `sujetoId`: la tarea ya no existe, y apuntar a una fila que no
+          // está invita a hacerle un `join` que no devolverá nada.
+          sujetoNombre: previa.title,
+        });
+        announceBoardChange(previa.workspace_id, "deleted", taskId);
       });
-      announceBoardChange(previa.workspace_id, "deleted", taskId);
-    });
+    } catch (fallo) {
+      if (!(fallo instanceof NoSeBorro)) throw fallo;
+    }
     return reply.status(204).send();
   });
 }
+
+/**
+ * «La tarea no se borró, deshaz la transacción.»
+ *
+ * No es un error de la petición —quien no puede borrar recibe el mismo 204 que
+ * antes—, sino la forma de que el `rollback` de `withUser` recupere los enlaces
+ * que se quitaron por adelantado. Tiene clase propia y no es un `Error` suelto
+ * para que el `catch` de arriba no se trague, de paso, un fallo de verdad.
+ */
+class NoSeBorro extends Error {}
 
 // ---------------------------------------------------------------------------
 // Lo que comparten la ruta y el asistente de dentro del producto
