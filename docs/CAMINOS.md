@@ -274,6 +274,35 @@ que la pantalla. No reordenar en el cliente.
 
 ---
 
+## 5bis. URGENTE — el tronco no arranca
+
+**`claude/sales-control-workspace-platform-i99syv` tiene `actividadRoutes`
+registrado dos veces** en `apps/api/src/server.ts` (líneas 163 y 165). Fastify
+rechaza declarar dos veces la misma ruta, así que **la API se cae nada más
+empezar**. Comprobado, no deducido: `Method 'GET' already declared for route
+'/workspaces/:workspaceId/actividad'`.
+
+Es de la fusión de los dos caminos —una línea que entró por cada lado— y lleva
+ahí desde entonces. Nada lo cazó porque **nada arrancaba el servidor**: compilar
+no lo ve (registrar dos veces el mismo módulo es correcto para TypeScript) y
+ninguna prueba levanta el HTTP, todas hablan con Postgres directamente. El único
+sitio donde se veía era al desplegar.
+
+Arreglado en mi rama (`d8e0674`), junto con el paso de CI que faltaba:
+
+```
+npm run arranca --workspace apps/api
+```
+
+Construye el servidor entero y comprueba que se queda escuchando. Nada más.
+
+**Lo que hay que hacer con esto:** si vas a sacar algo a producción antes de que
+se fusione mi rama, quita la línea duplicada en la tuya primero. Y quien fusione,
+que no dé por bueno un verde de CI anterior a este commit — ese verde no decía
+que la API arrancara, porque nadie se lo había preguntado.
+
+---
+
 ## 6. Pedido a funcionalidades (escribir aquí)
 
 *(vacío — la sesión de interfaz apunta aquí lo que necesite de la API, con la
@@ -367,13 +396,19 @@ quién puede abrir la puerta de una organización— **llevaba desde la fusión 
 ejecutarse**, en verde, sin que nada lo dijera. Ahora corre el script de la raíz,
 que encadena las dos.
 
-**4. Devolver a `que_ha_pasado` el alcance que perdió en la fusión.** Quedó la
-versión desplegada, que pregunta a `/workspaces/:id/actividad` — **un espacio
-cada vez**. Se perdieron tres cosas de la otra: cruzar todas las organizaciones
-(«¿qué me he perdido en TODO?», que es la pregunta del lunes), el filtro por
-persona y el filtro por verbo. La API ya las sirve —
-`/organizations/:orgId/activity` y `/organizations/:orgId/actividad/:personaId`—,
-así que es trabajo de herramienta, no de base.
+~~**4. Devolver a `que_ha_pasado` el alcance que perdió en la fusión.**~~
+**Hecho** (`d8e0674`). Ruta nueva `GET /me/actividad`, que cruza organizaciones
+sin un solo `where organization_id` —va por `withUser`, las políticas deciden—,
+más los filtros por persona y por verbo, y acotar a una organización sin tener
+que nombrar un espacio.
+
+Resultó ser más que un cambio de ruta: la herramienta **resolvía un espacio
+siempre**, así que la pregunta más frecuente era la que peor contestaba —o
+adivinaba (si solo había uno) o se plantaba pidiendo elegir entre cinco—. Ahora
+solo resuelve si le nombras uno.
+
+De aquí salió el hallazgo del §5bis: al comprobar que la ruta nueva se registra
+bien, el servidor no arrancaba. Llevaba así desde la fusión.
 
 **5. El diario del proyecto, cronológico.** Agrupar el registro por semana. La
 versión en prosa necesita al agente y va después.
