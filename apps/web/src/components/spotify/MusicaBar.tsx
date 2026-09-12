@@ -49,7 +49,13 @@ export function MusicaBar() {
 
   return (
     <div
-      className={`fixed inset-x-0 z-40 flex justify-center px-4 transition-[bottom] duration-200
+      // Posición en línea: este elemento es hijo directo de `body` —los
+      // proveedores que lo envuelven no pintan DOM— y `body > * { position:
+      // relative }` vive fuera de toda capa CSS, así que gana a la utilidad
+      // `fixed` de Tailwind. Sin esto la barra cae en el flujo del documento en
+      // vez de quedarse pegada a la ventana. Ver LO-QUE-HAY-Y-LO-QUE-FALTA.md.
+      style={{ position: "fixed" }}
+      className={`inset-x-0 z-40 flex justify-center px-4 transition-[bottom] duration-200
         ${hayLlamada ? "bottom-[4.5rem]" : "bottom-4"}`}
     >
       <div className="cristal flex max-w-[min(24rem,100%)] items-center gap-2 rounded-full py-1.5 pl-2 pr-1.5">

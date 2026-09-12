@@ -25,6 +25,9 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   mover_tarea: "moviendo una tarjeta",
   actualizar_tarea: "actualizando una tarea",
   dibujar_arquitectura: "dibujando la arquitectura",
+  ver_entornos: "mirando dónde está desplegado",
+  sincronizar_entornos: "preguntándole a GitHub por los despliegues",
+  crear_entorno: "montando un entorno nuevo",
 };
 
 /**
