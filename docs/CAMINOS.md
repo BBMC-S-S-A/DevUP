@@ -303,6 +303,24 @@ que la API arrancara, porque nadie se lo había preguntado.
 
 ---
 
+### La portada de una organización ya tiene datos
+
+`GET /organizations/:orgId/panorama?dias=7` devuelve espacios, gente, lo que está
+en marcha y lo que lleva parado, en una petición. Es lo que hoy contesta la
+pantalla que solo lista espacios.
+
+**El rediseño entero está en `docs/INTERFAZ-EL-FLUJO.md`**: el orden del menú, los
+canales dentro de DevCall, subir de un espacio a su organización, separar la
+persona del panel técnico, integraciones en un solo sitio y el login con el
+edificio. Con el porqué de cada decisión y con la prioridad si no cabe todo.
+
+**Léete el §0 antes de tocar nada de eso.** El Panel (0019/0020) y la Mesa (0025)
+son la misma idea construida dos veces, y hay una decisión pendiente sobre
+fusionarlas. Lo que se monte encima de cualquiera de las dos habrá que rehacerlo
+si se fusionan.
+
+---
+
 ## 6. Pedido a funcionalidades (escribir aquí)
 
 *(vacío — la sesión de interfaz apunta aquí lo que necesite de la API, con la
