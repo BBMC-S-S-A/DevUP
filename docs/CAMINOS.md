@@ -238,3 +238,43 @@ es de este espacio, es de todos—:
 demás de esa lista es de un espacio de trabajo concreto. Inicio no: es lo que
 contesta «¿qué tengo, en todos?». Ponerlo entre los de un espacio lo convierte
 en una pantalla más de ese espacio, que es justo lo que no es.
+
+---
+
+## 6. Lo que la web necesita de la API y no construye por su cuenta
+
+Esta sección existe por la lección del registro de actividad: **construirlo yo
+es literalmente cómo acabamos con dos**. Así que lo que falte se escribe aquí
+como pregunta que hay que poder contestar, no como esquema propuesto.
+
+### 6.1 · «¿Quién ha trabajado en esta rama?» — pendiente
+
+**La pregunta:** abierta una categoría (o área), quiénes han tocado sus tareas
+últimamente y cuándo fue la última vez.
+
+**Por qué no se puede hoy.** El recuento por persona
+(`GET /organizations/:id/activity/summary`) agrupa por actor, verbo y
+procedencia, y recorta por organización, espacio y días. **No hay por dónde
+entrar la categoría**, y cruzarlo en la pantalla exigiría traerse el tablero
+entero y volver a unir a mano lo que la base ya sabe unir. Eso es exactamente
+la clase de trabajo que acaba convertido en una segunda fuente de verdad.
+
+**Lo que NO hace falta:** un número por persona. El desglose ya está resuelto
+donde tiene sentido, y una cifra única al lado de una rama tendría el mismo
+problema que tendría al lado de una cara.
+
+**Estado en la web:** la ficha de la persona ya enseña su rastro
+(`/organizations/:id/actividad/:persona`). Lo de la rama espera a esto.
+
+### 6.2 · Las dos categorías: no se tapa con interfaz
+
+No es una petición, es una advertencia para quien llegue a esta sección
+buscando qué construir. `tags.owner_id` y `task_categories` **se ven iguales y
+no se portan igual**: la segunda hereda el responsable, la primera no la lee
+nadie para asignar. Quien archive en la etiqueta «DevVerse» esperando que caiga
+en su jefe de rama se encontrará una tarea sin responsable y nada se lo
+explicará.
+
+La web **no** va a disimularlo enseñando un delegado que no va a heredar nada.
+Mientras la decisión no se tome, el riesgo corre y se ve. Taparlo con interfaz
+lo convertiría en un fallo silencioso, que es peor que uno visible.

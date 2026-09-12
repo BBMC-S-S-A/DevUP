@@ -14,6 +14,7 @@ import {
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useRecurso } from "@/lib/datos";
+import { verboLegible } from "@/lib/actividad";
 import { fechaCorta, hoyLocal } from "@/lib/fechas";
 import { IconoDeTipo, TIPO_EN_PALABRAS, tonoDePrioridad } from "@/components/tasks/ficha";
 import type { TipoDeTarea } from "@/lib/api";
@@ -97,23 +98,6 @@ const VERBOS: { verbo: string; texto: string }[] = [
 ];
 
 /** La frase de un renglón, compuesta aquí. En pasado, como el verbo guardado. */
-const EN_CASTELLANO: Record<string, string> = {
-  creo: "creó",
-  movio: "movió",
-  cerro: "cerró",
-  reabrio: "reabrió",
-  asigno: "asignó",
-  desasigno: "quitó el responsable de",
-  renombro: "renombró",
-  comento: "comentó en",
-  adjunto: "adjuntó a",
-  etiqueto: "etiquetó",
-  borro: "borró",
-  reclasifico: "cambió de área",
-  priorizo: "repriorizó",
-  enlazo: "enlazó una rama a",
-  evidencio: "dejó prueba en",
-};
 
 const PERIODOS = [7, 30, 90] as const;
 
@@ -457,7 +441,7 @@ function LoUltimo({ hechos, dias }: { hechos: Hecho[]; dias: number }) {
             <span className="min-w-0 flex-1">
               {/* El verbo en gris y el nombre en tinta: lo que se busca al
                   repasar es QUÉ cosa, no qué se le hizo. */}
-              <span className="text-muted">{EN_CASTELLANO[h.verbo] ?? h.verbo}</span>{" "}
+              <span className="text-muted">{verboLegible(h.verbo)}</span>{" "}
               <span className="text-ink">{h.sujetoNombre || "algo sin nombre"}</span>
               {h.espacio && <span className="ml-1.5 text-faint">· {h.espacio}</span>}
             </span>
