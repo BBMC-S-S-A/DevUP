@@ -74,6 +74,7 @@ export function ParticipantVideos({
     | "displayName"
     | "muted"
     | "connectionState"
+    | "rtt"
     | "camera"
     | "sharing"
     | "audioStream"
@@ -109,6 +110,7 @@ export function ParticipantVideos({
           isSelf={isSelf}
           muted={participant.muted}
           connectionState={participant.connectionState}
+          rtt={participant.rtt}
           speaking={speaking}
           videoStream={tile.videoStream}
           spotlight={tile.kind === "screen" && spotlightScreen}
@@ -127,6 +129,7 @@ function ParticipantTile({
   isSelf,
   muted,
   connectionState,
+  rtt,
   speaking,
   videoStream,
   spotlight = false,
@@ -137,6 +140,7 @@ function ParticipantTile({
   isSelf: boolean;
   muted: boolean;
   connectionState: Participant["connectionState"];
+  rtt: Participant["rtt"];
   speaking: boolean;
   videoStream: MediaStream | null;
   spotlight?: boolean;
@@ -335,6 +339,22 @@ function ParticipantTile({
           <span className="min-w-0 truncate text-xs font-medium">{displayName}</span>
           {isSelf && <Rotulo>tú</Rotulo>}
           {kind === "camera" && <Rotulo>cámara</Rotulo>}
+          {/* La latencia hasta esa persona. Cuando alguien se entrecorta, lo
+              primero que pasa es que nadie sabe si es él, si eres tú o si es la
+              sala; este número lo contesta sin preguntar «¿me escucháis bien?»
+              tres veces.
+
+              Solo en los ajenos: la ida y vuelta hasta uno mismo no existe. Y
+              solo en la baldosa de voz, porque en la de cámara o pantalla sería
+              el mismo dato dos veces para la misma persona. */}
+          {!isSelf && kind === "voice" && rtt !== null && (
+            <span
+              title={`${rtt} ms de ida y vuelta`}
+              className={`shrink-0 font-mono text-[10px] tabular-nums ${tonoRtt(rtt)}`}
+            >
+              {rtt} ms
+            </span>
+          )}
         </span>
 
         {connecting ? (
@@ -369,4 +389,17 @@ function ParticipantTile({
       </div>
     </li>
   );
+}
+
+/**
+ * El color de la latencia. Los umbrales no son redondos por gusto: por debajo
+ * de 150 ms una conversación se siente natural, entre 150 y 300 se empieza a
+ * pisar la palabra del otro, y por encima de 300 ya se nota como retardo aunque
+ * el audio llegue entero. Es lo que mide la incomodidad, no la calidad de la
+ * red.
+ */
+function tonoRtt(ms: number): string {
+  if (ms < 150) return "text-live";
+  if (ms < 300) return "text-warn";
+  return "text-danger";
 }
