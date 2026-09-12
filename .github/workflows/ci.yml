@@ -79,6 +79,15 @@ jobs:
         # pertenece a ese canal.
         run: npm run test:world
 
+      - name: El registro de actividad
+        # No prueba el aislamiento —eso es de test:rls— sino el camino de
+        # escritura: que mover a una columna terminal se anote como «cerró» y
+        # no como «movió», que reordenar no ensucie la historia, y que lo que
+        # hace el asistente quede marcado como suyo. Las tres se rompen en
+        # silencio: la auditoría seguiría enseñando un número, y un número
+        # siempre parece verdad.
+        run: npm run test:actividad --workspace apps/api
+
       - name: El criterio de migraciones
         # Comprueba el analizador que se le aplica al repositorio de un
         # cliente, y lo hace contra nuestras propias migraciones: si a las

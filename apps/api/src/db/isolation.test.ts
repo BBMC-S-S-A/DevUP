@@ -2136,6 +2136,90 @@ async function main(): Promise<void> {
     });
     check("un codigo ya canjeado no se puede volver a usar", reintento === 0);
 
+    // ---------------------------------------------------------------------
+    // El registro de actividad (0038)
+    //
+    // Tiene DOS llaves y las dos hay que fijarlas aquí, porque la de arriba
+    // sola parece suficiente y no lo es. Pertenecer a la organizacion deja ver
+    // la actividad de la organizacion; sin la segunda —poder acceder al
+    // espacio— la historia del "Cuaderno de Ana" se leeria desde toda Acme.
+    // Carla es de Acme y no ve ese espacio: es exactamente el caso.
+    //
+    // Y se comprueba tambien que NO se puede editar ni borrar. Sin politica de
+    // UPDATE ni de DELETE, Postgres deniega — pero eso hay que fijarlo con una
+    // prueba antes de que alguien las añada "para poder corregir una errata",
+    // que es como un registro deja de serlo.
+    console.log("\nEl registro de actividad");
+
+    const anotarComo = (quien: string, workspace: string | null, org: string, resumen: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ id: string }>(
+          `insert into activity
+             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id, resumen)
+           values ($1, $2, $3, 'tarea.cerrada', 'tarea', $4, $5)
+           returning id`,
+          [org, workspace, quien, acme.soloTask, resumen],
+        );
+        return rows[0]!.id;
+      });
+
+    const enElCuaderno = await anotarComo(ana, acme.soloWs, acme.org, "cerró algo privado");
+    const enElCompartido = await anotarComo(ana, acme.ws, acme.org, "cerró algo del equipo");
+
+    const veActividad = (quien: string, id: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query("select id from activity where id = $1", [id]);
+        return rows.length;
+      });
+
+    check("Ana ve la actividad de su cuaderno", (await veActividad(ana, enElCuaderno)) === 1);
+    check(
+      "Carla, de la MISMA organizacion, no ve la actividad del cuaderno de Ana",
+      (await veActividad(carla, enElCuaderno)) === 0,
+    );
+    check(
+      "pero si ve la del workspace que comparten",
+      (await veActividad(carla, enElCompartido)) === 1,
+    );
+    check(
+      "Bruno, de otra organizacion, no ve ninguna de las dos",
+      (await veActividad(bruno, enElCompartido)) === 0 &&
+        (await veActividad(bruno, enElCuaderno)) === 0,
+    );
+
+    // Escribir en nombre de otro seria escribir participacion falsa.
+    const suplantacion = await withUser(carla, async (db) => {
+      try {
+        await db.query(
+          `insert into activity
+             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, resumen)
+           values ($1, $2, $3, 'tarea.cerrada', 'tarea', 'lo hizo Ana, dice Carla')`,
+          [acme.org, acme.ws, ana],
+        );
+        return "coló";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("Carla no puede anotar actividad a nombre de Ana", suplantacion === "rechazado");
+
+    // Un registro que se puede editar es una opinion sobre el pasado.
+    const editado = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "update activity set resumen = 'otra cosa' where id = $1",
+        [enElCompartido],
+      );
+      return rowCount ?? 0;
+    });
+    check("ni la propia Ana puede reescribir lo que anoto", editado === 0);
+
+    const borrado = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("delete from activity where id = $1", [enElCompartido]);
+      return rowCount ?? 0;
+    });
+    check("ni borrarlo", borrado === 0);
+    check("y sigue ahi despues de los dos intentos", (await veActividad(ana, enElCompartido)) === 1);
+
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

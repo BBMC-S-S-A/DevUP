@@ -2,6 +2,7 @@ import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
+import { type Origen, anotar, recorta } from "../lib/actividad.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { notificar } from "./notifications.js";
 
@@ -249,10 +250,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const body_ = body as Record<string, unknown>;
 
     return withUser(userId, async (db) => {
-      const { rows: previa } = await db.query<{ assignee_id: string | null }>(
-        "select assignee_id from tasks where id = $1",
-        [taskId],
-      );
+      const { rows: previa } = await db.query<{
+        assignee_id: string | null;
+        title: string;
+        workspace_id: string;
+      }>("select assignee_id, title, workspace_id from tasks where id = $1", [taskId]);
       const anterior = previa[0]?.assignee_id ?? null;
 
       const { rowCount } = await db.query(
@@ -288,6 +290,22 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         await avisarAsignacion(db, taskId, body.assigneeId, userId, request.log);
       }
 
+      // El título del resumen es el de ANTES de este `patch` si también se
+      // renombró en la misma llamada. Es lo correcto: la asignación ocurrió
+      // sobre la tarjeta que existía, no sobre la que queda después.
+      if ("assigneeId" in body_ && (body.assigneeId ?? null) !== anterior) {
+        const titulo = recorta(previa[0]?.title ?? "");
+        await anotar(db, {
+          workspaceId: previa[0]!.workspace_id,
+          actorId: userId,
+          verbo: "tarea.asignada",
+          objetoTipo: "tarea",
+          objetoId: taskId,
+          resumen: body.assigneeId ? `asignó «${titulo}»` : `quitó el responsable de «${titulo}»`,
+          datos: { assigneeId: body.assigneeId ?? null, anterior },
+        });
+      }
+
       return { task: await loadTask(db, taskId) };
     });
   });
@@ -310,14 +328,37 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     );
 
     return withUser(userId, async (db) => ({
-      task: await moverTareaEnDb(db, taskId, body.columnId, body.afterTaskId ?? null),
+      task: await moverTareaEnDb(db, taskId, body.columnId, body.afterTaskId ?? null, {
+        actorId: userId,
+      }),
     }));
   });
 
   app.delete("/tasks/:taskId", async (request, reply) => {
     const userId = requireUser(request);
     const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
-    await withUser(userId, (db) => db.query("delete from tasks where id = $1", [taskId]));
+    await withUser(userId, async (db) => {
+      // Se lee antes de borrar porque después no hay a quién preguntarle el
+      // título, y un «borró una tarea» sin decir cuál no sirve de nada.
+      const { rows } = await db.query<{ title: string; workspace_id: string }>(
+        "select title, workspace_id from tasks where id = $1",
+        [taskId],
+      );
+      const { rowCount } = await db.query("delete from tasks where id = $1", [taskId]);
+      if (rowCount === 0 || !rows[0]) return;
+
+      await anotar(db, {
+        workspaceId: rows[0].workspace_id,
+        actorId: userId,
+        verbo: "tarea.borrada",
+        objetoTipo: "tarea",
+        // Sin `objetoId`: la fila a la que apuntaría ya no existe, y guardar
+        // el identificador de algo borrado invita a intentar resolverlo.
+        objetoId: null,
+        resumen: `borró «${recorta(rows[0].title)}»`,
+        datos: { taskId },
+      });
+    });
     return reply.status(204).send();
   });
 }
@@ -346,6 +387,9 @@ export async function crearTareaEnDb(
     dueDate: string | null;
     tagIds: string[];
     autor: string;
+    /** Quién lo pidió de verdad. El asistente pasa `agente` para que su
+     *  trabajo no se sume al de la persona en la auditoría. */
+    origen?: Origen;
   },
   log?: FastifyBaseLogger,
 ): Promise<Record<string, unknown>> {
@@ -372,6 +416,36 @@ export async function crearTareaEnDb(
   const taskId = rows[0]!.id;
   await attachTaskTags(db, taskId, datos.tagIds);
   if (datos.assigneeId) await avisarAsignacion(db, taskId, datos.assigneeId, datos.autor, log);
+
+  await anotar(db, {
+    workspaceId: datos.workspaceId,
+    actorId: datos.autor,
+    origen: datos.origen ?? "persona",
+    verbo: "tarea.creada",
+    objetoTipo: "tarea",
+    objetoId: taskId,
+    resumen: `creó «${recorta(datos.title)}»`,
+    datos: { columnId: datos.columnId, assigneeId: datos.assigneeId },
+  });
+
+  // Asignar al crear también es una asignación. Se anota aparte y no solo
+  // dentro de `datos` para que la regla quede simple: TODA asignación es una
+  // fila `tarea.asignada`. Si el nacimiento fuera la excepción, cualquier
+  // consulta de «qué me han asignado» tendría que acordarse de mirar dos
+  // verbos, y tarde o temprano alguna se olvidaría de uno.
+  if (datos.assigneeId) {
+    await anotar(db, {
+      workspaceId: datos.workspaceId,
+      actorId: datos.autor,
+      origen: datos.origen ?? "persona",
+      verbo: "tarea.asignada",
+      objetoTipo: "tarea",
+      objetoId: taskId,
+      resumen: `asignó «${recorta(datos.title)}»`,
+      datos: { assigneeId: datos.assigneeId, anterior: null },
+    });
+  }
+
   return loadTask(db, taskId);
 }
 
@@ -380,7 +454,27 @@ export async function moverTareaEnDb(
   taskId: string,
   columnId: string,
   afterTaskId: string | null,
+  quien?: { actorId: string | null; origen?: Origen },
 ): Promise<Record<string, unknown>> {
+  // El estado de partida, ANTES de tocar nada: de qué columna sale y si esa
+  // columna terminaba. Es lo que convierte un movimiento en «cerró» o
+  // «reabrió» en vez de en un genérico «movió», que es la diferencia entre
+  // poder contestar «¿qué cerró Ana esta semana?» y no poder.
+  const { rows: antesRows } = await db.query<{
+    title: string;
+    column_id: string;
+    workspace_id: string;
+    columna: string;
+    terminal: boolean;
+  }>(
+    `select t.title, t.column_id, t.workspace_id, c.name as columna, c.is_terminal as terminal
+       from tasks t join task_columns c on c.id = t.column_id
+      where t.id = $1`,
+    [taskId],
+  );
+  const antes = antesRows[0];
+  if (!antes) throw notFound("tarea no encontrada");
+
   const { rows: previousRows } = await db.query<{ position: number }>(
     "select position from tasks where id = $1 and column_id = $2",
     [afterTaskId, columnId],
@@ -409,6 +503,41 @@ export async function moverTareaEnDb(
     [taskId, columnId, position],
   );
   if (rowCount === 0) throw notFound("tarea no encontrada");
+
+  // Reordenar dentro de la misma columna no se anota. Arrastrar una tarjeta
+  // dos puestos arriba no es un hecho que nadie vaya a querer recordar, y
+  // anotarlo llenaría la historia de ruido hasta esconder lo que sí importa.
+  if (quien && antes.column_id !== columnId) {
+    const { rows: destinoRows } = await db.query<{ name: string; is_terminal: boolean }>(
+      "select name, is_terminal from task_columns where id = $1",
+      [columnId],
+    );
+    const destino = destinoRows[0];
+
+    const cierra = destino?.is_terminal === true && !antes.terminal;
+    const reabre = destino?.is_terminal === false && antes.terminal;
+    const verbo = cierra ? "tarea.cerrada" : reabre ? "tarea.reabierta" : "tarea.movida";
+    const titulo = recorta(antes.title);
+    const resumen = cierra
+      ? `cerró «${titulo}»`
+      : reabre
+        ? `reabrió «${titulo}»`
+        : `movió «${titulo}» de ${antes.columna} a ${destino?.name ?? "otra columna"}`;
+
+    await anotar(db, {
+      workspaceId: antes.workspace_id,
+      actorId: quien.actorId,
+      origen: quien.origen ?? "persona",
+      verbo,
+      objetoTipo: "tarea",
+      objetoId: taskId,
+      resumen,
+      datos: {
+        desde: { columnId: antes.column_id, nombre: antes.columna, terminal: antes.terminal },
+        hasta: { columnId, nombre: destino?.name ?? null, terminal: destino?.is_terminal ?? null },
+      },
+    });
+  }
 
   return loadTask(db, taskId);
 }
