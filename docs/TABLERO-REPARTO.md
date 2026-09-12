@@ -134,6 +134,79 @@ trabaja, no como una lista de deseos.
 
 ---
 
+## 3bis. Lo que necesita variables de entorno · Juan Bonilla
+
+**Por qué van todas juntas y a la misma persona.** No es un criterio temático
+—hay correo, vídeo, música y respaldos mezclados— sino de acceso: son las
+tareas que **no se pueden terminar desde el editor**. Cada una acaba en un
+panel de un tercero, una clave pegada en el entorno de producción y un
+despliegue para comprobar que quedó bien. Repartirlas por área significaría
+que tres personas piden las mismas credenciales y ninguna sabe cuáles están ya
+puestas. Van al área de profundización porque es donde ya viven las
+integraciones.
+
+**Todas tienen la misma forma de «hecho»**: la variable puesta en producción,
+anotada en `.env.example` con su comentario, y **comprobada contra el sistema
+de verdad** —no «la puse», sino «mandé un correo y llegó»—. Lo sacado del
+código: `apps/api/src/env.ts` declara 37 variables y estas son las que hoy
+están vacías o apuntando a local.
+
+- **TURN de verdad, propio o gestionado** — `TURN_URLS` + `TURN_SECRET`, o
+  `METERED_APP_NAME` + `METERED_API_KEY`. Hoy están las cuatro vacías y solo
+  hay STUN. El propio `env.ts` avisa al arrancar en producción: sin TURN «las
+  llamadas conectarán pero no se oirá nada en NAT simétrico ni en buena parte
+  de las redes móviles». Es el fallo que más caro sale de descubrir en una
+  demo. **Con credenciales temporales, no fijas**: `TURN_STATIC_*` es solo para
+  el coturn de desarrollo y en producción el arranque lo rechaza.
+- **Correo que salga de verdad** — `MAIL_API_KEY` (+ `MAIL_API_URL`,
+  `MAIL_FROM`) o `SMTP_URL`. Sin esto las invitaciones y los correos de
+  recuperación **se escriben en el registro** y nadie los recibe. La vía de
+  producción es la API HTTP, no SMTP: las plataformas gestionadas bloquean los
+  puertos 25/465/587 y ahí SMTP no falla, se queda esperando —la invitación se
+  crea y nadie se entera de que no llegó—. Bloquea el código corto de
+  invitación: sin correo, el código hay que dictarlo por teléfono siempre.
+- **Respaldos fuera de la máquina, con restauración probada** —
+  `RUTA_RESPALDOS`. Los guiones ya existen (`scripts/respaldo-*.sh`,
+  `probar-restauracion.sh`), pero por defecto escriben en `./respaldos`, **el
+  mismo disco que la base y el almacén**. Un respaldo que muere con lo que
+  respalda no es un respaldo. La tarea no está hecha hasta que
+  `probar-restauracion.sh` levanta una copia desde el destino remoto.
+- **Custodia y rotación de `VAULT_MASTER_KEY`** — Descifra todas las
+  credenciales de terceros guardadas en la bóveda: perderla es perderlas
+  todas, y cambiarla sin rotar también. `rotar-clave-boveda.mjs` ya existe;
+  falta decidir dónde vive la clave, quién la tiene y cada cuánto se rota, y
+  escribirlo. Es media hora de decisión y cero de código, pero mientras no
+  esté, hay un solo punto de fallo sin dueño.
+- **Entrar con Google** — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GOOGLE_REDIRECT_URI`. Sin las tres la ruta devuelve 404 y la web no enseña
+  el botón, que es el comportamiento correcto. Ojo con la de redirección:
+  coincide carácter a carácter o el error es `redirect_uri_mismatch`, que no
+  dice cuál esperaba.
+- **Spotify, y el trámite de sacarlo del modo desarrollo** —
+  `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`. Aquí la
+  variable es lo fácil: en modo desarrollo Spotify solo admite **cinco cuentas
+  dadas de alta a mano**, y salir de ahí exige cifras de organización grande.
+  La tarea real es averiguar hasta dónde llegamos y decidir si la zona de
+  música sale con Spotify limitado a los cinco o solo con YouTube.
+- **YouTube como segunda fuente** — `YOUTUBE_API_KEY`. La que no tiene lista
+  blanca, así que es la que hace que la música funcione para quien se registre
+  hoy. Sin ella, buscar contesta que no está configurada y pegar un enlace
+  tampoco funciona.
+- **Almacén de producción apuntando a un bucket real** — `S3_ENDPOINT`,
+  `S3_ENDPOINT_INTERNO`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+  `S3_SECRET_ACCESS_KEY`. Las dos direcciones no son redundancia: la pública la
+  abre el navegador de cada persona con las URLs firmadas, la interna es por
+  donde el servidor se habla a sí mismo. Con una sola, comprobar una subida
+  salía a internet y volvía —154 ms medidos contra 3 ms— y cualquier corte de
+  salida se convertía en «la subida no llegó» sobre un archivo bien guardado.
+- **Tope de sala para compartir pantalla** — La variable y que **se vea en la
+  interfaz**. En malla, compartir con seis son cinco subidas de vídeo desde un
+  portátil. Está también arriba, en la lista general, porque tiene mitad de
+  código; se repite aquí porque sin la variable no se puede ajustar sin
+  desplegar.
+
+---
+
 ## 4. Dos cosas sobre cómo usar esto
 
 **Las tareas «hechas» van al tablero igualmente.** No es para inflar la lista:
