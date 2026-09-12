@@ -380,24 +380,50 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               usa a diario. Ahora es una sección más de esta misma barra, y el
               rol para «Ajustes» se pide aparte porque no hay ruta para una
               organización sola (mismo motivo que el armazón de organización). */}
+          {/* DOS GRUPOS Y NO UNO, porque no son lo mismo.
+              GitHub, Infraestructura, Base de datos, Integraciones y Auditoría
+              son de ESTE proyecto desde la migración 0035 — el de al lado
+              enseña otra cosa— y estaban bajo un rótulo que decía
+              «Organización». Un rótulo que miente en la barra cuesta más que
+              uno que falta, porque nadie lo comprueba: se lee una vez al
+              aprender la aplicación y ya no se vuelve a mirar.
+              Ventas y Noticias sí son de la empresa entera, y se quedan abajo
+              con Ajustes y Mi cuenta. */}
           {rolOrganizacion && (
-            <div>
-              <GrupoRotulo titulo="Organización" />
-              {/* `div` y no `ul`: `NavegacionOrganizacion` no envuelve sus
-                  destinos en `<li>` —los mismos elementos van también sueltos
-                  en el armazón de organización—, así que un `<ul>` aquí
-                  dejaría hijos que no son `<li>` directamente dentro de una
-                  lista. */}
-              <div className="capa space-y-0.5 rounded-2xl p-1.5">
-                <NavegacionOrganizacion
-                  orgId={workspace.organizationId}
-                  workspaceId={workspaceId}
-                  pathname={pathname}
-                  puedeAjustar={rolOrganizacion === "owner" || rolOrganizacion === "admin"}
-                  indiceInicial={4}
-                />
+            <>
+              <div>
+                <GrupoRotulo titulo="Proyecto" />
+                {/* `div` y no `ul`: `NavegacionOrganizacion` no envuelve sus
+                    destinos en `<li>` —los mismos elementos van también sueltos
+                    en el armazón de organización—, así que un `<ul>` aquí
+                    dejaría hijos que no son `<li>` directamente dentro de una
+                    lista. */}
+                <div className="capa space-y-0.5 rounded-2xl p-1.5">
+                  <NavegacionOrganizacion
+                    orgId={workspace.organizationId}
+                    workspaceId={workspaceId}
+                    pathname={pathname}
+                    puedeAjustar={false}
+                    indiceInicial={4}
+                    grupo="proyecto"
+                  />
+                </div>
               </div>
-            </div>
+
+              <div>
+                <GrupoRotulo titulo="Organización" />
+                <div className="capa space-y-0.5 rounded-2xl p-1.5">
+                  <NavegacionOrganizacion
+                    orgId={workspace.organizationId}
+                    workspaceId={workspaceId}
+                    pathname={pathname}
+                    puedeAjustar={rolOrganizacion === "owner" || rolOrganizacion === "admin"}
+                    indiceInicial={9}
+                    grupo="organizacion"
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           {text.length > 0 && (

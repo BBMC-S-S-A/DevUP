@@ -40,7 +40,7 @@ borrando deja trabajo perdido.
 
 | Herramienta | Qué hace |
 |---|---|
-| `crear_tarea` | Una tarea en el tablero, con responsable y fecha si se dicen. |
+| `crear_tarea` | Crea una tarea, con responsable, vencimiento y las categorías que se le digan. |
 | `crear_columna` | Una columna nueva en el tablero. |
 | `mover_tarea` | Pasa una tarea de columna. |
 | `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |
