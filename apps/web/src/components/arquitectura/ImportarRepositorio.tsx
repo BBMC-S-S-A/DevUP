@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, FileCode2, Github } from "lucide-react";
+import { AlertTriangle, Github, Workflow } from "lucide-react";
 import { useState } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { Cargando } from "@/components/ui/Pagina";
@@ -9,21 +9,34 @@ import type { GithubRepo } from "@/lib/api";
 import { api, useMutacion, useRecurso } from "@/lib/datos";
 
 /**
- * Traer al diagrama la arquitectura que ya está escrita en Terraform.
+ * Sacar el diagrama del repositorio, esté escrito o haya que deducirlo.
  *
- * POR QUÉ EXISTE. Quien usa Terraform ya declaró su infraestructura entera
- * —qué hay y qué depende de qué— y volver a dibujarla caja por caja es copiar
- * a mano algo que ya está escrito, con el agravante de que las dos copias se
- * separan en cuanto alguien cambia una.
+ * POR QUÉ YA NO SE LLAMA «IMPORTAR DE TERRAFORM». Lo fue, y era un callejón sin
+ * salida: la mayoría de los proyectos no tienen ni un `.tf` —el propio DevUP no
+ * lo tiene— y el diálogo contestaba «no encontré ningún archivo .tf», que es
+ * verdad y no le sirve a nadie. La arquitectura sí está en el repositorio; lo
+ * que pasa es que no está declarada en un sitio.
  *
- * SE DICE LO QUE NO SE PUEDE VER, y ocupa la mitad del diálogo a propósito. El
- * lector es de texto: no ejecuta `terraform plan`, no resuelve variables y no
- * entra en los módulos. Un diagrama al que le falta la mitad y no lo dice es
- * peor que no tener diagrama, porque se usa para decidir.
+ * SE DICE DE DÓNDE SALIÓ CADA COSA, y esto es lo que más importa de la
+ * pantalla. Una caja que viene de un `depends_on` es un hecho; una que viene de
+ * adivinar por el nombre de una carpeta es un indicio. Enseñarlas iguales
+ * convertiría el diagrama en algo que no se puede creer del todo — y un mapa
+ * que se cree completo engaña más que no tener mapa, porque se usa para
+ * decidir.
  */
+
+type Fuente = "terraform" | "compose" | "dependencias" | "carpetas";
+
+const NOMBRE_FUENTE: Record<Fuente, string> = {
+  terraform: "sus archivos .tf",
+  compose: "su docker-compose",
+  dependencias: "lo que declara instalar",
+  carpetas: "cómo están partidas sus carpetas",
+};
 
 type Resultado = {
   fullName: string;
+  fuentes: Fuente[];
   archivos: string[];
   omitidos: number;
   ilegibles: string[];
@@ -34,7 +47,7 @@ type Resultado = {
   sinResolver: string[];
 };
 
-export function ImportarTerraform({
+export function ImportarRepositorio({
   workspaceId,
   clave,
   onCerrar,
@@ -50,10 +63,10 @@ export function ImportarTerraform({
 
   const importar = useMutacion(
     (repoId: string) =>
-      api.post<Resultado>(`/workspaces/${workspaceId}/architecture/importar/terraform`, { repoId }),
+      api.post<Resultado>(`/workspaces/${workspaceId}/architecture/importar/repositorio`, { repoId }),
     {
       invalida: [clave],
-      fallo: "No se pudo leer el Terraform del repositorio.",
+      fallo: "No se pudo leer el repositorio.",
       alTerminar: (r) => setResultado(r),
     },
   );
@@ -62,11 +75,11 @@ export function ImportarTerraform({
 
   return (
     <Dialogo
-      titulo="Importar de Terraform"
+      titulo="Leer del repositorio"
       descripcion={
         resultado
           ? `Leído de ${resultado.fullName}.`
-          : "Se leen los archivos .tf del repositorio y se dibuja lo que declaran."
+          : "Se lee el repositorio y se dibuja la arquitectura que declara."
       }
       onCerrar={onCerrar}
       ancho="md"
@@ -98,7 +111,7 @@ export function ImportarTerraform({
             ))}
           </div>
 
-          <LoQueNoLee />
+          <DeDondeLoSaca />
 
           <div className="flex justify-end gap-2 pt-1">
             <Boton type="button" variante="fantasma" onClick={onCerrar}>
@@ -106,12 +119,12 @@ export function ImportarTerraform({
             </Boton>
             <Boton
               variante="primario"
-              icono={<FileCode2 size={14} />}
+              icono={<Workflow size={14} />}
               cargando={importar.enviando}
               disabled={!elegido}
               onClick={() => elegido && void importar.ejecutar(elegido)}
             >
-              Importar
+              Leer y dibujar
             </Boton>
           </div>
         </div>
@@ -121,38 +134,53 @@ export function ImportarTerraform({
 }
 
 /**
- * Los límites del lector, dichos antes de importar y no después.
+ * De dónde lo saca y qué no va a ver, dicho ANTES de leer y no después.
  *
  * Después ya se está mirando un diagrama, y un diagrama se cree.
  */
-function LoQueNoLee() {
+function DeDondeLoSaca() {
   return (
     <div className="rounded-xl border border-line bg-canvas/40 p-3">
+      <Rotulo className="mb-1.5 block">De dónde lo saca</Rotulo>
+      <ul className="mb-2.5 space-y-1 text-[11px] leading-relaxed text-muted">
+        <li>
+          De su <code className="font-mono">.tf</code> si tiene Terraform, que es lo que más dice.
+        </li>
+        <li>
+          De su <code className="font-mono">docker-compose</code>: qué servicios hay y —en{" "}
+          <code className="font-mono">depends_on</code>— quién necesita a quién. Es la única fuente
+          que da flechas declaradas y no deducidas.
+        </li>
+        <li>
+          De <strong>lo que cada servicio declara instalar</strong>: depender de{" "}
+          <code className="font-mono">pg</code> es decir que se habla con Postgres.
+        </li>
+        <li>
+          Y de <strong>cómo están partidas las carpetas</strong>: cada <code className="font-mono">apps/…</code>{" "}
+          o carpeta con su <code className="font-mono">Dockerfile</code> es algo que se despliega solo.
+        </li>
+      </ul>
+
       <div className="mb-1.5 flex items-center gap-1.5">
         <AlertTriangle size={12} className="text-muted" />
         <Rotulo>Qué no va a ver</Rotulo>
       </div>
       <ul className="space-y-1 text-[11px] leading-relaxed text-muted">
         <li>
-          Se lee el <strong>texto</strong> de los <code className="font-mono">.tf</code>: no se
-          ejecuta nada, no hacen falta credenciales de la nube y no se toca el estado remoto.
+          Se lee el <strong>texto</strong>: no se ejecuta nada, no hacen falta credenciales de la
+          nube y no se toca ningún estado remoto.
         </li>
         <li>
           Se lee <strong>con el enlace y nada más</strong>, sin usar ningún token de GitHub. De un
-          repositorio privado no se puede importar, y se leen hasta{" "}
-          <strong>12 archivos</strong> <code className="font-mono">.tf</code>.
+          repositorio privado no se puede leer, y se abren hasta <strong>12 archivos</strong>.
         </li>
         <li>
-          Un nombre que venga de una <code className="font-mono">var</code> o de un{" "}
-          <code className="font-mono">local</code> se queda como está escrito, sin resolver.
+          <strong>No lee el código.</strong> Que dos servicios se llamen entre ellos no se sabe si
+          nadie lo declaró en ningún sitio.
         </li>
         <li>
-          Los <code className="font-mono">module</code> no se abren: lo que declaran vive en otra
-          carpeta y no se trae.
-        </li>
-        <li>
-          <code className="font-mono">count</code> y <code className="font-mono">for_each</code>{" "}
-          dibujan <strong>una</strong> caja: diez réplicas son un recurso en el texto.
+          Una dependencia declarada <strong>puede no usarse ya</strong>, y lo que solo existe en
+          producción —un balanceador, una CDN— no está en el repositorio.
         </li>
         <li>Nada se borra ni se recoloca: lo que ya esté en el lienzo se queda donde está.</li>
       </ul>
@@ -161,32 +189,42 @@ function LoQueNoLee() {
 }
 
 function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onCerrar: () => void }) {
-  const { creados, reutilizados, enlazados, archivos, omitidos, ilegibles, recortados, sinResolver } =
+  const { creados, reutilizados, enlazados, archivos, omitidos, ilegibles, recortados, sinResolver, fuentes } =
     resultado;
 
   const nadaNuevo = creados.length === 0 && enlazados.length === 0;
 
   return (
     <div className="space-y-3">
-      {archivos.length === 0 ? (
+      {fuentes.length === 0 ? (
         <p className="text-xs text-muted">
-          No encontré ningún archivo <code className="font-mono">.tf</code> en ese repositorio. Si la
-          infraestructura está en otro sitio —otro repositorio, o una rama distinta de la principal—,
-          esto no la ve.
+          Miré el repositorio y no encontré de dónde sacar la arquitectura: ni Terraform, ni{" "}
+          <code className="font-mono">docker-compose</code>, ni un manifiesto de dependencias que
+          nombre algo de infraestructura. Si está en otro repositorio, o en una rama distinta de la
+          principal, esto no la ve — y siempre puedes dibujarla a mano o pedírsela a un agente.
         </p>
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2">
             <Dato numero={creados.length} etiqueta={creados.length === 1 ? "caja nueva" : "cajas nuevas"} />
             <Dato numero={enlazados.length} etiqueta={enlazados.length === 1 ? "flecha" : "flechas"} />
-            <Dato numero={archivos.length} etiqueta={archivos.length === 1 ? "archivo leído" : "archivos leídos"} />
+            <Dato
+              numero={archivos.length}
+              etiqueta={archivos.length === 1 ? "archivo aportó" : "archivos aportaron"}
+            />
           </div>
+
+          {/* De dónde salió. Es lo que permite calibrar cuánto creerse el
+              diagrama: un `depends_on` es un hecho, una carpeta es un indicio. */}
+          <p className="text-[11px] leading-relaxed text-muted">
+            Salió de {fuentes.map((f) => NOMBRE_FUENTE[f]).join(", ").replace(/, ([^,]*)$/, " y $1")}.
+          </p>
 
           {nadaNuevo && (
             <p className="text-xs text-muted">
               {reutilizados.length > 0
-                ? "Todo lo que declara ese Terraform ya estaba en el diagrama. No se ha duplicado nada."
-                : "Los archivos se leyeron, pero no declaran ningún recurso que dibujar."}
+                ? "Todo lo que encontré ya estaba en el diagrama. No se ha duplicado nada."
+                : "Se leyó el repositorio, pero no salió ningún componente que dibujar."}
             </p>
           )}
 
@@ -213,8 +251,8 @@ function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onC
           {omitidos > 0 && (
             <p>
               Quedaron <strong>{omitidos}</strong> archivo(s) <code className="font-mono">.tf</code>{" "}
-              sin leer: se leen los doce primeros para no agotar el cupo de lecturas que GitHub da
-              sin credencial, que es el mismo para todo DevUP.
+              sin leer: se abren unos pocos para no agotar el cupo de lecturas que GitHub da sin
+              credencial, que es el mismo para todo DevUP.
             </p>
           )}
           {ilegibles.length > 0 && (
@@ -225,8 +263,8 @@ function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onC
           )}
           {recortados > 0 && (
             <p>
-              El Terraform declara <strong>{recortados}</strong> recurso(s) más de los que caben en
-              un diagrama legible, y se quedaron fuera.
+              Salieron <strong>{recortados}</strong> componente(s) más de los que caben en un
+              diagrama legible, y se quedaron fuera.
             </p>
           )}
           {sinResolver.length > 0 && (

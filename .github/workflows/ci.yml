@@ -95,6 +95,15 @@ jobs:
         # Un diagrama que se cree completo engaña más que no tenerlo.
         run: npm run test:terraform
 
+      - name: Deducir la arquitectura de un repositorio
+        # El hermano del de Terraform, para los repositorios que no lo tienen
+        # —que son casi todos—. Aquí se adivina más, así que lo que se fija es
+        # dónde está la raya: una flecha hacia una caja que no se dibujó, una
+        # dependencia de desarrollo tomada por infraestructura o un depends_on
+        # que apunta a un servicio inexistente convierten el diagrama en algo
+        # que no se puede creer.
+        run: npm run test:repositorio
+
       - name: Dónde va cada caja del diagrama
         # Funciones puras, sin base ni servidor. Lo que fijan es que la
         # disposición salga legible y que un ciclo no cuelgue el bucle: un

@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Database, FileCode2, Globe, HardDrive, Layers, Link2, Plus, Trash2, X, Zap } from "lucide-react";
+import { Boxes, Database, Workflow, Globe, HardDrive, Layers, Link2, Plus, Trash2, X, Zap } from "lucide-react";
 import { useRef, useState } from "react";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -11,7 +11,7 @@ import type { EnlaceArquitectura, NodoArquitectura, TipoNodoArquitectura } from 
 import { api, sembrar, useMutacion, useRecurso } from "@/lib/datos";
 import { trazarEnlace } from "./Enlaces";
 import { ALTO_NODO, ANCHO_NODO, FormaNodo, INSET } from "./Formas";
-import { ImportarTerraform } from "./ImportarTerraform";
+import { ImportarRepositorio } from "./ImportarRepositorio";
 
 /**
  * El diagrama de arquitectura: un lienzo con nodos que se arrastran y se
@@ -20,7 +20,8 @@ import { ImportarTerraform } from "./ImportarTerraform";
  * QUÉ PROMETE. Un sitio para dibujar cómo está montado el sistema —un
  * servicio, una base de datos, una cola— y cómo se hablan entre ellos. Se
  * puede llenar a mano, pedírselo a un agente por MCP, o traer lo que ya esté
- * escrito en el Terraform del repositorio del proyecto.
+ * leyendo el repositorio del proyecto —su Terraform si lo tiene, y si no su
+ * docker-compose, sus dependencias y su reparto de carpetas—.
  *
  * LA POSICIÓN SE MUEVE OPTIMISTA Y SE GUARDA AL SOLTAR, no en cada píxel. Un
  * arrastre manda una petición por movimiento del ratón sería decenas de
@@ -183,10 +184,10 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
           <Boton
             tamano="sm"
             variante="fantasma"
-            icono={<FileCode2 size={13} />}
+            icono={<Workflow size={13} />}
             onClick={() => setImportando(true)}
           >
-            Importar de Terraform
+            Leer del repositorio
           </Boton>
           <Boton tamano="sm" variante="primario" icono={<Plus size={13} />} onClick={() => setCreando(true)}>
             Añadir nodo
@@ -204,14 +205,14 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
             <EstadoVacio
               icono={<Boxes size={20} />}
               titulo="Todavía no hay ningún nodo"
-              pista="Un nodo es una caja: un servicio, una base de datos, una cola. Dibújalas a mano, o trae las que ya estén escritas en el Terraform del repositorio."
+              pista="Un nodo es una caja: un servicio, una base de datos, una cola. Dibújalas a mano, o deja que DevUP las saque del repositorio del proyecto."
               accion={
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Boton variante="primario" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
                     Añadir el primero
                   </Boton>
-                  <Boton variante="fantasma" icono={<FileCode2 size={14} />} onClick={() => setImportando(true)}>
-                    Importar de Terraform
+                  <Boton variante="fantasma" icono={<Workflow size={14} />} onClick={() => setImportando(true)}>
+                    Leer del repositorio
                   </Boton>
                 </div>
               }
@@ -382,7 +383,7 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
       )}
 
       {importando && (
-        <ImportarTerraform
+        <ImportarRepositorio
           workspaceId={workspaceId}
           clave={clave}
           onCerrar={() => setImportando(false)}
