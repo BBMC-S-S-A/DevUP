@@ -36,10 +36,26 @@ const NODE_COLUMNS = `
 const LINK_COLUMNS = `id, source_id as "sourceId", target_id as "targetId", label`;
 const LINK_COLUMNS_L = `l.id, l.source_id as "sourceId", l.target_id as "targetId", l.label`;
 
+/**
+ * `x` e `y` son opcionales, y esa es toda la diferencia entre las dos formas
+ * de meter un diagrama.
+ *
+ * SIN COORDENADAS, las calcula DevUP repartiendo en columnas. Es lo que hay
+ * que hacer cuando quien manda los componentes los dedujo de un repositorio o
+ * de un Terraform: ahí hay estructura, pero no hay dibujo.
+ *
+ * CON COORDENADAS, se respetan tal cual. Cuando alguien ya TIENE el diagrama
+ * —lo trae de otra herramienta, o el agente lo ha compuesto a propósito—,
+ * recolocarlo sería tirar el trabajo hecho y devolver algo que no es lo que se
+ * pidió. Se mezclan las dos: las cajas que traen sitio van a su sitio, y las
+ * que no lo traen se reparten entre los huecos.
+ */
 const COMPONENTE = z.object({
   nombre: z.string().trim().min(1).max(60),
   tipo: KIND.default("servicio"),
   descripcion: z.string().trim().max(2000).optional(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
 });
 
 const CONEXION = z.object({
@@ -108,7 +124,12 @@ export async function fusionarArquitectura(
   const porNombre = new Map(existentes.map((n) => [clave(n.name), n]));
   const baseY = alturaLibre(existentes.map((n) => n.posY));
 
-  const nuevos = entrada.componentes.filter((c) => !porNombre.has(clave(c.nombre)));
+  // Solo se reparten en columnas los que NO traen sitio propio: a los que lo
+  // traen no hay nada que calcularles, y meterlos en el reparto además
+  // desplazaría a los otros para dejarles un hueco que no van a usar.
+  const nuevos = entrada.componentes.filter(
+    (c) => !porNombre.has(clave(c.nombre)) && c.x === undefined && c.y === undefined,
+  );
   const columnas = repartirEnColumnas(
     nuevos.map((c) => c.nombre),
     entrada.conexiones,
@@ -125,9 +146,19 @@ export async function fusionarArquitectura(
       reutilizados.push(componente.nombre);
       continue;
     }
-    const col = columnas.get(k) ?? 0;
-    const fila = ocupadas.get(col) ?? 0;
-    ocupadas.set(col, fila + 1);
+    /** Donde lo pidan, o donde toque por el reparto. */
+    let posX: number;
+    let posY: number;
+    if (componente.x !== undefined || componente.y !== undefined) {
+      posX = Math.round(componente.x ?? MARGEN);
+      posY = Math.round(componente.y ?? MARGEN);
+    } else {
+      const col = columnas.get(k) ?? 0;
+      const fila = ocupadas.get(col) ?? 0;
+      ocupadas.set(col, fila + 1);
+      posX = MARGEN + col * ANCHO_COLUMNA;
+      posY = baseY + fila * ALTO_FILA;
+    }
 
     const { rows } = await db.query<NodoFila>(
       `insert into architecture_nodes
@@ -140,8 +171,8 @@ export async function fusionarArquitectura(
         componente.tipo,
         componente.nombre,
         componente.descripcion ?? "",
-        MARGEN + col * ANCHO_COLUMNA,
-        baseY + fila * ALTO_FILA,
+        posX,
+        posY,
         userId,
       ],
     );
