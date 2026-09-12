@@ -129,7 +129,24 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
   return (
     <nav
       aria-label="Organizaciones"
-      className="fixed inset-y-3 left-3 z-30 hidden w-14 flex-col items-center gap-1.5
+      // LA POSICIÓN VA EN LÍNEA, Y NO ES UN CAPRICHO. `globals.css` tiene
+      // `body > * { position: relative }` fuera de toda capa CSS, y este `nav`
+      // ES hijo directo de `body`: los proveedores que lo envuelven no pintan
+      // ningún elemento. En la cascada, lo no-capado gana a las utilidades de
+      // Tailwind sin importar la especificidad, así que la clase `fixed` se
+      // quedaba en `relative`.
+      //
+      // Lo que se veía: el riel ocupaba sitio en el flujo —unos 220 px— y
+      // empujaba TODA la aplicación hacia abajo, que es por qué el saludo del
+      // panel salía a media pantalla y el mundo de DevVerse aparecía
+      // descolgado. Y al desplazarse la página, el riel se iba con ella
+      // mientras la barra lateral —que sí está anidada y conserva su `fixed`—
+      // se quedaba quieta.
+      //
+      // La trampa está escrita en LO-QUE-HAY-Y-LO-QUE-FALTA.md con su remedio:
+      // «si algo tiene que flotar, la posición va en línea».
+      style={{ position: "fixed" }}
+      className="inset-y-3 left-3 z-30 hidden w-14 flex-col items-center gap-1.5
         rounded-2xl border border-line bg-raised/60 py-3 backdrop-blur md:flex"
     >
       {organizaciones.map((o) => (

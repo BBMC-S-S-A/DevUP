@@ -34,7 +34,15 @@ export function ActiveCallBar() {
   // y sin respuesta la grabación se queda esperando para siempre.
   if (room.prompt && !onOwnPage) {
     return (
-      <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+      <div
+      // Posición en línea: este elemento es hijo directo de `body` —los
+      // proveedores que lo envuelven no pintan DOM— y `body > * { position:
+      // relative }` vive fuera de toda capa CSS, así que gana a la utilidad
+      // `fixed` de Tailwind. Sin esto la barra cae en el flujo del documento en
+      // vez de quedarse pegada a la ventana. Ver LO-QUE-HAY-Y-LO-QUE-FALTA.md.
+      style={{ position: "fixed" }}
+      className="inset-x-0 bottom-4 z-40 flex justify-center px-4"
+    >
         <Link
           href={channelHref}
           className="presionable cristal flex items-center gap-2.5 rounded-full border-danger/40
@@ -51,7 +59,15 @@ export function ActiveCallBar() {
   if (onOwnPage) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+    <div
+      // Posición en línea: este elemento es hijo directo de `body` —los
+      // proveedores que lo envuelven no pintan DOM— y `body > * { position:
+      // relative }` vive fuera de toda capa CSS, así que gana a la utilidad
+      // `fixed` de Tailwind. Sin esto la barra cae en el flujo del documento en
+      // vez de quedarse pegada a la ventana. Ver LO-QUE-HAY-Y-LO-QUE-FALTA.md.
+      style={{ position: "fixed" }}
+      className="inset-x-0 bottom-4 z-40 flex justify-center px-4"
+    >
       <div className="cristal flex items-center gap-1 rounded-full py-1.5 pl-3.5 pr-1.5">
         {/* El punto en directo, no el icono de radio: un círculo que late dice
             «hay una llamada abierta» sin competir con los iconos de los
