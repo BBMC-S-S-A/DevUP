@@ -12,7 +12,7 @@ const API = "https://api.github.com";
  *   separado exige `search/issues` con `type:pr` y `type:issue`, no leer ese
  *   campo directamente.
  */
-const headers = (token: string | null) => ({
+const headers = (token: string | null): Record<string, string> => ({
   // Sin token también se puede: la API de GitHub contesta a cualquiera para
   // lo público. Lo que cambia es el cupo —60 peticiones por hora y por IP en
   // vez de 5.000— y que lo privado deja de existir para quien pregunta.
@@ -117,12 +117,122 @@ function repoDeUrl(url: string): string {
   return url.match(/repos\/([^/?]+\/[^/?]+)/)?.[1] ?? url.replace(`${API}/`, "");
 }
 
+/**
+ * Lo último que contestó GitHub en cada URL, con su marca.
+ *
+ * QUÉ AHORRA, Y QUÉ NO. Mandando el `ETag` de la última respuesta en
+ * `If-None-Match`, GitHub contesta 304 «lo mismo que tenías» sin cuerpo. Con
+ * credencial eso NO descuenta del cupo de 5.000, así que las pasadas de un
+ * repositorio conectado salen casi gratis.
+ *
+ * **Sin credencial sí descuenta**, y conviene dejarlo escrito porque es justo
+ * lo contrario de lo que se suele repetir: medido contra la API, un 304
+ * anónimo baja el contador igual que un 200. De las sesenta por hora se lleva
+ * una. Así que esto no arregla por sí solo el cupo compartido — lo que lo
+ * arregla es preguntar menos veces, y de eso se encarga la pasada del
+ * barrendero en `server.ts`.
+ *
+ * Lo que sí ahorra siempre es ancho de banda y tiempo, y mantiene la última
+ * lectura buena en memoria para poder devolverla sin volver a parsearla.
+ *
+ * EN MEMORIA Y NO EN LA BASE, a propósito: perder el mapa al reiniciar cuesta
+ * una pasada cara y nada más, mientras que una columna nueva es una migración
+ * para guardar algo que caduca solo.
+ */
+const ULTIMA_RESPUESTA = new Map<string, { etag: string | null; cuerpo: unknown; cuando: number }>();
+
+/**
+ * Cuánto vale una lectura sin credencial antes de volver a preguntar.
+ *
+ * ESTO ES LO QUE DE VERDAD SALVA EL CUPO. Sin token son sesenta peticiones por
+ * hora Y POR IP, compartidas por todo DevUP, y se gastan a demanda: abrir
+ * Migraciones son trece —el árbol y hasta doce archivos—, y leer la
+ * arquitectura de un repositorio, otras trece. Dos pantallas abiertas cuatro
+ * veces y no queda cupo para nadie más, que es exactamente la «avería de
+ * lectura» que sale sin que nadie haya hecho nada raro.
+ *
+ * Diez minutos es el trato: lo que se enseña de un repositorio no cambia en
+ * ese rato —un commit nuevo tarda más en importar que en llegar—, y a cambio
+ * volver a abrir la misma pantalla, o darle dos veces a importar, deja de
+ * costar nada.
+ *
+ * CON CREDENCIAL NO SE APLICA: ahí hay 5.000 por hora y sí compensa
+ * revalidar con `If-None-Match`, que devuelve lo fresco sin gastar cupo.
+ */
+const FRESCURA_SIN_TOKEN_MS = 10 * 60 * 1000;
+
+/**
+ * Hasta cuándo no vale la pena volver a preguntar.
+ *
+ * Cuando GitHub corta por cupo, seguir pidiendo no arregla nada y además deja
+ * la pantalla llena de averías que no son culpa de quien las ve. Se apunta
+ * cuándo se repone —lo dice GitHub en una cabecera— y hasta entonces se falla
+ * de inmediato, sin gastar red, con un mensaje que dice a qué hora vuelve.
+ */
+let cortadoHasta = 0;
+
+/** Solo para las pruebas y para poder contarlo en pantalla. */
+export function estadoDelCupo(): { cortadoHasta: number; enCache: number } {
+  return { cortadoHasta, enCache: ULTIMA_RESPUESTA.size };
+}
+
+function horaCorta(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
 async function get(url: string, token: string | null): Promise<unknown> {
-  const response = await fetch(url, { headers: headers(token) });
+  // Sin credencial el cupo es de toda la instancia, así que respetar el corte
+  // es lo que evita que un repositorio se lleve por delante a los demás.
+  if (!token && cortadoHasta > Date.now()) {
+    throw new Error(
+      `GitHub cortó por límite de peticiones. Sin token son 60 por hora para todo DevUP; ` +
+        `vuelve a haber a las ${horaCorta(cortadoHasta)}.`,
+    );
+  }
+
+  // La clave lleva si había credencial o no: la misma URL contesta cosas
+  // distintas con token y sin él, y mezclar las dos daría por buena una lectura
+  // que la otra no tenía derecho a ver.
+  const clave = `${token ? "con" : "sin"}|${url}`;
+  const guardado = ULTIMA_RESPUESTA.get(clave);
+
+  // Sin credencial, lo reciente se sirve sin preguntar: preguntar cuesta cupo
+  // aunque la respuesta sea «no ha cambiado nada». Ver `FRESCURA_SIN_TOKEN_MS`.
+  if (!token && guardado && Date.now() - guardado.cuando < FRESCURA_SIN_TOKEN_MS) {
+    return guardado.cuerpo;
+  }
+
+  const cabeceras = headers(token);
+  if (guardado?.etag) cabeceras["If-None-Match"] = guardado.etag;
+
+  const response = await fetch(url, { headers: cabeceras });
+
+  // 304: nada ha cambiado. Con credencial además no ha costado cupo; sin ella
+  // sí —medido contra la API—, y por eso lo de arriba evita llegar hasta aquí.
+  if (response.status === 304 && guardado) {
+    ULTIMA_RESPUESTA.set(clave, { ...guardado, cuando: Date.now() });
+    return guardado.cuerpo;
+  }
+
   if (!response.ok) {
+    if (response.status === 403 || response.status === 429) {
+      // GitHub dice en segundos y desde epoch cuándo se repone. Si no lo dice,
+      // una hora es su ventana, así que es la espera correcta a ciegas.
+      const reset = Number(response.headers.get("x-ratelimit-reset"));
+      const restantes = response.headers.get("x-ratelimit-remaining");
+      if (restantes === "0" || Number.isFinite(reset)) {
+        cortadoHasta = Number.isFinite(reset) && reset > 0 ? reset * 1000 : Date.now() + 3_600_000;
+      }
+    }
     throw new Error(traducirFallo(response.status, repoDeUrl(url), Boolean(token)));
   }
-  return response.json();
+
+  const cuerpo = await response.json();
+  // Se guarda haya o no `ETag`: el valor de esto para una lectura sin
+  // credencial es la marca de tiempo —poder no volver a preguntar en diez
+  // minutos—, y eso no depende de que GitHub mande la marca.
+  ULTIMA_RESPUESTA.set(clave, { etag: response.headers.get("etag"), cuerpo, cuando: Date.now() });
+  return cuerpo;
 }
 
 /**
