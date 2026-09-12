@@ -221,6 +221,40 @@ dónde deducir la primera sin adivinar, y adivinar en un grafo es peor que no
 dibujar. Sigue aguantando bien el caso de cero aristas: una tarea recién creada
 no tiene ninguna.
 
+### El botón desactivado de ajustes ya tiene ruta detrás
+
+En `o/[orgId]/ajustes/page.tsx` hay un botón «Dar código / Otro código» con
+`disabled` y una nota explicando que faltaba `set_invitation_code`. Ya no falta:
+
+```
+POST /invitations/:id/codigo   → 201 { codigo: "ABCD2345" }
+```
+
+Solo hay que quitarle el `disabled` y el `title`, y enseñar el código igual que
+se enseña el que devuelve invitar. **Tres cosas antes de tocarlo:**
+
+**1. El código de antes deja de valer en cuanto se pide otro.** No es un efecto
+raro, es el punto —se pide porque el viejo se dictó mal o se quedó escrito en
+una pizarra—, pero la pantalla tiene que decirlo **antes**, no después. Si el
+botón dice «Otro código» sin avisar, quien solo quería volver a verlo acaba de
+invalidar el que la otra persona tenía apuntado.
+
+**2. El enlace NO se rompe.** Es toda la diferencia con la salida de mientras
+(reinvitar), y conviene que se note en el texto: se renueva el código, no la
+invitación.
+
+**3. El código se enseña una vez y no vuelve.** En la base está su hash, así que
+no hay «ver el código» que se pueda ofrecer nunca. Si quien mira cierra el aviso
+sin copiarlo, lo único que le queda es pedir otro.
+
+Y dos campos nuevos en `GET /organizations/:orgId/invitations`, que el botón ya
+leía sin que existieran —por eso decía siempre «Dar código»—:
+
+```
+hasCode: boolean          // si TIENE código, no cuál
+codeExpiresAt: string|null // su caducidad, un día; NO uses expiresAt, son siete
+```
+
 ### Lo que `GET /me/inicio?dias=30` devuelve
 
 ```
@@ -319,11 +353,19 @@ la política de borrado exige ver los dos extremos, así que una vez ida la fila
 sus aristas quedan inalcanzables para siempre. Hay que limpiarlas antes
 (`olvidarNodo`). Está en `lib/grafo.ts` con su comprobación al revés.
 
-**3. Renovar el código corto de invitación.** Falta `set_invitation_code`: hoy
-el botón de la pantalla de ajustes está **desactivado** porque no hay ruta
-detrás. Canjear por código ya funciona; lo único que no se puede es dar otro a
-una invitación que ya existe, y la salida actual —reinvitar— sirve pero no es
-lo que la pantalla promete.
+~~**3. Renovar el código corto de invitación.**~~ **Hecho.** Migración 0047
+(`set_invitation_code`) y `POST /invitations/:id/codigo`. Renueva el código sin
+tocar el enlace, que era la razón de existir: reinvitar servía, pero le rompía
+la URL a quien podía tenerla ya abierta. La mitad de pantalla está en §5.
+
+Dos cosas que salieron de aquí y no estaban en la lista. La primera: el listado
+de invitaciones nunca devolvió `hasCode`, y la pantalla ya lo leía — o sea que
+el botón llevaba desde siempre diciendo «Dar código» también sobre las que ya
+tenían uno. La segunda, peor: CI corría `test:codigo --workspace apps/api`, que
+es solo la mitad de lógica pura. La mitad contra Postgres —la que comprueba
+quién puede abrir la puerta de una organización— **llevaba desde la fusión sin
+ejecutarse**, en verde, sin que nada lo dijera. Ahora corre el script de la raíz,
+que encadena las dos.
 
 **4. Devolver a `que_ha_pasado` el alcance que perdió en la fusión.** Quedó la
 versión desplegada, que pregunta a `/workspaces/:id/actividad` — **un espacio

@@ -96,7 +96,14 @@ jobs:
         # código no dé más acceso que canjear por enlace. Es una puerta de
         # entrada a una organización: lo que falle aquí mete a alguien donde
         # no debía sin que nadie abra una incidencia.
-        run: npm run test:codigo --workspace apps/api
+        #
+        # SIN `--workspace apps/api`, y ese es el arreglo. Con él solo corría
+        # `test:codigo` de la API, que es la mitad de arriba —lógica pura, sin
+        # base—. La mitad contra Postgres vive en `test:invitacion`, y es
+        # precisamente la que comprueba quién puede abrir la puerta: llevaba
+        # desde la fusión sin ejecutarse aquí, en verde, sin que nada lo dijera.
+        # El script de la raíz encadena las dos.
+        run: npm run test:codigo
 
       - name: Los enlaces del grafo
         # Tres formas de estar mal que las políticas no pueden cazar, porque
