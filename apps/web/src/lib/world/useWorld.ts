@@ -279,6 +279,70 @@ export function useWorld({
   }, [workspaceId]);
 
   /**
+   * Dónde se estaba de pie justo antes de sentarse.
+   *
+   * Es una referencia y no estado porque cambia sin que nada se repinte, igual
+   * que la posición.
+   */
+  const antesDeSentarseRef = useRef<{ x: number; y: number } | null>(null);
+
+  /**
+   * Levantarse, y volver a donde se estaba de pie.
+   *
+   * EL BUG QUE ESTO ARREGLA, que es de los que parecen imposibles hasta que se
+   * ve: de un sillón o un sofá no se podía salir. Los dos son `blocks: true` y
+   * su plaza es SU PROPIA CASILLA (`SEATS` en `props.ts`: el sillón en dx0/dy0,
+   * el sofá a media casilla), así que sentarse deja al avatar dentro de una
+   * casilla bloqueada. Al levantarse, `isWalkable` rechazaba tres de las cuatro
+   * direcciones —solo escapaba hacia el sur, porque la plaza está a 0,9 de la
+   * casilla y ese lado quedaba cerca del borde—, y contra una pared no escapaba
+   * ninguna. Encima, al quedarse encima de la plaza, la acción volvía a ofrecer
+   * «Sentarse» y pulsarla te sentaba otra vez: el bucle que se sentía como
+   * «se traba».
+   *
+   * POR QUÉ SE GUARDA LA POSICIÓN Y NO SE BUSCA UN HUECO. La casilla desde la
+   * que alguien se sentó se sabe libre: estaba de pie en ella. Cualquier
+   * cálculo de «hueco más cercano» es una suposición, y encima devuelve a la
+   * persona a un sitio que no eligió.
+   *
+   * NO SE ARREGLA QUITANDO EL BLOQUEO del sillón: entonces se podría caminar
+   * por encima de los muebles, que es peor y además se ve.
+   */
+  const levantarse = useCallback((): void => {
+    const self = stateRef.current.self;
+    self.sitting = false;
+    const scene = sceneRef.current;
+    const antes = antesDeSentarseRef.current;
+    antesDeSentarseRef.current = null;
+    if (!scene) return;
+
+    if (antes && isWalkable(scene, antes.x, antes.y)) {
+      self.x = antes.x;
+      self.y = antes.y;
+      return;
+    }
+
+    // Sin recuerdo utilizable —se recargó la página sentado, o el mueble se
+    // movió con el editor mientras alguien estaba encima— se busca la salida
+    // más cercana. El sur va primero porque es donde está la puerta de toda
+    // sala, así que es la dirección con más probabilidad de estar despejada.
+    for (const [dx, dy] of [
+      [0, 1],
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+    ] as const) {
+      const x = Math.floor(self.x) + dx + 0.5;
+      const y = Math.floor(self.y) + dy + 0.5;
+      if (isWalkable(scene, x, y)) {
+        self.x = x;
+        self.y = y;
+        return;
+      }
+    }
+  }, []);
+
+  /**
    * Un paso del mundo. Lo llama el bucle de animación del componente.
    *
    * Hace cuatro cosas por fotograma: mover al jugador según las teclas,
@@ -293,12 +357,14 @@ export function useWorld({
     const self = state.self;
 
     // --- Movimiento propio -------------------------------------------------
-    // Sentado no se camina. Pulsar una dirección levanta: es lo que espera
-    // cualquiera, y ahorra tener que acordarse de una tecla para ponerse de
-    // pie.
+    // Sentado no se camina.
     let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-    if (self.sitting && (dx !== 0 || dy !== 0)) self.sitting = false;
+    // Pulsar una dirección levanta: es lo que espera cualquiera, y ahorra
+    // acordarse de una tecla. Va por `levantarse` y no poniendo `sitting` a
+    // falso a mano, porque lo que de verdad hace falta es salir de la casilla
+    // del mueble — ver el comentario de esa función.
+    if (self.sitting && (dx !== 0 || dy !== 0)) levantarse();
     if (self.sitting) {
       dx = 0;
       dy = 0;
@@ -433,18 +499,25 @@ export function useWorld({
    * estaba» deja al avatar medio dentro del sofá, y con perspectiva eso se ve
    * enseguida.
    */
-  const sit = useCallback((seat: { x: number; y: number; facing: Facing } | null) => {
-    const self = stateRef.current.self;
-    if (!seat) {
-      self.sitting = false;
-      return;
-    }
-    self.x = seat.x + 0.5;
-    self.y = seat.y + 0.9;
-    self.facing = seat.facing;
-    self.sitting = true;
-    self.moving = false;
-  }, []);
+  const sit = useCallback(
+    (seat: { x: number; y: number; facing: Facing } | null) => {
+      const self = stateRef.current.self;
+      if (!seat) {
+        levantarse();
+        return;
+      }
+      // Se apunta de dónde se viene ANTES de moverse a la plaza: es la casilla
+      // a la que hay que devolver a la persona al levantarse, y se sabe libre
+      // porque estaba de pie en ella.
+      antesDeSentarseRef.current = { x: self.x, y: self.y };
+      self.x = seat.x + 0.5;
+      self.y = seat.y + 0.9;
+      self.facing = seat.facing;
+      self.sitting = true;
+      self.moving = false;
+    },
+    [levantarse],
+  );
 
   /**
    * Manda un mensaje por el socket del mundo.
