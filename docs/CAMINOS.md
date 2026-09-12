@@ -74,7 +74,7 @@ Todo lo que va dentro de una pantalla.
 | Tarea | Qué es |
 |---|---|
 | **Las primitivas que faltan, empezando por el diálogo de confirmación** | Ocho acciones irreversibles se deciden hoy en el cuadro gris del sistema operativo. Es lo que mejor relación esfuerzo/resultado tiene de todo el plan. |
-| **Capa de datos: acabar con los 88 `api.*` y 71 efectos sueltos** | Y escribir de paso la regla de errores: el de un campo junto al campo, el de una acción en un aviso flotante. |
+| **Capa de datos: acabar con los `api.*` y los efectos sueltos** | **En marcha.** Ver §2ter. |
 | **Partir las pantallas grandes** | Ventas tiene 1.273 líneas. Después de la capa de datos, no antes. |
 
 **Archivos del camino B** (nadie más los toca):
@@ -120,6 +120,38 @@ rotulado «Área» y el de etiquetas rotulado «Etiquetas» —ya no «Categorí
 se cruzan con «y»: entre etiquetas se suma, entre el área y las etiquetas se
 multiplica. Sumarlo todo haría que elegir un área **ensanchara** el tablero,
 que es lo contrario de lo que hace un filtro.
+
+---
+
+## 2ter. La capa de datos: por dónde va
+
+Las primitivas ya estaban (`useRecurso`, `useMutacion`, `invalidar`, `sembrar`
+en `lib/datos.tsx`); lo que falta es **migrar**, pantalla por pantalla. Y el
+diálogo de confirmación de la lista original resultó estar **terminado**: cero
+`confirm`, `alert` o `prompt` del sistema en toda la web y catorce sitios
+usando `useConfirmar`.
+
+| | api.* sueltos | efectos | por la capa |
+|---|---|---|---|
+| Al empezar | 125 | 117 | 46 |
+| Ahora | 121 | 113 | 57 |
+
+Hecho:
+
+- **El tablero** (`TaskBoard.tsx`), que era el peor caso con 16 llamadas
+  sueltas. Lo optimista del arrastre se queda, pero **encima** de la caché y con
+  una regla que lo hace seguro: lo optimista nunca sobrevive a un dato fresco.
+- **Ajustes de organización**, con sus cuatro lecturas a mano. Cero efectos.
+
+Lo que queda por orden de tamaño: `ventas/page.tsx`, `cuenta/page.tsx`,
+`github/page.tsx`, `organizaciones/page.tsx`, y después los componentes
+(`FileLibrary`, `ChannelChat`, Spotify).
+
+**LA TRAMPA QUE APARECIÓ MIGRANDO, y que vale para las que quedan:** al pasar de
+estado local a caché hay que **invalidar aunque la escritura salga bien**. Antes
+el estado moría con la pantalla y pintar a mano bastaba; ahora lo pintado vive
+encima de algo guardado, y sin marcarlo viejo, volver a la pantalla dentro de la
+ventana de frescura enseña lo de antes. No falla nada: simplemente miente.
 
 ---
 
