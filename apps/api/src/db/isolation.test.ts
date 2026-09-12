@@ -2555,7 +2555,7 @@ async function main(): Promise<void> {
     // Un registro que se puede editar es una opinion sobre el pasado.
     const editado = await withUser(ana, async (db) => {
       const { rowCount } = await db.query(
-        "update activity set resumen = 'otra cosa' where id = $1",
+        "update activity set subject_label = 'otra cosa' where id = $1",
         [enElCompartido],
       );
       return rowCount ?? 0;
