@@ -53,8 +53,112 @@ const COLUMNAS = `
   p.display_name as "actorNombre",
   p.avatar_url   as "actorAvatar"`;
 
+/**
+ * Lo mismo, más de dónde salió cada hecho.
+ *
+ * Solo lo usa la vista que cruza organizaciones: ahí «Ana movió la tarea Pagos»
+ * sin decir en qué espacio es una frase que no sitúa a nadie. En las rutas de
+ * un espacio concreto sobraría, porque el espacio ya lo puso quien preguntó.
+ */
+const COLUMNAS_CON_SITIO = `${COLUMNAS},
+  a.workspace_id as "espacioId",
+  w.name         as "espacio",
+  o.name         as "organizacion"`;
+
 export async function actividadRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
+
+  /**
+   * Qué ha pasado en TODO, cruzando organizaciones.
+   *
+   * LA PREGUNTA DEL LUNES, que es la que ninguna de las rutas de abajo sabía
+   * contestar. Todas piden una organización o un espacio, y quien vuelve de una
+   * semana fuera no quiere preguntar cinco veces: quiere saber qué se ha
+   * perdido. Con dos organizaciones se podía recorrer a mano; con las de un
+   * estudio que lleva varios clientes, no.
+   *
+   * ESTO NO ES UN AGUJERO EN EL AISLAMIENTO, y conviene ver por qué. No hay ni
+   * un `where organization_id` aquí, igual que en el resto del producto: la
+   * consulta va por `withUser`, así que las políticas de `activity` deciden qué
+   * renglones existen para quien mira. Cruzar organizaciones no significa ver
+   * más — significa no tener que nombrar cada una. Quien no pertenezca a
+   * ninguna recibe una lista vacía, no un error.
+   *
+   * SE FILTRA POR NOMBRE DE PERSONA Y NO POR IDENTIFICADOR, al revés que las de
+   * abajo. Es deliberado: el que pregunta esto suele ser el asistente, que tiene
+   * «Carlos» y no un uuid, y obligarle a resolverlo antes serían dos viajes y
+   * una lista de personas que nadie pidió. Si el texto encaja con dos, salen
+   * las dos — cada renglón dice quién fue, así que la respuesta se explica sola.
+   *
+   * Y ESE FILTRO NO ENSEÑA A NADIE QUE NO SE VIERA YA: el nombre sale de
+   * `profiles`, que también va bajo RLS, así que buscar por el nombre de alguien
+   * de otra empresa no devuelve sus renglones — devuelve ninguno, que es lo
+   * mismo que contesta un nombre inventado.
+   */
+  app.get("/me/actividad", async (request) => {
+    const userId = requireUser(request);
+    const q = parseQuery(
+      z.object({
+        /**
+         * Un instante exacto. Es lo que manda el MCP, que ya sabe traducir
+         * «desde el lunes» o «8h» a una fecha — y esa traducción tiene que
+         * vivir en un solo sitio o las dos acabarán contestando cosas
+         * distintas a la misma pregunta.
+         */
+        desde: z.string().datetime().optional(),
+        /** La alternativa cómoda para una pantalla, que piensa en días. */
+        dias: z.coerce.number().int().min(1).max(365).optional(),
+        antes: z.string().datetime().optional(),
+        quien: z.string().trim().min(1).max(80).optional(),
+        verbo: z.string().max(40).optional(),
+        sujeto: z.string().max(40).optional(),
+        origen: z.enum(["persona", "regla", "agente"]).optional(),
+        organizationId: uuid.optional(),
+        workspaceId: uuid.optional(),
+        limite: z.coerce.number().int().min(1).max(POR_PAGINA).default(POR_PAGINA),
+      }),
+      request.query,
+    );
+
+    // `desde` manda sobre `dias` cuando llegan los dos: es el más preciso, y
+    // quien manda un instante exacto sabe mejor lo que quiere.
+    const desde =
+      q.desde ??
+      (q.dias === undefined ? null : new Date(Date.now() - q.dias * 86_400_000).toISOString());
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select ${COLUMNAS_CON_SITIO}
+           from activity a
+           left join profiles p on p.id = a.actor_id
+           left join workspaces w on w.id = a.workspace_id
+           left join organizations o on o.id = a.organization_id
+          where ($1::timestamptz is null or a.at >= $1::timestamptz)
+            and ($2::timestamptz is null or a.at < $2::timestamptz)
+            and ($3::text is null or p.display_name ilike '%' || $3 || '%')
+            and ($4::text is null or a.verb = $4)
+            and ($5::text is null or a.subject_type = $5)
+            and ($6::text is null or a.source::text = $6)
+            and ($7::uuid is null or a.organization_id = $7)
+            and ($8::uuid is null or a.workspace_id = $8)
+          order by a.at desc
+          limit $9`,
+        [
+          desde,
+          q.antes ?? null,
+          q.quien ?? null,
+          q.verbo ?? null,
+          q.sujeto ?? null,
+          q.origen ?? null,
+          q.organizationId ?? null,
+          q.workspaceId ?? null,
+          q.limite,
+        ],
+      );
+
+      return { actividad: rows, hayMas: rows.length === q.limite };
+    });
+  });
 
   /**
    * Lo último que ha pasado en un espacio.

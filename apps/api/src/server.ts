@@ -161,9 +161,13 @@ await app.register(fileRoutes);
 await app.register(githubRoutes);
 await app.register(infraestructuraRoutes);
 await app.register(arquitecturaRoutes);
+// `actividadRoutes` estaba aquí DOS VECES, una a cada lado de `auditoria`, y
+// eso no es una línea de más: Fastify rechaza declarar dos veces la misma ruta,
+// así que el proceso se caía al arrancar. No lo cazó nada porque nada arrancaba
+// el servidor — compilar y pasar las pruebas no lo toca. Ahora hay un paso de
+// CI que sí lo hace (`npm run arranca --workspace apps/api`).
 await app.register(actividadRoutes);
 await app.register(auditoriaRoutes);
-await app.register(actividadRoutes);
 await app.register(inicioRoutes);
 await app.register(grafoRoutes);
 await app.register(iceRoutes);

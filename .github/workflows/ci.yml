@@ -202,6 +202,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Y la API arranca de verdad
+        # El paso que faltaba, y se notó tarde: la API llevaba registrado un
+        # módulo de rutas DOS veces —una línea duplicada al fusionar dos
+        # caminos— y Fastify rechaza declarar dos veces la misma ruta, así que
+        # el proceso se caía nada más empezar. Todo lo demás estaba en verde:
+        # compilar no lo ve, porque registrar dos veces el mismo módulo es
+        # correcto para TypeScript, y las pruebas tampoco, porque hablan con
+        # Postgres directamente y ninguna levanta el HTTP. El único sitio donde
+        # se veía era al desplegar.
+        #
+        # No pide nada: arranca y comprueba que se queda escuchando.
+        run: npm run arranca --workspace apps/api
+
       - name: La imagen de la API construye
         # `npm run build` compila TypeScript; esto comprueba otra cosa que se
         # rompe aparte y solo se veía al desplegar: que el Dockerfile siga
