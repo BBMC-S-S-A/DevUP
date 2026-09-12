@@ -37,14 +37,16 @@ está hecho para que eso no pueda volver a pasar.
 
 ### Regla 1 — Cada sesión en su rama. Nunca las dos en la misma.
 
-| Sesión | Rama |
-|---|---|
-| Interfaz y flujo | `claude/interfaz-y-flujo` (o la que ya esté usando, pero **suya**) |
-| Funcionalidades | `claude/plan-desarrollo-interfaz-j9fr0o` |
+La sesión de interfaz ya trabaja como hay que trabajar: **una rama corta por
+PR**, salida del tronco y de vuelta a él —`fix/riel-legible`,
+`feat/barra-por-niveles`, `feat/selector-en-cabecera`—. Que siga así. La de
+funcionalidades usa una rama larga, `claude/plan-desarrollo-interfaz-j9fr0o`.
 
-Las dos salen del tronco (`claude/sales-control-workspace-platform-i99syv`) y
-vuelven a él por PR. Compartir rama fue la causa directa de los tres conflictos
-de hoy: dos sesiones empujando al mismo sitio se sobrescriben sin verse.
+La regla es una sola: **nadie empuja a la rama de la otra sesión.** Ahí estuvo
+el fallo de hoy, y no en cómo se llamen las ramas — dos sesiones empujando al
+mismo sitio se sobrescriben sin verse, y así aparecieron los tres conflictos.
+
+Las dos salen del tronco, `claude/sales-control-workspace-platform-i99syv`.
 
 **Traer el tronco es responsabilidad de cada una**, al empezar cada tanda:
 `git fetch origin && git merge origin/claude/sales-control-workspace-platform-i99syv`.
