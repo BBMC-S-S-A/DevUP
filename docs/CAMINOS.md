@@ -258,10 +258,18 @@ detrás. Canjear por código ya funciona; lo único que no se puede es dar otro 
 una invitación que ya existe, y la salida actual —reinvitar— sirve pero no es
 lo que la pantalla promete.
 
-**4. El diario del proyecto, cronológico.** Agrupar el registro por semana. La
+**4. Devolver a `que_ha_pasado` el alcance que perdió en la fusión.** Quedó la
+versión desplegada, que pregunta a `/workspaces/:id/actividad` — **un espacio
+cada vez**. Se perdieron tres cosas de la otra: cruzar todas las organizaciones
+(«¿qué me he perdido en TODO?», que es la pregunta del lunes), el filtro por
+persona y el filtro por verbo. La API ya las sirve —
+`/organizations/:orgId/activity` y `/organizations/:orgId/actividad/:personaId`—,
+así que es trabajo de herramienta, no de base.
+
+**5. El diario del proyecto, cronológico.** Agrupar el registro por semana. La
 versión en prosa necesita al agente y va después.
 
-**5. Reconstruir el contexto de una tarea en un botón.** El PR, los mensajes, la
+**6. Reconstruir el contexto de una tarea en un botón.** El PR, los mensajes, la
 pizarra y la grabación, juntos. Es la tesis del producto en un clic, y **depende
 de 1 y 2**: sin enlaces tejidos no hay nada que reconstruir.
 
@@ -315,6 +323,26 @@ sala para compartir pantalla.
 lo de arriba hace que el tablero mienta sobre cuánto queda: qué pantalla es la
 portada, qué se cuenta como participación, y el tamaño del sprite y cuántos
 cuerpos base.
+
+**Y la más urgente de las tres: ¿el área es una etiqueta o una pertenencia?**
+Conviven dos modelos de «categoría», los dos con dueño:
+
+| | `tags.owner_id` (0040, «jefe de rama») | `task_categories.owner_id` (0044, «delegado») |
+|---|---|---|
+| Cuántas por tarea | varias | una |
+| Ámbito | la organización | el espacio |
+| **¿Hereda responsable?** | **no, ninguno** | **sí**: crear ahí sin decir a quién la asigna al delegado |
+
+Lo que hace que esto no pueda esperar no es que haya dos: es que **se ven
+iguales y no se portan igual**. Las dos son fichas encima del tablero, las dos
+enseñan un nombre y una persona al lado, y solo una decide quién acaba haciendo
+el trabajo. Alguien que archive en la etiqueta «DevVerse» esperando que caiga en
+Carlos se encontrará con una tarea sin responsable, y no habrá nada en pantalla
+que se lo explique.
+
+Dos modelos que se distinguen a la vista son una redundancia; dos que no, son
+una trampa. La decisión es de producto y va al tablero — pero **mientras no se
+tome, el riesgo corre**.
 
 **El backlog huérfano.** Doce tareas con captura y sin responsable, casi todas
 vencidas. No son de nadie, y una tarea vencida y sin dueño no es trabajo
