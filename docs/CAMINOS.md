@@ -226,3 +226,109 @@ explicación cómoda y la equivocada.
 Lo que funciona: `npm run sembrar:caminos -- --ver` **desde el portátil**, con
 `DEVUP_TOKEN`. Usa las mismas funciones que el MCP, así que siembra lo mismo que
 sembraría el agente, y es repetible.
+
+---
+
+## 9. El trabajo, repartido
+
+Comprobado contra el código el 12 de septiembre, no contra la memoria de nadie.
+El criterio es el del §1: **por capa**. Cuando algo necesita las dos mitades, se
+parte en dos tareas —la API primero, la pantalla después— y cada mitad va a su
+sesión.
+
+### 9.1 Funcionalidades · base, API y MCP
+
+**1. Las rutas de enlaces del grafo.** `graph_links` tiene tabla y tiene
+`puede_ver_nodo` desde la 0043, y **no las usa nadie**: no hay una sola ruta que
+escriba o lea enlaces. Crear un enlace y leer los de un nodo, comprobando **los
+dos extremos** — que es para lo que se escribió esa función: un enlace entre una
+tarea y un mensaje de un canal privado no puede revelar que ese canal existe.
+
+*Va primero porque desbloquea a la otra sesión.* Sin esto, la red de trabajo no
+puede dibujar más de lo que ya dibuja.
+
+**2. Tejer enlaces desde donde ya pasan las cosas.** Al adjuntar un archivo a
+una tarea, al enlazarle una rama, al mencionarla en un mensaje. Un grafo que hay
+que rellenar a mano se queda vacío; uno que se teje solo crece. Es la diferencia
+entre una función que existe y una que sirve.
+
+**3. Renovar el código corto de invitación.** Falta `set_invitation_code`: hoy
+el botón de la pantalla de ajustes está **desactivado** porque no hay ruta
+detrás. Canjear por código ya funciona; lo único que no se puede es dar otro a
+una invitación que ya existe, y la salida actual —reinvitar— sirve pero no es
+lo que la pantalla promete.
+
+**4. El diario del proyecto, cronológico.** Agrupar el registro por semana. La
+versión en prosa necesita al agente y va después.
+
+**5. Reconstruir el contexto de una tarea en un botón.** El PR, los mensajes, la
+pizarra y la grabación, juntos. Es la tesis del producto en un clic, y **depende
+de 1 y 2**: sin enlaces tejidos no hay nada que reconstruir.
+
+### 9.2 Interfaz y flujo · `apps/web`
+
+**1. La entrada «Inicio» en el menú lateral.** Diez líneas (§5) que desbloquean
+una pantalla entera ya escrita y probada. Es lo que mejor relación
+esfuerzo/resultado tiene de toda la lista.
+
+**2. «¿Qué ha pasado aquí desde…?» en el espacio.** `GET
+/workspaces/:id/actividad?desde=…` **ya existe y pagina por marca de tiempo**,
+no por número de página, justo para que «lo que ha pasado desde ayer» no cambie
+de significado mientras se lee. Es con lo que alguien vuelve el lunes.
+
+**3. Quién ha trabajado, en la ficha de la persona y en la rama.** `GET
+/organizations/:orgId/actividad/:personaId?dias=…` **ya existe** y devuelve los
+renglones y un recuento por verbo.
+
+*Las tres se pueden empezar hoy: la API está hecha. No hay que esperar a nadie.*
+
+**4. El armazón de organización, con cajón para móvil desde el principio.** Seis
+pantallas siguen sin barra. Construirlo con barra fija y desmontarlo después es
+lo que hay que evitar.
+
+**5. Marco de página: una cabecera, no cinco copiadas.** Y con él los tres
+finales de una carga: cargando, fallo, vacío.
+
+**6. La capa de datos.** 125 llamadas sueltas y 119 efectos contra 65 sitios que
+ya usan `useRecurso`. Pantalla por pantalla. **La trampa, ya cazada una vez:** al
+pasar de estado local a caché hay que invalidar *aunque la escritura salga
+bien*, o volver dentro de la ventana de frescura enseña lo de antes. No falla
+nada — miente.
+
+**7. Partir las pantallas grandes.** `TaskBoard.tsx` va por 1.525 líneas y ya ha
+adelantado a Ventas (1.323); `piezas.tsx` de Spotify, 1.090. Después de la capa
+de datos, no antes.
+
+**8. La red de trabajo alimentándose del grafo.** Su propio comentario dice que
+no dibuja tarea↔commit ni tarea↔mensaje porque le faltaba el registro. **Depende
+de 9.1.1 y 9.1.2.**
+
+### 9.3 Ni de una sesión ni de la otra
+
+**Delegado a personas, porque toca variables de entorno o infraestructura** —la
+regla no cambia: eso no se hace a medias—. TURN o Metered, correo de verdad,
+respaldos fuera de la máquina con restauración probada, custodia de
+`VAULT_MASTER_KEY`, Google, Spotify, YouTube, S3 de producción, y el tope de
+sala para compartir pantalla.
+
+**Decisiones, no código.** Media hora de conversación cada una, y mezclarlas con
+lo de arriba hace que el tablero mienta sobre cuánto queda: qué pantalla es la
+portada, qué se cuenta como participación, y el tamaño del sprite y cuántos
+cuerpos base.
+
+**El backlog huérfano.** Doce tareas con captura y sin responsable, casi todas
+vencidas. No son de nadie, y una tarea vencida y sin dueño no es trabajo
+pendiente: es ruido que hace que el tablero deje de leerse. **Antes de añadir
+nada nuevo, repartirlas o cerrarlas.**
+
+### 9.4 El único punto donde una espera a la otra
+
+Todo lo demás es paralelo. La única dependencia real:
+
+```
+9.1.1 rutas de enlaces  ──►  9.1.2 tejer enlaces  ──►  9.2.8 la red
+                                                  └──►  9.1.5 el contexto en un botón
+```
+
+Por eso las rutas de enlaces van primero en la lista de funcionalidades: es lo
+único que tiene a alguien esperando detrás.
