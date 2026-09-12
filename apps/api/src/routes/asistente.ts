@@ -475,7 +475,7 @@ export async function ejecutar(
         // Lo pidió una persona, pero lo hizo el asistente. El registro guarda
         // las dos cosas para que la auditoría no le atribuya a nadie trabajo
         // que no tecleó.
-        origen: "agente",
+        procedencia: "agente",
       });
 
       const extras = [`en ${columna.name}`];
@@ -527,8 +527,8 @@ export async function ejecutar(
       if (!suya[0]) return { texto: "Esa tarea no está en este espacio.", adjuntos: [] };
 
       await moverTareaEnDb(db, datos.data.id, columna.id, null, {
-        actorId: userId,
-        origen: "agente",
+        userId,
+        procedencia: "agente",
       });
       return { texto: `«${suya[0].title}» movida a ${columna.name}.`, adjuntos: [] };
     }

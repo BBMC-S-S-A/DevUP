@@ -19,10 +19,10 @@ import { Field } from "@/components/ui/Field";
  * pega lo que sea —la URL entera o el código suelto— y esto saca lo que hace
  * falta.
  *
- * EL CÓDIGO CORTO TODAVÍA NO EXISTE, y esto no lo finge. Uno que se pueda
- * dictar por teléfono es una columna más en `invitations` y va en la otra mitad
- * del plan; cuando exista entra por este mismo campo sin cambiar nada aquí,
- * porque lo que se manda al servidor es lo mismo.
+ * EL CÓDIGO CORTO YA EXISTE (migración 0041) y entra por este mismo campo, tal
+ * como estaba previsto: lo que se manda al servidor es lo mismo, y es allí
+ * donde se decide si lo que llega es un token largo o un código dictado. Lo
+ * único que cambió aquí fue bajar el mínimo de diez a ocho, que es lo que mide.
  */
 export function EntrarConCodigo({ onCerrar }: { onCerrar: () => void }) {
   const router = useRouter();
@@ -128,6 +128,9 @@ export function tokenDe(entrada: string): string | null {
   // El código suelto. Sin espacios por dentro —un token no los lleva, y si los
   // hay es que se pegó una frase— y con el mismo mínimo que exige el servidor,
   // para que el mensaje de «esto no parece una invitación» salga aquí.
-  if (/\s/.test(limpio) || limpio.length < 10) return null;
+  // Ocho y no diez: es lo que mide el código corto (`ABCD-EFGH`, nueve con el
+  // guion). El servidor exige lo mismo, así que el mensaje de «esto no parece
+  // una invitación» sale aquí y no después de un viaje de ida y vuelta.
+  if (/\s/.test(limpio) || limpio.replace(/-/g, "").length < 8) return null;
   return limpio;
 }

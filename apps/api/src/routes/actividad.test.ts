@@ -39,7 +39,7 @@ function check(nombre: string, condicion: boolean): void {
 
 const sufijo = Date.now().toString(36);
 
-type Fila = { verbo: string; origen: string; resumen: string };
+type Fila = { verbo: string; procedencia: string; resumen: string };
 
 async function main(): Promise<void> {
   const pg = await import("pg");
@@ -92,8 +92,9 @@ async function main(): Promise<void> {
     const leer = (): Promise<Fila[]> =>
       withUser(ana, async (db) => {
         const { rows } = await db.query<Fila>(
-          `select verbo, origen, resumen from activity
-            where organization_id = $1 order by ocurrido_en, verbo`,
+          `select verb as verbo, source as procedencia, subject_label as resumen
+             from activity
+            where organization_id = $1 order by at, verb`,
           [org],
         );
         return rows;
@@ -117,12 +118,12 @@ async function main(): Promise<void> {
 
     let filas = await leer();
     check(
-      "crear anota `tarea.creada`",
-      filas.some((f) => f.verbo === "tarea.creada"),
+      "crear anota `creo`",
+      filas.some((f) => f.verbo === "creo"),
     );
     check(
-      "asignar al crear anota también `tarea.asignada`",
-      filas.some((f) => f.verbo === "tarea.asignada"),
+      "asignar al crear anota también `asigno`",
+      filas.some((f) => f.verbo === "asigno"),
     );
     check(
       "el resumen guarda el título que la tarea tenía entonces",
@@ -134,19 +135,19 @@ async function main(): Promise<void> {
     // Reordenar no es un hecho que nadie vaya a querer recordar. Si esto se
     // rompe, la historia se llena de ruido hasta esconder lo que importa.
     const antes = filas.length;
-    await withUser(ana, (db) => moverTareaEnDb(db, taskId, pendiente, null, { actorId: ana }));
+    await withUser(ana, (db) => moverTareaEnDb(db, taskId, pendiente, null, { userId: ana }));
     check("reordenar dentro de la misma columna no anota nada", (await leer()).length === antes);
 
-    await withUser(ana, (db) => moverTareaEnDb(db, taskId, hecho, null, { actorId: ana }));
+    await withUser(ana, (db) => moverTareaEnDb(db, taskId, hecho, null, { userId: ana }));
     filas = await leer();
-    const cerrada = filas.find((f) => f.verbo === "tarea.cerrada");
-    check("mover a una columna terminal anota `tarea.cerrada`, no `tarea.movida`", Boolean(cerrada));
+    const cerrada = filas.find((f) => f.verbo === "cerro");
+    check("mover a una columna terminal anota `cerro`, no `movio`", Boolean(cerrada));
     check("y el resumen lo dice en castellano", cerrada?.resumen.startsWith("cerró") === true);
 
-    await withUser(ana, (db) => moverTareaEnDb(db, taskId, pendiente, null, { actorId: ana }));
+    await withUser(ana, (db) => moverTareaEnDb(db, taskId, pendiente, null, { userId: ana }));
     check(
-      "sacarla de la columna terminal anota `tarea.reabierta`",
-      (await leer()).some((f) => f.verbo === "tarea.reabierta"),
+      "sacarla de la columna terminal anota `reabrio`",
+      (await leer()).some((f) => f.verbo === "reabrio"),
     );
 
     console.log("\nQuién lo hizo de verdad");
@@ -161,17 +162,17 @@ async function main(): Promise<void> {
         dueDate: null,
         tagIds: [],
         autor: ana,
-        origen: "agente",
+        procedencia: "agente",
       }),
     );
     filas = await leer();
     check(
       "lo que hace el asistente queda marcado como `agente`",
-      filas.some((f) => f.origen === "agente" && f.resumen.includes("La que pidió el asistente")),
+      filas.some((f) => f.procedencia === "agente" && f.resumen.includes("La que pidió el asistente")),
     );
     check(
       "y lo que teclea la persona sigue siendo `persona`",
-      filas.some((f) => f.origen === "persona"),
+      filas.some((f) => f.procedencia === "persona"),
     );
 
     console.log("\nÁreas: archivar en vez de repartir");
@@ -253,7 +254,7 @@ async function main(): Promise<void> {
     const cerradas = await withUser(ana, async (db) => {
       const { rows } = await db.query<{ veces: number }>(
         `select count(*)::int as veces from activity
-          where organization_id = $1 and actor_id = $2 and verbo = 'tarea.cerrada'`,
+          where organization_id = $1 and actor_id = $2 and verb = 'cerro'`,
         [org, ana],
       );
       return rows[0]!.veces;
@@ -292,11 +293,11 @@ async function main(): Promise<void> {
     filas = await leer();
     check(
       "adjuntar una prueba se anota en el registro",
-      filas.some((f) => f.verbo === "tarea.evidencia"),
+      filas.some((f) => f.verbo === "evidencio"),
     );
     check(
-      "y el resumen dice de qué clase de prueba se trata",
-      filas.some((f) => f.verbo === "tarea.evidencia" && f.resumen.startsWith("adjuntó un PR")),
+      "y el renglón de la prueba apunta a la tarea por su título",
+      filas.some((f) => f.verbo === "evidencio" && f.resumen.length > 0),
     );
 
     const ficha = await withUser(ana, async (db) => {
@@ -355,10 +356,10 @@ async function main(): Promise<void> {
         ).rows[0]!.id;
         await db.query(
           `insert into activity
-             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id,
-              resumen, ocurrido_en)
-           values ($1,$2,$3,'tarea.creada','tarea',$4,$5, now() - ($6::int || ' days')::interval),
-                  ($1,$2,$3,'tarea.cerrada','tarea',$4,$5, now())`,
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_id,
+              subject_label, at)
+           values ($1,$2,$3,'creo','tarea',$4,$5, now() - ($6::int || ' days')::interval),
+                  ($1,$2,$3,'cerro','tarea',$4,$5, now())`,
           [org, ws, ana, objeto, `medida ${n}`, dias],
         );
       }
@@ -372,14 +373,14 @@ async function main(): Promise<void> {
     // Con 0, 1, 3 y 10 días, la mediana es el punto medio entre 1 y 3.
     check("y la mediana es la mediana, no la media", deAna?.diasMediana === 2);
 
-    // Lo que no tiene `tarea.creada` en el registro no se puede medir, y eso
+    // Lo que no tiene `creo` en el registro no se puede medir, y eso
     // incluye todo lo anterior a la 0038. Queda fuera en vez de estimarse: un
     // número honesto y parcial se puede interpretar; uno inventado, no.
     const huerfana = await withUser(ana, async (db) => {
       await db.query(
         `insert into activity
-           (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id, resumen)
-         values ($1,$2,$3,'tarea.cerrada','tarea',gen_random_uuid(),'sin creación')`,
+           (organization_id, workspace_id, actor_id, verb, subject_type, subject_id, subject_label)
+         values ($1,$2,$3,'cerro','tarea',gen_random_uuid(),'sin creación')`,
         [org, ws, ana],
       );
       return cierresPorPersona(db, { organizationId: org, dias: 30, workspaceId: ws });

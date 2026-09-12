@@ -42,6 +42,7 @@ import { uploadFile } from "@/lib/files/upload";
 import { Boton } from "@/components/ui/Boton";
 import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { useAvisosDelEspacio } from "@/lib/workspace-feed";
 import { AreaTexto, Desplegable } from "@/components/ui/Field";
 import { invalidar, useRecurso } from "@/lib/datos";
 
@@ -164,6 +165,18 @@ export function TaskBoard({
    * se vea con claridad qué filtro hay activo desde fuera, se olvida al salir.
    */
   const [categorias, setCategorias] = useState<string[]>([]);
+
+  /**
+   * El tablero se repinta cuando lo cambia otra persona —o un agente por MCP—
+   * sin que haya que recargar. `tasks.ts` era la única ruta de escritura que
+   * no avisaba a nadie: la escritura ocurría y la tarjeta se quedaba donde
+   * estaba, así que parecía que el agente no había hecho nada.
+   *
+   * Se engancha al `load` de arriba —el de la capa de datos— y no al que traía
+   * el tronco: la forma de cargar es la del camino B, el aviso en vivo es del
+   * tronco, y las dos cosas son independientes.
+   */
+  useAvisosDelEspacio(workspaceId, "board-change", load);
 
   const confirmarEnTablero = useConfirmar();
 

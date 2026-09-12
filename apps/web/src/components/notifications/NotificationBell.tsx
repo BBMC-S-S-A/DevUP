@@ -185,7 +185,7 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label="Notificaciones"
-          className={`devup-emerge cristal absolute z-40 flex max-h-[26rem] w-80 flex-col
+          className={`devup-emerge panel-emergente absolute z-40 flex max-h-[26rem] w-80 flex-col
             overflow-hidden rounded-2xl ${ANCLAJES[anclaje]}`}
         >
           <header className="filo-luz flex shrink-0 items-center gap-2 px-3.5 py-2.5">

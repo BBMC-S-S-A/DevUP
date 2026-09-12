@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Database, FileCode2, Globe, HardDrive, Layers, Link2, Plus, Trash2, X, Zap } from "lucide-react";
+import { Boxes, Database, Workflow, Globe, HardDrive, Layers, Link2, Plus, Trash2, X, Zap } from "lucide-react";
 import { useRef, useState } from "react";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -9,7 +9,9 @@ import { Cargando, Fallo } from "@/components/ui/Pagina";
 import { Dialogo, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import type { EnlaceArquitectura, NodoArquitectura, TipoNodoArquitectura } from "@/lib/api";
 import { api, sembrar, useMutacion, useRecurso } from "@/lib/datos";
-import { ImportarTerraform } from "./ImportarTerraform";
+import { trazarEnlace } from "./Enlaces";
+import { ALTO_NODO, ANCHO_NODO, FormaNodo, INSET } from "./Formas";
+import { ImportarRepositorio } from "./ImportarRepositorio";
 
 /**
  * El diagrama de arquitectura: un lienzo con nodos que se arrastran y se
@@ -18,7 +20,8 @@ import { ImportarTerraform } from "./ImportarTerraform";
  * QUÉ PROMETE. Un sitio para dibujar cómo está montado el sistema —un
  * servicio, una base de datos, una cola— y cómo se hablan entre ellos. Se
  * puede llenar a mano, pedírselo a un agente por MCP, o traer lo que ya esté
- * escrito en el Terraform del repositorio del proyecto.
+ * leyendo el repositorio del proyecto —su Terraform si lo tiene, y si no su
+ * docker-compose, sus dependencias y su reparto de carpetas—.
  *
  * LA POSICIÓN SE MUEVE OPTIMISTA Y SE GUARDA AL SOLTAR, no en cada píxel. Un
  * arrastre manda una petición por movimiento del ratón sería decenas de
@@ -47,7 +50,6 @@ const NOMBRE_TIPO: Record<TipoNodoArquitectura, string> = {
   otro: "Otro",
 };
 
-const ANCHO_NODO = 176;
 const ALTO_LIENZO = 560;
 
 type Respuesta = { nodes: NodoArquitectura[]; links: EnlaceArquitectura[] };
@@ -182,10 +184,10 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
           <Boton
             tamano="sm"
             variante="fantasma"
-            icono={<FileCode2 size={13} />}
+            icono={<Workflow size={13} />}
             onClick={() => setImportando(true)}
           >
-            Importar de Terraform
+            Leer del repositorio
           </Boton>
           <Boton tamano="sm" variante="primario" icono={<Plus size={13} />} onClick={() => setCreando(true)}>
             Añadir nodo
@@ -203,14 +205,14 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
             <EstadoVacio
               icono={<Boxes size={20} />}
               titulo="Todavía no hay ningún nodo"
-              pista="Un nodo es una caja: un servicio, una base de datos, una cola. Dibújalas a mano, o trae las que ya estén escritas en el Terraform del repositorio."
+              pista="Un nodo es una caja: un servicio, una base de datos, una cola. Dibújalas a mano, o deja que DevUP las saque del repositorio del proyecto."
               accion={
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Boton variante="primario" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
                     Añadir el primero
                   </Boton>
-                  <Boton variante="fantasma" icono={<FileCode2 size={14} />} onClick={() => setImportando(true)}>
-                    Importar de Terraform
+                  <Boton variante="fantasma" icono={<Workflow size={14} />} onClick={() => setImportando(true)}>
+                    Leer del repositorio
                   </Boton>
                 </div>
               }
@@ -220,8 +222,15 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
           <>
             <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
               <defs>
-                <marker id="flecha-arquitectura" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                  <path d="M0,0 L8,4 L0,8 Z" fill="var(--c-faint)" />
+                <marker
+                  id="flecha-arquitectura"
+                  markerWidth="9"
+                  markerHeight="9"
+                  refX="8"
+                  refY="4.5"
+                  orient="auto"
+                >
+                  <path d="M0,0.5 L9,4.5 L0,8.5 Z" fill="var(--c-faint)" />
                 </marker>
               </defs>
               {enlaces.map((enlace) => {
@@ -230,25 +239,29 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
                 if (!origen || !destino) return null;
                 const a = posicionDe(origen);
                 const b = posicionDe(destino);
-                const x1 = a.x + ANCHO_NODO / 2;
-                const y1 = a.y + 28;
-                const x2 = b.x + ANCHO_NODO / 2;
-                const y2 = b.y + 28;
-                const mx = (x1 + x2) / 2;
-                const my = (y1 + y2) / 2;
+                // La curva se engancha al lado de cada caja que mira a la otra
+                // y se recalcula al arrastrarlas: ver `Enlaces.ts`.
+                const { d, medio } = trazarEnlace(
+                  { x: a.x, y: a.y, ancho: ANCHO_NODO, alto: ALTO_NODO },
+                  { x: b.x, y: b.y, ancho: ANCHO_NODO, alto: ALTO_NODO },
+                );
                 return (
                   <g key={enlace.id}>
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
+                    <path
+                      d={d}
+                      fill="none"
                       stroke="var(--c-faint)"
                       strokeWidth={1.5}
                       markerEnd="url(#flecha-arquitectura)"
                     />
                     {enlace.label && (
-                      <foreignObject x={mx - 60} y={my - 11} width={120} height={22} className="pointer-events-auto">
+                      <foreignObject
+                        x={medio.x - 60}
+                        y={medio.y - 11}
+                        width={120}
+                        height={22}
+                        className="pointer-events-auto"
+                      >
                         <button
                           type="button"
                           onClick={() =>
@@ -273,21 +286,32 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
             {nodos.map((nodo) => {
               const Icono = ICONO[nodo.kind];
               const pos = posicionDe(nodo);
+              const inset = INSET[nodo.kind];
               return (
                 <div
                   key={nodo.id}
                   onPointerDown={(e) => alPulsarNodo(nodo, e)}
-                  className={`devup-entrada absolute cursor-grab touch-none select-none rounded-xl border bg-surface p-2.5 shadow-sm active:cursor-grabbing
-                    ${conectando?.id === nodo.id ? "border-accent ring-2 ring-accent/40" : "border-line"}`}
-                  style={{ left: pos.x, top: pos.y, width: ANCHO_NODO }}
+                  className="devup-entrada absolute cursor-grab touch-none select-none active:cursor-grabbing"
+                  style={{ left: pos.x, top: pos.y, width: ANCHO_NODO, height: ALTO_NODO }}
                 >
+                  {/* El borde de la caja ES su silueta, así que lo dibuja un
+                      `path` por debajo y no un `border` de CSS: ver `Formas`. */}
+                  <FormaNodo kind={nodo.kind} resaltada={conectando?.id === nodo.id} />
+
+                  {/* El contenido se aparta lo que pida la forma — la tapa del
+                      cilindro, el estrechamiento de la nube— o se saldría del
+                      contorno en la mitad de los tipos. */}
+                  <div
+                    className="relative flex h-full flex-col"
+                    style={{ paddingTop: inset.top, paddingLeft: inset.x, paddingRight: inset.x, paddingBottom: 6 }}
+                  >
                   <div className="flex items-center gap-1.5">
                     <Icono size={13} className="shrink-0 text-accent" />
                     <span className="min-w-0 flex-1 truncate text-xs font-semibold">{nodo.name}</span>
                   </div>
                   <p className="mt-0.5 text-[10px] text-faint">{NOMBRE_TIPO[nodo.kind]}</p>
 
-                  <div className="mt-1.5 flex items-center justify-end gap-0.5">
+                  <div className="mt-auto flex items-center justify-end gap-0.5">
                     <BotonIcono etiqueta={`Enlazar ${nodo.name}`} onClick={() => setConectando(nodo)}>
                       <Link2 size={12} />
                     </BotonIcono>
@@ -312,6 +336,7 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
                     >
                       <Trash2 size={12} />
                     </BotonIcono>
+                  </div>
                   </div>
                 </div>
               );
@@ -358,7 +383,7 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
       )}
 
       {importando && (
-        <ImportarTerraform
+        <ImportarRepositorio
           workspaceId={workspaceId}
           clave={clave}
           onCerrar={() => setImportando(false)}

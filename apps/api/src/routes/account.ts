@@ -5,6 +5,7 @@ import { requireSession } from "../auth/plugin.js";
 import { hashPassword } from "../auth/password.js";
 import { type Db, withUser } from "../db/pool.js";
 import { googleConfigurado } from "../auth/google.js";
+import { normalizarCodigo, nuevoCodigo } from "../lib/codigo.js";
 import { env } from "../env.js";
 import {
   badRequest,
@@ -15,12 +16,6 @@ import {
   requireUser,
 } from "../lib/http.js";
 import { enviarCorreo, plantillas } from "../mail/mailer.js";
-import {
-  formatearCodigo,
-  hashCodigo,
-  normalizarCodigo,
-  nuevoCodigo,
-} from "../lib/codigo-invitacion.js";
 
 const uuid = z.string().uuid();
 const correo = z.string().trim().toLowerCase().email().max(254);
@@ -28,6 +23,16 @@ const correo = z.string().trim().toLowerCase().email().max(254);
 const HORA = 3600_000;
 const CADUCIDAD = {
   invitacion: 7 * 24 * HORA,
+  /**
+   * El código corto vive MUCHO menos que el enlace, y no es una manía.
+   *
+   * Ocho caracteres se prueban a lo bruto de una forma que un token de 32
+   * bytes no. Se dicta en el momento —por teléfono, en una reunión— y se usa
+   * en el momento, así que un día es de sobra para su trabajo y recorta la
+   * ventana a la centésima parte de la del enlace. Quien lo pierda, que
+   * vuelva a invitar: el nuevo sustituye al anterior.
+   */
+  codigo: 24 * HORA,
   verificacion: 24 * HORA,
   recuperacion: 1 * HORA,
 } as const;
@@ -44,37 +49,27 @@ function nuevoToken(): { token: string; hash: string } {
   return { token, hash: createHash("sha256").update(token).digest("hex") };
 }
 
-export function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+/**
+ * El hash con el que se busca una invitación, venga como venga.
+ *
+ * Quien recibe una invitación pega lo que le pasaron: la URL entera, el
+ * token suelto, o el código corto dictado por teléfono —con guion o sin él,
+ * en minúsculas—. Las tres cosas acaban aquí, y esta función decide si lo
+ * que llega es un código (y entonces se normaliza antes de resumir) o un
+ * token (que va tal cual).
+ *
+ * Vive en un solo sitio porque lo usan la ruta de mirar y la de canjear, y
+ * si divergieran se podría CONSULTAR una invitación que luego no se puede
+ * aceptar, que es la peor forma de fallar: la pantalla enseña la
+ * organización correcta y el botón no funciona.
+ */
+export function hashDeInvitacion(entrada: string): string {
+  const codigo = normalizarCodigo(entrada);
+  return hashToken(codigo ?? entrada);
 }
 
-/**
- * Le pone código corto a una invitación, reintentando si choca.
- *
- * CADA INTENTO VA EN SU PROPIA TRANSACCIÓN, y no es un detalle: en Postgres una
- * violación de unicidad aborta la transacción entera, así que reintentar dentro
- * de la misma no vuelve a intentar nada —falla todo lo que venga detrás—. Si
- * esto compartiera transacción con la creación de la invitación, un choque de
- * códigos se llevaría por delante la invitación misma.
- *
- * TRES INTENTOS SON DE SOBRA. Con 32^8 y unas pocas invitaciones abiertas a la
- * vez, la probabilidad de un choque es del orden de una entre mil millones; la
- * de tres seguidos no tiene nombre. El bucle está para que un imposible sea un
- * imposible y no un 500.
- */
-async function ponerCodigo(userId: string, invitacion: string): Promise<string | null> {
-  for (let intento = 0; intento < 3; intento += 1) {
-    const codigo = nuevoCodigo();
-    try {
-      await withUser(userId, (db) =>
-        db.query("select public.set_invitation_code($1,$2)", [invitacion, hashCodigo(codigo)]),
-      );
-      return codigo;
-    } catch (fallo) {
-      if ((fallo as { code?: string }).code !== "23505") throw fallo;
-    }
-  }
-  return null;
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 /** Envía la verificación de correo. Sin SMTP acaba en el registro. */
@@ -120,52 +115,21 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
 
   /** Vista previa de una invitación, antes de que haya sesión. */
   app.get("/invitations/:token", async (request) => {
-    const { token } = parseParams(z.object({ token: z.string().min(10) }), request.params);
+    // Ocho y no diez: es lo que mide un código corto. Un token largo pasa
+    // igual, y lo que no es ni una cosa ni otra no encuentra nada.
+    const { token } = parseParams(z.object({ token: z.string().min(8) }), request.params);
 
     const invitacion = await withUser(null, async (db) => {
       const { rows } = await db.query(
         `select organization_name as "organizationName", workspace_name as "workspaceName",
                 email, role, invited_by_name as "invitedByName", expired, accepted
            from public.invitation_by_token($1)`,
-        [hashToken(token)],
+        [hashDeInvitacion(token)],
       );
       return rows[0] ?? null;
     });
 
     if (!invitacion) throw notFound("esa invitación no existe");
-    return { invitation: invitacion };
-  });
-
-  /**
-   * La misma vista previa, pero llegando por el código dictado.
-   *
-   * CON LÍMITE ESTRICTO, y aquí no es rutina: un código de ocho símbolos es lo
-   * bastante corto como para que probar a ciegas sea una idea que se le pueda
-   * ocurrir a alguien. El espacio es de 32^8 y las invitaciones caducan en
-   * siete días, así que con el límite puesto no hay ataque posible; sin él,
-   * esta ruta sería el único sitio del producto donde se puede adivinar una
-   * credencial a base de insistir.
-   */
-  app.get("/invitations/code/:code", limiteEstricto, async (request) => {
-    const { code } = parseParams(z.object({ code: z.string().min(1).max(40) }), request.params);
-
-    const codigo = normalizarCodigo(code);
-    // Se contesta lo mismo que a un código bien formado que no existe. Decir
-    // «ese código no tiene la forma correcta» es gratis para quien se equivocó
-    // tecleando y es una pista para quien prueba.
-    if (!codigo) throw notFound("ese código no corresponde a ninguna invitación");
-
-    const invitacion = await withUser(null, async (db) => {
-      const { rows } = await db.query(
-        `select organization_name as "organizationName", workspace_name as "workspaceName",
-                email, role, invited_by_name as "invitedByName", expired, accepted
-           from public.invitation_by_code($1)`,
-        [hashCodigo(codigo)],
-      );
-      return rows[0] ?? null;
-    });
-
-    if (!invitacion) throw notFound("ese código no corresponde a ninguna invitación");
     return { invitation: invitacion };
   });
 
@@ -189,21 +153,23 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       );
 
       const { token, hash } = nuevoToken();
+      // El código se guarda igual que el token: solo su hash. Desde que hay
+      // respaldos automáticos, uno en claro viajaría dentro de cada volcado.
+      const codigo = nuevoCodigo();
+      const codigoHash = hashToken(normalizarCodigo(codigo)!);
 
       const contexto = await withUser(userId, async (db) => {
         // create_invitation comprueba dentro que quien llama es administrador.
-        const creada = await db.query<{ create_invitation: string }>(
-          "select public.create_invitation($1,$2,$3,$4,$5,$6)",
-          [
-            orgId,
-            body.email,
-            body.role,
-            hash,
-            new Date(Date.now() + CADUCIDAD.invitacion).toISOString(),
-            body.workspaceId ?? null,
-          ],
-        );
-        const invitacionId = creada.rows[0]!.create_invitation;
+        await db.query("select public.create_invitation($1,$2,$3,$4,$5,$6,$7,$8)", [
+          orgId,
+          body.email,
+          body.role,
+          hash,
+          new Date(Date.now() + CADUCIDAD.invitacion).toISOString(),
+          body.workspaceId ?? null,
+          codigoHash,
+          new Date(Date.now() + CADUCIDAD.codigo).toISOString(),
+        ]);
 
         const { rows } = await db.query<{ org: string; quien: string; workspace: string | null }>(
           `select o.name as org, coalesce(p.display_name, 'alguien') as quien,
@@ -213,19 +179,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
             where o.id = $1 and p.id = $2`,
           [orgId, userId, body.workspaceId ?? null],
         );
-        return { ...rows[0]!, invitacionId };
+        return rows[0]!;
       });
-
-      // El código va DESPUÉS y en su propia transacción: ver `ponerCodigo`. Si
-      // no sale, la invitación sigue siendo perfectamente válida por su enlace,
-      // así que no se tumba la petición por esto.
-      const codigo = await ponerCodigo(userId, contexto.invitacionId);
-      if (!codigo) {
-        request.log.warn(
-          { invitacion: contexto.invitacionId },
-          "no se pudo asignar código corto a una invitación",
-        );
-      }
 
       const url = `${env.APP_BASE_URL}/invitacion?token=${token}`;
 
@@ -260,18 +215,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       // El enlace va también en la respuesta, no solo en el correo: mientras
       // el dominio de envío no esté verificado, es la única vía fiable para
       // que quien invita se lo pueda mandar por su cuenta.
-      //
-      // EL CÓDIGO, EN CAMBIO, VA SOLO AQUÍ Y NO EN EL CORREO. Quien recibe el
-      // correo ya tiene el enlace, que es mejor —se pincha—; meterle además el
-      // código sería una segunda llave viajando por el mismo sitio sin que
-      // sirva para nada. El código es para quien INVITA: es lo que dice en voz
-      // alta cuando tiene delante a la persona. Por eso se devuelve aquí, que
-      // es donde está mirando en ese momento.
-      return reply.status(201).send({
-        sent: true,
-        url,
-        code: codigo ? formatearCodigo(codigo) : null,
-      });
+      // El código va en la respuesta y NO en la base ni en el correo: se
+      // enseña una vez a quien invita, que es cuando lo va a dictar. Si se
+      // pierde, se vuelve a invitar y el anterior se sustituye.
+      return reply.status(201).send({ sent: true, url, codigo });
     },
   );
 
@@ -283,14 +230,9 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
       return withUser(userId, async (db) => {
         const { rows } = await db.query(
-          // `hasCode` y no el código: en la base solo está su hash, así que no
-          // hay nada que enseñar aquí aunque se quisiera. Lo que la lista sí
-          // puede decir es si tiene uno vivo, que es lo que necesita el botón
-          // de «dame otro».
           `select i.id, i.email, i.role, i.workspace_id as "workspaceId", w.name as "workspaceName",
                   i.created_at as "createdAt", i.expires_at as "expiresAt",
-                  i.accepted_at as "acceptedAt",
-                  (i.code_hash is not null) as "hasCode"
+                  i.accepted_at as "acceptedAt"
              from invitations i
              left join workspaces w on w.id = i.workspace_id
             where i.organization_id = $1
@@ -309,70 +251,31 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(204).send();
   });
 
-  /**
-   * Pedir un código nuevo para una invitación que ya existe.
-   *
-   * ES LA CONSECUENCIA DE GUARDAR EL CÓDIGO CIFRADO. Como en la base solo vive
-   * su hash, nadie —ni nosotros— puede volver a leer el que se generó al
-   * invitar. Si quien invitó cerró la pestaña sin apuntarlo, esta es la salida.
-   *
-   * Y ES MEJOR SALIDA QUE LA ALTERNATIVA OBVIA, que sería borrar la invitación
-   * y crearla otra vez: eso invalidaría también su enlace, que a esas alturas
-   * ya está en el correo de la otra persona y quizá abierto en su móvil.
-   * Renovar el código no toca el token.
-   */
-  app.post("/invitations/:id/code", { onRequest: requireSession }, async (request) => {
-    const userId = requireUser(request);
-    const { id } = parseParams(z.object({ id: uuid }), request.params);
-
-    const codigo = await ponerCodigo(userId, id);
-    if (!codigo) throw badRequest("no se pudo generar un código para esa invitación");
-    return { code: formatearCodigo(codigo) };
-  });
-
   /** Aceptar una invitación teniendo ya sesión abierta. */
-  app.post("/invitations/accept", { onRequest: requireSession }, async (request) => {
+  /**
+   * Aceptar una invitación teniendo ya sesión abierta.
+   *
+   * CON LÍMITE DE INTENTOS desde que existe el código corto. Un token de 32
+   * bytes no se adivina; ocho caracteres, con paciencia y sin límite, sí. El
+   * límite es lo que convierte «850.000 millones de combinaciones» en una
+   * cifra que signifique algo.
+   */
+  app.post(
+    "/invitations/accept",
+    { onRequest: requireSession, ...limiteEstricto },
+    async (request) => {
     const userId = requireUser(request);
-    const { token } = parseBody(z.object({ token: z.string().min(10) }), request.body);
+    const { token } = parseBody(z.object({ token: z.string().min(8) }), request.body);
 
     const organizationId = await withUser(userId, async (db) => {
       const { rows } = await db.query<{ accept_invitation: string }>(
         "select public.accept_invitation($1,$2)",
-        [hashToken(token), userId],
+        [hashDeInvitacion(token), userId],
       );
       return rows[0]!.accept_invitation;
     });
 
     return { organizationId };
-  });
-
-  /**
-   * Lo mismo, tecleando el código.
-   *
-   * CON LÍMITE ESTRICTO TAMBIÉN, aunque exija sesión. La vista previa de arriba
-   * es anónima y esta no, pero el que prueba códigos a ciegas puede registrarse
-   * primero: pedir sesión sube el coste del ataque, no lo cierra. Lo que lo
-   * cierra es el límite.
-   */
-  app.post(
-    "/invitations/accept-code",
-    { onRequest: requireSession, ...limiteEstricto },
-    async (request) => {
-      const userId = requireUser(request);
-      const { code } = parseBody(z.object({ code: z.string().min(1).max(40) }), request.body);
-
-      const codigo = normalizarCodigo(code);
-      if (!codigo) throw badRequest("ese código no es válido");
-
-      const organizationId = await withUser(userId, async (db) => {
-        const { rows } = await db.query<{ accept_invitation_by_code: string }>(
-          "select public.accept_invitation_by_code($1,$2)",
-          [hashCodigo(codigo), userId],
-        );
-        return rows[0]!.accept_invitation_by_code;
-      });
-
-      return { organizationId };
     },
   );
 

@@ -26,8 +26,31 @@
  */
 import type { LiveData, Peer, Zone } from "./types";
 
-/** El nombre del canal que crea la sala. Sin ese canal, no hay muñeco. */
-const CANAL = "agente-ia";
+/**
+ * El nombre del canal que crea la sala, ya normalizado. Sin ese canal, no hay
+ * muñeco.
+ */
+const CANAL = "agenteia";
+
+/**
+ * El nombre de un canal, reducido a lo comparable.
+ *
+ * POR QUÉ NO BASTA `=== "agente-ia"`, que es lo que había antes y por lo que la
+ * sala no aparecía: el nombre de un canal es texto libre —la API solo lo recorta
+ * y lo limita a 80 caracteres, no lo convierte en identificador—, así que quien
+ * crea la sala la llama «Agente IA», que es como se llama en el producto, y no
+ * `agente-ia`, que es como se llamaba en el código. Pedir una grafía exacta que
+ * no se enseña en ninguna parte es pedir que falle.
+ *
+ * Se quitan los acentos también: «Agente IÁ» no debería ser otra sala.
+ */
+function normalizar(nombre: string): string {
+  return nombre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
 
 /**
  * Un `userId` que no existe.
@@ -91,12 +114,12 @@ function fraseDeReposo(live: LiveData | null, ahora: number): string {
 
 /** Si una zona es la sala del agente. */
 export function esSalaDelAgente(zone: { channelName: string } | null): boolean {
-  return zone?.channelName.toLowerCase() === CANAL;
+  return zone !== null && normalizar(zone.channelName) === CANAL;
 }
 
 /** La zona de la sala del agente, si su canal existe. */
 export function zonaDelAgente(zones: Zone[]): Zone | null {
-  return zones.find((z) => z.channelName.toLowerCase() === CANAL) ?? null;
+  return zones.find((z) => normalizar(z.channelName) === CANAL) ?? null;
 }
 
 /**

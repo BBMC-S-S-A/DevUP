@@ -160,6 +160,7 @@ await app.register(fileRoutes);
 await app.register(githubRoutes);
 await app.register(infraestructuraRoutes);
 await app.register(arquitecturaRoutes);
+await app.register(actividadRoutes);
 await app.register(auditoriaRoutes);
 await app.register(actividadRoutes);
 await app.register(inicioRoutes);

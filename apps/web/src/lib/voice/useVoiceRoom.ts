@@ -58,6 +58,12 @@ export type Participant = {
   cameraStream: MediaStream | null;
   screenStream: MediaStream | null;
   connectionState: RTCPeerConnectionState;
+  /**
+   * Ida y vuelta hasta esa persona, en milisegundos. `null` mientras no haya
+   * un par de candidatos elegido — al entrar, y unos segundos después de un
+   * cambio de red.
+   */
+  rtt: number | null;
 };
 
 /** Petición de grabación pendiente de respuesta por mi parte. */
@@ -165,6 +171,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
         cameraStream: null,
         screenStream: null,
         connectionState: "new" as RTCPeerConnectionState,
+        rtt: null,
       };
       return { ...current, [peerId]: { ...existing, ...patch } };
     });
@@ -396,6 +403,63 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     setRecording({ ...IDLE_RECORDING, awaitingConsent: true, mine: true });
     emit({ type: "recording-request" });
   }, [recording.active, recording.awaitingConsent, emit]);
+
+  /**
+   * La latencia hasta cada persona, cada dos segundos.
+   *
+   * POR QUÉ SE ENSEÑA. En una llamada en malla, cuando alguien se entrecorta lo
+   * primero que pasa es que nadie sabe si es él, si eres tú o si es la sala. Un
+   * número al lado de cada cara contesta eso sin que nadie tenga que preguntar
+   * «¿me escucháis bien?» tres veces.
+   *
+   * DE DÓNDE SALE. Del par de candidatos ICE realmente en uso
+   * (`currentRoundTripTime`), que es la medida de ida y vuelta de verdad. Los
+   * pares que el navegador descartó siguen en las estadísticas, así que hay que
+   * quedarse con el que está `succeeded` y marcado como `nominated`; tomar el
+   * primero que aparezca da números de una ruta que no se está usando.
+   *
+   * CADA DOS SEGUNDOS Y NO CADA MEDIO. `getStats` recorre todas las capas de la
+   * conexión, y con seis personas son seis recorridos: a medio segundo se nota
+   * en el propio audio, que es lo único que esta pantalla no puede permitirse
+   * estropear. Dos segundos bastan para ver una red cayéndose.
+   */
+  useEffect(() => {
+    if (status !== "live") return;
+    let vivo = true;
+
+    const medir = async () => {
+      for (const [peerId, pc] of peers.current) {
+        if (!vivo || pc.connectionState !== "connected") continue;
+        try {
+          const stats = await pc.getStats();
+          let ms: number | null = null;
+          stats.forEach((informe) => {
+            if (
+              informe.type === "candidate-pair" &&
+              (informe as RTCIceCandidatePairStats).state === "succeeded" &&
+              (informe as { nominated?: boolean }).nominated &&
+              typeof (informe as RTCIceCandidatePairStats).currentRoundTripTime === "number"
+            ) {
+              ms = Math.round(
+                ((informe as RTCIceCandidatePairStats).currentRoundTripTime as number) * 1000,
+              );
+            }
+          });
+          if (vivo && ms !== null) upsert(peerId, { rtt: ms });
+        } catch {
+          // Una conexión que se cerró entre el bucle y la consulta. No hay nada
+          // que anotar: la persona ya no está y su fila se va sola.
+        }
+      }
+    };
+
+    void medir();
+    const id = setInterval(() => void medir(), 2000);
+    return () => {
+      vivo = false;
+      clearInterval(id);
+    };
+  }, [status, upsert]);
 
   const stopRecording = useCallback(() => {
     emit({ type: "recording-stop" });

@@ -80,24 +80,107 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
    * respuesta correcta, porque decir «existe pero no puedes» ya filtra que
    * existe.
    */
+  /**
+   * Editar la organización: su nombre, su identificador y el modo inmersivo.
+   *
+   * NO SE PODÍA RENOMBRAR, y era de las cosas que no se notan hasta que pasan:
+   * una organización creada con una errata —o con el nombre de antes de
+   * cambiarlo— se quedaba así para siempre, porque la única salida era crear
+   * otra y mudar el equipo a mano.
+   *
+   * QUIÉN PUEDE: la política de la base pide `is_org_admin`, y esta ruta no
+   * repite la comprobación. Un `update` que no toca ninguna fila sale como
+   * «no encontrada» — igual que en el resto del producto, y a propósito: para
+   * quien no tiene permiso, una organización que no puede tocar y una que no
+   * existe son la misma cosa.
+   *
+   * EL IDENTIFICADOR SE PUEDE CAMBIAR, y hay que saber lo que cuesta: es lo
+   * que va en las direcciones, así que cualquier enlace guardado con el
+   * anterior deja de encontrar nada. La pantalla lo dice antes de dejar
+   * tocarlo; aquí solo se comprueba que sigue siendo único, que lo hace la
+   * base con su `unique` y se traduce a una frase en `translateDbError`.
+   */
   app.patch("/organizations/:orgId", async (request) => {
     const userId = requireUser(request);
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     const body = parseBody(
-      z.object({ immersiveEnabled: z.boolean() }),
+      z
+        .object({
+          name: z.string().trim().min(1).max(80).optional(),
+          slug: slug.optional(),
+          immersiveEnabled: z.boolean().optional(),
+        })
+        // Un PATCH sin nada que cambiar devolvería un 200 indistinguible de
+        // haber funcionado. Se rechaza.
+        .refine((v) => Object.keys(v).length > 0, {
+          message: "no hay nada que cambiar: manda «name», «slug» o «immersiveEnabled»",
+        }),
       request.body,
     );
 
     return withUser(userId, async (db) => {
+      // `coalesce` para que mandar uno solo no borre los otros dos.
       const { rows } = await db.query(
-        `update organizations set immersive_enabled = $2
+        `update organizations set
+           name = coalesce($2, name),
+           slug = coalesce($3, slug),
+           immersive_enabled = coalesce($4, immersive_enabled)
           where id = $1
       returning id, name, slug, immersive_enabled as "immersiveEnabled"`,
-        [orgId, body.immersiveEnabled],
+        [orgId, body.name ?? null, body.slug ?? null, body.immersiveEnabled ?? null],
       );
       if (rows.length === 0) throw notFound("organización no encontrada");
       return { organization: rows[0] };
     });
+  });
+
+  /**
+   * Borrar una organización entera.
+   *
+   * ES LO MÁS DESTRUCTIVO QUE TIENE EL PRODUCTO. Se lleva por delante, en
+   * cascada, sus espacios de trabajo con sus canales, mensajes, archivos,
+   * tareas, el diagrama, los repositorios conectados y las credenciales
+   * guardadas. No hay papelera y no hay vuelta atrás.
+   *
+   * POR ESO PIDE ESCRIBIR EL IDENTIFICADOR. No es teatro: un `DELETE` a secas
+   * se dispara desde un botón mal pulsado o desde una pestaña que alguien dejó
+   * abierta en la organización equivocada, y las dos cosas pasan. Tener que
+   * copiar `/mi-empresa` obliga a mirar CUÁL se está borrando, que es
+   * exactamente la comprobación que falla cuando se borra la que no era.
+   *
+   * SOLO LA PERSONA PROPIETARIA, y eso lo decide la política de la base
+   * (`org_role_of(id) = 'owner'`): administrar no alcanza. Quien administra
+   * puede renombrarla; llevarse el trabajo de todo el equipo es otra cosa.
+   */
+  app.delete("/organizations/:orgId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
+    const body = parseBody(z.object({ confirmarSlug: z.string().trim().min(1) }), request.body);
+
+    await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ slug: string; name: string }>(
+        "select slug, name from organizations where id = $1",
+        [orgId],
+      );
+      const org = rows[0];
+      // Quien no la ve tampoco la borra: RLS ya filtró el `select`.
+      if (!org) throw notFound("organización no encontrada");
+
+      if (body.confirmarSlug.replace(/^\//, "") !== org.slug) {
+        throw badRequest(
+          `para borrar «${org.name}» hay que escribir su identificador exacto: ${org.slug}`,
+        );
+      }
+
+      const { rowCount } = await db.query("delete from organizations where id = $1", [orgId]);
+      // Cero filas aquí no es «no existe» —acabamos de leerla— sino que la
+      // política de borrado la rechazó: no es la persona propietaria.
+      if (!rowCount) {
+        throw forbidden("solo quien es propietario de la organización puede borrarla");
+      }
+    });
+
+    return reply.status(204).send();
   });
 
   app.post("/organizations", async (request, reply) => {
