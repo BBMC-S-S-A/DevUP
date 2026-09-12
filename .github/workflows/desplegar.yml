@@ -41,14 +41,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # `actions: read` es lo que deja preguntar por la última ejecución correcta
+    # de este mismo workflow, que es contra lo que se compara para saber si hay
+    # migraciones sin desplegar. Sin ese permiso la consulta falla en silencio y
+    # el guardián se cae a comparar con el commit anterior — que es justo el
+    # agujero que esto viene a tapar.
+    permissions:
+      contents: read
+      actions: read
+
     steps:
       - uses: actions/checkout@v4
         with:
           # En un `workflow_run`, `checkout` trae la rama por defecto y no el
           # commit que disparó el workflow. Hace falta explícito.
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
-          # Dos commits para poder comparar qué cambió (ver el paso siguiente).
-          fetch-depth: 2
+          # La historia entera, y no dos commits, porque la comparación ya no
+          # es contra el commit anterior sino contra el último que se desplegó
+          # de verdad — que puede estar veinte commits atrás. Ver el paso
+          # siguiente.
+          fetch-depth: 0
 
       # LA MIGRACIÓN NO SE APLICA SOLA, Y ESE ES EL PELIGRO.
       #
@@ -61,16 +73,48 @@ jobs:
       # la migración a mano (ver docs/PLAN-DE-PRODUCCION.md) y luego se lanza
       # esto con «Run workflow». Preferimos un despliegue que no ocurre a uno
       # que ocurre en el orden equivocado.
-      - name: Parar si hay una migración sin aplicar
+      # CONTRA EL ÚLTIMO DESPLEGADO, NO CONTRA `HEAD~1`.
+      #
+      # EL HUECO QUE TENÍA, y que no era teórico: comparando con el commit
+      # anterior, una migración solo frenaba SU propio commit. El siguiente
+      # merge que no trajera migraciones veía un `diff` limpio y desplegaba —
+      # con la base todavía sin migrar. Así fue exactamente como el código del
+      # PR #40 llegó a producción antes que su migración.
+      #
+      # El último commit desplegado de verdad lo sabe GitHub: es el `head_sha`
+      # de la última ejecución correcta de este mismo workflow. No hace falta
+      # inventar un marcador ni una etiqueta que alguien tendría que mantener.
+      # Y cuenta la ejecución lanzada a mano, que es justo la que se usa
+      # después de aplicar una migración: aplicarla y desplegar es lo que
+      # mueve la referencia hacia delante.
+      - name: Parar si hay migraciones sin aplicar
         if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --name-only HEAD~1 HEAD -- db/migrations/ | grep -q .; then
-            echo "::error::Este commit trae una migración nueva:"
-            git diff --name-only HEAD~1 HEAD -- db/migrations/
-            echo "::error::Aplícala a mano contra Railway (docs/PLAN-DE-PRODUCCION.md) y luego lanza este workflow con 'Run workflow'. Desplegar antes de migrar rompe producción."
+          ultimo=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/desplegar.yml/runs?status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null || true)
+
+          # Sin ejecución previa —repositorio recién montado— o con una que ya
+          # no está en la historia (una reescritura de la rama) no hay contra
+          # qué comparar. Se cae a `HEAD~1`, que es lo que había antes: peor
+          # que lo nuevo, mejor que no mirar nada.
+          if [ -z "$ultimo" ] || ! git cat-file -e "$ultimo^{commit}" 2>/dev/null; then
+            echo "::warning::No encuentro el último commit desplegado; comparo solo con el anterior."
+            ultimo="HEAD~1"
+          else
+            echo "Último despliegue correcto: $ultimo"
+          fi
+
+          nuevas=$(git diff --name-only "$ultimo" HEAD -- db/migrations/)
+          if [ -n "$nuevas" ]; then
+            echo "::error::Hay migraciones sin desplegar desde el último despliegue:"
+            echo "$nuevas"
+            echo "::error::Aplícalas a mano contra Railway (docs/PLAN-DE-PRODUCCION.md) y luego lanza este workflow con 'Run workflow'. Desplegar antes de migrar rompe producción."
             exit 1
           fi
-          echo "Sin migraciones nuevas: se puede desplegar."
+          echo "Sin migraciones pendientes desde $ultimo: se puede desplegar."
 
       - name: Ver qué credenciales hay
         id: creds

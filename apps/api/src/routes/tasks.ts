@@ -2,8 +2,9 @@ import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
-import { type Origen, anotar, recorta } from "../lib/actividad.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { type Procedencia, anotar, recorta } from "../lib/actividad.js";
+import { announceBoardChange } from "../realtime/signaling.js";
 import { notificar } from "./notifications.js";
 
 const uuid = z.string().uuid();
@@ -159,11 +160,11 @@ export async function anotarEvidencia(
   await anotar(db, {
     workspaceId: datos.workspaceId,
     actorId: datos.autor,
-    verbo: "tarea.evidencia",
-    objetoTipo: "tarea",
-    objetoId: datos.taskId,
-    resumen: `adjuntó ${COMO_SE_LLAMA_LA_PRUEBA[e.tipo]} a «${recorta(datos.titulo)}»`,
-    datos: { tipo: e.tipo, url: e.url ?? null },
+    verbo: "evidencio",
+    sujeto: "tarea",
+    sujetoId: datos.taskId,
+    sujetoNombre: datos.titulo,
+    detalle: { tipo: e.tipo, url: e.url ?? null },
   });
 }
 
@@ -515,15 +516,23 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const body_ = body as Record<string, unknown>;
 
     return withUser(userId, async (db) => {
+      // De paso se trae el espacio y su organización: hacen falta para el
+      // renglón del registro y `loadTask` no devuelve la organización. Y el
+      // área y el título, que son del camino B: el título tiene que ser el de
+      // ANTES de este `patch`, porque la asignación ocurrió sobre la tarjeta
+      // que existía y no sobre la que queda después.
       const { rows: previa } = await db.query<{
         assignee_id: string | null;
-        title: string;
         workspace_id: string;
+        organization_id: string;
+        title: string;
         category_id: string | null;
         prioridad: number;
       }>(
-        `select assignee_id, title, workspace_id, category_id, prioridad
-           from tasks where id = $1`,
+        `select t.assignee_id, t.workspace_id, w.organization_id, t.title, t.category_id,
+                t.prioridad
+           from tasks t join workspaces w on w.id = t.workspace_id
+          where t.id = $1`,
         [taskId],
       );
       const anterior = previa[0]?.assignee_id ?? null;
@@ -571,13 +580,15 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         await anotar(db, {
           workspaceId: previa[0]!.workspace_id,
           actorId: userId,
-          verbo: "tarea.priorizada",
-          objetoTipo: "tarea",
-          objetoId: taskId,
-          resumen:
-            `${sube ? "subió" : "bajó"} a ${PRIORIDAD_EN_PALABRAS[body.prioridad]} ` +
-            `«${recorta(previa[0]?.title ?? "")}»`,
-          datos: { prioridad: body.prioridad, anterior: prioridadAnterior },
+          verbo: "priorizo",
+          sujeto: "tarea",
+          sujetoId: taskId,
+          sujetoNombre: previa[0]?.title ?? "",
+          detalle: {
+            a: PRIORIDAD_EN_PALABRAS[body.prioridad],
+            de: PRIORIDAD_EN_PALABRAS[prioridadAnterior],
+            sube,
+          },
         });
       }
 
@@ -595,38 +606,47 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         await avisarAsignacion(db, taskId, body.assigneeId, userId, request.log);
       }
 
-      // El título del resumen es el de ANTES de este `patch` si también se
-      // renombró en la misma llamada. Es lo correcto: la asignación ocurrió
-      // sobre la tarjeta que existía, no sobre la que queda después.
-      if ("assigneeId" in body_ && (body.assigneeId ?? null) !== anterior) {
-        const titulo = recorta(previa[0]?.title ?? "");
+      const tarea = await loadTask(db, taskId);
+
+      // Un `PATCH` puede traer varias cosas a la vez, pero el registro cuenta
+      // una sola: la que le importa a quien lo lee después. Cambiar de
+      // responsable es lo que se pregunta —«¿quién se la quedó?»— y renombrar,
+      // lo segundo. Mover la fecha o retocar el texto no merece un renglón:
+      // llenaría la historia de ruido y taparía lo que sí se busca.
+      const cambioResponsable = "assigneeId" in body_ && (body.assigneeId ?? null) !== anterior;
+      if (cambioResponsable || body.title !== undefined) {
         await anotar(db, {
           workspaceId: previa[0]!.workspace_id,
+          organizationId: previa[0]!.organization_id,
           actorId: userId,
-          verbo: "tarea.asignada",
-          objetoTipo: "tarea",
-          objetoId: taskId,
-          resumen: body.assigneeId ? `asignó «${titulo}»` : `quitó el responsable de «${titulo}»`,
-          datos: { assigneeId: body.assigneeId ?? null, anterior },
+          verbo: cambioResponsable ? (body.assigneeId ? "asigno" : "desasigno") : "renombro",
+          sujeto: "tarea",
+          sujetoId: taskId,
+          sujetoNombre: String(tarea.title ?? ""),
+          detalle: cambioResponsable ? { a: body.assigneeId ?? null } : {},
         });
       }
 
-      // Cambiar de área es mover trabajo de un frente a otro, así que deja
-      // rastro. No hereda el delegado: reclasificar una tarea que ya tiene
-      // responsable no debe quitársela a quien la estaba haciendo.
+      // Reclasificar viene del camino B y se conserva: cambiar de área es mover
+      // trabajo de un frente a otro, y quien lea la historia después va a
+      // preguntar por qué esto dejó de estar donde estaba. No hereda el
+      // delegado del área nueva, a propósito: reclasificar una tarea que ya
+      // tiene responsable no debe quitársela a quien la está haciendo.
       if ("categoryId" in body_ && (body.categoryId ?? null) !== areaAnterior) {
         await anotar(db, {
           workspaceId: previa[0]!.workspace_id,
+          organizationId: previa[0]!.organization_id,
           actorId: userId,
-          verbo: "tarea.reclasificada",
-          objetoTipo: "tarea",
-          objetoId: taskId,
-          resumen: `cambió de área «${recorta(previa[0]?.title ?? "")}»`,
-          datos: { categoryId: body.categoryId ?? null, anterior: areaAnterior },
+          verbo: "reclasifico",
+          sujeto: "tarea",
+          sujetoId: taskId,
+          sujetoNombre: String(tarea.title ?? ""),
+          detalle: { a: body.categoryId ?? null, de: areaAnterior },
         });
       }
 
-      return { task: await loadTask(db, taskId) };
+      announceBoardChange(String(tarea.workspaceId), "updated", taskId);
+      return { task: tarea };
     });
   });
 
@@ -649,7 +669,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
 
     return withUser(userId, async (db) => ({
       task: await moverTareaEnDb(db, taskId, body.columnId, body.afterTaskId ?? null, {
-        actorId: userId,
+        userId,
       }),
     }));
   });
@@ -705,11 +725,11 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       await anotar(db, {
         workspaceId: previa[0].workspace_id,
         actorId: userId,
-        verbo: "tarea.rama",
-        objetoTipo: "tarea",
-        objetoId: taskId,
-        resumen: `enlazó la rama ${recorta(body.nombre, 40)} a «${recorta(previa[0].title)}»`,
-        datos: { rama: body.nombre, repoId: body.repoId ?? null, estado: body.estado },
+        verbo: "enlazo",
+        sujeto: "tarea",
+        sujetoId: taskId,
+        sujetoNombre: previa[0].title,
+        detalle: { rama: recorta(body.nombre, 40), repoId: body.repoId ?? null, estado: body.estado },
       });
 
       return reply.status(201).send({ task: await loadTask(db, taskId), ramaId: rows[0]!.id });
@@ -853,7 +873,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      await moverTareaEnDb(db, taskId, terminal[0].id, null, { actorId: userId });
+      await moverTareaEnDb(db, taskId, terminal[0].id, null, { userId });
       return { task: await loadTask(db, taskId) };
     });
   });
@@ -862,26 +882,34 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
     await withUser(userId, async (db) => {
-      // Se lee antes de borrar porque después no hay a quién preguntarle el
-      // título, y un «borró una tarea» sin decir cuál no sirve de nada.
-      const { rows } = await db.query<{ title: string; workspace_id: string }>(
-        "select title, workspace_id from tasks where id = $1",
+      // Se lee antes de borrar: después no queda de dónde sacar ni el título ni
+      // el espacio, y un renglón que dice «borró algo» no es un renglón.
+      const { rows } = await db.query<{
+        workspace_id: string;
+        organization_id: string;
+        title: string;
+      }>(
+        `select t.workspace_id, w.organization_id, t.title
+           from tasks t join workspaces w on w.id = t.workspace_id
+          where t.id = $1`,
         [taskId],
       );
+      const previa = rows[0];
+
       const { rowCount } = await db.query("delete from tasks where id = $1", [taskId]);
-      if (rowCount === 0 || !rows[0]) return;
+      if (!rowCount || !previa) return;
 
       await anotar(db, {
-        workspaceId: rows[0].workspace_id,
+        workspaceId: previa.workspace_id,
+        organizationId: previa.organization_id,
         actorId: userId,
-        verbo: "tarea.borrada",
-        objetoTipo: "tarea",
-        // Sin `objetoId`: la fila a la que apuntaría ya no existe, y guardar
-        // el identificador de algo borrado invita a intentar resolverlo.
-        objetoId: null,
-        resumen: `borró «${recorta(rows[0].title)}»`,
-        datos: { taskId },
+        verbo: "borro",
+        sujeto: "tarea",
+        // Sin `sujetoId`: la tarea ya no existe, y apuntar a una fila que no
+        // está invita a hacerle un `join` que no devolverá nada.
+        sujetoNombre: previa.title,
       });
+      announceBoardChange(previa.workspace_id, "deleted", taskId);
     });
     return reply.status(204).send();
   });
@@ -916,9 +944,8 @@ export async function crearTareaEnDb(
     contexto?: string;
     criterio?: string;
     autor: string;
-    /** Quién lo pidió de verdad. El asistente pasa `agente` para que su
-     *  trabajo no se sume al de la persona en la auditoría. */
-    origen?: Origen;
+    /** Quién la crea de verdad: una persona, o un agente por la puerta MCP. */
+    procedencia?: Procedencia;
   },
   log?: FastifyBaseLogger,
 ): Promise<Record<string, unknown>> {
@@ -964,38 +991,109 @@ export async function crearTareaEnDb(
   );
   const taskId = rows[0]!.id;
   await attachTaskTags(db, taskId, datos.tagIds);
-  if (assigneeId) await avisarAsignacion(db, taskId, assigneeId, datos.autor, log);
+  if (datos.assigneeId) await avisarAsignacion(db, taskId, datos.assigneeId, datos.autor, log);
+
+  const { rows: deQuien } = await db.query<{ organization_id: string }>(
+    "select organization_id from workspaces where id = $1",
+    [datos.workspaceId],
+  );
+  const organizationId = deQuien[0]?.organization_id ?? "";
 
   await anotar(db, {
     workspaceId: datos.workspaceId,
+    organizationId,
     actorId: datos.autor,
-    origen: datos.origen ?? "persona",
-    verbo: "tarea.creada",
-    objetoTipo: "tarea",
-    objetoId: taskId,
-    resumen: `creó «${recorta(datos.title)}»`,
-    datos: { columnId: datos.columnId, assigneeId, categoryId: datos.categoryId ?? null },
+    procedencia: datos.procedencia,
+    verbo: "creo",
+    sujeto: "tarea",
+    sujetoId: taskId,
+    sujetoNombre: datos.title,
   });
 
-  // Asignar al crear también es una asignación. Se anota aparte y no solo
-  // dentro de `datos` para que la regla quede simple: TODA asignación es una
-  // fila `tarea.asignada`. Si el nacimiento fuera la excepción, cualquier
-  // consulta de «qué me han asignado» tendría que acordarse de mirar dos
-  // verbos, y tarde o temprano alguna se olvidaría de uno.
-  if (assigneeId) {
+  // Asignar al crear TAMBIÉN es una asignación, y va en su propio renglón. Es
+  // del camino B y se conserva porque la regla que deja es la simple: toda
+  // asignación es una fila `asigno`. Si el nacimiento fuera la excepción,
+  // cualquier consulta de «qué me han asignado» tendría que acordarse de mirar
+  // dos verbos, y tarde o temprano alguna se olvidaría de uno.
+  if (datos.assigneeId) {
     await anotar(db, {
       workspaceId: datos.workspaceId,
+      organizationId,
       actorId: datos.autor,
-      origen: datos.origen ?? "persona",
-      verbo: "tarea.asignada",
-      objetoTipo: "tarea",
-      objetoId: taskId,
-      resumen: `asignó «${recorta(datos.title)}»`,
-      datos: { assigneeId, anterior: null },
+      procedencia: datos.procedencia,
+      verbo: "asigno",
+      sujeto: "tarea",
+      sujetoId: taskId,
+      sujetoNombre: datos.title,
+      detalle: { a: datos.assigneeId },
     });
   }
 
-  return loadTask(db, taskId);
+  const tarea = await loadTask(db, taskId);
+  announceBoardChange(datos.workspaceId, "created", taskId);
+  return tarea;
+}
+
+/**
+ * De dónde a dónde va una tarjeta, y si eso significa cerrarla.
+ *
+ * Se lee ANTES de mover, porque después ya no se puede saber de qué columna
+ * venía. Y sirve para las dos cosas que hay que anotar: el detalle del
+ * renglón —«de Por hacer a En curso»— y el verbo, que no es el mismo si la
+ * columna de destino es terminal: eso no es mover, es cerrar, y es la
+ * pregunta que se le hace al registro («¿cuántas cerró esta semana?»).
+ *
+ * `mismaColumna` viene del camino B y arregla un ruido que este lado tenía:
+ * arrastrar una tarjeta dos puestos dentro de su propia columna escribía un
+ * «movió … de Por hacer a Por hacer». Reordenar no es un hecho que nadie vaya
+ * a querer recordar, y anotarlo esconde lo que sí importa.
+ */
+async function saltoDeColumna(
+  db: Db,
+  taskId: string,
+  columnId: string,
+): Promise<{
+  workspaceId: string;
+  organizationId: string;
+  titulo: string;
+  desde: string | null;
+  hasta: string | null;
+  cierra: boolean;
+  reabre: boolean;
+  mismaColumna: boolean;
+}> {
+  const { rows } = await db.query<{
+    workspace_id: string;
+    organization_id: string;
+    title: string;
+    misma: boolean;
+    desde: string | null;
+    desde_terminal: boolean | null;
+    hasta: string | null;
+    hasta_terminal: boolean | null;
+  }>(
+    `select t.workspace_id, w.organization_id, t.title,
+            (t.column_id = $2) as misma,
+            origen.name as desde, origen.is_terminal as desde_terminal,
+            destino.name as hasta, destino.is_terminal as hasta_terminal
+       from tasks t
+       join workspaces w on w.id = t.workspace_id
+       left join task_columns origen on origen.id = t.column_id
+       left join task_columns destino on destino.id = $2
+      where t.id = $1`,
+    [taskId, columnId],
+  );
+  const f = rows[0];
+  return {
+    workspaceId: f?.workspace_id ?? "",
+    organizationId: f?.organization_id ?? "",
+    titulo: f?.title ?? "",
+    desde: f?.desde ?? null,
+    hasta: f?.hasta ?? null,
+    cierra: Boolean(f?.hasta_terminal) && !f?.desde_terminal,
+    reabre: Boolean(f?.desde_terminal) && !f?.hasta_terminal,
+    mismaColumna: Boolean(f?.misma),
+  };
 }
 
 export async function moverTareaEnDb(
@@ -1003,26 +1101,14 @@ export async function moverTareaEnDb(
   taskId: string,
   columnId: string,
   afterTaskId: string | null,
-  quien?: { actorId: string | null; origen?: Origen },
+  /**
+   * Quién la mueve. Opcional porque no todos los caminos tienen persona
+   * —el asistente de dentro mueve por su cuenta— y un renglón sin actor sigue
+   * valiendo: dice qué pasó aunque no diga quién.
+   */
+  actor?: { userId: string | null; procedencia?: Procedencia },
 ): Promise<Record<string, unknown>> {
-  // El estado de partida, ANTES de tocar nada: de qué columna sale y si esa
-  // columna terminaba. Es lo que convierte un movimiento en «cerró» o
-  // «reabrió» en vez de en un genérico «movió», que es la diferencia entre
-  // poder contestar «¿qué cerró Ana esta semana?» y no poder.
-  const { rows: antesRows } = await db.query<{
-    title: string;
-    column_id: string;
-    workspace_id: string;
-    columna: string;
-    terminal: boolean;
-  }>(
-    `select t.title, t.column_id, t.workspace_id, c.name as columna, c.is_terminal as terminal
-       from tasks t join task_columns c on c.id = t.column_id
-      where t.id = $1`,
-    [taskId],
-  );
-  const antes = antesRows[0];
-  if (!antes) throw notFound("tarea no encontrada");
+  const salto = await saltoDeColumna(db, taskId, columnId);
 
   const { rows: previousRows } = await db.query<{ position: number }>(
     "select position from tasks where id = $1 and column_id = $2",
@@ -1053,40 +1139,27 @@ export async function moverTareaEnDb(
   );
   if (rowCount === 0) throw notFound("tarea no encontrada");
 
-  // Reordenar dentro de la misma columna no se anota. Arrastrar una tarjeta
-  // dos puestos arriba no es un hecho que nadie vaya a querer recordar, y
-  // anotarlo llenaría la historia de ruido hasta esconder lo que sí importa.
-  if (quien && antes.column_id !== columnId) {
-    const { rows: destinoRows } = await db.query<{ name: string; is_terminal: boolean }>(
-      "select name, is_terminal from task_columns where id = $1",
-      [columnId],
-    );
-    const destino = destinoRows[0];
-
-    const cierra = destino?.is_terminal === true && !antes.terminal;
-    const reabre = destino?.is_terminal === false && antes.terminal;
-    const verbo = cierra ? "tarea.cerrada" : reabre ? "tarea.reabierta" : "tarea.movida";
-    const titulo = recorta(antes.title);
-    const resumen = cierra
-      ? `cerró «${titulo}»`
-      : reabre
-        ? `reabrió «${titulo}»`
-        : `movió «${titulo}» de ${antes.columna} a ${destino?.name ?? "otra columna"}`;
-
+  // Reordenar dentro de la misma columna NO se anota (ver `saltoDeColumna`).
+  // El renglón va DENTRO de la transacción de quien llama: si el movimiento se
+  // deshace, lo que lo contaba se deshace con él.
+  if (!salto.mismaColumna) {
     await anotar(db, {
-      workspaceId: antes.workspace_id,
-      actorId: quien.actorId,
-      origen: quien.origen ?? "persona",
-      verbo,
-      objetoTipo: "tarea",
-      objetoId: taskId,
-      resumen,
-      datos: {
-        desde: { columnId: antes.column_id, nombre: antes.columna, terminal: antes.terminal },
-        hasta: { columnId, nombre: destino?.name ?? null, terminal: destino?.is_terminal ?? null },
-      },
+      workspaceId: salto.workspaceId,
+      organizationId: salto.organizationId,
+      actorId: actor?.userId ?? null,
+      procedencia: actor?.procedencia,
+      verbo: salto.cierra ? "cerro" : salto.reabre ? "reabrio" : "movio",
+      sujeto: "tarea",
+      sujetoId: taskId,
+      sujetoNombre: salto.titulo,
+      detalle: { de: salto.desde, a: salto.hasta },
     });
   }
 
-  return loadTask(db, taskId);
+  const tarea = await loadTask(db, taskId);
+  // El aviso va FUERA de la transacción en el tiempo —no se puede deshacer un
+  // mensaje ya enviado— pero se dispara aquí porque es donde se sabe qué pasó.
+  // `announce*` no espera a nadie: reparte a quien esté escuchando y vuelve.
+  announceBoardChange(salto.workspaceId, "moved", taskId);
+  return tarea;
 }

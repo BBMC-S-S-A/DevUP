@@ -135,15 +135,45 @@ Ordenado por lo que más duele.
   ponerlos. Se saltan solos al siguiente de la cola y se avisa por qué.
 
 ### Nuestro, y pendiente
-- **Respaldo del almacén de archivos.** El volcado automático de GitHub Actions
-  es solo de la base. Hoy no urge —el almacén está vacío— pero en cuanto haya
-  archivos de verdad hace falta.
-- **El respaldo de la base apunta a Supabase**, de donde ya nos fuimos. Hay que
-  rehacerlo contra Railway, que es red privada y pide un túnel.
-- **`search_path` fijo** en seis funciones que no lo llevan (`current_user_id`,
-  `global_search`, `mark_channel_read`, `touch_opportunity`, `touch_task`,
-  `unread_counts`). Ninguna es `security definer`, así que es higiene, no un
-  agujero.
+- ~~**Respaldo del almacén de archivos.**~~ — **hecho** el 12 de septiembre de
+  2026, en el mismo workflow que la base pero como trabajo independiente: que
+  falle uno no puede dejar sin copia al otro. Hacen falta los dos, porque
+  restaurando solo la base la biblioteca queda llena de fichas que apuntan a
+  archivos que ya no están.
+
+  No necesita túnel —el almacén sí tiene dirección pública, porque la web firma
+  URLs contra ella—, así que solo pide dos secretos más: `S3_ACCESS_KEY_ID` y
+  `S3_SECRET_ACCESS_KEY`.
+
+  **Hasta cuándo sirve, dicho ahora y no cuando falle:** hoy son 26 archivos y
+  3,5 MB, que caben de sobra en un artefacto. El día que sean gigas, subir el
+  almacén entero cada noche deja de tener sentido y toca un destino con
+  versionado propio. El trabajo avisa al pasar de 2 GB, en vez de empezar a
+  fallar por tiempo de espera sin que nadie sepa por qué.
+- ~~**El respaldo de la base apunta a Supabase**~~ — **rehecho contra Railway**
+  el 12 de septiembre de 2026. Iba roto por partida doble: apuntaba a una base
+  de la que el producto ya se había ido, y volcaba con `pg_dump` 17 contra un
+  servidor 18, que se niega. Ahora abre un túnel con la CLI de Railway —y no un
+  proxy TCP público: una base expuesta para que la respalde un cron es la clase
+  de puerta que nadie recuerda haber abierto— y **se restaura a sí mismo en un
+  Postgres de usar y tirar antes de guardarse**, comprobando que trae
+  organizaciones y no solo tablas. Un respaldo que nadie ha restaurado nunca se
+  descubre el día que hace falta, que es el único día en que no se arregla.
+  **Queda por poner los secretos `RAILWAY_TOKEN` y `POSTGRES_PASSWORD`** en el
+  repositorio; hasta entonces el trabajo para en el primer paso y lo dice.
+- ~~**`search_path` fijo** en seis funciones que no lo llevan~~ — **hecho** el
+  12 de septiembre de 2026 (migración 0039). Y eran **siete**, no seis: esta
+  lista, mantenida a mano, se había quedado corta. Faltaban las cinco de
+  siempre más `touch_task` —que se daba por arreglada y no lo estaba— y
+  `touch_architecture_node`, que nació con la 0033 después de escribirse esto.
+  Ninguna era `security definer`, así que era higiene y no un agujero; las 55
+  que sí lo son ya lo llevaban todas.
+
+  La migración no las nombra una a una: le pregunta a `pg_proc` cuáles son las
+  nuestras y se lo pone, porque una lista escrita a mano vuelve a quedarse
+  corta con la octava. Y desde hoy **la prueba de aislamiento comprueba que
+  ninguna función nueva nazca sin él**, que es lo único que impide que esto se
+  repita.
 - ~~**`user_tokens` es una tabla muerta**~~ — **era falso, y borrarla habría
   roto producción.** `account.ts` la usa para verificar el correo y para
   restablecer la contraseña, a través de `issue_user_token` y

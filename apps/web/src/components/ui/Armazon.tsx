@@ -114,7 +114,7 @@ export function Armazon({
         className={`cristal fixed inset-y-0 left-0 z-50 flex w-64 flex-col rounded-none
           transition-transform duration-300 md:z-30 md:translate-x-0
           md:inset-y-3 md:w-60 md:rounded-2xl
-          ${hayRiel ? "md:left-[4.75rem]" : "md:left-3"}
+          ${hayRiel ? "md:left-[4.25rem] md:rounded-l-none" : "md:left-3"}
           ${abierto ? "translate-x-0" : "-translate-x-full"}`}
         style={{ transitionTimingFunction: "var(--muelle-firme)" }}
         {...(abierto ? { role: "dialog", "aria-modal": true, "aria-label": "Navegación" } : {})}
@@ -146,7 +146,7 @@ export function Armazon({
         {barra}
       </aside>
 
-      <main className={`alto-util pt-12 md:pt-0 ${hayRiel ? "md:pl-[20.25rem]" : "md:pl-[16.5rem]"}`}>
+      <main className={`alto-util pt-12 md:pt-0 ${hayRiel ? "md:pl-[20rem]" : "md:pl-[16.5rem]"}`}>
         {children}
       </main>
     </div>
@@ -169,7 +169,7 @@ export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
     <div className="min-h-[100svh]">
       <aside
         className={`cristal fixed inset-y-3 z-30 hidden w-60 flex-col rounded-2xl md:flex
-          ${hayRiel ? "left-[4.75rem]" : "left-3"}`}
+          ${hayRiel ? "left-[4.25rem] rounded-l-none" : "left-3"}`}
       >
         <div className="filo-luz shrink-0 px-4 pb-3.5 pt-4">
           <div className="devup-esqueleto h-2.5 w-24 rounded" />
@@ -194,7 +194,7 @@ export function EsqueletoArmazon({ filas = 5 }: { filas?: number }) {
           </div>
         </div>
       </aside>
-      <main className={`min-h-[100svh] ${hayRiel ? "md:pl-[20.25rem]" : "md:pl-[16.5rem]"}`} />
+      <main className={`min-h-[100svh] ${hayRiel ? "md:pl-[20rem]" : "md:pl-[16.5rem]"}`} />
     </div>
   );
 }

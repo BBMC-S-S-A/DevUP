@@ -8,6 +8,7 @@ import {
   Code2,
   Copy,
   Github,
+  KeyRound,
   Link2,
   LogOut,
   Mail,
@@ -366,6 +367,8 @@ function Invitaciones({
   // Mientras el dominio de correo no esté verificado, el enlace es la vía
   // fiable: se enseña aquí para que quien invita lo mande por su cuenta.
   const [enlace, setEnlace] = useState<string | null>(null);
+  /** El código corto, que se enseña UNA vez: en la base solo queda su hash. */
+  const [codigo, setCodigo] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const confirmar = useConfirmar();
 
@@ -405,11 +408,12 @@ function Invitaciones({
           event.preventDefault();
           setBusy(true);
           try {
-            const { url } = await api.post<{ sent: boolean; url: string }>(
+            const { url, codigo } = await api.post<{ sent: boolean; url: string; codigo: string }>(
               `/organizations/${organizationId}/invitations`,
               { email, role: rol, workspaceId: workspaceId || null },
             );
             setEnlace(url);
+            setCodigo(codigo);
             setCopiado(false);
             toast.success(`Invitación creada para ${email}`);
             setEmail("");
@@ -475,6 +479,33 @@ function Invitaciones({
           Cerrar
         </Boton>
       </form>
+
+      {/* EL CÓDIGO, PARA DICTARLO. Va antes que el enlace porque es lo que
+          se usa cuando se está hablando con la persona: el enlace se manda
+          por escrito, el código se dice. Y se enseña UNA sola vez — en la
+          base solo queda su hash, igual que el token. */}
+      {codigo && (
+        <div className="devup-entrada mt-3 rounded-lg border border-accent/30 bg-accent-soft/30 px-2.5 py-2">
+          <div className="flex items-center gap-2">
+            <KeyRound size={13} className="shrink-0 text-accent" />
+            <span className="flex-1 font-mono text-sm tracking-[0.2em] text-ink">{codigo}</span>
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(codigo);
+                toast.success("Código copiado");
+              }}
+              className="presionable flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-display text-[10px] font-semibold uppercase tracking-wider text-accent hover:bg-accent/10"
+            >
+              <Copy size={12} /> Copiar
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] leading-relaxed text-faint">
+            Para dictarlo por teléfono. Caduca en 24 horas y solo se enseña ahora: si se
+            pierde, vuelve a invitar.
+          </p>
+        </div>
+      )}
 
       {enlace && (
         <div className="devup-entrada mt-3 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent-soft/30 px-2.5 py-2">

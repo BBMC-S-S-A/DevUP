@@ -8,10 +8,10 @@ import {
   Hash,
   KanbanSquare,
   LayoutDashboard,
+  PhoneCall,
   LayoutGrid,
   Loader2,
   Lock,
-  LogOut,
   Plus,
   Search,
   TriangleAlert,
@@ -23,6 +23,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ApiError, type Channel, type Organization, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { MenuDeUsuario } from "@/components/ui/MenuDeUsuario";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { guardarUltimoEspacio, olvidarUltimoEspacio } from "@/lib/ultimo-espacio";
@@ -30,15 +31,15 @@ import { ignorar } from "@/lib/fallo";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
+import { SelectorDeEspacio } from "@/components/ui/SelectorDeEspacio";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
-import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
-import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
 import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
 import { WorkspaceProvider } from "@/lib/workspace-context";
+import { toast } from "sonner";
 
 // `retraso` vivía aquí duplicado. Ahora es de `@/lib/animacion`, donde está
 // también el porqué del tope del índice.
@@ -234,28 +235,38 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             </Link>
           )}
 
-          <div className="flex items-center gap-2.5">
-            {/* La inicial en una chapa hace que dos workspaces con nombres
-                parecidos se distingan por la forma antes que por la lectura. */}
-            <span
-              aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong
-                bg-accent-soft/70 font-display text-sm font-semibold text-accent-bright"
-            >
-              {inicial}
+          {/* LA CABECERA ES EL SELECTOR. El riel son chapas de cuarenta
+              píxeles, y se reportó cuatro veces que no se podía cambiar de
+              organización con él. Sea cual sea el motivo exacto, la conclusión
+              es la misma: cambiar de contexto no puede depender de acertar en
+              una chapa pequeña. Aquí está donde el ojo ya está —esta cabecera
+              dice en qué espacio estás— con el nombre escrito y sitio para los
+              demás. El riel se queda: para quien lo usa es un clic, y las dos
+              cosas no se estorban. */}
+          <SelectorDeEspacio espacioActual={workspaceId}>
+            <span className="flex items-center gap-2.5">
+              {/* La inicial en una chapa hace que dos workspaces con nombres
+                  parecidos se distingan por la forma antes que por la lectura. */}
+              <span
+                aria-hidden
+                className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong
+                  bg-accent-soft/70 font-display text-sm font-semibold text-accent-bright"
+              >
+                {inicial}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold" title={workspace.name}>
+                  {workspace.name}
+                </span>
+                {workspace.visibility === "personal" && (
+                  <span className="mt-0.5 flex items-center gap-1 text-[10px] text-faint">
+                    <UserRound size={9} className="shrink-0" />
+                    Solo tú ves este workspace
+                  </span>
+                )}
+              </span>
             </span>
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold" title={workspace.name}>
-                {workspace.name}
-              </h1>
-              {workspace.visibility === "personal" && (
-                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-faint">
-                  <UserRound size={9} className="shrink-0" />
-                  Solo tú ves este workspace
-                </p>
-              )}
-            </div>
-          </div>
+          </SelectorDeEspacio>
         </header>
 
         {/* min-h-0 es lo que permite que el desplazamiento viva aquí dentro: sin
@@ -286,6 +297,20 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                 se mueven nunca. Meterlos en una capa dice cuál de las dos
                 listas es el mapa y cuál es el contenido. */}
             <ul className="capa space-y-0.5 rounded-2xl p-1.5">
+              <li>
+                {/* DevCall va el primero del grupo porque es lo único de esta
+                    lista donde hay alguien esperando. El resto —el panel, la
+                    mesa, el tablero— sigue ahí dentro de una hora; una sala con
+                    gente dentro, no. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/devcall`}
+                  icono={<PhoneCall size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/devcall`}
+                  indice={0}
+                >
+                  DevCall
+                </ItemNav>
+              </li>
               <li>
                 {/* El panel es la única pieza de esta lista que no es de este
                     workspace en sentido estricto —vive por persona, ver
@@ -380,50 +405,81 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               usa a diario. Ahora es una sección más de esta misma barra, y el
               rol para «Ajustes» se pide aparte porque no hay ruta para una
               organización sola (mismo motivo que el armazón de organización). */}
+          {/* LOS CANALES ARRIBA, justo debajo del espacio. Estaban al final,
+              debajo de dieciséis destinos, y hacía falta desplazarse para
+              llegar a una conversación o a una llamada — que es lo que más se
+              abre en todo el día y lo que otra persona está esperando ahora
+              mismo. Las herramientas del proyecto y de la organización se
+              miran de vez en cuando; un canal, cada rato.
+
+              Y la voz antes que el texto: un canal de voz es gente esperando,
+              y un canal de texto espera a que llegues. */}
+          <ChannelGroup
+            title="Voz"
+            kind="voice"
+            channels={voice}
+            workspaceId={workspaceId}
+            pathname={pathname}
+            unread={unread}
+            onCreated={load}
+          />
+          <ChannelGroup
+            title="Texto"
+            kind="text"
+            channels={text}
+            workspaceId={workspaceId}
+            pathname={pathname}
+            unread={unread}
+            onCreated={load}
+          />
+
+
+          {/* DOS GRUPOS Y NO UNO, porque no son lo mismo.
+              GitHub, Infraestructura, Base de datos, Integraciones y Auditoría
+              son de ESTE proyecto desde la migración 0035 — el de al lado
+              enseña otra cosa— y estaban bajo un rótulo que decía
+              «Organización». Un rótulo que miente en la barra cuesta más que
+              uno que falta, porque nadie lo comprueba: se lee una vez al
+              aprender la aplicación y ya no se vuelve a mirar.
+              Ventas y Noticias sí son de la empresa entera, y se quedan abajo
+              con Ajustes y Mi cuenta. */}
           {rolOrganizacion && (
-            <div>
-              <GrupoRotulo titulo="Organización" />
-              {/* `div` y no `ul`: `NavegacionOrganizacion` no envuelve sus
-                  destinos en `<li>` —los mismos elementos van también sueltos
-                  en el armazón de organización—, así que un `<ul>` aquí
-                  dejaría hijos que no son `<li>` directamente dentro de una
-                  lista. */}
-              <div className="capa space-y-0.5 rounded-2xl p-1.5">
-                <NavegacionOrganizacion
-                  orgId={workspace.organizationId}
-                  workspaceId={workspaceId}
-                  pathname={pathname}
-                  puedeAjustar={rolOrganizacion === "owner" || rolOrganizacion === "admin"}
-                  indiceInicial={4}
-                />
+            <>
+              <div>
+                <GrupoRotulo titulo="Proyecto" />
+                {/* `div` y no `ul`: `NavegacionOrganizacion` no envuelve sus
+                    destinos en `<li>` —los mismos elementos van también sueltos
+                    en el armazón de organización—, así que un `<ul>` aquí
+                    dejaría hijos que no son `<li>` directamente dentro de una
+                    lista. */}
+                <div className="capa space-y-0.5 rounded-2xl p-1.5">
+                  <NavegacionOrganizacion
+                    orgId={workspace.organizationId}
+                    workspaceId={workspaceId}
+                    pathname={pathname}
+                    puedeAjustar={false}
+                    indiceInicial={4}
+                    grupo="proyecto"
+                  />
+                </div>
               </div>
-            </div>
+
+              <div>
+                <GrupoRotulo titulo="Organización" />
+                <div className="capa space-y-0.5 rounded-2xl p-1.5">
+                  <NavegacionOrganizacion
+                    orgId={workspace.organizationId}
+                    workspaceId={workspaceId}
+                    pathname={pathname}
+                    puedeAjustar={rolOrganizacion === "owner" || rolOrganizacion === "admin"}
+                    indiceInicial={9}
+                    grupo="organizacion"
+                  />
+                </div>
+              </div>
+            </>
           )}
 
-          {text.length > 0 && (
-            <ChannelGroup
-              title="Texto"
-              channels={text}
-              workspaceId={workspaceId}
-              pathname={pathname}
-              unread={unread}
-            />
-          )}
-          {/* La misma comprobación que ya tenía «Texto» tres líneas arriba:
-              un encabezado «Voz» sin ningún canal debajo es un hueco sin
-              sentido en cada workspace nuevo, y no había motivo para que las
-              dos listas se comportaran distinto. */}
-          {voice.length > 0 && (
-            <ChannelGroup
-              title="Voz"
-              channels={voice}
-              workspaceId={workspaceId}
-              pathname={pathname}
-              unread={unread}
-            />
-          )}
-
-          <NewChannel workspaceId={workspaceId} onCreated={load} />
         </nav>
 
         <footer className="relative shrink-0 px-3 py-3">
@@ -436,38 +492,14 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               ajustes: es una preferencia de la persona —como el volumen— y no
               una configuración del producto. Aquí se alcanza desde cualquier
               pantalla sin salir de lo que se está haciendo. */}
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <Rotulo>Estado</Rotulo>
-            <SelectorPresencia />
-          </div>
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <Rotulo>Tema</Rotulo>
-            <SelectorTema />
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <span
-              aria-hidden
-              className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong
-                bg-raised font-display text-[11px] font-semibold text-muted"
-            >
-              {(user?.displayName ?? "?").trim().charAt(0).toUpperCase()}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-ink" title={user?.displayName}>
-                {user?.displayName}
-              </p>
-              <p className="truncate text-[10px] text-faint" title={user?.email}>
-                {user?.email}
-              </p>
-            </div>
+          {/* El estado, el tema y el cierre de sesión se mudan al menú de la
+              cuenta. Ocupaban tres filas fijas de una barra que ya tiene
+              diecisiete destinos, y el botón de salir suelto era peor que
+              ocupar sitio: un icono de puerta al lado del nombre del espacio no
+              dice «cerrar sesión», dice «salir de aquí». */}
+          <div className="flex items-center gap-2">
+            <MenuDeUsuario orgId={workspace.organizationId} />
             <NotificationBell />
-            {/* El tinte de peligro se pinta sobre el icono y no sobre el botón
-                porque BotonIcono ya declara su propio color al pasar por encima
-                y dos utilidades de la misma propiedad se pisan sin aviso. */}
-            <BotonIcono etiqueta="Cerrar sesión" onClick={() => void signOut()} className="group">
-              <LogOut size={15} className="transition-colors group-hover:text-danger" />
-            </BotonIcono>
           </div>
         </footer>
         </>
@@ -479,7 +511,16 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }) {
+function GrupoRotulo({
+  titulo,
+  contador,
+  accion,
+}: {
+  titulo: string;
+  contador?: number;
+  /** A la derecha del rotulo: crear algo de este grupo, sin salir de el. */
+  accion?: ReactNode;
+}) {
   return (
     <div className="mb-1.5 flex items-center gap-2 px-3">
       <Rotulo>{titulo}</Rotulo>
@@ -487,30 +528,81 @@ function GrupoRotulo({ titulo, contador }: { titulo: string; contador?: number }
       {contador !== undefined && (
         <span className="font-mono text-[10px] tabular-nums text-faint">{contador}</span>
       )}
+      {accion}
     </div>
   );
 }
 
 // `ItemNav` vivía aquí duplicado. Ahora es de `@/components/ui/ItemNav`.
 
+/**
+ * Un grupo de canales, con su boton de crear dentro.
+ *
+ * EL BOTON SUELTO DE «NUEVO CANAL» ERA EL PROBLEMA DEL FLUJO. Estaba debajo de
+ * las dos listas, no decia de que tipo iba a ser el canal, y hacer una sala de
+ * voz consistia en pulsarlo, escribir el nombre y acordarse de cambiar el tipo
+ * —que salia en «Texto» por defecto—. Casi todas las salas de voz nacian asi,
+ * por descarte.
+ *
+ * Ahora el «+» esta en la cabecera del grupo, y el grupo ya dice el tipo: el
+ * de Voz crea una sala, el de Texto crea un canal. No hay nada que elegir
+ * porque la eleccion ya la hiciste al decidir donde pulsar.
+ *
+ * Y los dos grupos se pintan aunque esten vacios: antes, un espacio sin
+ * canales de voz no ensenaba la seccion, asi que tampoco ensenaba por donde se
+ * crea el primero.
+ */
 function ChannelGroup({
   title,
+  kind,
   channels,
   workspaceId,
   pathname,
   unread,
+  onCreated,
 }: {
   title: string;
+  kind: "text" | "voice";
   channels: Channel[];
   workspaceId: string;
   pathname: string;
   unread: Record<string, number>;
+  onCreated: () => Promise<void>;
 }) {
+  const [creando, setCreando] = useState(false);
+  const esVoz = kind === "voice";
+
   return (
     <div>
-      <GrupoRotulo titulo={title} contador={channels.length} />
+      <GrupoRotulo
+        titulo={title}
+        contador={channels.length}
+        accion={
+          <BotonIcono
+            etiqueta={esVoz ? "Nueva sala de voz" : "Nuevo canal de texto"}
+            onClick={() => setCreando((a) => !a)}
+            aria-expanded={creando}
+          >
+            <Plus size={13} />
+          </BotonIcono>
+        }
+      />
+
+      {creando && (
+        <div className="mb-1.5">
+          <NewChannel
+            workspaceId={workspaceId}
+            kind={kind}
+            onCreated={onCreated}
+            onCerrar={() => setCreando(false)}
+          />
+        </div>
+      )}
+
       {channels.length === 0 ? (
-        <p className="px-3 text-[11px] text-faint">Ninguno todavía.</p>
+        <p className="px-3 text-[11px] text-faint">
+          {esVoz ? "Ninguna sala todavia." : "Ninguno todavia."}
+        </p>
       ) : (
         <ul className="space-y-0.5">
           {channels.map((channel, indice) => {
@@ -559,39 +651,36 @@ function ChannelGroup({
   );
 }
 
+/**
+ * El formulario, ya sin selector de tipo: lo trae puesto quien lo abre.
+ *
+ * Sigue quedando la casilla de privado, que si es una decision —y una que no
+ * se deduce de donde hayas pulsado—. Si falla la creacion se dice: antes el
+ * `finally` apagaba el indicador y el canal simplemente no aparecia.
+ */
 function NewChannel({
   workspaceId,
+  kind,
   onCreated,
+  onCerrar,
 }: {
   workspaceId: string;
+  kind: "text" | "voice";
   onCreated: () => Promise<void>;
+  onCerrar: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"text" | "voice">("text");
   const [isPrivate, setIsPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="presionable flex w-full items-center gap-2 rounded-xl border border-dashed border-line
-          px-3 py-2 text-[13px] text-faint
-          hover:border-line-strong hover:bg-raised/40 hover:text-muted"
-      >
-        <Plus size={14} className="shrink-0" />
-        Nuevo canal
-      </button>
-    );
-  }
-
   return (
-    // Crece desde el borde de arriba, que es donde estaba el botón que lo abrió:
-    // un panel que nace de su propio centro se despega de lo que lo invocó.
+    // Crece desde el borde de arriba, que es donde esta la cabecera que lo
+    // abrio: un panel que nace de su propio centro se despega de lo que lo
+    // invoco.
     <Tarjeta className="devup-emerge origin-top p-2.5">
-      <Rotulo className="mb-2 block">Nuevo canal</Rotulo>
+      <Rotulo className="mb-2 block">
+        {kind === "voice" ? "Nueva sala de voz" : "Nuevo canal de texto"}
+      </Rotulo>
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -603,10 +692,11 @@ function NewChannel({
               isPrivate,
             });
             setName("");
-            setKind("text");
             setIsPrivate(false);
-            setOpen(false);
+            onCerrar();
             await onCreated();
+          } catch (caught) {
+            toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear el canal");
           } finally {
             setBusy(false);
           }
@@ -614,34 +704,14 @@ function NewChannel({
         className="space-y-2.5"
       >
         {/* Mono porque el nombre de canal es un identificador, no una frase: se
-            escribe en minúsculas y con guiones y así se ve mientras se teclea. */}
+            escribe en minusculas y con guiones y asi se ve mientras se teclea. */}
         <Entrada
           autoFocus
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="nombre-del-canal"
+          placeholder={kind === "voice" ? "sala-de-equipo" : "nombre-del-canal"}
           className="font-mono"
         />
-
-        <div className="flex gap-1.5">
-          {(["text", "voice"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setKind(option)}
-              aria-pressed={kind === option}
-              className={`presionable flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-1.5
-                font-display text-[10px] font-semibold uppercase tracking-wider ${
-                  kind === option
-                    ? "border-accent/40 bg-accent-soft text-accent"
-                    : "border-line text-faint hover:border-line-strong hover:text-muted"
-                }`}
-            >
-              {option === "text" ? <Hash size={11} /> : <Volume2 size={11} />}
-              {option === "text" ? "Texto" : "Voz"}
-            </button>
-          ))}
-        </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted hover:text-ink">
           <input
@@ -655,8 +725,8 @@ function NewChannel({
         </label>
 
         <div className="flex items-center gap-1.5 pt-0.5">
-          {/* El ancho lo pone el envoltorio: Boton trae `shrink-0` de fábrica y
-              un `flex-1` encima sería una carrera de utilidades. */}
+          {/* El ancho lo pone el envoltorio: Boton trae `shrink-0` de fabrica y
+              un `flex-1` encima seria una carrera de utilidades. */}
           <div className="flex-1">
             <Boton
               type="submit"
@@ -669,7 +739,7 @@ function NewChannel({
               Crear
             </Boton>
           </div>
-          <Boton type="button" variante="fantasma" tamano="sm" onClick={() => setOpen(false)}>
+          <Boton type="button" variante="fantasma" tamano="sm" onClick={onCerrar}>
             Cancelar
           </Boton>
         </div>

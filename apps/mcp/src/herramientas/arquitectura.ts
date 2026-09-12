@@ -114,6 +114,16 @@ export const esquemaDibujarArquitectura = {
         nombre: z.string().trim().min(1).max(60).describe("Como lo llama el equipo: «API de pagos»."),
         tipo: z.enum(TIPOS).default("servicio"),
         descripcion: z.string().trim().max(2000).optional().describe("Qué hace, en una línea."),
+        x: z
+          .number()
+          .finite()
+          .optional()
+          .describe(
+            "Solo si YA tienes un diagrama y quieres que se vea igual. Píxeles desde la " +
+              "izquierda del lienzo. Si lo omites, DevUP coloca la caja sola y mejor: " +
+              "no inventes coordenadas para un diagrama que estás deduciendo.",
+          ),
+        y: z.number().finite().optional().describe("Píxeles desde arriba. Ver `x`."),
       }),
     )
     .min(1)
@@ -142,9 +152,26 @@ export const descripcionDibujarArquitectura = [
   "Dibuja la arquitectura de un sistema en el diagrama de un espacio de trabajo",
   "de DevUP: crea los componentes y las conexiones entre ellos de una sola vez.",
   "",
-  "Pensada para después de leer un repositorio: se le pasa la lista entera de",
-  "componentes y de conexiones, y ella los coloca. NO hay que darle",
-  "coordenadas — las calcula sola, poniendo a la izquierda lo que nadie llama.",
+  "PENSADA PARA USARLA DESPUÉS DE LEER EL REPOSITORIO. Si el proyecto no tiene",
+  "Terraform —que es lo normal—, su arquitectura no está escrita en ningún",
+  "archivo y no hay nada que importar: está repartida por el código, y",
+  "deducirla es justamente lo que sabes hacer tú. Mira qué servicios se",
+  "levantan, a qué base de datos se conectan, qué colas y cachés usan y a qué",
+  "APIs de fuera llaman, y mándalo aquí entero. Eso es lo que convierte una",
+  "lectura del repositorio en un diagrama que se queda.",
+  "",
+  "DOS FORMAS DE USARLA, según lo que tengas:",
+  "",
+  "- **Deduciendo** (lo habitual): manda los componentes y las conexiones SIN",
+  "  `x` ni `y`. DevUP los reparte en columnas, con lo que nadie llama a la",
+  "  izquierda. No inventes coordenadas: salen diagramas ilegibles.",
+  "- **Copiando un diagrama que ya existe**: si traes uno de otra herramienta o",
+  "  lo has compuesto tú a propósito, manda `x` e `y` y se pinta tal cual, sin",
+  "  recolocar nada.",
+  "",
+  "El `tipo` de cada componente decide su forma en el lienzo —el cilindro es la",
+  "base de datos, la nube es lo que vive fuera—, así que acertarlo es lo que",
+  "hace que el diagrama se lea de un vistazo.",
   "",
   "Es acumulativa y no destructiva: lo que ya exista con el mismo nombre se",
   "reutiliza en vez de duplicarse, lo que ya estuviera colocado a mano no se",
@@ -154,7 +181,13 @@ export const descripcionDibujarArquitectura = [
   "Conviene llamar antes a `ver_arquitectura` para saber qué hay.",
 ].join("\n");
 
-type Componente = { nombre: string; tipo: (typeof TIPOS)[number]; descripcion?: string };
+type Componente = {
+  nombre: string;
+  tipo: (typeof TIPOS)[number];
+  descripcion?: string;
+  x?: number;
+  y?: number;
+};
 type Conexion = { de: string; a: string; etiqueta?: string };
 
 /**

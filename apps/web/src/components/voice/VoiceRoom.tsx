@@ -282,6 +282,8 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
                     camera: room.cameraOn,
                     sharing: room.sharing,
                     connectionState: "connected",
+                    // La ida y vuelta hasta uno mismo no existe, y no se finge.
+                    rtt: null,
                     audioStream: room.localAudioStream,
                     cameraStream: room.localCameraStream,
                     screenStream: room.localScreenStream,

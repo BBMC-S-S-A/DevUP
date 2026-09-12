@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { ANCHO_COLUMNA, ALTO_FILA, MARGEN, alturaLibre, repartirEnColumnas } from "../connectors/arquitectura.js";
 import { fetchGithubFileContent, fetchGithubTree } from "../connectors/github.js";
+import { archivosQueImportan, leerRepositorio } from "../connectors/repositorio.js";
 import { leerTerraform, terraformDelArbol } from "../connectors/terraform.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
@@ -18,7 +19,8 @@ import { repoSinCredencial } from "./github.js";
  *
  * HAY TRES MANERAS DE LLENARLO y las tres acaban en el mismo sitio: a mano
  * desde la pantalla, de una tacada desde un agente por MCP, o leyendo el
- * Terraform de un repositorio conectado. Las dos últimas pasan por
+ * repositorio conectado —su Terraform si lo tiene, y si no su `docker-compose`,
+ * sus dependencias y su reparto de carpetas—. Las dos últimas pasan por
  * `fusionarArquitectura`, que es donde vive —una sola vez— la regla de qué
  * pasa cuando lo que llega ya está dibujado.
  *
@@ -36,10 +38,26 @@ const NODE_COLUMNS = `
 const LINK_COLUMNS = `id, source_id as "sourceId", target_id as "targetId", label`;
 const LINK_COLUMNS_L = `l.id, l.source_id as "sourceId", l.target_id as "targetId", l.label`;
 
+/**
+ * `x` e `y` son opcionales, y esa es toda la diferencia entre las dos formas
+ * de meter un diagrama.
+ *
+ * SIN COORDENADAS, las calcula DevUP repartiendo en columnas. Es lo que hay
+ * que hacer cuando quien manda los componentes los dedujo de un repositorio o
+ * de un Terraform: ahí hay estructura, pero no hay dibujo.
+ *
+ * CON COORDENADAS, se respetan tal cual. Cuando alguien ya TIENE el diagrama
+ * —lo trae de otra herramienta, o el agente lo ha compuesto a propósito—,
+ * recolocarlo sería tirar el trabajo hecho y devolver algo que no es lo que se
+ * pidió. Se mezclan las dos: las cajas que traen sitio van a su sitio, y las
+ * que no lo traen se reparten entre los huecos.
+ */
 const COMPONENTE = z.object({
   nombre: z.string().trim().min(1).max(60),
   tipo: KIND.default("servicio"),
   descripcion: z.string().trim().max(2000).optional(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
 });
 
 const CONEXION = z.object({
@@ -108,7 +126,12 @@ export async function fusionarArquitectura(
   const porNombre = new Map(existentes.map((n) => [clave(n.name), n]));
   const baseY = alturaLibre(existentes.map((n) => n.posY));
 
-  const nuevos = entrada.componentes.filter((c) => !porNombre.has(clave(c.nombre)));
+  // Solo se reparten en columnas los que NO traen sitio propio: a los que lo
+  // traen no hay nada que calcularles, y meterlos en el reparto además
+  // desplazaría a los otros para dejarles un hueco que no van a usar.
+  const nuevos = entrada.componentes.filter(
+    (c) => !porNombre.has(clave(c.nombre)) && c.x === undefined && c.y === undefined,
+  );
   const columnas = repartirEnColumnas(
     nuevos.map((c) => c.nombre),
     entrada.conexiones,
@@ -125,9 +148,19 @@ export async function fusionarArquitectura(
       reutilizados.push(componente.nombre);
       continue;
     }
-    const col = columnas.get(k) ?? 0;
-    const fila = ocupadas.get(col) ?? 0;
-    ocupadas.set(col, fila + 1);
+    /** Donde lo pidan, o donde toque por el reparto. */
+    let posX: number;
+    let posY: number;
+    if (componente.x !== undefined || componente.y !== undefined) {
+      posX = Math.round(componente.x ?? MARGEN);
+      posY = Math.round(componente.y ?? MARGEN);
+    } else {
+      const col = columnas.get(k) ?? 0;
+      const fila = ocupadas.get(col) ?? 0;
+      ocupadas.set(col, fila + 1);
+      posX = MARGEN + col * ANCHO_COLUMNA;
+      posY = baseY + fila * ALTO_FILA;
+    }
 
     const { rows } = await db.query<NodoFila>(
       `insert into architecture_nodes
@@ -140,8 +173,8 @@ export async function fusionarArquitectura(
         componente.tipo,
         componente.nombre,
         componente.descripcion ?? "",
-        MARGEN + col * ANCHO_COLUMNA,
-        baseY + fila * ALTO_FILA,
+        posX,
+        posY,
         userId,
       ],
     );
@@ -344,12 +377,21 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
-   * Traer la arquitectura que ya está escrita en el Terraform del repositorio.
+   * Sacar la arquitectura del repositorio, esté escrita o haya que deducirla.
+   *
+   * POR QUÉ NO ES «IMPORTAR DE TERRAFORM» Y YA. Lo fue, y era un callejón sin
+   * salida: la mayoría de los proyectos no tienen ni un `.tf` —el propio DevUP
+   * no lo tiene— y el botón contestaba «no encontré ningún archivo .tf», que es
+   * verdad y no sirve de nada. La arquitectura SÍ está en el repositorio; lo
+   * que pasa es que no está declarada en un sitio, está repartida: en el
+   * `docker-compose`, en lo que cada servicio declara instalar y en cómo están
+   * partidas las carpetas. Así que se leen las dos cosas y se juntan.
    *
    * SE LEE EL TEXTO, NO SE EJECUTA NADA: ni `terraform plan`, ni credenciales
    * de nadie, ni estado remoto. Lo que se puede y lo que no se puede ver así
-   * está escrito en `connectors/terraform.ts`, y la pantalla lo repite, porque
-   * un mapa que se cree completo engaña más que no tenerlo.
+   * está en `connectors/terraform.ts` y en `connectors/repositorio.ts`, y la
+   * pantalla lo repite, porque un mapa que se cree completo engaña más que no
+   * tenerlo.
    *
    * Y SE LEE CON EL ENLACE, SIN TOKEN. Aunque la organización tenga una
    * credencial de GitHub guardada, esta ruta no la toca: dibujar un diagrama
@@ -362,7 +404,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
    * alguien hubiera movido a mano sigue donde lo dejó: ver
    * `fusionarArquitectura`.
    */
-  app.post("/workspaces/:workspaceId/architecture/importar/terraform", async (request) => {
+  app.post("/workspaces/:workspaceId/architecture/importar/repositorio", async (request) => {
     const userId = requireUser(request);
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const { repoId } = parseBody(z.object({ repoId: uuid }), request.body);
@@ -371,7 +413,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
       repoSinCredencial(db, repoId),
     );
     // Quien pertenece a dos proyectos ve los repositorios de los dos, así que
-    // RLS no puede impedir esto: lo impide el código. Traerse el Terraform de
+    // RLS no puede impedir esto: lo impide el código. Traerse el repositorio de
     // un proyecto al diagrama de otro es la mezcla que 0035 vino a evitar.
     if (suEspacio !== workspaceId) throw notFound("repositorio no encontrado");
 
@@ -383,55 +425,68 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     const arbol = await fetchGithubTree(token, fullName).catch((error: unknown) => {
       throw badGateway(error instanceof Error ? error.message : "no se pudo leer el repositorio");
     });
-    const todos = terraformDelArbol(arbol.map((e) => e.path));
-
-    if (todos.length === 0) {
-      return {
-        fullName,
-        archivos: [],
-        omitidos: 0,
-        ilegibles: [],
-        recortados: 0,
-        creados: [],
-        reutilizados: [],
-        enlazados: [],
-        sinResolver: [],
-      };
-    }
+    const rutas = arbol.map((e) => e.path);
 
     /**
-     * Cuántos `.tf` se leen, y por qué son doce y no cuarenta.
+     * Cuántos archivos se leen en total, y por qué son doce.
      *
      * Al leer sin credencial, el cupo de GitHub son 60 peticiones por hora Y
      * POR IP: no por organización, sino compartidas por todo DevUP. Una sola
-     * importación con tope de cuarenta dejaría sin lecturas a las demás
-     * organizaciones durante una hora, y ellas verían un fallo que no causaron
-     * y no pueden arreglar. Doce deja ver la infraestructura de un repositorio
-     * normal —que rara vez pasa de unos pocos `.tf`— sin secuestrar el cupo de
-     * nadie, y lo que no entre se dice en pantalla.
+     * importación más golosa dejaría sin lecturas a las demás organizaciones
+     * durante una hora, y ellas verían un fallo que no causaron y no pueden
+     * arreglar. Lo que no entre se dice en pantalla.
      */
     const TOPE = 12;
-    const omitidos = Math.max(0, todos.length - TOPE);
-    const aLeer = todos.slice(0, TOPE);
 
-    const archivos: { ruta: string; contenido: string }[] = [];
+    /**
+     * El Terraform va primero cuando lo hay, pero no se lo queda todo.
+     *
+     * Un repositorio con Terraform Y con `docker-compose` tiene las dos cosas
+     * que contar, y gastar las doce lecturas en `.tf` dejaría fuera la fuente
+     * que da las flechas entre servicios. Ocho y cuatro reparte sin que ninguna
+     * se quede sin nada; sin Terraform, las doce son para el repositorio.
+     */
+    const terraform = terraformDelArbol(rutas);
+    const cupoTerraform = terraform.length > 0 ? Math.min(terraform.length, 8) : 0;
+    const tfALeer = terraform.slice(0, cupoTerraform);
+    const repoALeer = archivosQueImportan(rutas).slice(0, TOPE - tfALeer.length);
+
+    const omitidos = Math.max(0, terraform.length - tfALeer.length);
     const ilegibles: string[] = [];
-    for (const ruta of aLeer) {
-      try {
-        archivos.push({ ruta, contenido: await fetchGithubFileContent(token, fullName, ruta) });
-      } catch {
-        // Un archivo que no se puede leer —demasiado grande, o retirado entre
-        // el árbol y la lectura— no tira la importación de los otros. Se dice
-        // cuál fue: con Terraform, el que falta puede ser justo el que tenía
-        // la base de datos, y un diagrama incompleto sin avisar es peor que
-        // uno vacío.
-        ilegibles.push(ruta);
-      }
-    }
 
-    const { componentes, conexiones } = leerTerraform(archivos);
-    // Un repositorio con más de doscientos recursos existe, y el diagrama que
-    // saldría no se puede leer. Se dibuja lo que cabe y se dice cuántos se
+    /** Lee un archivo y anota si no se pudo, sin tirar los demás. */
+    const leer = async (ruta: string) => {
+      try {
+        return { ruta, contenido: await fetchGithubFileContent(token, fullName, ruta) };
+      } catch {
+        // Un archivo ilegible —demasiado grande, o retirado entre el árbol y la
+        // lectura— no tira la importación. Se dice cuál fue: puede ser justo el
+        // que tenía la base de datos, y un diagrama incompleto sin avisar es
+        // peor que uno vacío.
+        ilegibles.push(ruta);
+        return null;
+      }
+    };
+
+    const archivosTf = (await Promise.all(tfALeer.map(leer))).filter((a) => a !== null);
+    const archivosRepo = (await Promise.all(repoALeer.map(leer))).filter((a) => a !== null);
+
+    const deTerraform = leerTerraform(archivosTf);
+    const delRepo = leerRepositorio(rutas, archivosRepo);
+
+    // El Terraform manda cuando está: describe lo que se despliega de verdad,
+    // mientras que el resto son indicios. Va primero en la lista para que, al
+    // repetirse un nombre, sea su tipo el que se quede (ver `fusionar`).
+    const componentes = [...deTerraform.componentes, ...delRepo.componentes];
+    const conexiones = [...deTerraform.conexiones, ...delRepo.conexiones];
+
+    const fuentes = [
+      ...(deTerraform.componentes.length > 0 ? ["terraform" as const] : []),
+      ...delRepo.fuentes,
+    ];
+
+    // Un repositorio con más de doscientos componentes existe, y el diagrama
+    // que saldría no se puede leer. Se dibuja lo que cabe y se dice cuántos se
     // quedaron fuera: callarlo dejaría un mapa con agujeros que parecen
     // decisiones.
     const recortados = Math.max(0, componentes.length - TOPE_COMPONENTES);
@@ -452,7 +507,8 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
 
     return {
       fullName,
-      archivos: aLeer,
+      fuentes,
+      archivos: [...archivosTf.map((a) => a.ruta), ...delRepo.archivosUsados],
       omitidos,
       ilegibles,
       recortados,

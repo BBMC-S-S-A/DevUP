@@ -34,6 +34,7 @@ import { uploadOrgLogo } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Fallo, Pagina } from "@/components/ui/Pagina";
+import { IdentidadOrganizacion } from "@/components/organizacion/IdentidadOrganizacion";
 import { TarjetaPersona } from "@/components/perfil/TarjetaPersona";
 import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
 
@@ -82,6 +83,11 @@ export default function OrganizationSettingsPage() {
           <Fallo onReintentar={() => void load()}>{equipo.error}</Fallo>
         )}
 
+        <IdentidadOrganizacion
+          orgId={orgId}
+          puedeEditar={administro}
+          esPropietario={yo?.role === "owner"}
+        />
         <FotoOrganizacion orgId={orgId} puedeEditar={administro} />
         <Miembros orgId={orgId} members={members} yo={user?.id ?? null} administro={administro} onChange={load} />
         <Enlaces orgId={orgId} puedeEditar={administro} />
@@ -526,28 +532,23 @@ function Invitar({ orgId }: { orgId: string }) {
                   en ninguna parte. Es la consecuencia de guardarlo cifrado, y
                   la alternativa —borrar la invitación y rehacerla— invalidaría
                   también su enlace, que a estas alturas puede estar ya abierto
-                  en el móvil de la otra persona. */}
+                  en el móvil de la otra persona.
+
+                  DESACTIVADO AL FUSIONAR LOS DOS CAMINOS, y conviene decir por
+                  qué en vez de borrarlo. Los dos lados escribieron el código
+                  corto a la vez con esquemas distintos; ganó el del tronco
+                  porque su migración ya está aplicada y el checksum no deja
+                  reescribirla. Pero el del tronco guarda el hash y NO trae las
+                  funciones que este botón necesita —`set_invitation_code` y
+                  `invitation_by_code`—, así que la ruta no existe. Dejarlo vivo
+                  sería un botón que da 404: mejor que se vea apagado y que
+                  diga por qué. La migración que lo revive está delegada. */}
               <button
                 type="button"
-                title={
-                  invitacion.hasCode
-                    ? "Dar un código nuevo. El anterior deja de valer."
-                    : "Esta invitación no tiene código corto. Pedir uno."
-                }
-                onClick={async () => {
-                  try {
-                    const { code } = await api.post<{ code: string }>(
-                      `/invitations/${invitacion.id}/code`,
-                      {},
-                    );
-                    await navigator.clipboard.writeText(code).catch(() => {});
-                    toast.success(`Código ${code} — copiado`);
-                    await cargar();
-                  } catch (caught) {
-                    toast.error(
-                      caught instanceof ApiError ? caught.message : "no se pudo dar un código",
-                    );
-                  }
+                disabled
+                title="Los códigos cortos están a medias: el tronco guarda el código pero todavía no hay función para renovarlo ni para canjearlo. Delegado."
+                onClick={() => {
+                  /* sin ruta detrás hasta que entre la migración */
                 }}
                 className="presionable flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-0.5
                   font-display text-[10px] font-semibold uppercase tracking-wider

@@ -1510,6 +1510,355 @@ async function main(): Promise<void> {
       ),
     );
 
+    console.log("\nEl grafo, que es donde el aislamiento cuesta más (0043)");
+
+    /**
+     * Un enlace toca DOS extremos, y quien ve uno puede no ver el otro.
+     *
+     * Carla está en el workspace y ve su tablero, pero NO está en el canal
+     * privado «dirección». Un enlace entre ese canal y una tarea suya, visible
+     * para ella, le revelaría que el canal existe — que es la misma fuga que el
+     * producto ya se cuidó de evitar en las menciones.
+     */
+    const tareaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from tasks where workspace_id = $1 limit 1",
+        [acme.ws],
+      );
+      return rows[0]?.id ?? null;
+    });
+
+    check("puede_ver_nodo dice que sí a un canal del que se es miembro", Boolean(
+      await withUser(ana, async (db) => {
+        const { rows } = await db.query<{ r: boolean }>(
+          "select public.puede_ver_nodo('canal', $1) as r",
+          [acme.privateChannel],
+        );
+        return rows[0]!.r;
+      }),
+    ));
+
+    const carlaVeElCanal = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ r: boolean }>(
+        "select public.puede_ver_nodo('canal', $1) as r",
+        [acme.privateChannel],
+      );
+      return rows[0]!.r;
+    });
+    check("y que no a uno privado del que no se es", carlaVeElCanal === false);
+
+    // Lo que NO puede pasar nunca: que un tipo desconocido, o un id que no
+    // existe, devuelva NULL. NULL dentro de un `if not` se lee como «adelante»
+    // — ver 0042, que es exactamente como se coló lo de las invitaciones.
+    const inexistente = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ r: boolean | null }>(
+        "select public.puede_ver_nodo('tarea', gen_random_uuid()) as r",
+      );
+      return rows[0]!.r;
+    });
+    check("un nodo que no existe da false, nunca NULL", inexistente === false);
+
+    if (tareaDeAcme) {
+      await withUser(ana, (db) =>
+        db.query(
+          `insert into graph_links (source_kind, source_id, target_kind, target_id, label, created_by)
+           values ('canal',$1,'tarea',$2,'se habló en',$3)`,
+          [acme.privateChannel, tareaDeAcme, ana],
+        ),
+      );
+      check("Ana teje un enlace entre su canal privado y una tarea", true);
+
+      check("y lo ve, porque ve los dos extremos", (await count(ana, "graph_links")) === 1);
+
+      // EL CASO DE LA TAREA: Carla ve la tarea y no el canal. El enlace tiene
+      // que desaparecer entero para ella, no enseñarse a medias.
+      check(
+        "Carla, que ve la tarea pero no el canal, no ve el enlace",
+        (await count(carla, "graph_links")) === 0,
+      );
+      check("y Bruno, de otra organización, tampoco", (await count(bruno, "graph_links")) === 0);
+
+      // Y al revés: tampoco puede TEJER hacia algo que no ve. Si pudiera,
+      // probaría a enlazar y sabría que existe por si la escritura pasa.
+      await denied("Carla no puede tejer un enlace hacia el canal que no ve", () =>
+        withUser(carla, (db) =>
+          db.query(
+            `insert into graph_links (source_kind, source_id, target_kind, target_id, created_by)
+             values ('tarea',$1,'canal',$2,$3)`,
+            [tareaDeAcme, acme.privateChannel, carla],
+          ),
+        ),
+      );
+
+      const carlaBorra = await withUser(carla, async (db) => {
+        const { rowCount } = await db.query("delete from graph_links");
+        return rowCount ?? 0;
+      });
+      check("ni borrarlo, que sería otra forma de saber que está", carlaBorra === 0);
+      check("y después del intento sigue ahí", (await count(ana, "graph_links")) === 1);
+    }
+
+    console.log("\nEl guardián que no guardaba (0042)");
+
+    /**
+     * `is_org_admin` devolvía NULL a quien no es miembro, no `false`.
+     *
+     * Dentro de una política de RLS daba igual —NULL y `false` cierran las dos
+     * igual— y por eso el aislamiento de las tablas nunca lo notó. En plpgsql
+     * no: `if not NULL` NO entra en el `if`, así que los dos guardianes que lo
+     * usaban no saltaban. Cualquiera con sesión podía fabricarse una
+     * invitación de administrador a una organización ajena y aceptársela.
+     *
+     * Esto lo fija en el sitio exacto donde se rompió: el valor devuelto.
+     */
+    const comoRespondeAUnExtraño = await withUser(bruno, async (db) => {
+      const { rows } = await db.query<{ r: boolean | null }>(
+        "select public.is_org_admin($1) as r",
+        [acme.org],
+      );
+      return rows[0]!.r;
+    });
+    check(
+      "is_org_admin devuelve false a un extraño, no NULL —«no se sabe» se lee como «adelante»",
+      comoRespondeAUnExtraño === false,
+    );
+
+    console.log("\nCódigo corto de invitación (0041)");
+
+    // El código se guarda como hash, igual que el token: quien pueda leer la
+    // tabla no puede usar ninguna invitación. Importa más desde que hay
+    // respaldos automáticos — un código en claro viajaría en cada volcado.
+    const invitacionConCodigo = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ create_invitation: string }>(
+        "select public.create_invitation($1,$2,'member',$3,$4,null,$5,$6)",
+        [
+          acme.org,
+          "dictado@acme.test",
+          "hash-del-token-largo",
+          new Date(Date.now() + 7 * 86_400_000).toISOString(),
+          "hash-del-codigo-corto",
+          new Date(Date.now() + 86_400_000).toISOString(),
+        ],
+      );
+      return rows[0]!.create_invitation;
+    });
+    check("Ana, que administra, crea una invitación con código", Boolean(invitacionConCodigo));
+
+    const porCodigo = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ organization_name: string }>(
+        "select organization_name from public.invitation_by_token($1)",
+        ["hash-del-codigo-corto"],
+      );
+      return rows[0]?.organization_name;
+    });
+    check("y se encuentra por el código, no solo por el token", porCodigo === "Acme");
+
+    const porToken = await withUser(null, async (db) => {
+      const { rows } = await db.query("select id from public.invitation_by_token($1)", [
+        "hash-del-token-largo",
+      ]);
+      return rows.length;
+    });
+    check("el enlace largo sigue encontrándola igual", porToken === 1);
+
+    // Lo que de verdad hay que fijar: Bruno NO administra Acme. Si esto dejara
+    // de fallar, cualquiera podría fabricarse invitaciones a una organización
+    // ajena y meterse dentro.
+    await denied("Bruno no puede fabricar una invitación a una organización ajena", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.create_invitation($1,$2,'admin',$3,$4,null,$5,$6)", [
+          acme.org,
+          "colado@acme.test",
+          "otro-token",
+          new Date(Date.now() + 86_400_000).toISOString(),
+          "otro-codigo",
+          new Date(Date.now() + 86_400_000).toISOString(),
+        ]),
+      ),
+    );
+
+    console.log("\nJefe de rama de una categoría (0040)");
+
+    // Quien lleva una rama no es quien tiene sus tareas: reparte su trabajo.
+    // La columna es de `tags`, así que sus políticas ya la cubren — lo que hay
+    // que fijar es la escritura NUEVA, que es poder nombrar jefe.
+    const etiquetaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tags (organization_id, name, color, created_by)
+         values ($1,'Infraestructura','blue',$2) returning id`,
+        [acme.org, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const anaSeNombra = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("update tags set owner_id = $2 where id = $1", [
+        etiquetaDeAcme,
+        ana,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Ana puede poner jefe a una categoría de su organización", anaSeNombra === 1);
+
+    // El caso que de verdad importa: Bruno es de OTRA organización. Si esto
+    // dejara de fallar, su nombre aparecería como jefe en una pantalla de una
+    // empresa que no es la suya. La base no puede impedirlo con una clave
+    // foránea —solo mira `users`, que no sabe de organizaciones— así que la
+    // frontera aquí la pone RLS sobre la fila de la categoría.
+    const brunoSeCuela = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("update tags set owner_id = $2 where id = $1", [
+        etiquetaDeAcme,
+        bruno,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Bruno, de otra organización, no puede ponerse de jefe de una ajena", brunoSeCuela === 0);
+
+    const siguePuesta = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ owner_id: string | null }>(
+        "select owner_id from tags where id = $1",
+        [etiquetaDeAcme],
+      );
+      return rows[0]?.owner_id;
+    });
+    check("y después del intento la categoría sigue con su jefe de verdad", siguePuesta === ana);
+
+    console.log("\nHigiene del esquema");
+
+    /**
+     * Que ninguna función nuestra nazca sin `search_path` fijo.
+     *
+     * POR QUÉ ES UNA PRUEBA Y NO UNA MIGRACIÓN MÁS. La 0039 se lo puso a las
+     * siete que faltaban, pero una migración arregla el pasado: la número ocho
+     * la escribe alguien el mes que viene y vuelve a nacer sin él. Esto lo caza
+     * el mismo día.
+     *
+     * Y la cuenta hay que hacerla contra la BASE y no contra una lista: el
+     * documento decía seis, la tarea decía cinco, y `pg_proc` decía siete. Una
+     * lista de esto mantenida a mano se queda corta siempre.
+     *
+     * Las de las extensiones (`citext`, `pgcrypto`) quedan fuera: son suyas,
+     * las reinstala `create extension` y no las mantenemos nosotros.
+     */
+    const sinSearchPath = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ firma: string }>(
+        `select p.oid::regprocedure::text as firma
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.proconfig is null
+            and not exists (
+              select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e'
+            )
+          order by 1`,
+      );
+      return rows.map((r) => r.firma);
+    });
+    check(
+      sinSearchPath.length === 0
+        ? "ninguna función nuestra se queda sin search_path"
+        : `estas funciones nacieron sin search_path: ${sinSearchPath.join(", ")}`,
+      sinSearchPath.length === 0,
+    );
+
+    /**
+     * Y la que de verdad importa: que ninguna `security definer` se quede sin
+     * él. Esas corren con los permisos de quien las creó y se saltan RLS, así
+     * que ahí `search_path` deja de ser higiene y pasa a ser la puerta.
+     */
+    const definerSinRuta = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ firma: string }>(
+        `select p.oid::regprocedure::text as firma
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prosecdef and p.proconfig is null`,
+      );
+      return rows.map((r) => r.firma);
+    });
+    check(
+      definerSinRuta.length === 0
+        ? "y ninguna security definer, que ahí sí sería una puerta"
+        : `security definer sin search_path: ${definerSinRuta.join(", ")}`,
+      definerSinRuta.length === 0,
+    );
+
+    console.log("\nRegistro de actividad (0038)");
+
+    // Lo que hace que este registro sirva para responder de algo: que nadie
+    // pueda escribirlo a nombre de otro, y que nadie pueda reescribirlo
+    // después. Sin las dos cosas es un cuaderno, no un registro.
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+         values ($1,$2,$3,'movio','tarea','Arreglar el panel')`,
+        [acme.ws, acme.org, ana],
+      ),
+    );
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+         values ($1,$2,$3,'cerro','tarea','Lo de mi cuaderno')`,
+        [acme.soloWs, acme.org, ana],
+      ),
+    );
+
+    check("Ana ve los dos renglones que escribió", (await count(ana, "activity")) === 2);
+    check(
+      "Carla ve el del espacio compartido y no el del personal",
+      (await count(carla, "activity")) === 1,
+    );
+    check("Bruno no ve nada de la historia de Acme", (await count(bruno, "activity")) === 0);
+
+    // Miembro rasa sí escribe: lo que anota es lo que acaba de hacer ella.
+    const carlaAnoto = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+         values ($1,$2,$3,'comento','tarea','Una que tocó Carla')`,
+        [acme.ws, acme.org, carla],
+      );
+      return rowCount ?? 0;
+    });
+    check("Carla, miembro rasa, puede anotar en su espacio", carlaAnoto === 1);
+
+    // El caso que de verdad importa. Si esto dejara de fallar, cualquiera
+    // podría escribir «Ana cerró treinta tareas» y el registro dejaría de
+    // valer para exactamente aquello para lo que se creó.
+    await denied("nadie puede anotar a nombre de otra persona", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+           values ($1,$2,$3,'cerro','tarea','No la cerró Ana')`,
+          [acme.ws, acme.org, ana],
+        ),
+      ),
+    );
+
+    await denied("ni anotar en un espacio al que no llega", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+           values ($1,$2,$3,'movio','tarea','Ni de lejos')`,
+          [acme.soloWs, acme.org, carla],
+        ),
+      ),
+    );
+
+    // Y la propiedad que no se consigue con código, sino NO escribiendo dos
+    // políticas: el registro no se puede retocar ni borrar. Ni siquiera Ana,
+    // que administra la organización y escribió el renglón.
+    const anaReescribio = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("update activity set verb = 'invento'");
+      return rowCount ?? 0;
+    });
+    check("ni Ana, que administra, puede reescribir el registro", anaReescribio === 0);
+
+    const anaBorro = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("delete from activity");
+      return rowCount ?? 0;
+    });
+    check("ni borrarlo", anaBorro === 0);
+
     console.log("\nEntornos y despliegues (continuación)");
 
     // El caso que de verdad importa: ni siquiera la dueña del entorno puede
@@ -2156,7 +2505,7 @@ async function main(): Promise<void> {
         const { rows } = await db.query<{ id: string }>(
           `insert into activity
              (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id, resumen)
-           values ($1, $2, $3, 'tarea.cerrada', 'tarea', $4, $5)
+           values ($1, $2, $3, 'cerro', 'tarea', $4, $5)
            returning id`,
           [org, workspace, quien, acme.soloTask, resumen],
         );
@@ -2193,7 +2542,7 @@ async function main(): Promise<void> {
         await db.query(
           `insert into activity
              (organization_id, workspace_id, actor_id, verbo, objeto_tipo, resumen)
-           values ($1, $2, $3, 'tarea.cerrada', 'tarea', 'lo hizo Ana, dice Carla')`,
+           values ($1, $2, $3, 'cerro', 'tarea', 'lo hizo Ana, dice Carla')`,
           [acme.org, acme.ws, ana],
         );
         return "coló";

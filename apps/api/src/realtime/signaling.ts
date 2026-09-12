@@ -582,6 +582,35 @@ export function announceFileChange(
 }
 
 /**
+ * Avisa al workspace de que su tablero ha cambiado.
+ *
+ * POR QUÉ HACÍA FALTA. `tasks.ts` era la única ruta de escritura del producto
+ * que no avisaba a nadie. Se notaba justo donde más molesta: un agente mueve
+ * una tarjeta por MCP, la escritura ocurre, y el tablero de quien esté mirando
+ * no se entera hasta que recarga. La tarjeta se queda donde estaba y la
+ * persona cree que el agente no hizo nada.
+ *
+ * VA POR EL MISMO SOCKET QUE LA BIBLIOTECA. `fileHub` es, de hecho, el canal
+ * del workspace: su sala es el workspace y su autorización, la del workspace.
+ * Abrir una segunda conexión para el tablero sería un socket más por pestaña
+ * para repartir un mensaje cada varios minutos. Quien escucha distingue por el
+ * `type`, que es para lo que está.
+ *
+ * SE MANDA EL IDENTIFICADOR Y NO LA TARJETA. Igual que con los archivos: quien
+ * recibe el aviso vuelve a pedir el tablero en vez de aplicar el cambio a
+ * mano. Es una consulta más y evita que dos copias del estado —el filtro
+ * activo, el orden, las categorías— diverjan por un mensaje que llegó
+ * desordenado.
+ */
+export function announceBoardChange(
+  workspaceId: string,
+  action: "created" | "updated" | "moved" | "deleted",
+  taskId: string,
+): void {
+  fileHub.broadcast(workspaceId, { type: "board-change", action, taskId });
+}
+
+/**
  * Reparte un cambio en la música compartida del canal: la cola cambió, o
  * cambió qué suena ahora. Mismo socket que ya reparte los mensajes — no hace
  * falta una conexión aparte para algo tan ligero.
