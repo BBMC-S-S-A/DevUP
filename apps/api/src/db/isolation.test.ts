@@ -2500,20 +2500,20 @@ async function main(): Promise<void> {
     // que es como un registro deja de serlo.
     console.log("\nEl registro de actividad");
 
-    const anotarComo = (quien: string, workspace: string | null, org: string, resumen: string) =>
+    const anotarComo = (quien: string, workspace: string | null, org: string, sujeto: string) =>
       withUser(quien, async (db) => {
         const { rows } = await db.query<{ id: string }>(
           `insert into activity
-             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, objeto_id, resumen)
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_id, subject_label)
            values ($1, $2, $3, 'cerro', 'tarea', $4, $5)
            returning id`,
-          [org, workspace, quien, acme.soloTask, resumen],
+          [org, workspace, quien, acme.soloTask, sujeto],
         );
         return rows[0]!.id;
       });
 
-    const enElCuaderno = await anotarComo(ana, acme.soloWs, acme.org, "cerró algo privado");
-    const enElCompartido = await anotarComo(ana, acme.ws, acme.org, "cerró algo del equipo");
+    const enElCuaderno = await anotarComo(ana, acme.soloWs, acme.org, "algo privado");
+    const enElCompartido = await anotarComo(ana, acme.ws, acme.org, "algo del equipo");
 
     const veActividad = (quien: string, id: string) =>
       withUser(quien, async (db) => {
@@ -2541,7 +2541,7 @@ async function main(): Promise<void> {
       try {
         await db.query(
           `insert into activity
-             (organization_id, workspace_id, actor_id, verbo, objeto_tipo, resumen)
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_label)
            values ($1, $2, $3, 'cerro', 'tarea', 'lo hizo Ana, dice Carla')`,
           [acme.org, acme.ws, ana],
         );
@@ -2555,7 +2555,7 @@ async function main(): Promise<void> {
     // Un registro que se puede editar es una opinion sobre el pasado.
     const editado = await withUser(ana, async (db) => {
       const { rowCount } = await db.query(
-        "update activity set resumen = 'otra cosa' where id = $1",
+        "update activity set subject_label = 'otra cosa' where id = $1",
         [enElCompartido],
       );
       return rowCount ?? 0;

@@ -142,7 +142,14 @@ async function main(): Promise<void> {
     filas = await leer();
     const cerrada = filas.find((f) => f.verbo === "cerro");
     check("mover a una columna terminal anota `cerro`, no `movio`", Boolean(cerrada));
-    check("y el resumen lo dice en castellano", cerrada?.resumen.startsWith("cerró") === true);
+    // Ya no hay frase guardada: el renglón es verbo + sujeto, y la frase la
+    // compone quien pinta. Lo que sí tiene que guardar —y es la promesa de la
+    // 0038— es CÓMO SE LLAMABA la tarea en ese momento: si el renglón solo
+    // apuntara al id, renombrarla después reescribiría el pasado.
+    check(
+      "y guarda con qué nombre se cerró, no solo a cuál apunta",
+      cerrada?.resumen === "Arreglar el 415 del túnel",
+    );
 
     await withUser(ana, (db) => moverTareaEnDb(db, taskId, pendiente, null, { userId: ana }));
     check(
