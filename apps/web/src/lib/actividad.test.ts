@@ -154,5 +154,17 @@ check(
   "creó el despliegue «Arreglar el riel»",
 );
 
+check(
+  "los verbos que trajo la fusión de los dos caminos también se leen",
+  fraseDeRenglon(renglon({ verbo: "reclasifico", detalle: { a: "c2" } }), false),
+  "cambió de área la tarea",
+);
+
+check(
+  "y el que traduce a una frase con preposición no se parte",
+  fraseDeRenglon(renglon({ verbo: "evidencio", detalle: {} })),
+  "dejó prueba en la tarea «Arreglar el riel»",
+);
+
 console.log(`\n${total} comprobaciones, ${fallos} fallida${fallos === 1 ? "" : "s"}`);
 process.exit(fallos === 0 ? 0 : 1);

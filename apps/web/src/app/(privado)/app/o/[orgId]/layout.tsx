@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, LogOut, Search, UserRound } from "lucide-react";
+import { ArrowLeft, Home, LogOut, Search, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -178,6 +178,25 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
         </header>
 
         <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
+          {/* También aquí, y por el mismo motivo: Inicio cruza TODAS las
+              organizaciones, así que desde dentro de una es la salida hacia
+              «¿qué tengo en todas?». Si solo estuviera en el armazón de espacio,
+              quien se quede en el nivel de organización no la vería nunca. */}
+          <Link
+            href="/app/inicio"
+            style={retraso(0)}
+            aria-current={pathname === "/app/inicio" ? "page" : undefined}
+            className={`devup-entrada presionable flex h-9 items-center gap-2 rounded-xl border px-2.5
+              text-[13px] hover:border-line-strong hover:bg-canvas hover:text-ink ${
+                pathname === "/app/inicio"
+                  ? "border-accent/40 bg-accent-soft/50 text-accent-bright"
+                  : "border-line bg-canvas/50 text-muted"
+              }`}
+          >
+            <Home size={13} className="shrink-0 text-faint" />
+            Inicio
+          </Link>
+
           <Link
             href={`${base}/buscar`}
             style={retraso(0)}

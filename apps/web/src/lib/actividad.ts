@@ -53,10 +53,18 @@ const VERBOS: Record<string, string> = {
   asigno: "asignó",
   desasigno: "quitó el responsable de",
   renombro: "renombró",
-  comento: "comentó",
-  adjunto: "adjuntó",
+  comento: "comentó en",
+  adjunto: "adjuntó a",
   etiqueto: "etiquetó",
   borro: "borró",
+  // Los cuatro que trajo la fusión de los dos caminos. El vocabulario crece sin
+  // migración —el verbo es texto en la base, a propósito—, así que esta tabla
+  // se queda corta antes que la de allí: por eso `verboLegible` devuelve el
+  // verbo tal cual en vez de un hueco.
+  reclasifico: "cambió de área",
+  priorizo: "repriorizó",
+  enlazo: "enlazó una rama a",
+  evidencio: "dejó prueba en",
 };
 
 export function verboLegible(verbo: string): string {

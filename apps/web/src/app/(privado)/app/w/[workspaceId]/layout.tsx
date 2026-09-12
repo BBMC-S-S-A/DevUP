@@ -7,6 +7,8 @@ import {
   Gamepad2,
   Hash,
   KanbanSquare,
+  History,
+  Home,
   LayoutDashboard,
   PhoneCall,
   LayoutGrid,
@@ -289,6 +291,31 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             Buscar
           </Link>
 
+          {/* INICIO VA AQUÍ, FUERA DEL GRUPO, y el motivo es el mismo que
+              pide el §5 de CAMINOS.md: no es una pantalla de este espacio, es
+              la que contesta «¿qué tengo, en todos?». Se pidió «encima de
+              Panel», y encima está — pero encima del rótulo y no debajo de él,
+              porque el grupo se llama «Espacio» y meterla dentro la convertiría
+              en una pantalla más de este espacio, que es justo lo que el §5
+              dice que no es.
+
+              Y hay precedente a dos líneas de aquí: «Buscar» ya vive fuera del
+              grupo por esta misma razón. */}
+          <Link
+            href="/app/inicio"
+            style={retraso(0)}
+            aria-current={pathname === "/app/inicio" ? "page" : undefined}
+            className={`devup-entrada presionable flex h-9 items-center gap-2 rounded-xl border px-2.5
+              text-[13px] hover:border-line-strong hover:bg-canvas hover:text-ink ${
+                pathname === "/app/inicio"
+                  ? "border-accent/40 bg-accent-soft/50 text-accent-bright"
+                  : "border-line bg-canvas/50 text-muted"
+              }`}
+          >
+            <Home size={13} className="shrink-0 text-faint" />
+            Inicio
+          </Link>
+
           <div>
             <GrupoRotulo titulo="Espacio" />
             {/* Los destinos fijos del espacio van en su propia capa, separados
@@ -363,6 +390,22 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   indice={2}
                 >
                   Tablero
+                </ItemNav>
+              </li>
+              <li>
+                {/* «Qué ha pasado aquí» va junto al tablero y no junto a la
+                    auditoría, aunque las dos lean el mismo registro. La
+                    auditoría contesta «¿quién ha hecho cuánto?» y se abre
+                    cuando toca revisar; esto contesta «¿qué me he perdido?» y
+                    se abre al llegar. Quien vuelve un lunes no está auditando a
+                    nadie. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/actividad`}
+                  icono={<History size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/actividad`}
+                  indice={2}
+                >
+                  Qué ha pasado
                 </ItemNav>
               </li>
               <li>
