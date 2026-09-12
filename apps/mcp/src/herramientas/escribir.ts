@@ -111,6 +111,84 @@ async function resolverPersona(
   );
 }
 
+export type Area = { id: string; name: string; ownerName: string | null };
+
+async function areas(cliente: ClienteApi, espacioId: string): Promise<Area[]> {
+  const { categories } = await cliente.get<{ categories: Area[] }>(
+    `/workspaces/${espacioId}/categories`,
+  );
+  return categories;
+}
+
+/**
+ * Resuelve un área por nombre, sin pedirle un identificador al modelo.
+ *
+ * Es el mismo criterio que las columnas y las personas: coincidencia exacta
+ * primero, parcial después, y si encaja con varias se DICE en vez de elegir.
+ * Adivinar aquí archivaría trabajo en el frente equivocado, y eso no se ve
+ * hasta que alguien busca su tarea y no está.
+ */
+export function resolverArea(lista: Area[], nombre: string): Area | string {
+  const limpio = nombre.trim().toLowerCase();
+  const exacta = lista.find((a) => a.name.toLowerCase() === limpio);
+  if (exacta) return exacta;
+  const parciales = lista.filter((a) => a.name.toLowerCase().includes(limpio));
+  if (parciales.length === 1) return parciales[0]!;
+  if (parciales.length === 0) {
+    return lista.length === 0
+      ? "Este tablero no tiene áreas todavía. Créala con `crear_area`."
+      : `No hay ningún área que se llame «${nombre}». Hay: ${lista.map((a) => a.name).join(", ")}.`;
+  }
+  return `«${nombre}» encaja con varias áreas: ${parciales.map((a) => a.name).join(", ")}.`;
+}
+
+// ---------------------------------------------------------------------------
+// crear_area
+// ---------------------------------------------------------------------------
+
+export const esquemaCrearArea = {
+  nombre: z.string().trim().min(1).max(40).describe("Cómo se llama el área de trabajo."),
+  responsable: z
+    .string()
+    .optional()
+    .describe("Quién la lleva. Las tareas que se archiven aquí se le asignan solas."),
+  espacio: z.string().optional(),
+  organizacion: z.string().optional(),
+};
+
+export const descripcionCrearArea = [
+  "Crea un área en el tablero: el otro eje, el de «de qué trata esto».",
+  "",
+  "Una COLUMNA dice en qué estado está algo —por hacer, en curso, hecho—. Un",
+  "ÁREA dice de qué trata y de quién es: «DevVerse», «Flujos», «Infraestructura».",
+  "Sirve para que un tablero de cuarenta tarjetas se pueda leer.",
+  "",
+  "Lo que la hace útil es el responsable: las tareas que se archiven en un área",
+  "se asignan solas a quien la lleva, salvo que se diga otra cosa. Así se deja",
+  "de repartir tarea por tarea.",
+  "",
+  "Pocas y estables. Un tablero con ocho áreas que nadie usa es peor que uno",
+  "con tres.",
+].join("\n");
+
+export async function crearArea(
+  cliente: ClienteApi,
+  entrada: { nombre: string; responsable?: string; espacio?: string; organizacion?: string },
+): Promise<string> {
+  const espacio: Espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
+  const responsable = entrada.responsable
+    ? await resolverPersona(cliente, entrada.responsable, entrada.organizacion)
+    : null;
+
+  const { category } = await cliente.post<{ category: { id: string; name: string } }>(
+    `/workspaces/${espacio.id}/categories`,
+    { name: entrada.nombre, ownerId: responsable },
+  );
+
+  const quien = entrada.responsable ? `, que lleva ${entrada.responsable}` : ", sin responsable";
+  return `Creada el área «${category.name}» en ${espacio.name}${quien}.  [area ${category.id}]`;
+}
+
 // ---------------------------------------------------------------------------
 // crear_tarea
 // ---------------------------------------------------------------------------
@@ -130,6 +208,10 @@ export const esquemaCrearTarea = {
   columna: z.string().optional().describe("En qué columna. Por defecto, la primera del tablero."),
   espacio: z.string().optional().describe("Nombre del espacio de trabajo. Omitir si solo hay uno."),
   responsable: z.string().optional().describe("Nombre de la persona a la que se asigna."),
+  area: z
+    .string()
+    .optional()
+    .describe("En qué área se archiva. Si el área tiene responsable, se asigna a esa persona."),
   vence: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -162,6 +244,7 @@ export async function crearTarea(
     columna?: string;
     espacio?: string;
     responsable?: string;
+    area?: string;
     vence?: string;
     organizacion?: string;
   },
@@ -173,6 +256,13 @@ export async function crearTarea(
     ? await resolverPersona(cliente, entrada.responsable, entrada.organizacion)
     : null;
 
+  let area: Area | null = null;
+  if (entrada.area) {
+    const resuelta = resolverArea(await areas(cliente, espacio.id), entrada.area);
+    if (typeof resuelta === "string") return resuelta;
+    area = resuelta;
+  }
+
   const { task } = await cliente.post<{ task: { id: string; title: string } }>(
     `/workspaces/${espacio.id}/tasks`,
     {
@@ -182,11 +272,16 @@ export async function crearTarea(
       assigneeId: responsable,
       dueDate: entrada.vence ?? null,
       tagIds: [etiqueta],
+      categoryId: area?.id ?? null,
     },
   );
 
   const trozos = [`en ${espacio.name} / ${columna.name}`];
+  if (area) trozos.push(`área ${area.name}`);
+  // Quien la lleva puede venir del área sin que nadie lo dijera: se nombra
+  // igual, porque enterarse después de a quién se le asignó es peor.
   if (entrada.responsable) trozos.push(`para ${entrada.responsable}`);
+  else if (area?.ownerName) trozos.push(`para ${area.ownerName}, que lleva el área`);
   if (entrada.vence) trozos.push(`vence el ${entrada.vence}`);
   return `Creada «${task.title}» ${trozos.join(", ")}, con la etiqueta «${ETIQUETA_AGENTE}».  [tarea ${task.id}]`;
 }

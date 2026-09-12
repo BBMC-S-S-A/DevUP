@@ -36,6 +36,7 @@ export type Verbo =
   | "tarea.cerrada"
   | "tarea.reabierta"
   | "tarea.asignada"
+  | "tarea.reclasificada"
   | "tarea.borrada";
 
 export type Anotacion = {

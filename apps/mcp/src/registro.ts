@@ -22,13 +22,16 @@ import {
 } from "./herramientas/tareas.js";
 import {
   actualizarTarea,
+  crearArea,
   crearColumna,
   crearTarea,
   descripcionActualizarTarea,
+  descripcionCrearArea,
   descripcionCrearColumna,
   descripcionCrearTarea,
   descripcionMoverTarea,
   esquemaActualizarTarea,
+  esquemaCrearArea,
   esquemaCrearColumna,
   esquemaCrearTarea,
   esquemaMoverTarea,
@@ -132,6 +135,15 @@ export function registrarHerramientas(
     esquemaCrearTarea,
     herramienta(async (cliente, entrada) => [
       { type: "text" as const, text: await crearTarea(cliente, entrada) },
+    ]),
+  );
+
+  servidor.tool(
+    "crear_area",
+    descripcionCrearArea,
+    esquemaCrearArea,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await crearArea(cliente, entrada) },
     ]),
   );
 

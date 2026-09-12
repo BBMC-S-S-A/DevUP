@@ -49,6 +49,7 @@ const ESPERADAS = [
   "ver_tarea",
   "ver_arquitectura",
   "crear_tarea",
+  "crear_area",
   "crear_columna",
   "mover_tarea",
   "actualizar_tarea",

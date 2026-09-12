@@ -12,6 +12,7 @@ const TASK_COLUMNS = `
   t.id, t.workspace_id as "workspaceId", t.column_id as "columnId",
   t.title, t.description, t.position, t.assignee_id as "assigneeId",
   t.due_date as "dueDate", t.created_at as "createdAt", t.updated_at as "updatedAt",
+  t.category_id as "categoryId",
   p.display_name as "assigneeName",
   coalesce(
     (select json_agg(json_build_object('id', g.id, 'name', g.name, 'color', g.color)
@@ -117,13 +118,132 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         [workspaceId],
       );
 
+      // Las áreas viajan aparte y no dentro de las columnas: son el OTRO eje
+      // del tablero, y meterlas dentro obligaría a repetirlas en cada columna.
+      // La interfaz agrupa o filtra con ellas según le convenga.
+      const { rows: categories } = await db.query(
+        `select c.id, c.name, c.color, c.position,
+                c.owner_id as "ownerId", p.display_name as "ownerName",
+                (select count(*) from tasks t where t.category_id = c.id)::int as tareas
+           from task_categories c
+           left join profiles p on p.id = c.owner_id
+          where c.workspace_id = $1
+          order by c.position, c.name`,
+        [workspaceId],
+      );
+
       return {
+        categories,
         columns: columns.map((column) => ({
           ...column,
           tasks: tasks.filter((task) => task.columnId === column.id),
         })),
       };
     });
+  });
+
+  // ---------------------------------------------------------------------
+  // Áreas (categorías)
+  //
+  // El otro eje del tablero: la columna dice EN QUÉ ESTADO está algo, el área
+  // dice DE QUÉ TRATA y de quién es. Ver la cabecera de la 0039 para por qué
+  // no son etiquetas.
+  // ---------------------------------------------------------------------
+
+  app.get("/workspaces/:workspaceId/categories", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select c.id, c.name, c.color, c.position,
+                c.owner_id as "ownerId", p.display_name as "ownerName",
+                (select count(*) from tasks t where t.category_id = c.id)::int as tareas
+           from task_categories c
+           left join profiles p on p.id = c.owner_id
+          where c.workspace_id = $1
+          order by c.position, c.name`,
+        [workspaceId],
+      );
+      return { categories: rows };
+    });
+  });
+
+  app.post("/workspaces/:workspaceId/categories", async (request, reply) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        name: z.string().trim().min(1).max(40),
+        color: z.number().int().min(0).max(15).optional(),
+        /** Quién la lleva. Puede quedarse sin dueño y decidirse después. */
+        ownerId: uuid.nullish(),
+      }),
+      request.body,
+    );
+
+    const category = await withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `insert into task_categories (workspace_id, name, color, owner_id, position, created_by)
+         values (
+           $1, $2, $3, $4,
+           coalesce((select max(position) from task_categories where workspace_id = $1), 0) + $5,
+           $6
+         )
+         returning id, name, color, position, owner_id as "ownerId"`,
+        [workspaceId, body.name, body.color ?? 0, body.ownerId ?? null, STEP, userId],
+      );
+      if (!rows[0]) throw notFound("workspace no encontrado");
+      return rows[0];
+    });
+
+    return reply.status(201).send({ category: { ...category, tareas: 0 } });
+  });
+
+  app.patch("/categories/:categoryId", async (request) => {
+    const userId = requireUser(request);
+    const { categoryId } = parseParams(z.object({ categoryId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        name: z.string().trim().min(1).max(40).optional(),
+        color: z.number().int().min(0).max(15).optional(),
+        ownerId: uuid.nullish(),
+      }),
+      request.body,
+    );
+    const enviado = body as Record<string, unknown>;
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `update task_categories
+            set name = coalesce($2, name),
+                color = coalesce($3, color),
+                owner_id = case when $4 then $5::uuid else owner_id end
+          where id = $1
+          returning id, name, color, position, owner_id as "ownerId"`,
+        [
+          categoryId,
+          body.name ?? null,
+          body.color ?? null,
+          // `null` explícito significa «quítale el dueño», que no es lo mismo
+          // que no mandar el campo. Mismo patrón que el responsable de una tarea.
+          "ownerId" in enviado,
+          body.ownerId ?? null,
+        ],
+      );
+      if (!rows[0]) throw notFound("categoría no encontrada");
+      return { category: rows[0] };
+    });
+  });
+
+  app.delete("/categories/:categoryId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { categoryId } = parseParams(z.object({ categoryId: uuid }), request.params);
+    // Las tareas NO caen con ella: se quedan sin clasificar. Ver la 0039.
+    await withUser(userId, (db) =>
+      db.query("delete from task_categories where id = $1", [categoryId]),
+    );
+    return reply.status(204).send();
   });
 
   app.post("/workspaces/:workspaceId/columns", async (request, reply) => {
@@ -206,6 +326,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         assigneeId: uuid.nullish(),
         dueDate: z.string().date().nullish(),
         tagIds: z.array(uuid).max(20).default([]),
+        categoryId: uuid.nullish(),
       }),
       request.body,
     );
@@ -221,6 +342,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           assigneeId: body.assigneeId ?? null,
           dueDate: body.dueDate ?? null,
           tagIds: body.tagIds,
+          categoryId: body.categoryId ?? null,
           autor: userId,
         },
         request.log,
@@ -243,6 +365,7 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         assigneeId: uuid.nullish(),
         dueDate: z.string().date().nullish(),
         tagIds: z.array(uuid).max(20).optional(),
+        categoryId: uuid.nullish(),
       }),
       request.body,
     );
@@ -254,15 +377,18 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
         assignee_id: string | null;
         title: string;
         workspace_id: string;
-      }>("select assignee_id, title, workspace_id from tasks where id = $1", [taskId]);
+        category_id: string | null;
+      }>("select assignee_id, title, workspace_id, category_id from tasks where id = $1", [taskId]);
       const anterior = previa[0]?.assignee_id ?? null;
+      const areaAnterior = previa[0]?.category_id ?? null;
 
       const { rowCount } = await db.query(
         `update tasks set
            title       = coalesce($2, title),
            description = coalesce($3, description),
            assignee_id = case when $4 then $5::uuid else assignee_id end,
-           due_date    = case when $6 then $7::date else due_date end
+           due_date    = case when $6 then $7::date else due_date end,
+           category_id = case when $8 then $9::uuid else category_id end
          where id = $1`,
         [
           taskId,
@@ -272,6 +398,8 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           body.assigneeId ?? null,
           "dueDate" in body_,
           body.dueDate ?? null,
+          "categoryId" in body_,
+          body.categoryId ?? null,
         ],
       );
       if (rowCount === 0) throw notFound("tarea no encontrada");
@@ -303,6 +431,21 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
           objetoId: taskId,
           resumen: body.assigneeId ? `asignó «${titulo}»` : `quitó el responsable de «${titulo}»`,
           datos: { assigneeId: body.assigneeId ?? null, anterior },
+        });
+      }
+
+      // Cambiar de área es mover trabajo de un frente a otro, así que deja
+      // rastro. No hereda el delegado: reclasificar una tarea que ya tiene
+      // responsable no debe quitársela a quien la estaba haciendo.
+      if ("categoryId" in body_ && (body.categoryId ?? null) !== areaAnterior) {
+        await anotar(db, {
+          workspaceId: previa[0]!.workspace_id,
+          actorId: userId,
+          verbo: "tarea.reclasificada",
+          objetoTipo: "tarea",
+          objetoId: taskId,
+          resumen: `cambió de área «${recorta(previa[0]?.title ?? "")}»`,
+          datos: { categoryId: body.categoryId ?? null, anterior: areaAnterior },
         });
       }
 
@@ -386,6 +529,7 @@ export async function crearTareaEnDb(
     assigneeId: string | null;
     dueDate: string | null;
     tagIds: string[];
+    categoryId?: string | null;
     autor: string;
     /** Quién lo pidió de verdad. El asistente pasa `agente` para que su
      *  trabajo no se sume al de la persona en la auditoría. */
@@ -393,13 +537,28 @@ export async function crearTareaEnDb(
   },
   log?: FastifyBaseLogger,
 ): Promise<Record<string, unknown>> {
+  // EL GESTO QUE HACE ÚTILES LAS ÁREAS: si la tarea se archiva en un área que
+  // tiene dueño y nadie dijo a quién asignarla, se asigna a quien lleva esa
+  // área. Se deja de repartir tareas una a una y se pasa a clasificarlas.
+  // Un responsable explícito siempre gana: el automatismo rellena huecos, no
+  // discute decisiones.
+  let assigneeId = datos.assigneeId;
+  if (!assigneeId && datos.categoryId) {
+    const { rows: duenyo } = await db.query<{ owner_id: string | null }>(
+      "select owner_id from task_categories where id = $1",
+      [datos.categoryId],
+    );
+    assigneeId = duenyo[0]?.owner_id ?? null;
+  }
+
   const { rows } = await db.query<{ id: string }>(
     `insert into tasks
-       (workspace_id, column_id, title, description, assignee_id, due_date, position, created_by)
+       (workspace_id, column_id, title, description, assignee_id, due_date, position,
+        created_by, category_id)
      values (
        $1, $2, $3, $4, $5, $6,
        coalesce((select max(position) from tasks where column_id = $2), 0) + $7,
-       $8
+       $8, $9
      )
      returning id`,
     [
@@ -407,15 +566,16 @@ export async function crearTareaEnDb(
       datos.columnId,
       datos.title,
       datos.description,
-      datos.assigneeId,
+      assigneeId,
       datos.dueDate,
       STEP,
       datos.autor,
+      datos.categoryId ?? null,
     ],
   );
   const taskId = rows[0]!.id;
   await attachTaskTags(db, taskId, datos.tagIds);
-  if (datos.assigneeId) await avisarAsignacion(db, taskId, datos.assigneeId, datos.autor, log);
+  if (assigneeId) await avisarAsignacion(db, taskId, assigneeId, datos.autor, log);
 
   await anotar(db, {
     workspaceId: datos.workspaceId,
@@ -425,7 +585,7 @@ export async function crearTareaEnDb(
     objetoTipo: "tarea",
     objetoId: taskId,
     resumen: `creó «${recorta(datos.title)}»`,
-    datos: { columnId: datos.columnId, assigneeId: datos.assigneeId },
+    datos: { columnId: datos.columnId, assigneeId, categoryId: datos.categoryId ?? null },
   });
 
   // Asignar al crear también es una asignación. Se anota aparte y no solo
@@ -433,7 +593,7 @@ export async function crearTareaEnDb(
   // fila `tarea.asignada`. Si el nacimiento fuera la excepción, cualquier
   // consulta de «qué me han asignado» tendría que acordarse de mirar dos
   // verbos, y tarde o temprano alguna se olvidaría de uno.
-  if (datos.assigneeId) {
+  if (assigneeId) {
     await anotar(db, {
       workspaceId: datos.workspaceId,
       actorId: datos.autor,
@@ -442,7 +602,7 @@ export async function crearTareaEnDb(
       objetoTipo: "tarea",
       objetoId: taskId,
       resumen: `asignó «${recorta(datos.title)}»`,
-      datos: { assigneeId: datos.assigneeId, anterior: null },
+      datos: { assigneeId, anterior: null },
     });
   }
 

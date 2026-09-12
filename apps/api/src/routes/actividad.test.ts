@@ -176,6 +176,80 @@ async function main(): Promise<void> {
       filas.some((f) => f.origen === "persona"),
     );
 
+    console.log("\nÁreas: archivar en vez de repartir");
+
+    const area = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_categories (workspace_id, name, owner_id, position, created_by)
+         values ($1, 'DevVerse', $2, 1000, $2) returning id`,
+        [ws, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    // Lo que hace útiles las áreas: sin decir a quién, la tarea cae en quien
+    // lleva el área. Si esto se rompe, la función pierde su motivo de existir.
+    const heredada = await withUser(ana, (db) =>
+      crearTareaEnDb(db, {
+        workspaceId: ws,
+        columnId: pendiente,
+        title: "Personalización de personajes",
+        description: "",
+        assigneeId: null,
+        dueDate: null,
+        tagIds: [],
+        categoryId: area,
+        autor: ana,
+      }),
+    );
+    check("una tarea archivada en un área hereda a quien la lleva", heredada.assigneeId === ana);
+    check("y queda clasificada en esa área", heredada.categoryId === area);
+
+    // Sin área no hay a quién heredar: la tarea se queda sin responsable, que
+    // es el comportamiento de siempre y no debe cambiar por añadir esto.
+    const sinArea = await withUser(ana, (db) =>
+      crearTareaEnDb(db, {
+        workspaceId: ws,
+        columnId: pendiente,
+        title: "Sin clasificar",
+        description: "",
+        assigneeId: null,
+        dueDate: null,
+        tagIds: [],
+        autor: ana,
+      }),
+    );
+    check("sin área, la tarea sigue sin responsable", sinArea.assigneeId === null);
+    check("y sin clasificar", sinArea.categoryId === null);
+
+    // La trampa que RLS no puede cerrar: clasificar una tarea en el área de
+    // otro espacio al que la persona también tiene acceso. Lo para el
+    // disparador de la 0039, en la base y no en un `if` de una ruta.
+    const otroEspacio = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "insert into workspaces (organization_id, name, created_by) values ($1,$2,$3) returning id",
+        [org, "Otro tablero", ana],
+      );
+      return rows[0]!.id;
+    });
+    const cruzada = await withUser(ana, async (db) => {
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [otroEspacio],
+      );
+      try {
+        await db.query(
+          `insert into tasks (workspace_id, column_id, title, position, created_by, category_id)
+           values ($1,$2,'intrusa',1000,$3,$4)`,
+          [otroEspacio, col[0]!.id, ana, area],
+        );
+        return "coló";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("una tarea no puede clasificarse en un área de otro espacio", cruzada === "rechazado");
+
     console.log("\nLa pregunta que antes no se podía contestar");
 
     const cerradas = await withUser(ana, async (db) => {

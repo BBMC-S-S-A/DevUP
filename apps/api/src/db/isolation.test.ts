@@ -2220,6 +2220,88 @@ async function main(): Promise<void> {
     check("ni borrarlo", borrado === 0);
     check("y sigue ahi despues de los dos intentos", (await veActividad(ana, enElCompartido)) === 1);
 
+    // ---------------------------------------------------------------------
+    // Las areas del tablero (0039)
+    //
+    // Tabla nueva, asi que caso nuevo: es la regla dura del proyecto. Lo que
+    // se fija aqui es que VER un area es ver el tablero, pero CREARLA o
+    // cambiarla es organizarlo — `can_manage_workspace`, igual que las
+    // columnas. Diego entra invitado a UN workspace y es quien separa «estas
+    // en el equipo» de «puedes reorganizar el trabajo de los demas».
+    console.log("\nLas areas del tablero");
+
+    const areaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_categories (workspace_id, name, owner_id, position, created_by)
+         values ($1, 'DevVerse', $2, 1000, $2) returning id`,
+        [acme.ws, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const veArea = (quien: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query("select id from task_categories where id = $1", [
+          areaDeAcme,
+        ]);
+        return rows.length;
+      });
+
+    check("Ana ve el area que creo", (await veArea(ana)) === 1);
+    check("Carla, del mismo workspace, tambien la ve", (await veArea(carla)) === 1);
+    check("Bruno, de otra organizacion, no la ve", (await veArea(bruno)) === 0);
+
+    const brunoCreo = await withUser(bruno, async (db) => {
+      try {
+        await db.query(
+          `insert into task_categories (workspace_id, name, position, created_by)
+           values ($1, 'colada', 1000, $2)`,
+          [acme.ws, bruno],
+        );
+        return "colo";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("y no puede crear areas en un tablero ajeno", brunoCreo === "rechazado");
+
+    const brunoRenombro = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "update task_categories set name = 'mia' where id = $1",
+        [areaDeAcme],
+      );
+      return rowCount ?? 0;
+    });
+    check("ni renombrar la de otros", brunoRenombro === 0);
+
+    // Borrar un area NO se lleva sus tareas por delante: se quedan sin
+    // clasificar. Lo contrario seria una trampa esperando a quien reorganice.
+    const tareaClasificada = await withUser(ana, async (db) => {
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.ws],
+      );
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by, category_id)
+         values ($1,$2,'clasificada',1000,$3,$4) returning id`,
+        [acme.ws, col[0]!.id, ana, areaDeAcme],
+      );
+      return rows[0]!.id;
+    });
+
+    await withUser(ana, (db) =>
+      db.query("delete from task_categories where id = $1", [areaDeAcme]),
+    );
+    const sobrevive = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ category_id: string | null }>(
+        "select category_id from tasks where id = $1",
+        [tareaClasificada],
+      );
+      return rows[0];
+    });
+    check("borrar un area no borra sus tareas", sobrevive !== undefined);
+    check("solo las deja sin clasificar", sobrevive?.category_id === null);
+
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la
