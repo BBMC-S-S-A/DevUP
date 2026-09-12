@@ -20,8 +20,13 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   ver_tablero: "mirando el tablero",
   ver_tarea: "leyendo una tarea",
   ver_arquitectura: "mirando la arquitectura",
-  que_ha_pasado: "poniéndose al día con lo que hizo el equipo",
   crear_tarea: "anotando una tarea nueva",
+  crear_area: "ordenando el tablero por áreas",
+  que_ha_pasado: "poniéndose al día de lo que pasó",
+  enlazar_rama: "apuntando en qué rama va esto",
+  // La única que AFIRMA algo, y por eso su frase lo dice: quien pase por la
+  // sala y la lea tiene que poder ir a mirar si de verdad estaba hecha.
+  marcar_hecha: "dando una tarea por terminada",
   crear_columna: "añadiendo una columna al tablero",
   mover_tarea: "moviendo una tarjeta",
   actualizar_tarea: "actualizando una tarea",

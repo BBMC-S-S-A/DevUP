@@ -3,25 +3,39 @@
 import {
   AlertTriangle,
   CalendarClock,
+  ChevronDown,
   KanbanSquare,
+  GitBranch,
   Paperclip,
   Plus,
+  ShieldCheck,
   CircleCheck,
   Pencil,
   Trash2,
   UserPlus,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { fechaCorta, hoyLocal, iniciales } from "@/lib/fechas";
 import {
   ApiError,
+  type AreaDeTablero,
   type BoardColumn,
   type OrganizationMember,
   type Tag,
   type Task,
+  type TipoDeTarea,
   api,
 } from "@/lib/api";
+import { FichaDeTarea, FormularioDeEvidencia, type CamposDeFicha } from "./FichaDeTarea";
+import { IconoDeTipo, TIPO_EN_PALABRAS, tonoDePrioridad } from "./ficha";
 import { TagBadge } from "@/components/files/TagBadge";
 import { AdjuntosTarea } from "./AdjuntosTarea";
 import { HistorialDeTarea } from "./HistorialDeTarea";
@@ -31,6 +45,7 @@ import { Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superfici
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { useAvisosDelEspacio } from "@/lib/workspace-feed";
 import { AreaTexto, Desplegable } from "@/components/ui/Field";
+import { invalidar, useRecurso } from "@/lib/datos";
 
 /** Tono del vencimiento: vencido grita, hoy avisa, el resto solo informa. */
 function tonoVencimiento(dueDate: string, hoy: string): string {
@@ -65,11 +80,71 @@ export function TaskBoard({
   workspaceId: string;
   organizationId: string;
 }) {
-  const [columns, setColumns] = useState<BoardColumn[]>([]);
-  const [members, setMembers] = useState<OrganizationMember[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /**
+   * El tablero, ya por la capa de datos.
+   *
+   * LO QUE SE GANA, Y NO ES SOLO MENOS CÓDIGO: al volver de otra pantalla el
+   * tablero aparece puesto en vez de en blanco medio segundo, dos componentes
+   * que pidan la misma clave piden una sola vez, y al volver a la pestaña se
+   * comprueba solo. Antes esto eran tres `useState`, un `load` y un efecto en
+   * cada pantalla que quisiera lo mismo.
+   */
+  const claveTablero = `/workspaces/${workspaceId}/board`;
+  const tablero = useRecurso<{ columns: BoardColumn[]; categories: AreaDeTablero[] }>(claveTablero);
+  const equipo = useRecurso<{ members: OrganizationMember[] }>(
+    `/organizations/${organizationId}/members`,
+  );
+  const etiquetas = useRecurso<{ tags: Tag[] }>(`/organizations/${organizationId}/tags`);
+
+  /**
+   * El tablero tal y como se está viendo MIENTRAS una acción va por la red.
+   *
+   * POR QUÉ HACE FALTA UNA CAPA ENCIMA DE LA CACHÉ. Arrastrar una tarjeta tiene
+   * que verse en el sitio nuevo antes de que el servidor conteste; si no, la
+   * tarjeta se queda quieta medio segundo y el arrastre se siente roto. Eso es
+   * estado local por definición: no es lo que el servidor dice, es lo que
+   * estamos apostando a que va a decir.
+   *
+   * Se suelta en cuanto llega la respuesta de verdad (`useEffect` de abajo), y
+   * esa es la regla que lo hace seguro: **lo optimista nunca sobrevive a un
+   * dato fresco**. Si la apuesta era mala, el servidor gana sin que nadie
+   * tenga que acordarse de deshacerla.
+   */
+  const [optimista, setOptimista] = useState<BoardColumn[] | null>(null);
+  const servidor = tablero.datos?.columns;
+  useEffect(() => {
+    if (servidor) setOptimista(null);
+  }, [servidor]);
+
+  const columns = optimista ?? servidor ?? [];
+  const areas = tablero.datos?.categories ?? [];
+  const members = equipo.datos?.members ?? [];
+  const tags = etiquetas.datos?.tags ?? [];
+  const loading = tablero.cargando;
+  const error = tablero.error;
+
+  /** Cambia lo que se ve ahora, sin tocar lo que dice el servidor. */
+  const pintar = (cambio: (previas: BoardColumn[]) => BoardColumn[]) =>
+    setOptimista((previas) => cambio(previas ?? servidor ?? []));
+
+  /** Vuelve a pedir el tablero y suelta lo optimista. Es lo que se llama
+   *  después de cualquier escritura que no se haya pintado a mano. */
+  const load = useCallback(async () => {
+    setOptimista(null);
+    await tablero.recargar();
+  }, [tablero]);
+
+  /**
+   * Por qué área se está mirando el tablero, o `null` por todas.
+   *
+   * ES UN FILTRO Y NO UNA AGRUPACIÓN, y es la decisión de esta pantalla. Agrupar
+   * por área dentro de cada columna partiría el tablero en una cuadrícula de
+   * áreas × columnas donde arrastrar una tarjeta ya no significa una sola cosa
+   * —¿la cambio de estado, o de área?— y donde el tablero deja de leerse de un
+   * vistazo, que era justo para lo que servían las áreas. Filtrando, el tablero
+   * sigue siendo el tablero y se puede mirar «solo lo de DevVerse» en un clic.
+   */
+  const [area, setArea] = useState<string | null>(null);
   const [open, setOpen] = useState<Task | null>(null);
   /** Columna donde se está creando una tarea, si es que se está creando. */
   const [creandoEn, setCreandoEn] = useState<{ id: string; nombre: string } | null>(null);
@@ -92,33 +167,15 @@ export function TaskBoard({
    */
   const [categorias, setCategorias] = useState<string[]>([]);
 
-  const load = useCallback(async () => {
-    try {
-      const [board, memberList, tagList] = await Promise.all([
-        api.get<{ columns: BoardColumn[] }>(`/workspaces/${workspaceId}/board`),
-        api.get<{ members: OrganizationMember[] }>(`/organizations/${organizationId}/members`),
-        api.get<{ tags: Tag[] }>(`/organizations/${organizationId}/tags`),
-      ]);
-      setColumns(board.columns);
-      setMembers(memberList.members);
-      setTags(tagList.tags);
-      setError(null);
-    } catch {
-      setError("no se pudo cargar el tablero");
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId, organizationId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   /**
    * El tablero se repinta cuando lo cambia otra persona —o un agente por MCP—
    * sin que haya que recargar. `tasks.ts` era la única ruta de escritura que
    * no avisaba a nadie: la escritura ocurría y la tarjeta se quedaba donde
    * estaba, así que parecía que el agente no había hecho nada.
+   *
+   * Se engancha al `load` de arriba —el de la capa de datos— y no al que traía
+   * el tronco: la forma de cargar es la del camino B, el aviso en vivo es del
+   * tronco, y las dos cosas son independientes.
    */
   useAvisosDelEspacio(workspaceId, "board-change", load);
 
@@ -140,11 +197,12 @@ export function TaskBoard({
   const renombrarColumna = async (column: BoardColumn, propuesto: string) => {
     const nombre = propuesto.trim();
     if (!nombre || nombre === column.name) return;
-    setColumns((previas) => previas.map((c) => (c.id === column.id ? { ...c, name: nombre } : c)));
+    pintar((previas) => previas.map((c) => (c.id === column.id ? { ...c, name: nombre } : c)));
     try {
       await api.patch(`/columns/${column.id}`, { name: nombre });
+      invalidar(claveTablero);
     } catch {
-      setColumns((previas) =>
+      pintar((previas) =>
         previas.map((c) => (c.id === column.id ? { ...c, name: column.name } : c)),
       );
       toast.error("no se pudo renombrar la columna");
@@ -192,13 +250,14 @@ export function TaskBoard({
    */
   const marcarTerminal = async (column: BoardColumn) => {
     const valor = !column.isTerminal;
-    setColumns((previas) =>
+    pintar((previas) =>
       previas.map((c) => (c.id === column.id ? { ...c, isTerminal: valor } : c)),
     );
     try {
       await api.patch(`/columns/${column.id}`, { isTerminal: valor });
+      invalidar(claveTablero);
     } catch {
-      setColumns((previas) =>
+      pintar((previas) =>
         previas.map((c) => (c.id === column.id ? { ...c, isTerminal: !valor } : c)),
       );
       toast.error("no se pudo cambiar la columna");
@@ -215,7 +274,7 @@ export function TaskBoard({
 
     // Movimiento optimista: la tarjeta salta donde se soltó y la petición va
     // detrás.
-    setColumns((current) => {
+    pintar((current) => {
       const task = current.flatMap((c) => c.tasks).find((t) => t.id === info.taskId);
       if (!task) return current;
       return current.map((column) => {
@@ -231,8 +290,18 @@ export function TaskBoard({
 
     try {
       await api.post(`/tasks/${info.taskId}/move`, { columnId, afterTaskId });
+      // INVALIDAR AUNQUE HAYA SALIDO BIEN, y es lo que el cambio a la caché
+      // obliga a recordar: antes `columns` era estado local y moría con la
+      // pantalla, así que pintar a mano bastaba. Ahora lo que se pintó vive
+      // encima de algo GUARDADO, y si no se marca viejo, volver al tablero
+      // dentro de la ventana de frescura enseñaría el orden de antes del
+      // arrastre. Lo optimista sigue en pantalla hasta que llegue lo fresco.
+      invalidar(claveTablero);
     } catch {
-      setError("no se pudo mover la tarjeta");
+      // La apuesta salió mal: se suelta lo optimista y manda el servidor. Un
+      // aviso flotante y no un cartel fijo, siguiendo la regla: el error de un
+      // CAMPO va junto al campo; el de una ACCIÓN, flotando.
+      toast.error("no se pudo mover la tarjeta");
       await load();
     }
   };
@@ -244,17 +313,25 @@ export function TaskBoard({
   // El medidor de cada columna se lee contra la columna más cargada: dice de un
   // vistazo dónde se está acumulando el trabajo, que es la pregunta que se le
   // hace a un tablero desde lejos.
-  // El filtro se aplica ANTES de todo lo demás: así el medidor de carga, los
-  // contadores de cada columna y el vacío de una columna hablan de lo que se
-  // está viendo. Filtrar solo al pintar las tarjetas dejaría un tablero
-  // diciendo «7» encima de una columna con dos tarjetas.
+  // DOS EJES QUE SE CRUZAN, Y SE CRUZAN CON «Y». El área dice DÓNDE VIVE la
+  // tarea —una sola, con dueño— y las etiquetas dicen QUÉ LA CRUZA —varias,
+  // sin dueño—. Entre etiquetas se suma («enséñame urgente o deuda»); entre el
+  // área y las etiquetas se multiplica («de DevVerse, lo urgente»). Sumarlo
+  // todo haría que elegir un área ENSANCHARA el tablero, que es lo contrario
+  // de lo que hace un filtro.
+  //
+  // Y se aplica ANTES de contar: si no, el medidor de carga y los contadores
+  // de cada columna seguirían hablando del tablero entero mientras la pantalla
+  // enseña un trozo — un tablero diciendo «7» encima de una columna con dos
+  // tarjetas. Todo lo de debajo trabaja sobre `visibles`.
+  const filtra = (t: Task) =>
+    (area === null || t.categoryId === area) &&
+    (categorias.length === 0 || t.tags.some((g) => categorias.includes(g.id)));
+
   const visibles =
-    categorias.length === 0
+    area === null && categorias.length === 0
       ? columns
-      : columns.map((c) => ({
-          ...c,
-          tasks: c.tasks.filter((t) => t.tags.some((g) => categorias.includes(g.id))),
-        }));
+      : columns.map((c) => ({ ...c, tasks: c.tasks.filter(filtra) }));
 
   const carga = visibles.reduce((maximo, columna) => Math.max(maximo, columna.tasks.length), 0);
 
@@ -267,14 +344,45 @@ export function TaskBoard({
         </p>
       )}
 
-      <BarraCategorias
-        tags={tags}
-        columnas={columns}
-        elegidas={categorias}
-        onElegir={setCategorias}
-        organizationId={organizationId}
-        onCreada={load}
-      />
+      {/* UNA SOLA BARRA CON LOS DOS EJES, y no dos barras apiladas. Dos filas
+          de chips encima de un tablero es la forma más rápida de que nadie use
+          ninguna de las dos: ocupan la altura de una columna entera y no se
+          distingue cuál hace qué. Aquí van en la misma fila, cada grupo con su
+          rótulo, y envuelven cuando no caben. */}
+      {(areas.length > 0 || tags.length > 0) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5">
+          {areas.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Rotulo className="mr-0.5">Área</Rotulo>
+              <BotonDeArea activa={area === null} onClick={() => setArea(null)}>
+                Todas
+                <span className="ml-1.5 font-mono tabular-nums opacity-60">
+                  {columns.reduce((n, c) => n + c.tasks.length, 0)}
+                </span>
+              </BotonDeArea>
+              {areas.map((a) => (
+                <BotonDeArea key={a.id} activa={area === a.id} onClick={() => setArea(a.id)}>
+                  {a.name}
+                  {/* Quién la lleva, en el propio filtro: es la mitad de lo que
+                      un área significa, y esconderlo obliga a abrir los ajustes
+                      para contestar «¿de quién es esto?». */}
+                  {a.ownerName && <span className="ml-1.5 opacity-60">{a.ownerName}</span>}
+                  <span className="ml-1.5 font-mono tabular-nums opacity-60">{a.tareas ?? 0}</span>
+                </BotonDeArea>
+              ))}
+            </div>
+          )}
+
+          <BarraCategorias
+            tags={tags}
+            columnas={columns}
+            elegidas={categorias}
+            onElegir={setCategorias}
+            organizationId={organizationId}
+            onCreada={load}
+          />
+        </div>
+      )}
 
       {columns.length === 0 ? (
         <EstadoVacio
@@ -441,6 +549,10 @@ export function TaskBoard({
                     // tarea al principio: la marca va encima de la primera.
                     const marcaArriba = sobrevolada && huecoTras === null && posicion === 0;
                     const marcaAbajo = sobrevolada && huecoTras === task.id && !viajando;
+                    const prioridad = tonoDePrioridad(task.prioridad);
+                    const areaDe = task.categoryId
+                      ? areas.find((a) => a.id === task.categoryId)
+                      : undefined;
 
                     return (
                       <li
@@ -516,7 +628,43 @@ export function TaskBoard({
                             {task.title}
                           </span>
 
-                          {(task.tags.length > 0 || task.adjuntos > 0) && (
+                          {/* La segunda línea de la tarjeta: qué clase de
+                              trabajo es, cuánto corre y de qué área. Solo se
+                              dibuja lo que tiene algo que decir — una tarjeta
+                              sin tipo, normal y sin área no gasta ni un píxel
+                              en decir tres veces «nada». */}
+                          {(task.tipo || prioridad || areaDe) && (
+                            <span className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {prioridad && (
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-1.5 py-0.5
+                                    font-display text-[9px] font-semibold uppercase tracking-wider ${prioridad.clase}`}
+                                >
+                                  {prioridad.texto}
+                                </span>
+                              )}
+                              {task.tipo && (
+                                <span
+                                  title={TIPO_EN_PALABRAS[task.tipo]}
+                                  className="inline-flex items-center gap-1 text-[10px] text-faint"
+                                >
+                                  <IconoDeTipo tipo={task.tipo} size={10} />
+                                  {TIPO_EN_PALABRAS[task.tipo]}
+                                </span>
+                              )}
+                              {areaDe && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-muted">
+                                  <span className="size-1.5 rounded-full bg-accent/70" />
+                                  {areaDe.name}
+                                </span>
+                              )}
+                            </span>
+                          )}
+
+                          {(task.tags.length > 0 ||
+                            task.adjuntos > 0 ||
+                            task.ramas.length > 0 ||
+                            task.evidencias > 0) && (
                             <span className="mt-2 flex flex-wrap items-center gap-1">
                               {task.tags.map((tag) => (
                                 <TagBadge key={tag.id} tag={tag} />
@@ -531,6 +679,31 @@ export function TaskBoard({
                                 >
                                   <Paperclip size={10} className="shrink-0" />
                                   <span className="font-mono tabular-nums">{task.adjuntos}</span>
+                                </span>
+                              )}
+                              {/* La rama con nombre y no solo contada: «¿quién
+                                  está tocando pagos?» se contesta desde el
+                                  tablero o no se contesta. Si hay varias, la
+                                  primera y cuántas más. */}
+                              {task.ramas[0] && (
+                                <span
+                                  title={task.ramas.map((r) => r.nombre).join("\n")}
+                                  className="inline-flex min-w-0 items-center gap-1 text-[10px] text-faint"
+                                >
+                                  <GitBranch size={10} className="shrink-0" />
+                                  <span className="max-w-[9rem] truncate font-mono">
+                                    {task.ramas[0].nombre}
+                                  </span>
+                                  {task.ramas.length > 1 && <span>+{task.ramas.length - 1}</span>}
+                                </span>
+                              )}
+                              {task.evidencias > 0 && (
+                                <span
+                                  title={`${task.evidencias} ${task.evidencias === 1 ? "prueba" : "pruebas"} de que se hizo`}
+                                  className="inline-flex items-center gap-1 text-[10px] text-live"
+                                >
+                                  <ShieldCheck size={10} className="shrink-0" />
+                                  <span className="font-mono tabular-nums">{task.evidencias}</span>
                                 </span>
                               )}
                             </span>
@@ -604,7 +777,20 @@ export function TaskBoard({
           workspaceId={workspaceId}
           members={members}
           tags={tags}
+          areas={areas}
           anioActual={anioActual}
+          onRecargar={async () => {
+            // Las ramas y la evidencia se guardan solas, así que hay que
+            // refrescar las dos cosas: el tablero —de eso se encarga ya la
+            // caché— y la tarjeta abierta, que el tablero no trae entera.
+            // Sin lo segundo, el diálogo seguiría enseñando la lista de antes
+            // y parecería que no se guardó nada.
+            invalidar(claveTablero);
+            if (open) {
+              const { task: completa } = await api.get<{ task: Task }>(`/tasks/${open.id}`);
+              setOpen(completa);
+            }
+          }}
           onClose={() => {
             setOpen(null);
             setCreandoEn(null);
@@ -617,6 +803,41 @@ export function TaskBoard({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Un botón del filtro por área.
+ *
+ * Chips y no un desplegable: las áreas son tres o cuatro y se cambian mucho —
+ * un desplegable convierte cada cambio en dos clics y esconde cuántas hay. Con
+ * seis o siete dejaría de caber, y entonces tocará replantearlo; hoy no las
+ * hay.
+ */
+function BotonDeArea({
+  activa,
+  onClick,
+  children,
+}: {
+  activa: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activa}
+      className={`presionable inline-flex items-center rounded-full border px-2.5 py-1
+        font-display text-[10px] font-semibold uppercase tracking-wider transition-colors
+        ${
+          activa
+            ? "border-accent/40 bg-accent-soft/60 text-accent"
+            : "border-line text-faint hover:text-muted"
+        }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -752,9 +973,11 @@ function TaskDialog({
   workspaceId,
   members,
   tags,
+  areas,
   anioActual,
   onClose,
   onSaved,
+  onRecargar,
 }: {
   /** `null` cuando se está creando: entonces manda `crearEn`. */
   task: Task | null;
@@ -763,9 +986,12 @@ function TaskDialog({
   workspaceId: string;
   members: OrganizationMember[];
   tags: Tag[];
+  areas: AreaDeTablero[];
   anioActual: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  /** Para lo que se guarda solo: ramas y evidencia. */
+  onRecargar: () => Promise<void>;
 }) {
   const confirmar = useConfirmar();
   const [title, setTitle] = useState(task?.title ?? "");
@@ -773,6 +999,24 @@ function TaskDialog({
   const [assigneeId, setAssigneeId] = useState(task?.assigneeId ?? "");
   const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
   const [tagIds, setTagIds] = useState(task?.tags.map((t) => t.id) ?? []);
+  const [ficha, setFicha] = useState<CamposDeFicha>({
+    tipo: task?.tipo ?? "",
+    prioridad: task?.prioridad ?? 1,
+    categoryId: task?.categoryId ?? "",
+    contexto: task?.contexto ?? "",
+    criterio: task?.criterio ?? "",
+  });
+  /**
+   * Si la ficha de desarrollo está desplegada.
+   *
+   * Cerrada al crear y abierta al editar, y es deliberado: al crear se está
+   * sacando algo de la cabeza y el único campo que importa es el título; al
+   * abrir una tarjeta que ya existe se está trabajando en ella. Un formulario
+   * que pide tipo, prioridad, área y criterio antes de dejar escribir «arreglar
+   * el login» consigue que la gente deje de usar el tablero.
+   */
+  const [fichaAbierta, setFichaAbierta] = useState(task !== null);
+  const [cerrando, setCerrando] = useState(false);
   const [busy, setBusy] = useState(false);
   /** Imágenes elegidas antes de que la tarea exista. Ver `AdjuntosTarea`. */
   const [pendientes, setPendientes] = useState<File[]>([]);
@@ -808,6 +1052,11 @@ function TaskDialog({
               assigneeId: assigneeId || null,
               dueDate: dueDate || null,
               tagIds,
+              tipo: ficha.tipo || null,
+              prioridad: ficha.prioridad,
+              categoryId: ficha.categoryId || null,
+              contexto: ficha.contexto,
+              criterio: ficha.criterio,
             };
             if (task) {
               await api.patch(`/tasks/${task.id}`, campos);
@@ -908,6 +1157,43 @@ function TaskDialog({
           </div>
         )}
 
+        {/* La ficha de desarrollo, plegable. El resumen dice lo que hay dentro
+            aunque esté cerrada: un desplegable que no dice qué esconde es un
+            desplegable que nadie abre. */}
+        <div className="rounded-xl border border-line">
+          <button
+            type="button"
+            onClick={() => setFichaAbierta((abierta) => !abierta)}
+            aria-expanded={fichaAbierta}
+            className="presionable flex w-full items-center gap-2 px-3 py-2 text-left"
+          >
+            <span className="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
+              Ficha de desarrollo
+            </span>
+            {!fichaAbierta && (
+              <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
+                {resumenDeFicha(ficha, areas, task)}
+              </span>
+            )}
+            <ChevronDown
+              size={13}
+              className={`ml-auto shrink-0 text-faint transition-transform duration-[var(--dur-hover)]
+                ${fichaAbierta ? "rotate-180" : ""}`}
+            />
+          </button>
+          {fichaAbierta && (
+            <div className="border-t border-line p-3">
+              <FichaDeTarea
+                task={task}
+                areas={areas}
+                campos={ficha}
+                onCampos={setFicha}
+                onRecargar={onRecargar}
+              />
+            </div>
+          )}
+        </div>
+
         <AdjuntosTarea
           taskId={task?.id ?? null}
           workspaceId={task?.workspaceId ?? workspaceId}
@@ -948,22 +1234,151 @@ function TaskDialog({
             </Boton>
           )}
 
-          <Boton
-            type="submit"
-            variante="primario"
-            cargando={busy}
-            disabled={title.trim().length === 0}
-          >
-            {creando ? "Crear tarea" : "Guardar"}
-          </Boton>
+          <div className="flex items-center gap-2">
+            {task && (
+              <Boton
+                type="button"
+                variante="secundario"
+                icono={<CircleCheck size={13} />}
+                onClick={() => setCerrando(true)}
+              >
+                Marcar como hecha
+              </Boton>
+            )}
+            <Boton
+              type="submit"
+              variante="primario"
+              cargando={busy}
+              disabled={title.trim().length === 0}
+            >
+              {creando ? "Crear tarea" : "Guardar"}
+            </Boton>
+          </div>
         </div>
       </form>
+
+      {cerrando && task && (
+        <Dialogo
+          titulo="Marcar como hecha"
+          descripcion={task.title}
+          onCerrar={() => setCerrando(false)}
+        >
+          <div className="space-y-4">
+            {/* El criterio se enseña AQUÍ y en ningún otro sitio, que es el
+                único momento en que sirve: se escribió al empezar para leerse
+                al terminar. Si solo viviera en la ficha, nadie volvería a él. */}
+            {task.criterio ? (
+              <div className="rounded-xl border border-line bg-canvas/60 p-3">
+                <span className="mb-1 block font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
+                  Estaba hecha cuando
+                </span>
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink">
+                  {task.criterio}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-faint">
+                Esta tarea no dijo cuándo estaría hecha. No pasa nada: se puede cerrar igual.
+              </p>
+            )}
+
+            <div>
+              <span className="mb-1.5 block font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-faint">
+                Deja la prueba (opcional)
+              </span>
+              <FormularioDeEvidencia
+                textoBoton="Cerrar con esto"
+                ocupado={busy}
+                onEnviar={async (evidencia) => {
+                  setBusy(true);
+                  try {
+                    await api.post(`/tasks/${task.id}/hecha`, { evidencia });
+                    setCerrando(false);
+                    await onSaved();
+                  } catch {
+                    toast.error("no se pudo cerrar la tarea");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+              {/* Se OFRECE, no se exige. Hacerla obligatoria convertiría la
+                  primera tarea sin PR —una decisión, una llamada, algo que se
+                  resolvió hablando— en un callejón sin salida, y la respuesta
+                  de la gente a un campo obligatorio que estorba es escribir
+                  «ok» y seguir. */}
+              <p className="mt-2 text-[11px] text-faint">
+                El PR que la cierra, el enlace donde se ve, o lo que comprobaste. Queda con tu
+                nombre y la fecha.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
+              <Boton
+                type="button"
+                variante="fantasma"
+                tamano="sm"
+                onClick={() => setCerrando(false)}
+              >
+                Cancelar
+              </Boton>
+              <Boton
+                type="button"
+                variante="primario"
+                cargando={busy}
+                icono={<CircleCheck size={13} />}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await api.post(`/tasks/${task.id}/hecha`, {});
+                    setCerrando(false);
+                    await onSaved();
+                  } catch {
+                    toast.error("no se pudo cerrar la tarea");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Cerrar sin prueba
+              </Boton>
+            </div>
+          </div>
+        </Dialogo>
+      )}
     </Dialogo>
   );
 }
 
 /**
- * Las categorías del tablero, y el filtro por ellas.
+ * Lo que dice la ficha cuando está plegada.
+ *
+ * Un desplegable que no adelanta qué esconde es un desplegable que nadie abre,
+ * y peor: uno que hace que la gente no sepa que esa tarea YA tiene tipo, área y
+ * criterio puestos, y los vuelva a preguntar por el chat.
+ */
+function resumenDeFicha(
+  ficha: CamposDeFicha,
+  areas: AreaDeTablero[],
+  task: Task | null,
+): string {
+  const trozos: string[] = [];
+  if (ficha.tipo) trozos.push(TIPO_EN_PALABRAS[ficha.tipo as TipoDeTarea]);
+  const prioridad = tonoDePrioridad(ficha.prioridad);
+  if (prioridad) trozos.push(prioridad.texto.toLowerCase());
+  const area = areas.find((a) => a.id === ficha.categoryId);
+  if (area) trozos.push(area.name);
+  if (task && task.ramas.length > 0) {
+    trozos.push(`${task.ramas.length} ${task.ramas.length === 1 ? "rama" : "ramas"}`);
+  }
+  if (task && task.evidencias > 0) {
+    trozos.push(`${task.evidencias} ${task.evidencias === 1 ? "prueba" : "pruebas"}`);
+  }
+  return trozos.length > 0 ? trozos.join(" · ") : "sin clasificar";
+}
+
+/**
+ * Las etiquetas del tablero, y el filtro por ellas.
  *
  * SON LAS ETIQUETAS QUE YA EXISTÍAN. `tags` está en la base desde la 0002, es
  * de la organización, tiene color y ya se podía poner en una tarea desde su
@@ -1035,7 +1450,7 @@ function BarraCategorias({
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-      <Rotulo className="mr-0.5">Categorías</Rotulo>
+      <Rotulo className="mr-0.5">Etiquetas</Rotulo>
 
       <button
         type="button"

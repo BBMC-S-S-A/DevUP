@@ -2485,6 +2485,331 @@ async function main(): Promise<void> {
     });
     check("un codigo ya canjeado no se puede volver a usar", reintento === 0);
 
+    // ---------------------------------------------------------------------
+    // El registro de actividad (0038)
+    //
+    // Tiene DOS llaves y las dos hay que fijarlas aquí, porque la de arriba
+    // sola parece suficiente y no lo es. Pertenecer a la organizacion deja ver
+    // la actividad de la organizacion; sin la segunda —poder acceder al
+    // espacio— la historia del "Cuaderno de Ana" se leeria desde toda Acme.
+    // Carla es de Acme y no ve ese espacio: es exactamente el caso.
+    //
+    // Y se comprueba tambien que NO se puede editar ni borrar. Sin politica de
+    // UPDATE ni de DELETE, Postgres deniega — pero eso hay que fijarlo con una
+    // prueba antes de que alguien las añada "para poder corregir una errata",
+    // que es como un registro deja de serlo.
+    console.log("\nEl registro de actividad");
+
+    const anotarComo = (quien: string, workspace: string | null, org: string, sujeto: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ id: string }>(
+          `insert into activity
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_id, subject_label)
+           values ($1, $2, $3, 'cerro', 'tarea', $4, $5)
+           returning id`,
+          [org, workspace, quien, acme.soloTask, sujeto],
+        );
+        return rows[0]!.id;
+      });
+
+    const enElCuaderno = await anotarComo(ana, acme.soloWs, acme.org, "algo privado");
+    const enElCompartido = await anotarComo(ana, acme.ws, acme.org, "algo del equipo");
+
+    const veActividad = (quien: string, id: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query("select id from activity where id = $1", [id]);
+        return rows.length;
+      });
+
+    check("Ana ve la actividad de su cuaderno", (await veActividad(ana, enElCuaderno)) === 1);
+    check(
+      "Carla, de la MISMA organizacion, no ve la actividad del cuaderno de Ana",
+      (await veActividad(carla, enElCuaderno)) === 0,
+    );
+    check(
+      "pero si ve la del workspace que comparten",
+      (await veActividad(carla, enElCompartido)) === 1,
+    );
+    check(
+      "Bruno, de otra organizacion, no ve ninguna de las dos",
+      (await veActividad(bruno, enElCompartido)) === 0 &&
+        (await veActividad(bruno, enElCuaderno)) === 0,
+    );
+
+    // Escribir en nombre de otro seria escribir participacion falsa.
+    const suplantacion = await withUser(carla, async (db) => {
+      try {
+        await db.query(
+          `insert into activity
+             (organization_id, workspace_id, actor_id, verb, subject_type, subject_label)
+           values ($1, $2, $3, 'cerro', 'tarea', 'lo hizo Ana, dice Carla')`,
+          [acme.org, acme.ws, ana],
+        );
+        return "coló";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("Carla no puede anotar actividad a nombre de Ana", suplantacion === "rechazado");
+
+    // Un registro que se puede editar es una opinion sobre el pasado.
+    const editado = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query(
+        "update activity set subject_label = 'otra cosa' where id = $1",
+        [enElCompartido],
+      );
+      return rowCount ?? 0;
+    });
+    check("ni la propia Ana puede reescribir lo que anoto", editado === 0);
+
+    const borrado = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("delete from activity where id = $1", [enElCompartido]);
+      return rowCount ?? 0;
+    });
+    check("ni borrarlo", borrado === 0);
+    check("y sigue ahi despues de los dos intentos", (await veActividad(ana, enElCompartido)) === 1);
+
+    // ---------------------------------------------------------------------
+    // Las areas del tablero (0039)
+    //
+    // Tabla nueva, asi que caso nuevo: es la regla dura del proyecto. Lo que
+    // se fija aqui es que VER un area es ver el tablero, pero CREARLA o
+    // cambiarla es organizarlo — `can_manage_workspace`, igual que las
+    // columnas. Diego entra invitado a UN workspace y es quien separa «estas
+    // en el equipo» de «puedes reorganizar el trabajo de los demas».
+    console.log("\nLas areas del tablero");
+
+    const areaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_categories (workspace_id, name, owner_id, position, created_by)
+         values ($1, 'DevVerse', $2, 1000, $2) returning id`,
+        [acme.ws, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const veArea = (quien: string) =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query("select id from task_categories where id = $1", [
+          areaDeAcme,
+        ]);
+        return rows.length;
+      });
+
+    check("Ana ve el area que creo", (await veArea(ana)) === 1);
+    check("Carla, del mismo workspace, tambien la ve", (await veArea(carla)) === 1);
+    check("Bruno, de otra organizacion, no la ve", (await veArea(bruno)) === 0);
+
+    const brunoCreo = await withUser(bruno, async (db) => {
+      try {
+        await db.query(
+          `insert into task_categories (workspace_id, name, position, created_by)
+           values ($1, 'colada', 1000, $2)`,
+          [acme.ws, bruno],
+        );
+        return "colo";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("y no puede crear areas en un tablero ajeno", brunoCreo === "rechazado");
+
+    const brunoRenombro = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query(
+        "update task_categories set name = 'mia' where id = $1",
+        [areaDeAcme],
+      );
+      return rowCount ?? 0;
+    });
+    check("ni renombrar la de otros", brunoRenombro === 0);
+
+    // Borrar un area NO se lleva sus tareas por delante: se quedan sin
+    // clasificar. Lo contrario seria una trampa esperando a quien reorganice.
+    const tareaClasificada = await withUser(ana, async (db) => {
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.ws],
+      );
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by, category_id)
+         values ($1,$2,'clasificada',1000,$3,$4) returning id`,
+        [acme.ws, col[0]!.id, ana, areaDeAcme],
+      );
+      return rows[0]!.id;
+    });
+
+    await withUser(ana, (db) =>
+      db.query("delete from task_categories where id = $1", [areaDeAcme]),
+    );
+    const sobrevive = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ category_id: string | null }>(
+        "select category_id from tasks where id = $1",
+        [tareaClasificada],
+      );
+      return rows[0];
+    });
+    check("borrar un area no borra sus tareas", sobrevive !== undefined);
+    check("solo las deja sin clasificar", sobrevive?.category_id === null);
+
+    console.log("\nRamas y evidencia de una tarea");
+
+    // Las dos tablas de la 0042 NO llevan `workspace_id` propio: se apoyan en
+    // la politica de `tasks`. Eso hay que comprobarlo aqui, porque si el
+    // `exists` de la politica estuviera mal escrito, las filas de una tarea
+    // ajena se verian sin que nada fallara — que es como se rompe RLS siempre.
+    const conRama = await withUser(ana, async (db) => {
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [acme.ws],
+      );
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by, prioridad, tipo)
+         values ($1,$2,'pasarela de pagos',2000,$3,3,'funcionalidad') returning id`,
+        [acme.ws, col[0]!.id, ana],
+      );
+      const tarea = rows[0]!.id;
+      await db.query(
+        `insert into task_branches (task_id, nombre, created_by) values ($1,'feat/pagos',$2)`,
+        [tarea, ana],
+      );
+      await db.query(
+        `insert into task_evidence (task_id, tipo, url, created_by)
+         values ($1,'pr','https://github.com/acme/x/pull/1',$2)`,
+        [tarea, ana],
+      );
+      return tarea;
+    });
+
+    const veBruno = await withUser(bruno, async (db) => {
+      const ramas = await db.query("select id from task_branches where task_id = $1", [conRama]);
+      const pruebas = await db.query("select id from task_evidence where task_id = $1", [conRama]);
+      return { ramas: ramas.rowCount, pruebas: pruebas.rowCount };
+    });
+    check("Bruno no ve las ramas de una tarea que no puede ver", veBruno.ramas === 0);
+    check("ni sus evidencias", veBruno.pruebas === 0);
+
+    await denied("ni puede colgarle una rama", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into task_branches (task_id, nombre) values ($1,'intrusa')", [conRama]),
+      ),
+    );
+    await denied("ni una evidencia", () =>
+      withUser(bruno, (db) =>
+        db.query("insert into task_evidence (task_id, tipo, nota) values ($1,'nota','yo lo vi')", [
+          conRama,
+        ]),
+      ),
+    );
+
+    // Firmar con el nombre de otro es la unica forma que tiene esta tabla de
+    // mentir: atribuirle a alguien una comprobacion que no hizo.
+    await denied("nadie firma una evidencia con el nombre de otro", () =>
+      withUser(carla, (db) =>
+        db.query(
+          "insert into task_evidence (task_id, tipo, nota, created_by) values ($1,'nota','fui yo',$2)",
+          [conRama, ana],
+        ),
+      ),
+    );
+
+    // Sin politica de UPDATE, a proposito: cambiar en silencio lo que alguien
+    // afirmo, dejando su nombre debajo, es lo que un registro de pruebas no
+    // puede permitir. Corregir es borrar y volver a poner.
+    const reescribio = await withUser(ana, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          "update task_evidence set url = 'https://otro' where task_id = $1",
+          [conRama],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("ni la propia Ana puede reescribir una evidencia", reescribio !== 1);
+
+    const carlaVe = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query("select id from task_branches where task_id = $1", [
+        conRama,
+      ]);
+      return rowCount;
+    });
+    check("Carla, del mismo espacio, si ve la rama", carlaVe === 1);
+
+    // Borrar la tarea se lleva las dos por delante: son de la tarea, no cosas
+    // con vida propia. Lo contrario dejaria pruebas huerfanas apuntando a algo
+    // que ya no existe.
+    await withUser(ana, (db) => db.query("delete from tasks where id = $1", [conRama]));
+    const quedan = await admin.query("select id from task_branches where task_id = $1", [conRama]);
+    const quedanPruebas = await admin.query("select id from task_evidence where task_id = $1", [
+      conRama,
+    ]);
+    check(
+      "borrar la tarea se lleva sus ramas y sus evidencias",
+      quedan.rowCount === 0 && quedanPruebas.rowCount === 0,
+    );
+
+    console.log("\nNadie se invita solo a una organizacion ajena");
+
+    // ESTO ES UNA REGRESION, NO UNA COMPROBACION DE RUTINA. Hasta la 0041,
+    // `is_org_admin` devolvia NULL —no `false`— para quien no es miembro, y
+    // un `if not NULL` de PL/pgSQL no entra en el bloque: la comprobacion de
+    // permisos de `create_invitation` no fallaba, se saltaba. Bruno, que es de
+    // otra organizacion, podia crear una invitacion de ADMINISTRADOR a Acme
+    // con el token que el eligiera y canjearla. Hacerse dueño de la casa de
+    // otro sabiendo solo el numero del portal.
+    //
+    // En RLS no se notaba porque alli NULL y `false` niegan igual. Por eso vive
+    // aqui: es el unico sitio del repositorio donde se prueban permisos contra
+    // la base de verdad, y es donde alguien mirara el dia que vuelva a pasar.
+    await denied("un extraño no puede crear invitaciones en una organizacion ajena", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.create_invitation($1,$2,$3,$4,$5,$6)", [
+          acme.org,
+          `colado-${suffix}@devup.test`,
+          "admin",
+          `hash-colado-${suffix}`,
+          new Date(Date.now() + 86_400_000).toISOString(),
+          null,
+        ]),
+      ),
+    );
+
+    // La misma trampa por la puerta nueva de la 0040.
+    const invitacionDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ create_invitation: string }>(
+        "select public.create_invitation($1,$2,$3,$4,$5,$6)",
+        [
+          acme.org,
+          `elena-${suffix}@devup.test`,
+          "member",
+          `hash-elena-${suffix}`,
+          new Date(Date.now() + 86_400_000).toISOString(),
+          null,
+        ],
+      );
+      return rows[0]!.create_invitation;
+    });
+    await denied("ni ponerle codigo corto a una invitacion que no es suya", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.set_invitation_code($1,$2)", [
+          invitacionDeAcme,
+          `hash-codigo-colado-${suffix}`,
+        ]),
+      ),
+    );
+
+    // Y la comprobacion directa de lo que causaba todo: la funcion contesta
+    // «no», no «no lo se».
+    const respuesta = await withUser(bruno, async (db) => {
+      const { rows } = await db.query<{ is_org_admin: boolean | null }>(
+        "select public.is_org_admin($1)",
+        [acme.org],
+      );
+      return rows[0]!.is_org_admin;
+    });
+    check("`is_org_admin` contesta false a un extraño, nunca null", respuesta === false);
+
   } finally {
     // Limpieza. Las organizaciones primero: `created_by` es ON DELETE RESTRICT
     // a propósito —borrar una cuenta no debe llevarse por delante la

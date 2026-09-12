@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
 import { parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { cierresPorPersona } from "../lib/actividad.js";
 
 /**
  * Leer el registro de actividad: qué ha pasado, y quién lo hizo.
@@ -163,6 +164,126 @@ export async function actividadRoutes(app: FastifyInstance): Promise<void> {
         [sujetoId, POR_PAGINA],
       );
       return { actividad: rows };
+    });
+  });
+
+  /**
+   * La línea de tiempo de una ORGANIZACIÓN entera, con filtros.
+   *
+   * LLEGÓ DEL CAMINO B Y NO SOBRA, aunque arriba ya haya una de espacio. Son
+   * preguntas distintas: la de arriba es «qué ha pasado en este proyecto» y
+   * esta es «qué ha pasado en la empresa», cruzando todos los espacios a los
+   * que quien mira llega. Es la que usa el MCP para contestar «¿qué me he
+   * perdido?» sin tener que recorrer los espacios uno a uno.
+   *
+   * EL FILTRO POR VERBO ACEPTABA FAMILIAS —`verbo like 'tarea.%'`— porque allí
+   * los verbos llevaban espacio de nombres. Aquí no lo llevan: son palabras
+   * sueltas (`movio`, `cerro`), y la familia es `subject_type`. Así que el
+   * filtro de familia pasa a ser por sujeto, que es lo que de verdad se estaba
+   * preguntando: «todo lo del tablero».
+   */
+  app.get("/organizations/:organizationId/activity", async (request) => {
+    const userId = requireUser(request);
+    const { organizationId } = parseParams(z.object({ organizationId: uuid }), request.params);
+    const q = parseQuery(
+      z.object({
+        workspaceId: uuid.optional(),
+        actorId: uuid.optional(),
+        verbo: z.string().max(40).optional(),
+        sujeto: z.string().max(40).optional(),
+        origen: z.enum(["persona", "regla", "agente"]).optional(),
+        dias: z.coerce.number().int().min(1).max(365).optional(),
+        limite: z.coerce.number().int().min(1).max(200).optional(),
+      }),
+      request.query,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select ${COLUMNAS}
+           from activity a
+           left join profiles p on p.id = a.actor_id
+          where a.organization_id = $1
+            and a.at > now() - ($2::int || ' days')::interval
+            and ($3::uuid is null or a.workspace_id = $3)
+            and ($4::uuid is null or a.actor_id = $4)
+            and ($5::text is null or a.verb = $5)
+            and ($6::text is null or a.subject_type = $6)
+            and ($7::text is null or a.source::text = $7)
+          order by a.at desc
+          limit $8`,
+        [
+          organizationId,
+          q.dias ?? DIAS_POR_DEFECTO,
+          q.workspaceId ?? null,
+          q.actorId ?? null,
+          q.verbo ?? null,
+          q.sujeto ?? null,
+          q.origen ?? null,
+          q.limite ?? 100,
+        ],
+      );
+      return { actividad: rows };
+    });
+  });
+
+  /**
+   * El recuento por persona: qué hizo cada uno y cuándo fue la última vez.
+   *
+   * También del camino B, y es la única de las suyas que no tenía equivalente
+   * aquí: la de arriba cuenta los verbos de UNA persona, y esta compara a todas
+   * las de la organización. Es la auditoría del tablero.
+   *
+   * SE CUENTA POR VERBO Y NO EN UN TOTAL. Un número único obligaría a decidir
+   * ya cuánto vale cerrar una tarea frente a crearla, que es justo la decisión
+   * que no está tomada. El desglose deja que la pantalla enseñe lo que hay
+   * —cuatro cerradas, dos creadas— sin inventarse una equivalencia.
+   *
+   * LA PROCEDENCIA VIAJA EN EL DESGLOSE porque sin ella una persona que le pide
+   * diez tareas a su asistente aparecería trabajando el doble que quien las
+   * escribió a mano. Las dos cosas cuentan, pero no son la misma y no deben
+   * sumarse solas.
+   */
+  app.get("/organizations/:organizationId/activity/summary", async (request) => {
+    const userId = requireUser(request);
+    const { organizationId } = parseParams(z.object({ organizationId: uuid }), request.params);
+    const q = parseQuery(
+      z.object({
+        workspaceId: uuid.optional(),
+        dias: z.coerce.number().int().min(1).max(365).optional(),
+      }),
+      request.query,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select a.actor_id as "actorId",
+                p.display_name as "actorNombre",
+                a.verb as "verbo",
+                a.source as "origen",
+                count(*)::int as veces,
+                max(a.at) as "ultimaVez"
+           from activity a
+           left join profiles p on p.id = a.actor_id
+          where a.organization_id = $1
+            and a.at > now() - ($2::int || ' days')::interval
+            and ($3::uuid is null or a.workspace_id = $3)
+            and a.actor_id is not null
+          group by a.actor_id, p.display_name, a.verb, a.source
+          order by veces desc`,
+        [organizationId, q.dias ?? DIAS_POR_DEFECTO, q.workspaceId ?? null],
+      );
+
+      // El cálculo vive en `lib/actividad.ts` para poder probarlo sin levantar
+      // el servidor: es la única consulta del registro que calcula algo en vez
+      // de contarlo, y por tanto la única que puede estar mal sin fallar.
+      const cierres = await cierresPorPersona(db, {
+        organizationId,
+        dias: q.dias ?? DIAS_POR_DEFECTO,
+        workspaceId: q.workspaceId ?? null,
+      });
+
+      return { resumen: rows, cierres };
     });
   });
 }

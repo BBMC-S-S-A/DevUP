@@ -32,6 +32,16 @@ export const VERBOS = [
   "adjunto",
   "etiqueto",
   "borro",
+  // Del camino B: cambiar de área es mover trabajo de un frente a otro. El
+  // verbo es texto y no un enum justo para poder añadir uno sin migración.
+  "reclasifico",
+  // Los tres de la ficha de tarea, también del camino B. `priorizo` es el
+  // único cambio de campo que se anota: subir algo a urgente es una decisión
+  // que alguien tomó y que otro va a querer entender después. Cambiar el tipo
+  // o el contexto es corregir la ficha, no decidir nada.
+  "priorizo",
+  "enlazo",
+  "evidencio",
 ] as const;
 
 export type Verbo = (typeof VERBOS)[number];
@@ -45,7 +55,15 @@ export type Procedencia = "persona" | "regla" | "agente";
 
 export type Renglon = {
   workspaceId: string;
-  organizationId: string;
+  /**
+   * De qué organización es. OPCIONAL DESDE LA FUSIÓN DE LOS DOS CAMINOS: casi
+   * siempre se anota algo de un espacio, y el espacio ya sabe de qué
+   * organización es. Pedírsela a quien llama era una consulta más en cada sitio
+   * y una ocasión más de pasarla mal; `org_of_workspace` la resuelve dentro del
+   * mismo `insert`. Se sigue admitiendo cuando quien llama ya la tiene a mano,
+   * para no ir a buscar lo que ya está.
+   */
+  organizationId?: string | null;
   /** Null solo para lo que escribe el producto solo, sin nadie detrás. */
   actorId: string | null;
   verbo: Verbo;
@@ -95,10 +113,14 @@ export async function anotar(db: Db, renglon: Renglon): Promise<void> {
     await db.query(
       `insert into activity
          (workspace_id, organization_id, actor_id, source, verb, subject_type, subject_id, subject_label, detail)
-       values ($1,$2,$3,$4::activity_source,$5,$6,$7,$8,$9::jsonb)`,
+       values (
+         $1,
+         coalesce($2::uuid, public.org_of_workspace($1)),
+         $3,$4::activity_source,$5,$6,$7,$8,$9::jsonb
+       )`,
       [
         renglon.workspaceId,
-        renglon.organizationId,
+        renglon.organizationId ?? null,
         renglon.actorId,
         renglon.procedencia ?? "persona",
         renglon.verbo,
@@ -113,4 +135,74 @@ export async function anotar(db: Db, renglon: Renglon): Promise<void> {
     // A propósito, y ver la cabecera: el cuaderno no puede tumbar el trabajo.
     await db.query("rollback to savepoint anotar_actividad").catch(() => {});
   }
+}
+
+/**
+ * Cuántas tareas ha cerrado cada persona, y en cuánto tiempo.
+ *
+ * LLEGÓ DEL CAMINO B, PORTADA AL ESQUEMA QUE SE QUEDÓ. Las dos ramas
+ * escribieron el registro de actividad a la vez con esquemas distintos, y este
+ * cálculo venía escrito contra el otro —`ocurrido_en`, `verbo = 'tarea.cerrada'`,
+ * `objeto_id`—. Se conserva porque es la única consulta del registro que
+ * CALCULA algo en vez de contarlo, y por tanto la única que puede estar mal sin
+ * devolver ningún error.
+ *
+ * LA MEDIANA Y NO LA MEDIA, a propósito: una tarea que alguien dejó abierta seis
+ * meses no debe decidir la cifra de un trimestre entero.
+ *
+ * REABRIR Y VOLVER A CERRAR CUENTA DOS VECES, y las dos se miden desde que se
+ * creó. Es lo correcto: la segunda vez la tarea llevaba abierta todo ese tiempo
+ * de verdad.
+ *
+ * EL FILTRO POR `subject_type` NO ESTABA EN EL ORIGINAL Y AQUÍ HACE FALTA. Allí
+ * el verbo llevaba espacio de nombres —`tarea.cerrada` solo podía ser de una
+ * tarea— y aquí los verbos son sueltos: `cerro` a secas acabaría contando el
+ * cierre de cualquier otra cosa que se anote mañana con ese mismo verbo.
+ */
+export type Cierre = { actorId: string; cerradas: number; diasMediana: number | null };
+
+export async function cierresPorPersona(
+  db: Db,
+  filtro: { organizationId: string; dias: number; workspaceId?: string | null },
+): Promise<Cierre[]> {
+  const { rows } = await db.query<Cierre>(
+    `with cerradas as (
+       select c.actor_id,
+              extract(epoch from (c.at - cr.creada)) / 86400 as dias
+         from activity c
+         join lateral (
+           select min(a2.at) as creada
+             from activity a2
+            where a2.subject_id = c.subject_id
+              and a2.subject_type = 'tarea'
+              and a2.verb = 'creo'
+         ) cr on cr.creada is not null
+        where c.organization_id = $1
+          and c.subject_type = 'tarea'
+          and c.verb = 'cerro'
+          and c.at > now() - ($2::int || ' days')::interval
+          and ($3::uuid is null or c.workspace_id = $3)
+          and c.actor_id is not null
+     )
+     select actor_id as "actorId",
+            count(*)::int as cerradas,
+            round((percentile_cont(0.5) within group (order by dias))::numeric, 1)::float8
+              as "diasMediana"
+       from cerradas
+      group by actor_id`,
+    [filtro.organizationId, filtro.dias, filtro.workspaceId ?? null],
+  );
+  return rows;
+}
+
+/**
+ * Recorta un título para que quepa en una línea sin comerse el resto.
+ *
+ * También del camino B. Sigue haciendo falta: `subject_label` admite 200
+ * caracteres, y un título que los use todos deja fuera la parte de la frase
+ * —«de Por hacer a En curso»— que es justo la que explica qué pasó.
+ */
+export function recorta(texto: string, maximo = 60): string {
+  const limpio = texto.trim();
+  return limpio.length <= maximo ? limpio : `${limpio.slice(0, maximo - 1)}…`;
 }

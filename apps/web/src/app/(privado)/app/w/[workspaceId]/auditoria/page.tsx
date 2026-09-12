@@ -4,6 +4,7 @@ import { CircleAlert, FileCode, Lightbulb, ScanSearch, TriangleAlert } from "luc
 import Link from "next/link";
 import { useState } from "react";
 import { AuditoriaDelEquipo } from "@/components/auditoria/Equipo";
+import { AuditoriaDelRegistro } from "@/components/auditoria/Registro";
 import { Desplegable } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -136,16 +137,25 @@ function filasDeIntegraciones(datos: RespuestaIntegraciones | null | undefined):
 }
 
 /**
- * Dos mitades, y las dos son auditoría.
+ * Tres vistas, y las tres son auditoría.
  *
  * «El equipo» es lo que se pedía cuando se pidió esta pantalla: cómo trabaja
- * la gente junta. «El repositorio» es lo que se construyó primero, porque la
- * palabra se leyó en su sentido técnico. Las dos valen, así que conviven en
- * vez de sustituirse — y el equipo va delante, que es la pregunta que se hace
- * más veces.
+ * la gente junta, cruzando mensajes, llamadas y tarjetas. «El repositorio» es
+ * lo que se construyó primero, porque la palabra se leyó en su sentido
+ * técnico. «El registro» es la tercera y la más reciente: lee la tabla
+ * `activity` de la 0038, donde cada línea es un hecho fechado.
+ *
+ * POR QUÉ EL REGISTRO NO SUSTITUYE AL EQUIPO, que era la tentación al
+ * añadirlo. Aquella contesta con aproximaciones —una tarea no guardaba cuándo
+ * se cerró— pero ve cosas que el registro no ve: quién habla con quién, quién
+ * coincide en llamadas. Esta contesta con hechos, y solo sobre el tablero. Las
+ * dos preguntas son distintas y las dos se hacen.
+ *
+ * El equipo va delante porque es la que se abre más veces.
  */
 const MITADES = [
   { id: "equipo", texto: "El equipo" },
+  { id: "registro", texto: "El registro" },
   { id: "repositorio", texto: "El repositorio" },
 ] as const;
 type Mitad = (typeof MITADES)[number]["id"];
@@ -189,7 +199,9 @@ export default function AuditoriaPage() {
       rotulo={
         mitad === "equipo"
           ? "Cómo trabaja el equipo junto"
-          : "Todo lo que hay que mirar en este repositorio, junto"
+          : mitad === "registro"
+            ? "Qué ha hecho cada uno en el tablero, hecho por hecho"
+            : "Todo lo que hay que mirar en este repositorio, junto"
       }
       icono={<ScanSearch size={20} />}
       ancho="xl"
@@ -226,6 +238,8 @@ export default function AuditoriaPage() {
 
       {mitad === "equipo" ? (
         <AuditoriaDelEquipo workspaceId={workspaceId} />
+      ) : mitad === "registro" ? (
+        <AuditoriaDelRegistro workspaceId={workspaceId} />
       ) : (
         <>
       {repos.error && (

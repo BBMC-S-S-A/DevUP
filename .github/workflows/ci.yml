@@ -79,6 +79,25 @@ jobs:
         # pertenece a ese canal.
         run: npm run test:world
 
+      - name: El registro de actividad
+        # No prueba el aislamiento —eso es de test:rls— sino el camino de
+        # escritura: que mover a una columna terminal se anote como «cerró» y
+        # no como «movió», que reordenar no ensucie la historia, y que lo que
+        # hace el asistente quede marcado como suyo. Las tres se rompen en
+        # silencio: la auditoría seguiría enseñando un número, y un número
+        # siempre parece verdad.
+        run: npm run test:actividad --workspace apps/api
+
+      - name: El código corto de invitación
+        # Dos mitades: que normalizar perdone lo que se teclea al dictado
+        # (minúsculas, guiones, la O por el cero) sin volver iguales dos
+        # códigos distintos, y que en la base solo un administrador pueda
+        # poner código, que renovarlo mate al anterior, y que canjear por
+        # código no dé más acceso que canjear por enlace. Es una puerta de
+        # entrada a una organización: lo que falle aquí mete a alguien donde
+        # no debía sin que nadie abra una incidencia.
+        run: npm run test:codigo --workspace apps/api
+
       - name: El criterio de migraciones
         # Comprueba el analizador que se le aplica al repositorio de un
         # cliente, y lo hace contra nuestras propias migraciones: si a las

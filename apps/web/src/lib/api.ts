@@ -157,6 +157,18 @@ export type PendingInvitation = {
   createdAt: string;
   expiresAt: string;
   acceptedAt: string | null;
+  /**
+   * Si tiene código corto vivo.
+   *
+   * OPCIONAL A PROPÓSITO: la ruta que lista invitaciones todavía no lo
+   * devuelve. Marcarlo obligatorio mentiría al tipo —sería `undefined` en
+   * tiempo de ejecución y TypeScript no diría nada—, que es justo cómo un
+   * `boolean` acaba pintando siempre la misma mitad de un rótulo.
+   *
+   * El código en sí no viaja ni viajará: en la base solo está su hash (0041),
+   * así que ni la API puede volver a leerlo.
+   */
+  hasCode?: boolean;
 };
 
 export type Notification = {
@@ -251,6 +263,70 @@ export type Task = {
   tags: Tag[];
   /** Cuantos archivos cuelgan de la tarea. Para el indicador de la tarjeta. */
   adjuntos: number;
+
+  // --- La ficha de desarrollo (migración 0042) -------------------------------
+  /** El área del tablero (0039). Nulo = sin clasificar. */
+  categoryId: string | null;
+  /** Qué clase de trabajo es. Nulo = sin tipar, que es un estado legítimo. */
+  tipo: TipoDeTarea | null;
+  /** 0 baja · 1 normal · 2 alta · 3 urgente. */
+  prioridad: number;
+  /** De dónde sale esto: se lee al empezar. */
+  contexto: string;
+  /** Cómo sabremos que está hecha: se lee al terminar. */
+  criterio: string;
+  ramas: RamaDeTarea[];
+  /** Cuántas pruebas tiene. Enteras solo al abrir la tarjeta. */
+  evidencias: number;
+  /** Solo viene en la tarea cargada de una en una, no en el tablero. */
+  evidencia?: Evidencia[];
+};
+
+/**
+ * Vocabulario cerrado a propósito, y compartido con la base (ver la 0042): el
+ * tipo dice qué clase de trabajo es, y eso no depende del proyecto. El eje que
+ * sí se inventa por tablero son las áreas.
+ */
+export const TIPOS_DE_TAREA = [
+  "funcionalidad",
+  "arreglo",
+  "mejora",
+  "deuda",
+  "investigacion",
+  "documentacion",
+  "diseno",
+  "infraestructura",
+] as const;
+export type TipoDeTarea = (typeof TIPOS_DE_TAREA)[number];
+
+export type RamaDeTarea = {
+  id: string;
+  nombre: string;
+  estado: "abierta" | "fusionada" | "descartada";
+  repoId: string | null;
+  repo: string | null;
+};
+
+export type Evidencia = {
+  id: string;
+  tipo: "pr" | "commit" | "enlace" | "nota";
+  url: string | null;
+  titulo: string;
+  nota: string;
+  autorId: string | null;
+  autor: string | null;
+  creadaEn: string;
+};
+
+/** Las áreas del tablero (0039): el otro eje, el de «de qué trata y de quién es». */
+export type AreaDeTablero = {
+  id: string;
+  name: string;
+  color: number;
+  ownerId: string | null;
+  ownerName: string | null;
+  position: number;
+  tareas?: number;
 };
 
 export type BoardColumn = {

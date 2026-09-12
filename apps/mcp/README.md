@@ -28,6 +28,7 @@ apuntes también en la lista que comprueba el registro.
 | `ver_tablero` | El tablero de un espacio, con sus columnas y tarjetas. |
 | `ver_tarea` | Una tarea con su detalle, y sus imágenes adjuntas incrustadas. |
 | `ver_arquitectura` | Los componentes del diagrama de un espacio y cómo se conectan. |
+| `que_ha_pasado` | La historia de un espacio o de la organización: quién creó, movió, cerró o asignó qué, y cuándo. Agrupada por día y en el orden en que ocurrió. Distingue lo que hizo una persona de lo que hizo su asistente. |
 | `ver_entornos` | Dónde corre lo que escribe el equipo y cómo quedó el último despliegue. Dice cuáles no pueden leer nada por faltarles repositorio o token. |
 | `sincronizar_entornos` | Vuelve a preguntarle a GitHub por los despliegues, sin esperar a la pasada automática. Va aquí aunque escriba: lo que guarda es un reflejo de lo que dijo el proveedor. |
 
@@ -40,9 +41,12 @@ borrando deja trabajo perdido.
 
 | Herramienta | Qué hace |
 |---|---|
-| `crear_tarea` | Crea una tarea, con responsable, vencimiento y las categorías que se le digan. |
+| `crear_tarea` | Crea una tarea, con responsable, vencimiento, área y las categorías que se le digan. |
+| `crear_area` | Un área del tablero, con su delegado. Lo que se cree en ella se le asigna solo. |
 | `crear_columna` | Una columna nueva en el tablero. |
 | `mover_tarea` | Pasa una tarea de columna. |
+| `enlazar_rama` | Apunta en una tarea la rama donde se trabaja, o cambia su estado. Varias, si el trabajo va por varios caminos. |
+| `marcar_hecha` | Cierra una tarea y, si se le pasa, deja en ella la prueba de que se hizo —el PR, el commit, el enlace o una nota—. Las dos cosas caen juntas. |
 | `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |
 | `dibujar_arquitectura` | Vuelca un diagrama entero —componentes y conexiones— en un espacio. Coloca las cajas ella: no hay que darle coordenadas. Reutiliza lo que ya exista con ese nombre en vez de duplicarlo. |
 | `crear_entorno` | Crea un entorno y lo engancha a un repositorio de GitHub, leyendo sus despliegues en la misma llamada. Si al espacio le falta el token, lo crea igual y **lo dice**: sin token no sincroniza nunca, y callarlo deja esperando despliegues que no llegan. |

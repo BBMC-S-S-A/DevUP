@@ -17,13 +17,20 @@ import { parseParams, parseQuery, requireUser } from "../lib/http.js";
  * aquí es cruzarlo.
  *
  * LO QUE ESTO **NO** PUEDE CONTESTAR, y va dicho también en la pantalla porque
- * un número sin su letra pequeña se lee como una verdad: no hay registro de
- * actividad —lo señala la propia propuesta de arquitectura, §6—, así que no se
- * puede reconstruir «qué pasó esta semana» como una historia. Y una tarea no
- * guarda cuándo se terminó: lo más cercano es `updated_at`, que es cuándo se
- * tocó por última vez. Para una tarea que se movió a «hecho» y ya no se tocó
- * más, las dos cosas coinciden; para una que se editó después, no. Se usa, y
- * se avisa de que es una aproximación.
+ * un número sin su letra pequeña se lee como una verdad: una tarea no guarda
+ * cuándo se terminó, así que lo más cercano que tiene esta ruta es
+ * `updated_at`, que es cuándo se tocó por última vez. Para una tarea que se
+ * movió a «hecho» y ya no se tocó más, las dos cosas coinciden; para una que se
+ * editó después, no. Se usa, y se avisa de que es una aproximación.
+ *
+ * ESO YA TIENE ARREGLO, Y ESTÁ AL LADO. La 0038 añadió el registro de
+ * actividad y `actividad.ts` lo lee: allí «cerró cuatro esta semana» es un
+ * hecho con su fecha, no una deducción a partir de dónde está la tarjeta hoy.
+ * Esta ruta se queda porque cubre lo que aquella no —mensajes y llamadas
+ * cruzados, que no pasan por el registro— pero **todo lo que sea del tablero se
+ * pregunta allí**. Si algún día esta ruta empieza a contestar sobre tareas con
+ * aproximaciones cuando la otra puede hacerlo con hechos, lo que hay que
+ * cambiar es esta.
  *
  * EL AISLAMIENTO NO LO PONE ESTA RUTA. Todas las consultas van por `withUser`,
  * así que RLS decide qué filas entran: los canales privados a los que alguien
