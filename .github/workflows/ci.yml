@@ -105,6 +105,16 @@ jobs:
         # El script de la raíz encadena las dos.
         run: npm run test:codigo
 
+      - name: El diario del proyecto
+        # Tres formas de contar una historia falsa con datos verdaderos, y
+        # ninguna falla: saltarse las semanas vacías —que comprime el tiempo y
+        # hace parecer constante un proyecto que estuvo parado—, agrupar en UTC
+        # —que mete lo cerrado un domingo por la tarde en Bogotá en la semana
+        # siguiente— y contar movimientos como hitos, que daría las semanas más
+        # llenas a quien más arrastra tarjetas. Las tres salen en pantalla como
+        # un diario perfectamente creíble.
+        run: npm run test:diario --workspace apps/api
+
       - name: Los enlaces del grafo
         # Tres formas de estar mal que las políticas no pueden cazar, porque
         # ninguna falla: dibujar las flechas al revés, devolver solo los

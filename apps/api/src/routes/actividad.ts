@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
-import { parseParams, parseQuery, requireUser } from "../lib/http.js";
-import { cierresPorPersona } from "../lib/actividad.js";
+import { badRequest, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { cierresPorPersona, diarioPorSemanas } from "../lib/actividad.js";
 
 /**
  * Leer el registro de actividad: qué ha pasado, y quién lo hizo.
@@ -199,6 +199,72 @@ export async function actividadRoutes(app: FastifyInstance): Promise<void> {
       // `hayMas` sale de haber llenado la página, no de contar el total: contar
       // una tabla que solo crece es caro y a nadie le sirve el número.
       return { actividad: rows, hayMas: rows.length === limite };
+    });
+  });
+
+  /**
+   * El diario del proyecto: qué pasó cada semana.
+   *
+   * NO ES «EL REGISTRO CON TÍTULOS CADA SIETE DÍAS». Eso sería paginar con
+   * encabezados. Un diario contesta otra cosa: «¿cómo ha ido este proyecto?»,
+   * y para eso lo que importa de una semana no son sus cuarenta movimientos
+   * sino tres datos — cuánto se cerró, quién estuvo, y qué quedó terminado.
+   *
+   * POR ESO LOS HITOS SON LOS CIERRES Y NO LOS CAMBIOS. Mover una tarjeta tres
+   * veces deja tres renglones y no terminó nada; cerrarla deja uno y es lo
+   * único que una semana después alguien recuerda. Un diario que contara
+   * movimientos daría sus semanas más llenas a quien más arrastra tarjetas.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   *
+   * LAS SEMANAS VACÍAS SALEN, Y ESA ES LA DECISIÓN QUE MÁS IMPORTA. Lo obvio
+   * es agrupar lo que hay y devolver solo las semanas con algo dentro. Pero
+   * entonces dos entradas seguidas parecen consecutivas cuando entre ellas hubo
+   * un mes de nada: el diario **comprime el tiempo** y cuenta un ritmo que no
+   * existió. Y no falla — sale una lista perfectamente ordenada.
+   *
+   * Que una semana aparezca en blanco es información, y de la que más se mira:
+   * es lo que enseña un parón, unas vacaciones, o un proyecto que se quedó
+   * quieto mientras nadie lo decía en voz alta. De ahí el `generate_series`:
+   * las semanas las pone el calendario, no los datos.
+   *
+   * EL HUSO HORARIO NO ES UN DETALLE DE PRESENTACIÓN AQUÍ. Agrupar por semana
+   * en UTC mete lo que se cerró un domingo por la tarde en Bogotá dentro de la
+   * semana siguiente, porque allí ya es lunes. Nadie lo notaría —la lista se ve
+   * bien— y sin embargo el hito estaría en la casilla equivocada. Se recibe el
+   * huso y se trunca en él; UTC solo es lo que se usa si no lo dicen.
+   */
+  app.get("/workspaces/:workspaceId/diario", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const { semanas, tz } = parseQuery(
+      z.object({
+        semanas: z.coerce.number().int().min(1).max(52).default(8),
+        /**
+         * Un nombre IANA («America/Bogota»). No se valida contra una lista
+         * nuestra: Postgres conoce la suya, que es la que de verdad manda, y
+         * mantener una copia aquí solo garantiza que algún día discrepen.
+         */
+        tz: z.string().trim().max(60).default("UTC"),
+      }),
+      request.query,
+    );
+
+    return withUser(userId, async (db) => {
+      try {
+        // La consulta vive en `lib/actividad.ts`: ver allí por qué, que no es
+        // solo por poder probarla sin servidor.
+        const semanasDelDiario = await diarioPorSemanas(db, { workspaceId, semanas, tz });
+        return { semanas: semanasDelDiario, tz };
+      } catch (fallo) {
+        // 22023 es lo que contesta Postgres ante un huso que no conoce. Se
+        // traduce porque «invalid value for parameter TimeZone» no le dice a
+        // nadie que lo que hay que corregir es la letra de «America/Bogota».
+        if ((fallo as { code?: string }).code === "22023") {
+          throw badRequest(`no conozco el huso horario «${tz}»`);
+        }
+        throw fallo;
+      }
     });
   });
 

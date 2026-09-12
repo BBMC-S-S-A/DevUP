@@ -28,6 +28,7 @@ import {
   estoyHaciendo,
 } from "./herramientas/estado.js";
 import { descripcionQueHaPasado, esquemaQueHaPasado, queHaPasado } from "./herramientas/pasado.js";
+import { descripcionDiario, diarioDelProyecto, esquemaDiario } from "./herramientas/diario.js";
 import {
   descripcionMisTareas,
   descripcionVerTablero,
@@ -191,6 +192,15 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
       { type: "text" as const, text: await queHaPasado(cliente, entrada) },
     ],
   );
+
+  /**
+   * La vista de lejos. Va justo detrás de `que_ha_pasado` porque la pregunta
+   * que las separa es fácil de confundir: una cuenta lo que pasó, la otra cómo
+   * fue. Ver `herramientas/diario.ts`.
+   */
+  registrar("diario", descripcionDiario, esquemaDiario, async (cliente, entrada) => [
+    { type: "text" as const, text: await diarioDelProyecto(cliente, entrada) },
+  ]);
 
   registrar("ver_entornos", descripcionVerEntornos, esquemaVerEntornos, async (cliente, entrada) => [
     { type: "text" as const, text: await verEntornos(cliente, entrada) },

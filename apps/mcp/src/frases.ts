@@ -23,6 +23,7 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   crear_tarea: "anotando una tarea nueva",
   crear_area: "ordenando el tablero por áreas",
   que_ha_pasado: "poniéndose al día de lo que pasó",
+  diario: "repasando cómo ha ido el proyecto",
   enlazar_rama: "apuntando en qué rama va esto",
   // La única que AFIRMA algo, y por eso su frase lo dice: quien pase por la
   // sala y la lea tiene que poder ir a mirar si de verdad estaba hecha.

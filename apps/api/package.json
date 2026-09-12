@@ -27,6 +27,7 @@
     "test:asistente": "tsx src/routes/asistente.test.ts",
     "test:invitacion": "tsx src/routes/invitacion-codigo.test.ts",
     "arranca": "tsx src/arranca.test.ts",
+    "test:diario": "tsx src/routes/diario.test.ts",
     "test:grafo": "tsx src/routes/grafo.test.ts"
   },
   "dependencies": {

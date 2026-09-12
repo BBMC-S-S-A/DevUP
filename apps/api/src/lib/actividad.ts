@@ -195,6 +195,117 @@ export async function cierresPorPersona(
   return rows;
 }
 
+export type SemanaDelDiario = {
+  inicia: string;
+  termina: string;
+  hechos: number;
+  porVerbo: Record<string, number>;
+  personas: { id: string; nombre: string | null; veces: number }[];
+  cerradas: string[];
+};
+
+/**
+ * El diario del proyecto: qué pasó cada semana.
+ *
+ * VIVE AQUÍ Y NO EN LA RUTA POR EL MISMO MOTIVO QUE `cierresPorPersona`: para
+ * poder probarlo sin levantar el servidor. Y hay una razón de más, que se vio
+ * al escribir la prueba: si la consulta se quedara en la ruta, la prueba
+ * tendría que llevar su propia copia del SQL — y entonces las dos podrían
+ * divergir sin que ninguna se pusiera roja. Una prueba que comprueba su propia
+ * copia no comprueba nada.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ *
+ * LAS SEMANAS LAS PONE EL CALENDARIO, NO LOS DATOS. Lo obvio es agrupar lo que
+ * hay y devolver solo las semanas con algo dentro, y es lo que convierte el
+ * diario en mentira: dos entradas seguidas parecen consecutivas cuando entre
+ * ellas hubo un mes de nada. Comprime el tiempo y cuenta un ritmo que no
+ * existió — sin fallar, en una lista perfectamente ordenada. Que una semana
+ * salga en blanco es información, y de la que más se mira: es lo que enseña un
+ * parón que nadie dijo en voz alta.
+ *
+ * LOS HITOS SON LOS CIERRES. Mover una tarjeta tres veces deja tres renglones
+ * y no terminó nada; cerrarla deja uno y es lo único que una semana después
+ * alguien recuerda. Un diario que contara movimientos daría sus semanas más
+ * llenas a quien más arrastra tarjetas.
+ *
+ * Y SE EXIGE `subject_type = 'tarea'` ademas del verbo, por lo mismo que en
+ * `cierresPorPersona`: `cerro` a secas acabaría contando el cierre de cualquier
+ * otra cosa que mañana se anote con ese verbo.
+ *
+ * EL HUSO NO ES PRESENTACIÓN. Truncar en UTC mete lo que se cerró un domingo
+ * por la tarde en Bogotá en la semana siguiente, porque allí ya es lunes. El
+ * hito aparece, en la casilla equivocada, y la lista se ve perfecta.
+ */
+export async function diarioPorSemanas(
+  db: Db,
+  filtro: { workspaceId: string; semanas: number; tz: string },
+): Promise<SemanaDelDiario[]> {
+  const { rows } = await db.query<SemanaDelDiario>(
+    `with limites as (
+       select date_trunc('week', (now() at time zone $3)) as ultima,
+              date_trunc('week', (now() at time zone $3))
+                - (($2::int - 1) || ' weeks')::interval as primera
+     ),
+     serie as (
+       select generate_series((select primera from limites),
+                              (select ultima  from limites),
+                              '1 week'::interval) as inicia
+     ),
+     h as (
+       select date_trunc('week', (a.at at time zone $3)) as semana,
+              a.verb, a.actor_id, a.subject_type, a.subject_label, a.at
+         from activity a
+        where a.workspace_id = $1
+          and (a.at at time zone $3) >= (select primera from limites)
+     ),
+     totales as (select semana, count(*)::int as n from h group by 1),
+     porverbo as (
+       select semana, jsonb_object_agg(verb, n) as v
+         from (select semana, verb, count(*)::int as n from h group by 1, 2) x
+        group by 1
+     ),
+     porpersona as (
+       select semana,
+              jsonb_agg(jsonb_build_object('id', actor_id, 'nombre', nombre, 'veces', n)
+                        order by n desc) as p
+         from (
+           select h.semana, h.actor_id, pr.display_name as nombre, count(*)::int as n
+             from h left join profiles pr on pr.id = h.actor_id
+            where h.actor_id is not null
+            group by 1, 2, 3
+         ) y
+        group by 1
+     ),
+     -- Con tope: una semana de limpieza puede dejar ochenta títulos, y el
+     -- diario no es la lista de esa semana sino lo que se recuerda de ella.
+     cierres as (
+       select semana, subject_label, at,
+              row_number() over (partition by semana order by at desc) as puesto
+         from h
+        where verb = 'cerro' and subject_type = 'tarea' and subject_label is not null
+     ),
+     cerradas as (
+       select semana, array_agg(subject_label order by at desc) as c
+         from cierres where puesto <= 12 group by 1
+     )
+     select to_char(s.inicia, 'YYYY-MM-DD') as "inicia",
+            to_char(s.inicia + interval '6 days', 'YYYY-MM-DD') as "termina",
+            coalesce(t.n, 0) as hechos,
+            coalesce(v.v, '{}'::jsonb) as "porVerbo",
+            coalesce(pp.p, '[]'::jsonb) as personas,
+            coalesce(cd.c, array[]::text[]) as cerradas
+       from serie s
+       left join totales    t  on t.semana  = s.inicia
+       left join porverbo   v  on v.semana  = s.inicia
+       left join porpersona pp on pp.semana = s.inicia
+       left join cerradas   cd on cd.semana = s.inicia
+      order by s.inicia desc`,
+    [filtro.workspaceId, filtro.semanas, filtro.tz],
+  );
+  return rows;
+}
+
 /**
  * Recorta un título para que quepa en una línea sin comerse el resto.
  *
