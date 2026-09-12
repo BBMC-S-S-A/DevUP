@@ -9,6 +9,7 @@ import {
   Monitor,
   Plus,
   Sparkles,
+  MailWarning,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -136,6 +137,7 @@ function Perfil() {
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
 
   // Se siembra desde la sesión cuando llega, y no se vuelve a pisar: si se
   // reasignara en cada renderizado, escribir en el campo sería imposible.
@@ -147,6 +149,22 @@ function Perfil() {
 
   const limpio = nombre.trim();
   const cambiado = Boolean(user) && (limpio !== (user?.displayName ?? "") || cargo.trim() !== (user?.title ?? ""));
+
+  const reenviar = async () => {
+    setReenviando(true);
+    try {
+      await api.post("/auth/verify-email/resend");
+      // El servidor contesta 202 aunque la cuenta ya estuviera verificada, así
+      // que el mensaje habla de lo que se pidió y no de lo que se sabe.
+      toast.success("te lo mandamos otra vez", {
+        description: "Si no aparece, mira en la carpeta de spam.",
+      });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo reenviar");
+    } finally {
+      setReenviando(false);
+    }
+  };
 
   const guardar = async () => {
     if (!limpio) {
@@ -206,6 +224,30 @@ function Perfil() {
           <p className="text-[11px] text-faint">
             El correo ({user?.email}) no se cambia desde aquí: es con lo que entras.
           </p>
+
+          {/* Sin verificar: se dice y se puede arreglar.
+              `emailVerified` estaba en el tipo y no lo miraba NADIE, y
+              `POST /auth/verify-email/resend` existía sin que nada lo llamara.
+              O sea: si el correo de verificación no llegaba —spam, una errata
+              al escribirlo, el proveedor tardando— no había ni aviso de que
+              faltaba ni forma de pedir otro. */}
+          {user && !user.emailVerified && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warn/30 bg-warn/[0.07] px-3 py-2">
+              <MailWarning size={14} className="shrink-0 text-warn" />
+              <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-warn">
+                Tu correo todavía no está verificado.
+              </span>
+              <Boton
+                variante="fantasma"
+                tamano="sm"
+                disabled={reenviando}
+                onClick={() => void reenviar()}
+              >
+                {reenviando ? <Loader2 size={12} className="animate-spin" /> : null}
+                Reenviar
+              </Boton>
+            </div>
+          )}
 
           <Boton onClick={() => void guardar()} disabled={!cambiado || guardando} tamano="sm">
             {guardando ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}

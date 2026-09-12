@@ -23,7 +23,8 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 9 | **Grabar una llamada dejó de ser invisible** | **Hecho** |
 | 10 | **El dinero, en un solo sitio** — y una decisión que hay que tomar | **Hecho** |
 | 11 | **El perfil, que no existía** — nombre y cargo | **Hecho** |
-| 12 | Una superficie por nivel, y el acento reservado | Después |
+| 12 | **Barrido de rutas muertas** — siete, y tres eran agujeros | **Hecho** |
+| 13 | Una superficie por nivel, y el acento reservado | Después |
 
 **Cómo se verifica desde aquí.** No hay Docker ni Postgres en el entorno donde
 se escribe esto, así que `test:rls` no se puede correr en local — pero **sí
@@ -244,6 +245,35 @@ agente, navegadores con sesión) y **ninguna era la persona**.
   la aplicación el avatar es la inicial. Añadir la subida sin cambiar además
   todos los sitios que dibujan esa chapa daría una foto que solo se ve en su
   propia pantalla, que es peor que no tenerla.
+
+---
+
+## 12 · El barrido de rutas muertas
+
+Después de encontrar por accidente tres cosas construidas y sin forma de
+llegar a ellas —las grabaciones, el cargo, renombrar una columna— hice el
+barrido sistemático: **158 rutas en la API, 7 sin una sola referencia** en la
+web ni en el MCP.
+
+Cuatro son correctas: los callbacks de Google y Spotify y las dos rutas de
+OAuth del MCP las llaman de fuera, no nuestro cliente.
+
+Las otras tres eran agujeros de verdad:
+
+- **`POST /auth/verify-email/resend`.** Si el correo de verificación no llegaba
+  —spam, una errata, el proveedor tardando— no había **ni aviso de que faltaba
+  ni forma de pedir otro**. `emailVerified` estaba en el tipo y no lo miraba
+  nadie.
+- **`GET /environments/:envId/deployments`.** Devuelve los últimos treinta y
+  solo se enseñaba el más reciente. La historia entera estaba guardada y no se
+  podía ver — que es justo lo que se mira cuando algo se rompió y hace falta
+  saber desde cuándo.
+- **`PATCH` y `DELETE /columns/:id`**, ya arreglados: una columna no se podía
+  renombrar ni borrar.
+
+**Vale la pena repetir este barrido de vez en cuando.** Una ruta sin llamantes
+casi nunca es código de más: suele ser una función terminada a la que le falta
+la puerta.
 
 ---
 
