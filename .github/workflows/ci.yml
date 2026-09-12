@@ -87,6 +87,20 @@ jobs:
         # hay para esto.
         run: npm run test:migraciones
 
+      - name: El lector de Terraform
+        # Lo que se prueba aquí no es que lea bien, es que NO lea de más: un
+        # recurso citado en un comentario no es una dependencia, y un script
+        # dentro de un heredoc lleva llaves que descuadrarían el conteo de
+        # bloques y harían desaparecer medio archivo sin que nada se queje.
+        # Un diagrama que se cree completo engaña más que no tenerlo.
+        run: npm run test:terraform
+
+      - name: Dónde va cada caja del diagrama
+        # Funciones puras, sin base ni servidor. Lo que fijan es que la
+        # disposición salga legible y que un ciclo no cuelgue el bucle: un
+        # diagrama con un ciclo es raro, pero no es motivo para no dibujarlo.
+        run: npm run test:arquitectura
+
       - name: El diagnóstico de integraciones
         # Lo que más importa aquí no es que acierte, es que se calle: una
         # recomendación equivocada gasta la confianza de todas las siguientes.

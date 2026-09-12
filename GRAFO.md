@@ -1,9 +1,9 @@
 # El grafo de DevUP
 
 > Generado leyendo el código con `npm run grafo`. **No se edita a mano**: lo que se escriba aquí
-> desaparece en la siguiente pasada. Última: 2026-09-11.
+> desaparece en la siguiente pasada. Última: 2026-09-12.
 
-Hoy el proyecto tiene **23 áreas de API**, **18 pantallas**, **12 componentes que hablan con la API** y **50 tablas** repartidas en 37 migraciones.
+Hoy el proyecto tiene **24 áreas de API**, **18 pantallas**, **14 componentes que hablan con la API** y **50 tablas** repartidas en 37 migraciones.
 
 ## Qué áreas se tocan de verdad
 
@@ -11,14 +11,15 @@ Dos áreas están acopladas cuando escriben en la misma tabla, se importen o no 
 Ese es el único parentesco que cuenta, y es el que enseña este diagrama.
 
 Las tablas que tocan 4 áreas o más quedan fuera: son el armazón del producto y no
-distinguen a nadie —con ellas dentro, todo aparece conectado con todo—. Hoy son `channels`, `connections`, `files`, `profiles`, `workspaces`.
+distinguen a nadie —con ellas dentro, todo aparece conectado con todo—. Hoy son `channels`, `connections`, `files`, `messages`, `organization_members`, `profiles`, `task_columns`, `tasks`, `workspaces`.
 
 ```mermaid
 graph LR
   account["account"]
-  announcements["announcements"]
+  announcements["announcements"]:::isla
   arquitectura["arquitectura"]:::isla
-  asistente["asistente"]
+  asistente["asistente"]:::isla
+  auditoria["auditoria"]
   auth["auth"]
   connections["connections"]
   files["files"]
@@ -26,36 +27,28 @@ graph LR
   ice["ice"]:::isla
   infraestructura["infraestructura"]:::isla
   mcp["mcp"]:::isla
-  messages["messages"]
+  messages["messages"]:::isla
   notifications["notifications"]:::isla
   oauth["oauth"]:::isla
   preferences["preferences"]:::isla
-  recordings["recordings"]:::isla
+  recordings["recordings"]
   sales["sales"]:::isla
   search["search"]:::isla
   spotify["spotify"]
   tasks["tasks"]
   workspaces["workspaces"]
-  world["world"]
+  world["world"]:::isla
   youtube["youtube"]:::isla
   account --- |users| auth
   account --- |organizations| workspaces
-  announcements --- |organization_members| asistente
-  announcements --- |organization_members| workspaces
-  asistente --- |task_columns, tasks| tasks
-  asistente --- |organization_members| workspaces
-  asistente --- |task_columns, tasks| world
+  auditoria --- |call_sessions| recordings
   connections --- |github_repos| github
   connections --- |connection_secrets| spotify
   files --- |tags| tasks
-  messages --- |messages| workspaces
-  messages --- |messages| world
-  tasks --- |task_columns, tasks| world
-  workspaces --- |messages| world
   classDef isla stroke-dasharray: 4 3;
 ```
 
-**Islas** (con el borde punteado): `arquitectura`, `ice`, `infraestructura`, `mcp`, `notifications`, `oauth`, `preferences`, `recordings`, `sales`, `search`, `youtube`. No comparten ninguna tabla con nadie. No es necesariamente un defecto —hay áreas que deben bastarse solas— pero sí es lo que hace que el producto se sienta como varias herramientas en la misma barra lateral.
+**Islas** (con el borde punteado): `announcements`, `arquitectura`, `asistente`, `ice`, `infraestructura`, `mcp`, `messages`, `notifications`, `oauth`, `preferences`, `sales`, `search`, `world`, `youtube`. No comparten ninguna tabla con nadie. No es necesariamente un defecto —hay áreas que deben bastarse solas— pero sí es lo que hace que el producto se sienta como varias herramientas en la misma barra lateral.
 
 ## El mapa completo
 
@@ -86,6 +79,8 @@ graph LR
     P__login["/login"]
     P__recuperar["/recuperar"]
     P_arquitectura_Diagrama["arquitectura/Diagrama"]
+    P_arquitectura_ImportarTerraform["arquitectura/ImportarTerraform"]
+    P_auditoria_Equipo["auditoria/Equipo"]
     P_chat_ChannelChat["chat/ChannelChat"]
     P_dev_DevWorkspace["dev/DevWorkspace"]
     P_files_FileLibrary["files/FileLibrary"]
@@ -103,6 +98,7 @@ graph LR
     A_announcements["announcements"]
     A_arquitectura["arquitectura"]
     A_asistente["asistente"]
+    A_auditoria["auditoria"]
     A_auth["auth"]
     A_connections["connections"]
     A_files["files"]
@@ -135,6 +131,7 @@ graph LR
     T_files[("files")]
     T_file_tags[("file_tags")]
     T_call_sessions[("call_sessions")]
+    T_call_participants[("call_participants")]
     T_task_columns[("task_columns")]
     T_tasks[("tasks")]
     T_task_tags[("task_tags")]
@@ -171,10 +168,12 @@ graph LR
     T_architecture_links[("architecture_links")]
   end
   subgraph Fuera
+    C_arquitectura{{"arquitectura"}}
     C_despliegues{{"despliegues"}}
     C_github{{"github"}}
     C_integraciones{{"integraciones"}}
     C_migraciones{{"migraciones"}}
+    C_terraform{{"terraform"}}
     C_youtube{{"youtube"}}
   end
   P__app_autorizar_agente --> A_oauth
@@ -189,6 +188,7 @@ graph LR
   P__app_w__workspaceId_asistente --> A_asistente
   P__app_w__workspaceId_auditoria --> A_github
   P__app_w__workspaceId_base_de_datos --> A_github
+  P__app_w__workspaceId_cuenta --> A_account
   P__app_w__workspaceId_cuenta --> A_auth
   P__app_w__workspaceId_cuenta --> A_connections
   P__app_w__workspaceId_cuenta --> A_preferences
@@ -207,6 +207,9 @@ graph LR
   P__login --> A_auth
   P__recuperar --> A_account
   P_arquitectura_Diagrama --> A_arquitectura
+  P_arquitectura_ImportarTerraform --> A_arquitectura
+  P_arquitectura_ImportarTerraform --> A_github
+  P_auditoria_Equipo --> A_auditoria
   P_chat_ChannelChat --> A_messages
   P_dev_DevWorkspace --> A_github
   P_files_FileLibrary --> A_files
@@ -232,6 +235,9 @@ graph LR
   A_arquitectura --> T_architecture_links
   A_arquitectura --> T_architecture_nodes
   A_arquitectura --> T_workspaces
+  A_arquitectura -.-> C_arquitectura
+  A_arquitectura -.-> C_github
+  A_arquitectura -.-> C_terraform
   A_asistente --> T_connections
   A_asistente --> T_files
   A_asistente --> T_organization_members
@@ -239,6 +245,15 @@ graph LR
   A_asistente --> T_task_columns
   A_asistente --> T_tasks
   A_asistente --> T_workspaces
+  A_auditoria --> T_call_participants
+  A_auditoria --> T_call_sessions
+  A_auditoria --> T_channels
+  A_auditoria --> T_messages
+  A_auditoria --> T_organization_members
+  A_auditoria --> T_profiles
+  A_auditoria --> T_task_columns
+  A_auditoria --> T_tasks
+  A_auditoria --> T_workspaces
   A_auth --> T_profiles
   A_auth --> T_sessions
   A_auth --> T_users
@@ -321,8 +336,9 @@ graph LR
 |---|---|---|---|
 | `account` | 10 | `invitations`, `organizations`, `users`, `workspaces` | — |
 | `announcements` | 4 | `announcements`, `organization_members`, `profiles` | — |
-| `arquitectura` | 6 | `architecture_links`, `architecture_nodes`, `workspaces` | — |
+| `arquitectura` | 8 | `architecture_links`, `architecture_nodes`, `workspaces` | `arquitectura`, `github`, `terraform` |
 | `asistente` | 2 | `connections`, `files`, `organization_members`, `profiles`, `task_columns`, `tasks`, `workspaces` | — |
+| `auditoria` | 1 | `call_participants`, `call_sessions`, `channels`, `messages`, `organization_members`, `profiles`, `task_columns`, `tasks`, `workspaces` | — |
 | `auth` | 11 | `profiles`, `sessions`, `users` | — |
 | `connections` | 7 | `connection_secrets`, `connections`, `github_repos` | — |
 | `files` | 11 | `file_tags`, `files`, `profiles`, `tags`, `workspaces` | — |
@@ -340,7 +356,7 @@ graph LR
 | `spotify` | 12 | `channel_listening_sessions`, `channel_queue_tracks`, `connection_secrets`, `connections` | — |
 | `tasks` | 8 | `files`, `profiles`, `tags`, `task_columns`, `task_tags`, `tasks`, `workspaces` | — |
 | `workspaces` | 21 | `channels`, `messages`, `organization_links`, `organization_members`, `organizations`, `profiles`, `workspaces` | — |
-| `world` | 8 | `channels`, `files`, `messages`, `task_columns`, `tasks`, `world_avatars`, `world_outfits`, `world_props`, `world_rooms`, `world_zones` | — |
+| `world` | 9 | `channels`, `files`, `messages`, `task_columns`, `tasks`, `world_avatars`, `world_outfits`, `world_props`, `world_rooms`, `world_zones` | — |
 | `youtube` | 3 | — | `youtube` |
 
 ## Cada punto de entrada
@@ -367,8 +383,11 @@ graph LR
 | DELETE | `/architecture/nodes/:nodeId` | `arquitectura` |
 | POST | `/architecture/links` | `arquitectura` |
 | DELETE | `/architecture/links/:linkId` | `arquitectura` |
+| POST | `/workspaces/:workspaceId/architecture/fusionar` | `arquitectura` |
+| POST | `/workspaces/:workspaceId/architecture/importar/terraform` | `arquitectura` |
 | GET | `/me/asistente` | `asistente` |
 | POST | `/workspaces/:workspaceId/asistente` | `asistente` |
+| GET | `/workspaces/:workspaceId/auditoria/equipo` | `auditoria` |
 | POST | `/auth/register` | `auth` |
 | POST | `/auth/login` | `auth` |
 | POST | `/auth/refresh` | `auth` |
@@ -497,6 +516,7 @@ graph LR
 | GET | `/workspaces/:workspaceId/world` | `world` |
 | PUT | `/world/zones/:zoneId/props` | `world` |
 | GET | `/workspaces/:workspaceId/world/live` | `world` |
+| POST | `/me/agente/latido` | `world` |
 | POST | `/world/zones/:zoneId/reset` | `world` |
 | PATCH | `/world/zones/:zoneId` | `world` |
 | GET | `/world/avatars` | `world` |
@@ -513,15 +533,15 @@ graph LR
 | `announcements` | `0019_personalizacion.sql` | `announcements` |
 | `architecture_links` | `0033_arquitectura.sql` | `arquitectura` |
 | `architecture_nodes` | `0033_arquitectura.sql` | `arquitectura` |
-| `call_participants` | `0003_calls.sql` | — |
+| `call_participants` | `0003_calls.sql` | `auditoria` |
 | `call_recording_consents` | `0004_workspaces_tasks_recordings.sql` | `recordings` |
 | `call_recordings` | `0004_workspaces_tasks_recordings.sql` | `recordings` |
-| `call_sessions` | `0003_calls.sql` | `recordings` |
+| `call_sessions` | `0003_calls.sql` | `auditoria`, `recordings` |
 | `channel_listening_sessions` | `0017_spotify.sql` | `spotify` |
 | `channel_members` | `0001_core.sql` | — |
 | `channel_queue_tracks` | `0017_spotify.sql` | `spotify` |
 | `channel_reads` | `0005_messages.sql` | — |
-| `channels` | `0001_core.sql` | `messages`, `recordings`, `workspaces`, `world` |
+| `channels` | `0001_core.sql` | `auditoria`, `messages`, `recordings`, `workspaces`, `world` |
 | `clients` | `0012_ventas.sql` | `sales` |
 | `connection_secrets` | `0015_vault.sql` | `connections`, `spotify` |
 | `connections` | `0015_vault.sql` | `asistente`, `connections`, `github`, `spotify` |
@@ -533,28 +553,28 @@ graph LR
 | `github_repos` | `0016_github.sql` | `connections`, `github` |
 | `goals` | `0013_objetivos.sql` | `sales` |
 | `invitations` | `0006_invitations_notifications.sql` | `account` |
-| `messages` | `0005_messages.sql` | `messages`, `workspaces`, `world` |
+| `messages` | `0005_messages.sql` | `auditoria`, `messages`, `workspaces`, `world` |
 | `notifications` | `0006_invitations_notifications.sql` | `notifications` |
 | `oauth_clients` | `0032_oauth_clientes.sql` | `oauth` |
 | `oauth_codes` | `0032_oauth_clientes.sql` | `oauth` |
 | `opportunities` | `0012_ventas.sql` | `sales` |
 | `opportunity_items` | `0012_ventas.sql` | `sales` |
 | `organization_links` | `0019_personalizacion.sql` | `workspaces` |
-| `organization_members` | `0001_core.sql` | `announcements`, `asistente`, `workspaces` |
+| `organization_members` | `0001_core.sql` | `announcements`, `asistente`, `auditoria`, `workspaces` |
 | `organizations` | `0001_core.sql` | `account`, `workspaces` |
-| `profiles` | `0001_core.sql` | `announcements`, `asistente`, `auth`, `files`, `messages`, `notifications`, `preferences`, `recordings`, `sales`, `tasks`, `workspaces` |
+| `profiles` | `0001_core.sql` | `announcements`, `asistente`, `auditoria`, `auth`, `files`, `messages`, `notifications`, `preferences`, `recordings`, `sales`, `tasks`, `workspaces` |
 | `services` | `0012_ventas.sql` | `sales` |
 | `sessions` | `0001_core.sql` | `auth` |
 | `tags` | `0002_files.sql` | `files`, `tasks` |
-| `task_columns` | `0004_workspaces_tasks_recordings.sql` | `asistente`, `tasks`, `world` |
+| `task_columns` | `0004_workspaces_tasks_recordings.sql` | `asistente`, `auditoria`, `tasks`, `world` |
 | `task_tags` | `0004_workspaces_tasks_recordings.sql` | `tasks` |
-| `tasks` | `0004_workspaces_tasks_recordings.sql` | `asistente`, `tasks`, `world` |
+| `tasks` | `0004_workspaces_tasks_recordings.sql` | `asistente`, `auditoria`, `tasks`, `world` |
 | `user_dashboard_prefs` | `0019_personalizacion.sql` | `preferences` |
 | `user_tokens` | `0006_invitations_notifications.sql` | — |
 | `user_workbench_prefs` | `0025_mesa_de_trabajo.sql` | `preferences` |
 | `users` | `0001_core.sql` | `account`, `auth` |
 | `workspace_members` | `0027_miembros_por_workspace.sql` | — |
-| `workspaces` | `0001_core.sql` | `account`, `arquitectura`, `asistente`, `files`, `github`, `infraestructura`, `tasks`, `workspaces` |
+| `workspaces` | `0001_core.sql` | `account`, `arquitectura`, `asistente`, `auditoria`, `files`, `github`, `infraestructura`, `tasks`, `workspaces` |
 | `world_avatars` | `0007_world.sql` | `world` |
 | `world_outfits` | `0023_atuendos_por_organizacion.sql` | `world` |
 | `world_props` | `0010_world_editor.sql` | `world` |
@@ -574,7 +594,7 @@ graph LR
 | `/app/w/:workspaceId/asistente` | `asistente` |
 | `/app/w/:workspaceId/auditoria` | `github` |
 | `/app/w/:workspaceId/base-de-datos` | `github` |
-| `/app/w/:workspaceId/cuenta` | `auth`, `connections`, `preferences` |
+| `/app/w/:workspaceId/cuenta` | `account`, `auth`, `connections`, `preferences` |
 | `/app/w/:workspaceId/github` | `connections`, `github` |
 | `/app/w/:workspaceId/infraestructura` | `connections`, `infraestructura` |
 | `/app/w/:workspaceId/integraciones` | `github` |
@@ -584,6 +604,8 @@ graph LR
 | `/login` | `account`, `auth` |
 | `/recuperar` | `account` |
 | `arquitectura/Diagrama` | `arquitectura` |
+| `arquitectura/ImportarTerraform` | `arquitectura`, `github` |
+| `auditoria/Equipo` | `auditoria` |
 | `chat/ChannelChat` | `messages` |
 | `dev/DevWorkspace` | `github` |
 | `files/FileLibrary` | `files` |
@@ -675,7 +697,6 @@ y recuperar la contraseña.
 
 | Tabla | Migración | Quién la escribe |
 |---|---|---|
-| `call_participants` | `0003_calls.sql` | `join_call`, `leave_call`, `reap_call_peer` |
 | `channel_members` | `0001_core.sql` | `can_access_channel`, `create_channel` |
 | `channel_reads` | `0005_messages.sql` | `unread_counts`, `mark_channel_read` |
 | `user_tokens` | `0006_invitations_notifications.sql` | `issue_user_token`, `consume_user_token` |

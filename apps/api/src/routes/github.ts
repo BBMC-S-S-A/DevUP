@@ -56,19 +56,25 @@ export async function refreshRepo(
  * GitHub necesitaban exactamente esto, y repetir la comprobación de nulo en
  * cada una es donde se olvida en la séptima.
  */
-async function repoConCredencial(
+export async function repoConCredencial(
   db: Db,
   repoId: string,
-): Promise<{ token: string | null; fullName: string }> {
-  const { rows } = await db.query<{ connection_id: string | null; full_name: string }>(
-    "select connection_id, full_name from github_repos where id = $1",
-    [repoId],
-  );
+): Promise<{ token: string | null; fullName: string; workspaceId: string | null }> {
+  const { rows } = await db.query<{
+    connection_id: string | null;
+    full_name: string;
+    workspace_id: string | null;
+  }>("select connection_id, full_name, workspace_id from github_repos where id = $1", [repoId]);
   const fila = rows[0];
   if (!fila) throw notFound("repositorio no encontrado");
   return {
     token: fila.connection_id ? await getDecryptedSecret(db, fila.connection_id) : null,
     fullName: fila.full_name,
+    // Quien importa desde un repositorio tiene que comprobar que es el de ESE
+    // espacio: RLS deja ver los dos a quien pertenece a los dos, y traerse el
+    // Terraform de un proyecto al diagrama de otro es justo la mezcla que 0035
+    // vino a impedir. Ver la ruta de importar de `arquitectura.ts`.
+    workspaceId: fila.workspace_id,
   };
 }
 

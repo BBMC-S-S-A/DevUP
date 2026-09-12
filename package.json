@@ -21,6 +21,8 @@
     "test:github": "npm run test:github --workspace apps/api",
     "test:integraciones": "npm run test:integraciones --workspace apps/api",
     "test:migraciones": "npm run test:migraciones --workspace apps/api",
+    "test:terraform": "npm run test:terraform --workspace apps/api",
+    "test:arquitectura": "npm run test:arquitectura --workspace apps/api",
     "test:world": "npm run test:world --workspace apps/api",
     "test:agente": "npm run test:agente --workspace apps/api",
     "respaldo:ahora": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/respaldo-base-de-datos.sh",

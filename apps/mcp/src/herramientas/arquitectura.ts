@@ -53,9 +53,6 @@ const NOMBRE_TIPO: Record<string, string> = {
   otro: "otro",
 };
 
-const ANCHO_COLUMNA = 240;
-const ALTO_FILA = 120;
-
 // --- Ver ---------------------------------------------------------------------
 
 export const esquemaVerArquitectura = {
@@ -161,38 +158,17 @@ type Componente = { nombre: string; tipo: (typeof TIPOS)[number]; descripcion?: 
 type Conexion = { de: string; a: string; etiqueta?: string };
 
 /**
- * Reparte los componentes nuevos en columnas siguiendo las conexiones.
- *
- * Lo que nadie llama va en la primera columna, lo que solo llaman los de la
- * primera va en la segunda, y así. Es la forma en que se dibuja un sistema en
- * una pizarra —entra por la izquierda, acaba en la base de datos de la
- * derecha— y sale legible sin que nadie piense en píxeles.
- *
- * Los ciclos no rompen nada: al dejar de haber candidatos sin dependencias, lo
- * que queda se coloca en la columna siguiente y ya está. Un diagrama con un
- * ciclo es raro pero no es un error, y desde luego no es motivo para no
- * dibujarlo.
+ * El resumen que devuelve el servidor al fusionar. Ver
+ * `fusionarArquitectura` en `apps/api/src/routes/arquitectura.ts`: la regla
+ * de qué pasa con lo que ya está dibujado vive allí, y no aquí, porque
+ * importar Terraform desde la pantalla tiene que hacer exactamente lo mismo.
  */
-export function repartirEnColumnas(nombres: string[], conexiones: Conexion[]): Map<string, number> {
-  const pendientes = new Set(nombres.map((n) => n.toLowerCase()));
-  const columna = new Map<string, number>();
-  const entrantes = (nombre: string) =>
-    conexiones.filter(
-      (c) => c.a.toLowerCase() === nombre && pendientes.has(c.de.toLowerCase()) && c.de.toLowerCase() !== nombre,
-    ).length;
-
-  let actual = 0;
-  while (pendientes.size > 0) {
-    const libres = [...pendientes].filter((n) => entrantes(n) === 0);
-    const tanda = libres.length > 0 ? libres : [...pendientes];
-    for (const n of tanda) {
-      columna.set(n, actual);
-      pendientes.delete(n);
-    }
-    actual += 1;
-  }
-  return columna;
-}
+type Fusion = {
+  creados: string[];
+  reutilizados: string[];
+  enlazados: string[];
+  sinResolver: string[];
+};
 
 export async function dibujarArquitectura(
   cliente: ClienteApi,
@@ -204,75 +180,16 @@ export async function dibujarArquitectura(
   },
 ): Promise<string> {
   const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
-  const conexiones = entrada.conexiones ?? [];
 
-  const actual = await cliente.get<Diagrama>(`/workspaces/${espacio.id}/architecture`);
-  const porNombre = new Map(actual.nodes.map((n) => [n.name.trim().toLowerCase(), n]));
+  // Una sola llamada y no una por caja: así el diagrama entra entero o no
+  // entra, y no se queda a medias con veinte cajas puestas y las flechas sin
+  // poner.
+  const fusion = await cliente.post<Fusion>(`/workspaces/${espacio.id}/architecture/fusionar`, {
+    componentes: entrada.componentes,
+    conexiones: entrada.conexiones ?? [],
+  });
 
-  // Lo nuevo se dibuja debajo de lo que ya hubiera, para no pisarlo.
-  const baseY = actual.nodes.length > 0 ? Math.max(...actual.nodes.map((n) => n.posY)) + ALTO_FILA : 40;
-
-  const nuevos = entrada.componentes.filter((c) => !porNombre.has(c.nombre.trim().toLowerCase()));
-  const columnas = repartirEnColumnas(
-    nuevos.map((c) => c.nombre),
-    conexiones,
-  );
-  const ocupadas = new Map<number, number>();
-
-  const creados: string[] = [];
-  const reutilizados: string[] = [];
-
-  for (const componente of entrada.componentes) {
-    const clave = componente.nombre.trim().toLowerCase();
-    if (porNombre.has(clave)) {
-      reutilizados.push(componente.nombre);
-      continue;
-    }
-    const col = columnas.get(clave) ?? 0;
-    const fila = ocupadas.get(col) ?? 0;
-    ocupadas.set(col, fila + 1);
-
-    const { node } = await cliente.post<{ node: Nodo }>(
-      `/workspaces/${espacio.id}/architecture/nodes`,
-      {
-        name: componente.nombre.trim(),
-        kind: componente.tipo,
-        description: componente.descripcion ?? "",
-        posX: 40 + col * ANCHO_COLUMNA,
-        posY: baseY + fila * ALTO_FILA,
-      },
-    );
-    porNombre.set(clave, node);
-    creados.push(node.name);
-  }
-
-  // Las conexiones que ya existen no se repiten: la base no admite el mismo
-  // enlace dos veces, y fallar entero por eso sería absurdo.
-  const yaEnlazados = new Set(actual.links.map((l) => `${l.sourceId}|${l.targetId}|${l.label}`));
-  const enlazados: string[] = [];
-  const sinResolver: string[] = [];
-
-  for (const conexion of conexiones) {
-    const origen = porNombre.get(conexion.de.trim().toLowerCase());
-    const destino = porNombre.get(conexion.a.trim().toLowerCase());
-    if (!origen || !destino) {
-      sinResolver.push(`${conexion.de} → ${conexion.a}`);
-      continue;
-    }
-    if (origen.id === destino.id) continue;
-
-    const etiqueta = conexion.etiqueta?.trim() ?? "";
-    if (yaEnlazados.has(`${origen.id}|${destino.id}|${etiqueta}`)) continue;
-
-    await cliente.post("/architecture/links", {
-      sourceId: origen.id,
-      targetId: destino.id,
-      label: etiqueta,
-    });
-    yaEnlazados.add(`${origen.id}|${destino.id}|${etiqueta}`);
-    enlazados.push(`${origen.name} → ${destino.name}`);
-  }
-
+  const { creados, reutilizados, enlazados, sinResolver } = fusion;
   const lineas = [`Diagrama de «${espacio.name}» actualizado.`];
   if (creados.length > 0) lineas.push(`Componentes nuevos (${creados.length}): ${creados.join(", ")}.`);
   if (reutilizados.length > 0) {
