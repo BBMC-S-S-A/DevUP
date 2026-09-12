@@ -10,6 +10,7 @@ import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies"
 import { useOrgId, useWorkspaceId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { iniciales } from "@/lib/fechas";
+import { RedDeTrabajo } from "@/components/categorias/RedDeTrabajo";
 
 /**
  * Las categorías como ramas de trabajo, no como etiquetas de color.
@@ -43,6 +44,9 @@ export default function CategoriasPage() {
   const columnas = tablero.datos?.columns ?? [];
   const lista = etiquetas.datos?.tags ?? [];
 
+  /** Qué categorías están señaladas en la red. Vacío = todas por igual. */
+  const [senaladas, setSenaladas] = useState<string[]>([]);
+
   return (
     <Pagina
       titulo="Categorías"
@@ -61,15 +65,65 @@ export default function CategoriasPage() {
           pista="Se crean desde el tablero, en la barra de categorías. Sirven para separar áreas de trabajo y filtrar por ellas."
         />
       ) : (
-        <div className="space-y-2.5">
-          {lista.map((tag) => (
-            <Rama
-              key={tag.id}
-              tag={tag}
-              columnas={columnas}
-              onCambiada={() => void etiquetas.recargar()}
-            />
-          ))}
+        <div className="space-y-4">
+          {/* LA RED PRIMERO. Es lo que contesta «cómo está repartido esto» de
+              un vistazo; la lista de abajo es para cambiar una rama concreta.
+              Poner la lista arriba haría que el mapa solo lo viera quien se
+              desplaza. */}
+          <Tarjeta className="p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <Rotulo className="mr-1">Red de trabajo</Rotulo>
+              <button
+                type="button"
+                onClick={() => setSenaladas([])}
+                aria-pressed={senaladas.length === 0}
+                className={`presionable rounded-lg border px-2 py-0.5 text-[11px] transition-colors ${
+                  senaladas.length === 0
+                    ? "border-accent/50 bg-accent-soft/60 text-accent-bright"
+                    : "border-line text-faint hover:text-muted"
+                }`}
+              >
+                Todas
+              </button>
+              {lista.map((tag) => {
+                const activa = senaladas.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() =>
+                      setSenaladas((previas) =>
+                        previas.includes(tag.id)
+                          ? previas.filter((x) => x !== tag.id)
+                          : [...previas, tag.id],
+                      )
+                    }
+                    aria-pressed={activa}
+                    className={`presionable rounded-lg border px-2 py-0.5 text-[11px] transition-colors ${
+                      activa
+                        ? "border-accent/50 bg-accent-soft/60 text-accent-bright"
+                        : "border-line text-muted hover:border-line-strong"
+                    }`}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            <RedDeTrabajo columnas={columnas} tags={lista} elegidas={senaladas} />
+          </Tarjeta>
+
+          <div className="space-y-2.5">
+            {lista.map((tag) => (
+              <Rama
+                key={tag.id}
+                tag={tag}
+                columnas={columnas}
+                onCambiada={() => void etiquetas.recargar()}
+              />
+            ))}
+          </div>
         </div>
       )}
     </Pagina>
