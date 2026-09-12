@@ -29,6 +29,7 @@ import {
 } from "./herramientas/estado.js";
 import { descripcionQueHaPasado, esquemaQueHaPasado, queHaPasado } from "./herramientas/pasado.js";
 import { descripcionDiario, diarioDelProyecto, esquemaDiario } from "./herramientas/diario.js";
+import { contextoDeTarea, descripcionContexto, esquemaContexto } from "./herramientas/contexto.js";
 import {
   descripcionMisTareas,
   descripcionVerTablero,
@@ -200,6 +201,14 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
    */
   registrar("diario", descripcionDiario, esquemaDiario, async (cliente, entrada) => [
     { type: "text" as const, text: await diarioDelProyecto(cliente, entrada) },
+  ]);
+
+  /**
+   * La tesis del producto en una herramienta: por qué se hizo así. Va con las
+   * de leer — no escribe nada. Ver `herramientas/contexto.ts`.
+   */
+  registrar("contexto_de_tarea", descripcionContexto, esquemaContexto, async (cliente, entrada) => [
+    { type: "text" as const, text: await contextoDeTarea(cliente, entrada) },
   ]);
 
   registrar("ver_entornos", descripcionVerEntornos, esquemaVerEntornos, async (cliente, entrada) => [

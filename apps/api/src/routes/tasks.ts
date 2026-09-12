@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
-import { olvidarNodo, retejerTarea } from "../lib/grafo.js";
+import { olvidarNodo, retejerTarea, vecinosDe } from "../lib/grafo.js";
 import { type Procedencia, anotar, recorta } from "../lib/actividad.js";
 import { announceBoardChange } from "../realtime/signaling.js";
 import { notificar } from "./notifications.js";
@@ -691,6 +691,64 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     const userId = requireUser(request);
     const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
     return withUser(userId, async (db) => ({ task: await loadTask(db, taskId) }));
+  });
+
+  /**
+   * Todo lo que rodea a una tarea, de una vez.
+   *
+   * ES LA TESIS DEL PRODUCTO EN UNA RUTA. Lo que se pierde al volver a algo que
+   * se dejó hace tres semanas no es el código: es **por qué se hizo así**. Esa
+   * respuesta existe, pero repartida —en quién la movió y cuándo, en la rama
+   * donde se tocó, en el PR que la cerró, en el archivo que alguien colgó—, y
+   * juntarla a mano son seis pantallas y media hora. Esto la junta.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   *
+   * UNA PETICIÓN Y NO SEIS, por lo mismo que `/me/inicio`. Seis peticiones
+   * encadenadas no son solo más lentas: son seis oportunidades de pintar media
+   * pantalla y dejar la otra media girando, y quien la mira no sabe si lo que
+   * falta es que no existe o que no ha llegado.
+   *
+   * LA HISTORIA VA HACIA DELANTE, al revés que en todas las demás rutas del
+   * registro. Allí lo último arriba es lo correcto —se mira para ponerse al
+   * día—. Aquí se lee para reconstruir, y una reconstrucción se cuenta desde el
+   * principio: primero se creó, luego se asignó, luego se movió. Del revés hay
+   * que leerla dos veces.
+   *
+   * Y LO QUE NO ESTÁ ENLAZADO, NO SE INVENTA. La tentación aquí es rellenar:
+   * buscar mensajes que mencionen el título, grabaciones de esa semana,
+   * archivos del mismo espacio. Todo eso son conjeturas, y una conjetura
+   * metida entre hechos no se distingue de un hecho — se lee con la misma
+   * confianza y decide igual. Lo que sale es lo que el grafo tiene tejido: lo
+   * deducido de algo cierto, o lo que enlazó una persona. Si está vacío, está
+   * vacío, y eso también es una respuesta.
+   */
+  app.get("/tasks/:taskId/contexto", async (request) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      // `loadTask` lanza si RLS no devuelve la fila, así que lo de abajo solo
+      // corre para quien puede ver la tarea. No hace falta comprobarlo aparte.
+      const task = await loadTask(db, taskId);
+
+      const [historia, enlaces] = await Promise.all([
+        db.query(
+          `select a.verb as "verbo", a.detail as "detalle", a.source as "procedencia",
+                  a.at as "cuando", a.actor_id as "actorId",
+                  p.display_name as "actorNombre"
+             from activity a
+             left join profiles p on p.id = a.actor_id
+            where a.subject_id = $1 and a.subject_type = 'tarea'
+            order by a.at asc
+            limit 200`,
+          [taskId],
+        ),
+        vecinosDe(db, "tarea", taskId),
+      ]);
+
+      return { task, historia: historia.rows, enlaces };
+    });
   });
 
   // --- Las ramas donde se está tocando --------------------------------------
