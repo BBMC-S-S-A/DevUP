@@ -46,9 +46,10 @@ export function EntrarConCodigo({ onCerrar }: { onCerrar: () => void }) {
       );
       toast.success("ya estás dentro");
       onCerrar();
-      // A la organización recién aceptada y no a la lista: quien acaba de
-      // entrar quiere ver dónde ha entrado, no volver a elegir.
-      router.push(`/app/o/${organizationId}/ventas`);
+      // A la organización recién aceptada, que enseña sus espacios de trabajo:
+      // es lo primero que quiere ver quien acaba de entrar —dónde se trabaja
+      // aquí— y no el embudo de ventas de una empresa que todavía no conoce.
+      router.push(`/app/o/${organizationId}`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "no se pudo entrar con esa invitación");
     } finally {
