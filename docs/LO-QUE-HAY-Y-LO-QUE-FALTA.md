@@ -135,9 +135,21 @@ Ordenado por lo que más duele.
   ponerlos. Se saltan solos al siguiente de la cola y se avisa por qué.
 
 ### Nuestro, y pendiente
-- **Respaldo del almacén de archivos.** El volcado automático de GitHub Actions
-  es solo de la base. Hoy no urge —el almacén está vacío— pero en cuanto haya
-  archivos de verdad hace falta.
+- ~~**Respaldo del almacén de archivos.**~~ — **hecho** el 12 de septiembre de
+  2026, en el mismo workflow que la base pero como trabajo independiente: que
+  falle uno no puede dejar sin copia al otro. Hacen falta los dos, porque
+  restaurando solo la base la biblioteca queda llena de fichas que apuntan a
+  archivos que ya no están.
+
+  No necesita túnel —el almacén sí tiene dirección pública, porque la web firma
+  URLs contra ella—, así que solo pide dos secretos más: `S3_ACCESS_KEY_ID` y
+  `S3_SECRET_ACCESS_KEY`.
+
+  **Hasta cuándo sirve, dicho ahora y no cuando falle:** hoy son 26 archivos y
+  3,5 MB, que caben de sobra en un artefacto. El día que sean gigas, subir el
+  almacén entero cada noche deja de tener sentido y toca un destino con
+  versionado propio. El trabajo avisa al pasar de 2 GB, en vez de empezar a
+  fallar por tiempo de espera sin que nadie sepa por qué.
 - ~~**El respaldo de la base apunta a Supabase**~~ — **rehecho contra Railway**
   el 12 de septiembre de 2026. Iba roto por partida doble: apuntaba a una base
   de la que el producto ya se había ido, y volcaba con `pg_dump` 17 contra un

@@ -1,5 +1,5 @@
 # =============================================================================
-# DevUP · Respaldo diario de la base de datos
+# DevUP · Respaldo diario: la base de datos Y el almacén de archivos
 #
 # POR QUÉ AQUÍ Y NO EN UN SERVICIO DE ALMACENAMIENTO. Todos los destinos
 # gratuitos que miramos —R2, B2— piden método de pago. GitHub Actions ya lo
@@ -45,14 +45,26 @@
 #   POSTGRES_PASSWORD    La del superusuario del servicio Postgres. Hace falta
 #                        el rol administrador porque el de la aplicación tiene
 #                        RLS y volcaría cero filas sin dar ningún error.
+#   S3_ACCESS_KEY_ID     Las del almacén, las mismas que usa la API. El
+#   S3_SECRET_ACCESS_KEY endpoint y el bucket no son secretos y van arriba.
 #   BACKUP_PASSPHRASE    Una frase larga. **Guárdala donde no esté solo aquí:**
 #                        sin ella los respaldos no se pueden abrir, y entonces
 #                        no son respaldos.
+#
+# SON DOS TRABAJOS INDEPENDIENTES a propósito: que falle el de la base no
+# puede dejar sin copia al del almacén, que es lo que pasaría encadenándolos.
+# Y hacen falta los dos — restaurando solo la base, la biblioteca queda llena
+# de fichas que apuntan a archivos que ya no están.
 #
 # CÓMO SE RESTAURA UNO:
 #   gpg --decrypt --batch --passphrase "$BACKUP_PASSPHRASE" \
 #       -o devup.dump devup-AAAAMMDD-HHMMSSZ.dump.gpg
 #   pg_restore --clean --if-exists --no-owner -d "<url de destino>" devup.dump
+#
+# Y EL ALMACÉN:
+#   gpg --decrypt --batch --passphrase "$BACKUP_PASSPHRASE" \
+#       -o almacen.tar.gz almacen-AAAAMMDD-HHMMSSZ.tar.gz.gpg
+#   tar -xzf almacen.tar.gz && mc mirror almacen/ destino/devup-files
 # =============================================================================
 name: Respaldo
 
@@ -73,6 +85,12 @@ concurrency:
 # nuevo, así que esto se sube el día que se suba Railway y no antes.
 env:
   IMAGEN_PG: postgres:18-alpine
+  # Ni el endpoint ni el nombre del bucket son secretos: la web firma URLs
+  # contra esa dirección y cualquiera la ve. Aquí para que haya que poner dos
+  # secretos y no cuatro — cada secreto de más es una forma más de que esto
+  # se quede sin configurar.
+  S3_ENDPOINT: https://storage-production-2cdb.up.railway.app
+  S3_BUCKET: devup-files
 
 jobs:
   base-de-datos:
@@ -210,5 +228,110 @@ jobs:
           path: devup-${{ env.SELLO }}.dump.gpg
           # 90 días es el máximo de la capa gratuita. Con una copia diaria son
           # 90 puntos de restauración; la base son megas, no gigas.
+          retention-days: 90
+          if-no-files-found: error
+
+  # ===========================================================================
+  # El almacén de archivos
+  #
+  # POR QUÉ HACE FALTA APARTE. El volcado de arriba es solo de la base: guarda
+  # que un archivo existe, quién lo subió y a qué tarea va — pero no el archivo.
+  # Restaurando solo la base, la biblioteca queda llena de fichas que apuntan a
+  # nada.
+  #
+  # NO HACE FALTA TÚNEL, al revés que con Postgres: el almacén tiene dirección
+  # pública porque la web firma URLs contra ella. Se entra con las mismas
+  # credenciales S3 que usa la API.
+  #
+  # HASTA CUÁNDO SIRVE ESTO, que es lo que hay que decir y no callarse. Hoy el
+  # almacén son 26 archivos y tres megas y medio: cabe de sobra en un artefacto
+  # y sale gratis. El día que sean gigas, esto deja de ser la respuesta —subir
+  # el almacén entero cada noche es tirar ancho de banda y espacio— y toca un
+  # destino con versionado propio. El trabajo AVISA cuando se acerca a ese
+  # punto, en vez de empezar a fallar por tiempo de espera sin que nadie sepa
+  # por qué.
+  # ===========================================================================
+  almacen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Independiente del volcado de la base: que falle uno no debe dejar sin
+    # copia al otro, que es justo lo que pasaría encadenándolos.
+    steps:
+      - name: Comprobar que hay con qué entrar y con qué cifrar
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+        run: |
+          falta=0
+          for nombre in S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY BACKUP_PASSPHRASE; do
+            if [ -z "$(eval echo \$$nombre)" ]; then
+              echo "::error::Falta el secreto $nombre."
+              falta=1
+            fi
+          done
+          [ "$falta" -eq 0 ] || exit 1
+
+      - name: Copiar el almacén
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+        run: |
+          sello=$(date -u +%Y%m%d-%H%M%SZ)
+          echo "SELLO=$sello" >> "$GITHUB_ENV"
+
+          curl -sSLo mc https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x mc
+
+          # `--api S3v4` explícito: sin esto `mc` negocia y, contra un MinIO
+          # detrás de un proxy, a veces elige una firma que el otro no acepta.
+          ./mc alias set almacen "$S3_ENDPOINT" "$S3_ACCESS_KEY_ID" "$S3_SECRET_ACCESS_KEY" \
+            --api S3v4 >/dev/null
+
+          mkdir -p almacen
+          # Cada ejecución empieza con la carpeta vacía, así que esto es una
+          # foto completa y no un espejo incremental: no hace falta pensar en
+          # `--remove`, que es lo que sí importaba cuando el destino era un
+          # volumen que persistía entre pasadas.
+          ./mc mirror --quiet "almacen/$S3_BUCKET" almacen
+
+          echo "archivos: $(find almacen -type f | wc -l)"
+
+      - name: Comprobar que trajo algo, y que sigue cabiendo
+        run: |
+          archivos=$(find almacen -type f | wc -l)
+          bytes=$(du -sb almacen | cut -f1)
+          echo "almacén: $archivos archivo(s), $bytes bytes"
+
+          # Cero archivos con la base llena de fichas es el fallo silencioso que
+          # importa: el respaldo «funciona» y no protege nada.
+          if [ "$archivos" -eq 0 ]; then
+            echo "::warning::El almacén vino vacío. Si la biblioteca tiene archivos, esto NO es un respaldo."
+          fi
+
+          # 2 GB. El aviso llega antes de que empiece a fallar por tiempo, que
+          # es cuando ya nadie sabe por qué.
+          if [ "$bytes" -gt 2000000000 ]; then
+            echo "::warning::El almacén pasa de 2 GB. Subirlo entero cada noche deja de tener sentido: toca un destino con versionado propio."
+          fi
+
+      - name: Cifrar
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          tar -czf "almacen-$SELLO.tar.gz" almacen
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --symmetric \
+            --cipher-algo AES256 \
+            --passphrase-fd 0 \
+            --output "almacen-$SELLO.tar.gz.gpg" \
+            "almacen-$SELLO.tar.gz"
+          rm -rf "almacen-$SELLO.tar.gz" almacen
+          ls -l "almacen-$SELLO.tar.gz.gpg"
+
+      - name: Guardar
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-almacen-${{ env.SELLO }}
+          path: almacen-${{ env.SELLO }}.tar.gz.gpg
           retention-days: 90
           if-no-files-found: error
