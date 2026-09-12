@@ -11,7 +11,6 @@ import {
   LayoutGrid,
   Loader2,
   Lock,
-  LogOut,
   Plus,
   Search,
   TriangleAlert,
@@ -23,17 +22,16 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ApiError, type Channel, type Organization, type Workspace, api } from "@/lib/api";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { MenuDeUsuario } from "@/components/ui/MenuDeUsuario";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { guardarUltimoEspacio, olvidarUltimoEspacio } from "@/lib/ultimo-espacio";
 import { ignorar } from "@/lib/fallo";
-import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { Boton } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { SelectorDeEspacio } from "@/components/ui/SelectorDeEspacio";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
-import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
-import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
 import { retraso } from "@/lib/animacion";
@@ -479,38 +477,14 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               ajustes: es una preferencia de la persona —como el volumen— y no
               una configuración del producto. Aquí se alcanza desde cualquier
               pantalla sin salir de lo que se está haciendo. */}
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <Rotulo>Estado</Rotulo>
-            <SelectorPresencia />
-          </div>
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <Rotulo>Tema</Rotulo>
-            <SelectorTema />
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <span
-              aria-hidden
-              className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong
-                bg-raised font-display text-[11px] font-semibold text-muted"
-            >
-              {(user?.displayName ?? "?").trim().charAt(0).toUpperCase()}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-ink" title={user?.displayName}>
-                {user?.displayName}
-              </p>
-              <p className="truncate text-[10px] text-faint" title={user?.email}>
-                {user?.email}
-              </p>
-            </div>
+          {/* El estado, el tema y el cierre de sesión se mudan al menú de la
+              cuenta. Ocupaban tres filas fijas de una barra que ya tiene
+              diecisiete destinos, y el botón de salir suelto era peor que
+              ocupar sitio: un icono de puerta al lado del nombre del espacio no
+              dice «cerrar sesión», dice «salir de aquí». */}
+          <div className="flex items-center gap-2">
+            <MenuDeUsuario orgId={workspace.organizationId} />
             <NotificationBell />
-            {/* El tinte de peligro se pinta sobre el icono y no sobre el botón
-                porque BotonIcono ya declara su propio color al pasar por encima
-                y dos utilidades de la misma propiedad se pisan sin aviso. */}
-            <BotonIcono etiqueta="Cerrar sesión" onClick={() => void signOut()} className="group">
-              <LogOut size={15} className="transition-colors group-hover:text-danger" />
-            </BotonIcono>
           </div>
         </footer>
         </>

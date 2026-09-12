@@ -443,6 +443,30 @@ h3 {
   box-shadow: var(--sombra-dialogo), inset 0 1px 0 var(--brillo-canto);
 }
 
+/* Un panel que flota SOBRE otra interfaz, y no sobre la atmósfera.
+ *
+ * POR QUÉ NO VALE `.cristal` AQUÍ, y es un fallo que se veía en pantalla: el
+ * vidrio funciona difuminando lo que tiene detrás, y `backdrop-filter` solo
+ * difumina hasta su raíz de fondo. Un panel de cristal DENTRO de un elemento
+ * que ya lleva `backdrop-filter` —la barra lateral, el riel— no puede difuminar
+ * a sus hermanos: quedan dentro de la misma raíz. Resultado, el contenido de la
+ * barra se leía nítido a través del panel de notificaciones, como si el panel
+ * fuera una hoja de plástico transparente.
+ *
+ * No es un caso raro: le pasa a todo lo que se abre desde la barra — las
+ * notificaciones, el selector de espacio y el menú del riel.
+ *
+ * Así que aquí el material es OPACO. Se pierde el efecto de vidrio y se gana
+ * poder leer lo que pone, que es para lo que se abre un panel. El relieve lo
+ * dan el borde y la sombra de diálogo, que ya distinguen una capa de otra sin
+ * necesidad de transparencia.
+ */
+.panel-emergente {
+  background: var(--c-raised);
+  border: 1px solid var(--canto);
+  box-shadow: var(--sombra-dialogo), inset 0 1px 0 var(--brillo-canto);
+}
+
 /* Superficie sólida con canto iluminado, para tarjetas que no necesitan
    desenfoque (la mayoría: en una lista larga el desenfoque cuesta caro). */
 .panel {
