@@ -80,9 +80,15 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
+        // El nombre del jefe viene en la misma fila: la pantalla de Categorías
+        // lo enseña siempre, y pedirlo aparte sería una consulta por categoría.
         `select t.id, t.name, t.color,
+                t.owner_id as "ownerId",
+                p.display_name as "ownerName",
                 (select count(*)::int from file_tags ft where ft.tag_id = t.id) as "fileCount"
-           from tags t where t.organization_id = $1 order by t.name`,
+           from tags t
+           left join profiles p on p.id = t.owner_id
+          where t.organization_id = $1 order by t.name`,
         [orgId],
       );
       return { tags: rows };
@@ -135,24 +141,59 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
           color: z
             .enum(["slate", "blue", "green", "amber", "red", "violet", "pink", "teal"])
             .optional(),
+          /**
+           * Quién lleva la rama. `null` explícito la deja sin jefe, que es
+           * distinto de no mandar el campo — de ahí `nullish` y el uso de `in`
+           * más abajo en vez de comprobar si es falsy.
+           */
+          ownerId: uuid.nullish(),
         })
         // Un PATCH sin nada que cambiar devolvería un 200 indistinguible de
         // haber funcionado. Se rechaza.
-        .refine((v) => v.name !== undefined || v.color !== undefined, {
-          message: "no hay nada que cambiar: manda «name», «color» o los dos",
+        .refine((v) => Object.keys(v).length > 0, {
+          message: "no hay nada que cambiar: manda «name», «color» u «ownerId»",
         }),
       request.body,
     );
 
+    const cuerpo = body as Record<string, unknown>;
+    const cambiaJefe = "ownerId" in cuerpo;
+
     return withUser(userId, async (db) => {
+      /**
+       * Que el jefe sea de la organización de la categoría.
+       *
+       * LA BASE NO PUEDE COMPROBARLO: una clave foránea solo mira `users`, que
+       * no sabe de organizaciones. Sin esto, cualquiera con acceso a una
+       * categoría podría nombrar jefe a una persona de otra empresa pasando su
+       * identificador a mano — y su nombre aparecería en una pantalla donde no
+       * pinta nada. Se mira bajo RLS, así que la consulta solo ve lo que quien
+       * llama ya podía ver.
+       */
+      if (cambiaJefe && body.ownerId) {
+        const { rows: vale } = await db.query<{ ok: boolean }>(
+          `select exists (
+             select 1
+               from organization_members m
+               join tags g on g.organization_id = m.organization_id
+              where g.id = $1 and m.user_id = $2
+           ) as ok`,
+          [tagId, body.ownerId],
+        );
+        if (!vale[0]?.ok) {
+          throw badRequest("esa persona no pertenece a la organización de la categoría");
+        }
+      }
+
       const { rows } = await db
-        .query<{ id: string; name: string; color: string }>(
+        .query<{ id: string; name: string; color: string; ownerId: string | null }>(
           `update tags
               set name = coalesce($2, name),
-                  color = coalesce($3, color)
+                  color = coalesce($3, color),
+                  owner_id = case when $4 then $5::uuid else owner_id end
             where id = $1
-        returning id, name, color`,
-          [tagId, body.name ?? null, body.color ?? null],
+        returning id, name, color, owner_id as "ownerId"`,
+          [tagId, body.name ?? null, body.color ?? null, cambiaJefe, body.ownerId ?? null],
         )
         .catch((fallo: unknown) => {
           // 23505 es la violación de unicidad. Traducirla aquí es la diferencia

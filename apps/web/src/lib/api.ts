@@ -205,6 +205,15 @@ export type Tag = {
   name: string;
   color: string;
   fileCount?: number;
+  /**
+   * Quién LLEVA la rama, que no es quien tiene sus tareas.
+   *
+   * Son dos cosas distintas a propósito: quien lleva un área reparte su
+   * trabajo, así que puede no tener ninguna tarea suya y seguir respondiendo
+   * por ella. Ver la migración 0040.
+   */
+  ownerId?: string | null;
+  ownerName?: string | null;
 };
 
 export type FileRecord = {

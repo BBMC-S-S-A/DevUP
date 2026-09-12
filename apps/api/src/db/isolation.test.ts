@@ -1510,6 +1510,52 @@ async function main(): Promise<void> {
       ),
     );
 
+    console.log("\nJefe de rama de una categoría (0040)");
+
+    // Quien lleva una rama no es quien tiene sus tareas: reparte su trabajo.
+    // La columna es de `tags`, así que sus políticas ya la cubren — lo que hay
+    // que fijar es la escritura NUEVA, que es poder nombrar jefe.
+    const etiquetaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tags (organization_id, name, color, created_by)
+         values ($1,'Infraestructura','blue',$2) returning id`,
+        [acme.org, ana],
+      );
+      return rows[0]!.id;
+    });
+
+    const anaSeNombra = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("update tags set owner_id = $2 where id = $1", [
+        etiquetaDeAcme,
+        ana,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Ana puede poner jefe a una categoría de su organización", anaSeNombra === 1);
+
+    // El caso que de verdad importa: Bruno es de OTRA organización. Si esto
+    // dejara de fallar, su nombre aparecería como jefe en una pantalla de una
+    // empresa que no es la suya. La base no puede impedirlo con una clave
+    // foránea —solo mira `users`, que no sabe de organizaciones— así que la
+    // frontera aquí la pone RLS sobre la fila de la categoría.
+    const brunoSeCuela = await withUser(bruno, async (db) => {
+      const { rowCount } = await db.query("update tags set owner_id = $2 where id = $1", [
+        etiquetaDeAcme,
+        bruno,
+      ]);
+      return rowCount ?? 0;
+    });
+    check("Bruno, de otra organización, no puede ponerse de jefe de una ajena", brunoSeCuela === 0);
+
+    const siguePuesta = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ owner_id: string | null }>(
+        "select owner_id from tags where id = $1",
+        [etiquetaDeAcme],
+      );
+      return rows[0]?.owner_id;
+    });
+    check("y después del intento la categoría sigue con su jefe de verdad", siguePuesta === ana);
+
     console.log("\nHigiene del esquema");
 
     /**

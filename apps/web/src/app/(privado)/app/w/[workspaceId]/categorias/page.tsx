@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Loader2, Network, Pencil, Users } from "lucide-react";
+import { Check, Loader2, Network, Pencil, UserRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ApiError, type BoardColumn, type Tag, api } from "@/lib/api";
+import { ApiError, type BoardColumn, type OrganizationMember, type Tag, api } from "@/lib/api";
 import { Boton } from "@/components/ui/Boton";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -24,15 +24,20 @@ import { RedDeTrabajo } from "@/components/categorias/RedDeTrabajo";
  * borrar la categoría — y borrarla se lleva por delante su vínculo con todas
  * las tareas y archivos que la llevaban. Perder trabajo por arreglar una letra.
  *
- * QUIÉN ANDA EN CADA UNA: lo que se puede contestar HOY es quién tiene tareas
- * de esa categoría, y cuántas le quedan sin terminar. No es lo mismo que quién
- * ha trabajado en ella —para eso hace falta el registro de actividad, que
- * todavía no existe— y por eso el rótulo dice «quién la lleva» y no «quién ha
- * trabajado». Decirlo mal aquí sería inventarse un dato que nadie ha medido.
+ * DOS COSAS DISTINTAS, Y LA PANTALLA LAS SEPARA:
  *
- * EL JEFE DE RAMA TAMPOCO ESTÁ TODAVÍA: `tags` no tiene columna para él, y eso
- * es una migración. Está delegado como tarea. Mientras tanto, quien más tareas
- * lleva sale primero, que es la aproximación honesta.
+ *  · **Quién lleva la rama** es un dato: la columna `owner_id` de la migración
+ *    0040. Quien lleva un área REPARTE su trabajo, así que puede no tener ni
+ *    una tarea suya y seguir respondiendo por ella.
+ *  · **Quién carga con ella ahora** es una cuenta: quién tiene tareas de esa
+ *    categoría sin terminar. Dice dónde está el trabajo, no quién manda.
+ *
+ * Estuvieron mezcladas bajo un solo rótulo —«quién la lleva», sacado de contar
+ * tareas— y era engañoso: no dejaba distinguir «es tuya» de «te tocó una».
+ *
+ * LO QUE SIGUE SIN PODERSE CONTESTAR AQUÍ es «quién ha trabajado en ella»: eso
+ * pide leer el registro de actividad, y es otra pregunta. Decirlo mal sería
+ * inventarse un dato que nadie ha medido.
  */
 export default function CategoriasPage() {
   const orgId = useOrgId();
@@ -40,6 +45,8 @@ export default function CategoriasPage() {
 
   const etiquetas = useRecurso<{ tags: Tag[] }>(`/organizations/${orgId}/tags`);
   const tablero = useRecurso<{ columns: BoardColumn[] }>(`/workspaces/${workspaceId}/board`);
+  // Hacen falta para poder elegir jefe de rama: la lista de quién puede serlo.
+  const miembros = useRecurso<{ members: OrganizationMember[] }>(`/organizations/${orgId}/members`);
 
   const columnas = tablero.datos?.columns ?? [];
   const lista = etiquetas.datos?.tags ?? [];
@@ -120,6 +127,7 @@ export default function CategoriasPage() {
                 key={tag.id}
                 tag={tag}
                 columnas={columnas}
+                miembros={miembros.datos?.members ?? []}
                 onCambiada={() => void etiquetas.recargar()}
               />
             ))}
@@ -134,10 +142,12 @@ export default function CategoriasPage() {
 function Rama({
   tag,
   columnas,
+  miembros,
   onCambiada,
 }: {
   tag: Tag;
   columnas: BoardColumn[];
+  miembros: OrganizationMember[];
   onCambiada: () => void;
 }) {
   const [editando, setEditando] = useState(false);
@@ -165,6 +175,25 @@ function Rama({
   }
   const gente = [...porPersona.values()].sort((a, b) => b.cuantas - a.cuantas);
   const sinDueno = pendientes.filter((x) => !x.t.assigneeId).length;
+
+  /**
+   * Cambiar quién lleva la rama.
+   *
+   * Se recarga al terminar en vez de tocar el estado a mano: la lista viene
+   * del servidor con el nombre del jefe ya resuelto, y mantener aquí una
+   * segunda copia sería otra cosa que puede quedarse vieja.
+   */
+  const ponerJefe = async (ownerId: string | null) => {
+    setGuardando(true);
+    try {
+      await api.patch(`/tags/${tag.id}`, { ownerId });
+      onCambiada();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo cambiar el jefe de rama");
+    } finally {
+      setGuardando(false);
+    }
+  };
 
   const guardar = async () => {
     const limpio = nombre.trim();
@@ -232,14 +261,44 @@ function Rama({
         </span>
       </div>
 
+      {/* EL JEFE DE RAMA, que es dato y no deducción.
+          Va separado de la lista de abajo a propósito: quien lleva un área
+          REPARTE su trabajo, así que puede no tener ni una tarea suya y seguir
+          respondiendo por ella. Mezclarlo con «quién carga más» —que es lo que
+          se enseñaba antes bajo este mismo rótulo— hacía imposible distinguir
+          «es tuya» de «te tocó una». */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+        <div className="flex items-center gap-1.5">
+          <UserRound size={11} className="text-faint" />
+          <Rotulo>Jefe de rama</Rotulo>
+        </div>
+        <select
+          value={tag.ownerId ?? ""}
+          aria-label={`Jefe de rama de ${tag.name}`}
+          onChange={(e) => void ponerJefe(e.target.value || null)}
+          disabled={guardando}
+          className="rounded-lg border border-line bg-canvas/60 px-2 py-1 text-[11px] text-muted"
+        >
+          <option value="">Sin jefe</option>
+          {miembros.map((m) => (
+            <option key={m.userId} value={m.userId}>
+              {m.displayName}
+            </option>
+          ))}
+        </select>
+        {tag.ownerId && (
+          <span className="text-[11px] text-faint">responde por esta rama</span>
+        )}
+      </div>
+
       {(gente.length > 0 || sinDueno > 0) && (
         <div className="mt-3 border-t border-line pt-3">
           <div className="flex items-center gap-1.5">
             <Users size={11} className="text-faint" />
-            {/* «Quién la lleva» y no «quién ha trabajado»: lo que se puede
-                contestar hoy es quién tiene tareas asignadas sin terminar. Lo
-                segundo pide el registro de actividad, que está delegado. */}
-            <Rotulo>Quién la lleva</Rotulo>
+            {/* Esto es CARGA, no mando: quién tiene ahora tareas sin terminar.
+                Antes ponía «quién la lleva» y era engañoso — quien lleva la
+                rama está arriba, y puede no aparecer aquí. */}
+            <Rotulo>Quién carga con ella ahora</Rotulo>
           </div>
 
           <ul className="mt-2 flex flex-wrap gap-1.5">
