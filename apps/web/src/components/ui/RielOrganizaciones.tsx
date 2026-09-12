@@ -159,8 +159,14 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
       // La trampa está escrita en LO-QUE-HAY-Y-LO-QUE-FALTA.md con su remedio:
       // «si algo tiene que flotar, la posición va en línea».
       style={{ position: "fixed" }}
+      // PEGADO A LA BARRA, NO AL LADO. Eran dos tarjetas flotando separadas, y
+      // se leían como dos cosas: el riel por un lado y la barra por otro. Son
+      // una sola —dónde estás y qué hay aquí— y ahora lo parecen: el riel
+      // redondea solo por la izquierda, no lleva canto derecho, y la barra
+      // empieza justo donde él termina. La costura entre los dos la marca el
+      // borde izquierdo de la barra, que ya estaba.
       className="inset-y-3 left-3 z-30 hidden w-14 flex-col items-center gap-1.5
-        rounded-2xl border border-line bg-raised/60 py-3 backdrop-blur md:flex"
+        rounded-l-2xl border border-r-0 border-line bg-raised/60 py-3 backdrop-blur md:flex"
     >
       {organizaciones.map((o) => (
         <Chapa
