@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, Database, Globe, HardDrive, Layers, Link2, Plus, Trash2, X, Zap } from "lucide-react";
+import { Boxes, Database, FileCode2, Globe, HardDrive, Layers, Link2, Plus, Trash2, X, Zap } from "lucide-react";
 import { useRef, useState } from "react";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -9,15 +9,16 @@ import { Cargando, Fallo } from "@/components/ui/Pagina";
 import { Dialogo, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import type { EnlaceArquitectura, NodoArquitectura, TipoNodoArquitectura } from "@/lib/api";
 import { api, sembrar, useMutacion, useRecurso } from "@/lib/datos";
+import { ImportarTerraform } from "./ImportarTerraform";
 
 /**
  * El diagrama de arquitectura: un lienzo con nodos que se arrastran y se
  * enlazan entre sí.
  *
  * QUÉ PROMETE. Un sitio para dibujar cómo está montado el sistema —un
- * servicio, una base de datos, una cola— y cómo se hablan entre ellos. Traer
- * una arquitectura ya escrita en Terraform queda para después: esto es la
- * pieza a mano.
+ * servicio, una base de datos, una cola— y cómo se hablan entre ellos. Se
+ * puede llenar a mano, pedírselo a un agente por MCP, o traer lo que ya esté
+ * escrito en el Terraform del repositorio del proyecto.
  *
  * LA POSICIÓN SE MUEVE OPTIMISTA Y SE GUARDA AL SOLTAR, no en cada píxel. Un
  * arrastre manda una petición por movimiento del ratón sería decenas de
@@ -58,6 +59,7 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
   const confirmar = useConfirmar();
 
   const [creando, setCreando] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [editando, setEditando] = useState<NodoArquitectura | null>(null);
   const [conectando, setConectando] = useState<NodoArquitectura | null>(null);
   const [enlazandoCon, setEnlazandoCon] = useState<{ origen: NodoArquitectura; destino: NodoArquitectura } | null>(
@@ -176,9 +178,19 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
               ? `Elige con qué conectar «${conectando.name}» — o vuelve a pulsarlo para cancelar`
               : `${nodos.length} nodo${nodos.length === 1 ? "" : "s"} · ${enlaces.length} enlace${enlaces.length === 1 ? "" : "s"}`}
         </Rotulo>
-        <Boton tamano="sm" variante="primario" icono={<Plus size={13} />} onClick={() => setCreando(true)}>
-          Añadir nodo
-        </Boton>
+        <div className="flex shrink-0 items-center gap-2">
+          <Boton
+            tamano="sm"
+            variante="fantasma"
+            icono={<FileCode2 size={13} />}
+            onClick={() => setImportando(true)}
+          >
+            Importar de Terraform
+          </Boton>
+          <Boton tamano="sm" variante="primario" icono={<Plus size={13} />} onClick={() => setCreando(true)}>
+            Añadir nodo
+          </Boton>
+        </div>
       </div>
 
       <div
@@ -191,11 +203,16 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
             <EstadoVacio
               icono={<Boxes size={20} />}
               titulo="Todavía no hay ningún nodo"
-              pista="Un nodo es una caja: un servicio, una base de datos, una cola. Añade el primero y conéctalo con los demás."
+              pista="Un nodo es una caja: un servicio, una base de datos, una cola. Dibújalas a mano, o trae las que ya estén escritas en el Terraform del repositorio."
               accion={
-                <Boton variante="primario" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
-                  Añadir el primero
-                </Boton>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Boton variante="primario" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
+                    Añadir el primero
+                  </Boton>
+                  <Boton variante="fantasma" icono={<FileCode2 size={14} />} onClick={() => setImportando(true)}>
+                    Importar de Terraform
+                  </Boton>
+                </div>
               }
             />
           </div>
@@ -337,6 +354,14 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
           origen={enlazandoCon.origen}
           destino={enlazandoCon.destino}
           onCerrar={() => setEnlazandoCon(null)}
+        />
+      )}
+
+      {importando && (
+        <ImportarTerraform
+          workspaceId={workspaceId}
+          clave={clave}
+          onCerrar={() => setImportando(false)}
         />
       )}
     </div>

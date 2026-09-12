@@ -75,7 +75,6 @@ Todo lo que va dentro de una pantalla.
 |---|---|
 | **Las primitivas que faltan, empezando por el diálogo de confirmación** | Ocho acciones irreversibles se deciden hoy en el cuadro gris del sistema operativo. Es lo que mejor relación esfuerzo/resultado tiene de todo el plan. |
 | **Capa de datos: acabar con los 88 `api.*` y 71 efectos sueltos** | Y escribir de paso la regla de errores: el de un campo junto al campo, el de una acción en un aviso flotante. |
-| **«Te espera» con trabajo real, no avisos** | Hoy lista notificaciones sin leer, que son hechos que ocurrieron, no trabajo pendiente. Con `is_terminal` ya se puede construir de las tareas en columnas no terminales. |
 | **Partir las pantallas grandes** | Ventas tiene 1.273 líneas. Después de la capa de datos, no antes. |
 
 **Archivos del camino B** (nadie más los toca):
@@ -96,6 +95,31 @@ que va dicha aquí: **el camino A no abre un `page.tsx` y el camino B no abre un
 Si una tarea de verdad necesita tocar el otro lado, no se toca: se apunta en la
 tarjeta y se espera. Una tanda bloqueada cuesta una hora; un conflicto de
 fusión en seis archivos cuesta la tarde de los dos.
+
+---
+
+## 2bis. Lo que ya estaba hecho y se retira de la lista
+
+Comprobado contra `mainline` antes de empezar, que es de lo que va este
+documento. Tres cosas de la lista original **ya están fusionadas**:
+
+- **«Te espera» con trabajo real** — hecho en `2f04d83`. Listaba notificaciones
+  sin leer, y un aviso no es una tarea: «te han asignado X» se queda ahí aunque
+  X esté cerrada, porque lo que pasó pasó.
+- **El «+» del riel para entrar con un enlace** — hecho en `9385634`.
+- **El riel marcando dónde estás** — hecho en `381e133`.
+
+Y una que **casi choca**: `006c33e` añadió una barra encima del tablero para
+filtrar por **etiquetas**, y la llamó «categorías». Al mismo tiempo, la 0039
+añadió las **áreas**, que son otra cosa —una sola por tarea, con dueño— y
+también se filtran desde el tablero. Fusionarlo tal cual habría dejado dos
+barras apiladas y dos ejes llamados igual.
+
+Resuelto en la fusión: **una sola barra con los dos grupos**, el de áreas
+rotulado «Área» y el de etiquetas rotulado «Etiquetas» —ya no «Categorías»—. Y
+se cruzan con «y»: entre etiquetas se suma, entre el área y las etiquetas se
+multiplica. Sumarlo todo haría que elegir un área **ensanchara** el tablero,
+que es lo contrario de lo que hace un filtro.
 
 ---
 

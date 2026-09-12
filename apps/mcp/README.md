@@ -29,6 +29,8 @@ apuntes también en la lista que comprueba el registro.
 | `ver_tarea` | Una tarea con su detalle, y sus imágenes adjuntas incrustadas. |
 | `ver_arquitectura` | Los componentes del diagrama de un espacio y cómo se conectan. |
 | `que_ha_pasado` | La historia de un espacio o de la organización: quién creó, movió, cerró o asignó qué, y cuándo. Agrupada por día y en el orden en que ocurrió. Distingue lo que hizo una persona de lo que hizo su asistente. |
+| `ver_entornos` | Dónde corre lo que escribe el equipo y cómo quedó el último despliegue. Dice cuáles no pueden leer nada por faltarles repositorio o token. |
+| `sincronizar_entornos` | Vuelve a preguntarle a GitHub por los despliegues, sin esperar a la pasada automática. Va aquí aunque escriba: lo que guarda es un reflejo de lo que dijo el proveedor. |
 
 ### Escribir
 
@@ -47,6 +49,7 @@ borrando deja trabajo perdido.
 | `marcar_hecha` | Cierra una tarea y, si se le pasa, deja en ella la prueba de que se hizo —el PR, el commit, el enlace o una nota—. Las dos cosas caen juntas. |
 | `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |
 | `dibujar_arquitectura` | Vuelca un diagrama entero —componentes y conexiones— en un espacio. Coloca las cajas ella: no hay que darle coordenadas. Reutiliza lo que ya exista con ese nombre en vez de duplicarlo. |
+| `crear_entorno` | Crea un entorno y lo engancha a un repositorio de GitHub, leyendo sus despliegues en la misma llamada. Si al espacio le falta el token, lo crea igual y **lo dice**: sin token no sincroniza nunca, y callarlo deja esperando despliegues que no llegan. |
 
 ## Dos maneras de conectarlo, y cuál elegir
 
@@ -58,10 +61,31 @@ borrando deja trabajo perdido.
 | Para quién | Cualquiera del equipo | Quien ya desarrolla aquí |
 
 **El remoto es el camino normal.** Se pega
-`https://api.hytrex.co/mcp` en Claude → Connectors → Add custom connector, y
-Claude hace el resto: descubre el servidor de autorización, se registra, y
-manda a DevUP a pedir el consentimiento. No hay token que copiar ni archivo
-que editar.
+
+    https://api-production-7b95.up.railway.app/mcp
+
+en Claude → Conectores → Añadir conector personalizado, y Claude hace el resto:
+descubre el servidor de autorización, se registra, y manda a DevUP a pedir el
+consentimiento. No hay token que copiar ni archivo que editar.
+
+**La URL es la fea a propósito.** `api.hytrex.co` todavía no sirve: sus
+certificados se quedaron atascados en Railway con el DNS ya correcto, y todo
+apunta mientras tanto a `*.up.railway.app` — está contado en
+`docs/LO-QUE-HAY-Y-LO-QUE-FALTA.md`. El día que el dominio bonito emita, se
+cambia aquí y en el `.mcp.json` de la raíz.
+
+**Y es el que usa el repositorio.** El `.mcp.json` de la raíz apunta a esta
+misma URL, así que quien abra el proyecto en Claude Code tiene las herramientas
+sin instalar ni configurar nada: las autoriza una vez con su propia cuenta y
+listo. Antes arrancaba el paquete local, que exige un archivo de token que casi
+nadie tiene creado — y el síntoma era «no hay token con el que entrar a DevUP»
+sin que nada dijera qué token ni de dónde.
+
+> **Ojo, y es deliberado:** esa URL es **producción**. Una sesión de desarrollo
+> que use estas herramientas escribe en el tablero de verdad. Es lo que se
+> quiere para trabajar, pero si lo que hace falta es probar la puerta contra
+> una API local, entonces sí es el camino de abajo — y entonces el token local
+> tiene sentido.
 
 Lo sirve `apps/api` (`src/routes/mcp.ts`), con las herramientas de este mismo
 paquete —la lista está en `src/registro.ts` y no se escribe dos veces— y hace

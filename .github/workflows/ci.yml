@@ -106,6 +106,20 @@ jobs:
         # hay para esto.
         run: npm run test:migraciones
 
+      - name: El lector de Terraform
+        # Lo que se prueba aquí no es que lea bien, es que NO lea de más: un
+        # recurso citado en un comentario no es una dependencia, y un script
+        # dentro de un heredoc lleva llaves que descuadrarían el conteo de
+        # bloques y harían desaparecer medio archivo sin que nada se queje.
+        # Un diagrama que se cree completo engaña más que no tenerlo.
+        run: npm run test:terraform
+
+      - name: Dónde va cada caja del diagrama
+        # Funciones puras, sin base ni servidor. Lo que fijan es que la
+        # disposición salga legible y que un ciclo no cuelgue el bucle: un
+        # diagrama con un ciclo es raro, pero no es motivo para no dibujarlo.
+        run: npm run test:arquitectura
+
       - name: El diagnóstico de integraciones
         # Lo que más importa aquí no es que acierte, es que se calle: una
         # recomendación equivocada gasta la confianza de todas las siguientes.
@@ -129,6 +143,14 @@ jobs:
         # la variable de entorno, y resolver la organizacion sin pedirle un
         # uuid al modelo. Las tres se rompen en silencio.
         run: npm run test:mcp
+
+      - name: Lo que dice el muñeco del agente
+        # No necesita base ni servidor: es un mapa en memoria con caducidad.
+        # Lo que fija son dos afirmaciones sobre la verdad de lo que se pinta
+        # en la sala —que lo declarado gana a lo deducido, y que todo
+        # caduca—. Si la segunda se rompe, el muñeco sigue diciendo que
+        # trabaja un agente que se murió hace media hora, y nada se queja.
+        run: npm run test:agente
 
       - name: La lógica pura de la web
         # Las primeras pruebas de `apps/web`, y no son un trámite: la regla de

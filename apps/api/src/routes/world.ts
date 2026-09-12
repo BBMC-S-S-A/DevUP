@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
+import { anotarLatido, faenaDelAgente } from "../realtime/agente.js";
 import { HttpError, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
 
 const uuid = z.string().uuid();
@@ -196,8 +197,40 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
           files: Number(c.files),
           lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
         })),
+        // La faena del agente de QUIEN PREGUNTA, no la del espacio: el agente
+        // es Claude conectado con una sesión concreta. Dos personas en la
+        // misma sala ven el mismo muñeco diciendo cosas distintas, y eso es lo
+        // correcto — la frase de uno puede llevar el nombre de un cliente.
+        //
+        // Viaja aquí y no por una ruta propia porque el mundo ya sondea esto:
+        // una ruta más serían dos relojes pidiendo lo mismo a la vez.
+        agente: faenaDelAgente(userId),
       };
     });
+  });
+
+  /**
+   * El latido del agente: «sigo aquí, y ando en esto».
+   *
+   * NO GUARDA NADA EN LA BASE, a propósito. Ver `realtime/agente.ts` para el
+   * porqué entero; en corto: un estado que hay que borrar acaba mintiendo.
+   *
+   * La frase se acota en largo y se recorta porque se pinta dentro de una
+   * burbuja de ancho fijo en DevVerse: un párrafo no cabría y la sala quedaría
+   * ilegible. El texto se toma tal cual lo escribe el agente —el cliente lo
+   * dibuja en un lienzo, no lo interpreta como HTML.
+   */
+  app.post("/me/agente/latido", async (request) => {
+    const userId = requireUser(request);
+    const { origen, frase } = parseBody(
+      z.object({
+        origen: z.enum(["declarada", "herramienta"]),
+        frase: z.string().trim().min(1).max(120),
+      }),
+      request.body,
+    );
+    anotarLatido(userId, origen, frase);
+    return { anotado: true };
   });
 
   /** Volver al amueblado deducido del nombre del canal. */

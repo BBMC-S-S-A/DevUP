@@ -25,6 +25,7 @@ Se actualiza al terminar cada punto. Lo que no está aquí, no se está haciendo
 | 11 | **El perfil, que no existía** — nombre y cargo | **Hecho** |
 | 12 | **Barrido de rutas muertas** — siete, y tres eran agujeros | **Hecho** |
 | 13 | Una superficie por nivel, y el acento reservado | Después |
+| 14 | **La sala del agente en DevVerse** — que su trabajo se vea | **Hecho** |
 
 **Cómo se verifica desde aquí.** No hay Docker ni Postgres en el entorno donde
 se escribe esto, así que `test:rls` no se puede correr en local — pero **sí
@@ -274,6 +275,38 @@ Las otras tres eran agujeros de verdad:
 **Vale la pena repetir este barrido de vez en cuando.** Una ruta sin llamantes
 casi nunca es código de más: suele ser una función terminada a la que le falta
 la puerta.
+
+---
+
+## 14 · La sala del agente en DevVerse
+
+Desde que la puerta MCP está viva, Claude escribe en el tablero, busca y dibuja
+arquitectura — y en DevVerse eso era **invisible**: la oficina solo mostraba
+personas. Un canal llamado `agente-ia` tiene ahora su sala, con un muñeco que
+dice en qué anda o, si está libre, pregunta.
+
+**La sala es un canal de verdad.** Que una zona sea siempre la proyección de un
+canal está grabado cuatro veces en el proyecto, y la 0007 ya dejó dicho que
+ante una zona sin canal «la pregunta correcta no es *quito el NOT NULL*». Por
+eso **no hay migración ni una línea de SQL**: se crea el canal desde la
+interfaz y `ensure_world_room` coloca y amuebla la zona sola.
+
+**La frase es mixta a propósito.** El agente puede declararla con la
+herramienta nueva `estoy_haciendo`; si no declara nada, se deduce del nombre de
+la última herramienta que usó. Deducir solo deja frases genéricas, y depender
+de que el modelo declare deja al muñeco mudo cuando no colabora.
+
+**El estado vive en memoria y caduca**, con el criterio que `hub.ts` ya defiende
+para el estado en vivo: esto se limpia solo, y una fila tendría que borrarla
+alguien — nadie borra «estaba migrando la base» cuando el proceso del agente se
+muere a mitad. Hereda la contrapartida del hub: con dos instancias de la API no
+se comparte.
+
+**Qué falta.** `drawAvatar` dibuja una persona y no hay ningún sprite que no lo
+sea, así que por ahora lleva el avatar gris de reserva y el cartel «Agente IA».
+Un sprite propio es trabajo de dibujo en `atlas.ts`. Y sigue pendiente lo de
+siempre en este plan: **nadie lo ha visto pintado** — hay que crear el canal
+`agente-ia` en un espacio y entrar a mirar.
 
 ---
 

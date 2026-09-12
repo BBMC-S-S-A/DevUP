@@ -72,6 +72,33 @@ async function repoConCredencial(
   };
 }
 
+/**
+ * El repositorio SIN su credencial, a propósito.
+ *
+ * PARA QUIEN NO DEBE LEER NADA PRIVADO. Importar la arquitectura de un
+ * Terraform se hace con el enlace y nada más: no descifra el token de la
+ * organización ni lo manda a GitHub. Pedir el secreto «por si acaso» y no
+ * usarlo sería la forma de que alguien lo use mañana sin darse cuenta, así que
+ * esta consulta ni lo trae.
+ *
+ * Devuelve también de qué espacio es el repositorio: RLS deja ver los dos a
+ * quien pertenece a los dos, y traerse el Terraform de un proyecto al diagrama
+ * de otro es justo la mezcla que 0035 vino a impedir. Ver la ruta de importar
+ * en `arquitectura.ts`.
+ */
+export async function repoSinCredencial(
+  db: Db,
+  repoId: string,
+): Promise<{ fullName: string; workspaceId: string | null }> {
+  const { rows } = await db.query<{ full_name: string; workspace_id: string | null }>(
+    "select full_name, workspace_id from github_repos where id = $1",
+    [repoId],
+  );
+  const fila = rows[0];
+  if (!fila) throw notFound("repositorio no encontrado");
+  return { fullName: fila.full_name, workspaceId: fila.workspace_id };
+}
+
 export async function githubRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 

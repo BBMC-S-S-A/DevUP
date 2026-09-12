@@ -1,5 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ZodObject, ZodRawShape, infer as Inferir } from "zod";
 import { ErrorDeApi, type ClienteApi } from "./api.js";
+import { FRASES_POR_HERRAMIENTA } from "./frases.js";
 import {
   descripcionDibujarArquitectura,
   descripcionVerArquitectura,
@@ -14,6 +16,22 @@ import {
   esquemaQueHaPasado,
   queHaPasado,
 } from "./herramientas/historia.js";
+import {
+  crearEntorno,
+  descripcionCrearEntorno,
+  descripcionSincronizarEntornos,
+  descripcionVerEntornos,
+  esquemaCrearEntorno,
+  esquemaSincronizarEntornos,
+  esquemaVerEntornos,
+  sincronizarEntornos,
+  verEntornos,
+} from "./herramientas/entornos.js";
+import {
+  descripcionEstoyHaciendo,
+  esquemaEstoyHaciendo,
+  estoyHaciendo,
+} from "./herramientas/estado.js";
 import {
   descripcionMisTareas,
   descripcionVerTablero,
@@ -77,67 +95,120 @@ function comoError(fallo: unknown) {
   return { content: [{ type: "text" as const, text: `No pude: ${mensaje}` }] };
 }
 
-export function registrarHerramientas(
-  servidor: McpServer,
-  obtenerCliente: () => ClienteApi,
-): void {
-  const herramienta = <E>(hacer: (cliente: ClienteApi, entrada: E) => Promise<Contenido[]>) =>
-    async (entrada: E) => {
+/**
+ * El latido que hace que el muñeco de DevVerse diga algo.
+ *
+ * SIN `await`, Y CON EL FALLO TRAGADO A PROPÓSITO. Esto es decoración: que no
+ * se pueda pintar una frase no puede retrasar ni tumbar el trabajo de verdad.
+ * Si la API no contesta, el muñeco dirá que está libre — que es exactamente
+ * lo que hay que decir cuando no se sabe.
+ *
+ * Va aquí, en el envoltorio común, porque es el único sitio por el que pasan
+ * todas las herramientas y los dos transportes. Ponerlo en cada herramienta
+ * serían diez copias y la siguiente que alguien añada se olvidaría.
+ */
+function latir(cliente: ClienteApi, nombre: string): void {
+  const frase = FRASES_POR_HERRAMIENTA[nombre];
+  if (!frase) return;
+  void cliente.post("/me/agente/latido", { origen: "herramienta", frase }).catch(() => {});
+}
+
+export function registrarHerramientas(servidor: McpServer, obtenerCliente: () => ClienteApi): void {
+  /**
+   * Registra una herramienta con su envoltorio.
+   *
+   * El nombre se escribe UNA vez: es también la clave con la que se busca su
+   * frase para DevVerse, y dos copias del mismo nombre es una copia que puede
+   * descuadrar sin que nada se queje.
+   */
+  const registrar = <S extends ZodRawShape>(
+    nombre: string,
+    descripcion: string,
+    esquema: S,
+    hacer: (cliente: ClienteApi, entrada: Inferir<ZodObject<S>>) => Promise<Contenido[]>,
+  ): void => {
+    const envoltorio = async (entrada: Inferir<ZodObject<S>>) => {
+      const cliente = obtenerCliente();
       try {
-        return { content: await hacer(obtenerCliente(), entrada) };
+        latir(cliente, nombre);
+        return { content: await hacer(cliente, entrada) };
       } catch (fallo) {
         return comoError(fallo);
       }
     };
+    // El único `as` de todo esto, y va aquí a propósito. `servidor.tool` tiene
+    // seis sobrecargas y ninguna deja atar `S` hasta el tipo de su callback,
+    // así que TypeScript resuelve el parámetro como `ZodRawShape` a secas.
+    // Puesto en este sitio, los once registros de abajo conservan la
+    // inferencia entera: si un esquema y su función no encajan, salta ahí.
+    servidor.tool(nombre, descripcion, esquema, envoltorio as never);
+  };
 
-  servidor.tool(
-    "buscar",
-    descripcionBuscar,
-    esquemaBuscar,
-    herramienta(async (cliente, entrada) => [
-      { type: "text" as const, text: await buscar(cliente, entrada) },
-    ]),
+  registrar("buscar", descripcionBuscar, esquemaBuscar, async (cliente, entrada) => [
+    { type: "text" as const, text: await buscar(cliente, entrada) },
+  ]);
+
+  registrar("mis_tareas", descripcionMisTareas, esquemaMisTareas, (cliente, entrada) =>
+    misTareas(cliente, entrada),
   );
 
-  servidor.tool(
-    "mis_tareas",
-    descripcionMisTareas,
-    esquemaMisTareas,
-    herramienta((cliente, entrada) => misTareas(cliente, entrada)),
+  registrar("ver_tablero", descripcionVerTablero, esquemaVerTablero, async (cliente, entrada) => [
+    { type: "text" as const, text: await verTablero(cliente, entrada) },
+  ]);
+
+  registrar("ver_tarea", descripcionVerTarea, esquemaVerTarea, (cliente, entrada) =>
+    verTarea(cliente, entrada),
   );
 
-  servidor.tool(
-    "ver_tablero",
-    descripcionVerTablero,
-    esquemaVerTablero,
-    herramienta(async (cliente, entrada) => [
-      { type: "text" as const, text: await verTablero(cliente, entrada) },
-    ]),
-  );
-
-  servidor.tool(
-    "ver_tarea",
-    descripcionVerTarea,
-    esquemaVerTarea,
-    herramienta((cliente, entrada) => verTarea(cliente, entrada)),
-  );
-
-  servidor.tool(
+  registrar(
     "que_ha_pasado",
     descripcionQueHaPasado,
     esquemaQueHaPasado,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await queHaPasado(cliente, entrada) },
-    ]),
+    ],
   );
 
-  servidor.tool(
+  registrar(
     "ver_arquitectura",
     descripcionVerArquitectura,
     esquemaVerArquitectura,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await verArquitectura(cliente, entrada) },
-    ]),
+    ],
+  );
+
+  /**
+   * La única que no toca el proyecto: solo dice en qué anda el agente, para
+   * que el muñeco de la sala «Agente IA» lo cuente. Ver `herramientas/estado.ts`.
+   */
+  registrar(
+    "estoy_haciendo",
+    descripcionEstoyHaciendo,
+    esquemaEstoyHaciendo,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await estoyHaciendo(cliente, entrada) },
+    ],
+  );
+
+  registrar("ver_entornos", descripcionVerEntornos, esquemaVerEntornos, async (cliente, entrada) => [
+    { type: "text" as const, text: await verEntornos(cliente, entrada) },
+  ]);
+
+  /**
+   * Sincronizar va con las de leer aunque escriba.
+   *
+   * Lo que guarda es un reflejo de lo que dijo GitHub, no una decisión de
+   * nadie: no crea nada que no existiera ni cambia lo que el equipo puso a
+   * mano. Volver a preguntar dos veces deja el mismo resultado.
+   */
+  registrar(
+    "sincronizar_entornos",
+    descripcionSincronizarEntornos,
+    esquemaSincronizarEntornos,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await sincronizarEntornos(cliente, entrada) },
+    ],
   );
 
   // --- Las que escriben -----------------------------------------------------
@@ -149,49 +220,30 @@ export function registrarHerramientas(
   // No hay ninguna de borrar, y es deliberado: equivocarse creando deja
   // trabajo que revisar, equivocarse borrando deja trabajo perdido.
 
-  servidor.tool(
-    "crear_tarea",
-    descripcionCrearTarea,
-    esquemaCrearTarea,
-    herramienta(async (cliente, entrada) => [
-      { type: "text" as const, text: await crearTarea(cliente, entrada) },
-    ]),
-  );
+  registrar("crear_tarea", descripcionCrearTarea, esquemaCrearTarea, async (cliente, entrada) => [
+    { type: "text" as const, text: await crearTarea(cliente, entrada) },
+  ]);
 
-  servidor.tool(
-    "crear_area",
-    descripcionCrearArea,
-    esquemaCrearArea,
-    herramienta(async (cliente, entrada) => [
-      { type: "text" as const, text: await crearArea(cliente, entrada) },
-    ]),
-  );
-
-  servidor.tool(
+  registrar(
     "crear_columna",
     descripcionCrearColumna,
     esquemaCrearColumna,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await crearColumna(cliente, entrada) },
-    ]),
+    ],
   );
 
-  servidor.tool(
-    "mover_tarea",
-    descripcionMoverTarea,
-    esquemaMoverTarea,
-    herramienta(async (cliente, entrada) => [
-      { type: "text" as const, text: await moverTarea(cliente, entrada) },
-    ]),
-  );
+  registrar("crear_area", descripcionCrearArea, esquemaCrearArea, async (cliente, entrada) => [
+    { type: "text" as const, text: await crearArea(cliente, entrada) },
+  ]);
 
-  servidor.tool(
+  registrar(
     "enlazar_rama",
     descripcionEnlazarRama,
     esquemaEnlazarRama,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await enlazarRama(cliente, entrada) },
-    ]),
+    ],
   );
 
   /**
@@ -204,22 +256,26 @@ export function registrarHerramientas(
    * prueba: una afirmación con su PR debajo se puede comprobar en diez
    * segundos; una sola, hay que creérsela.
    */
-  servidor.tool(
+  registrar(
     "marcar_hecha",
     descripcionMarcarHecha,
     esquemaMarcarHecha,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await marcarHecha(cliente, entrada) },
-    ]),
+    ],
   );
 
-  servidor.tool(
+  registrar("mover_tarea", descripcionMoverTarea, esquemaMoverTarea, async (cliente, entrada) => [
+    { type: "text" as const, text: await moverTarea(cliente, entrada) },
+  ]);
+
+  registrar(
     "actualizar_tarea",
     descripcionActualizarTarea,
     esquemaActualizarTarea,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await actualizarTarea(cliente, entrada) },
-    ]),
+    ],
   );
 
   /**
@@ -229,12 +285,23 @@ export function registrarHerramientas(
    * lienzo con cajas de más —que una persona quita de una en una— y no trabajo
    * perdido. Coloca las cajas ella: ver `herramientas/arquitectura.ts`.
    */
-  servidor.tool(
+  registrar(
     "dibujar_arquitectura",
     descripcionDibujarArquitectura,
     esquemaDibujarArquitectura,
-    herramienta(async (cliente, entrada) => [
+    async (cliente, entrada) => [
       { type: "text" as const, text: await dibujarArquitectura(cliente, entrada) },
-    ]),
+    ],
   );
+
+  /**
+   * Crear un entorno no es pintar una caja: si lleva repositorio, se pone a
+   * leer despliegues de GitHub de verdad y gasta cupo de su API. Por eso la
+   * herramienta avisa cuando no va a poder leer nada —sin token no sincroniza
+   * jamás, y callarlo deja a alguien esperando despliegues que no llegan— y
+   * por eso no hay ninguna de borrar: un entorno se lleva consigo su historia.
+   */
+  registrar("crear_entorno", descripcionCrearEntorno, esquemaCrearEntorno, async (cliente, entrada) => [
+    { type: "text" as const, text: await crearEntorno(cliente, entrada) },
+  ]);
 }

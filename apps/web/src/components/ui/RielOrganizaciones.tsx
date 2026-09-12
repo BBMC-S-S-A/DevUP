@@ -1,10 +1,11 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Building2, KeyRound, LayoutGrid, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { type Organization, type Workspace, api } from "@/lib/api";
+import { EntrarConCodigo } from "./EntrarConCodigo";
 
 /**
  * Si hay riel puesto, para que el armazón se aparte lo justo.
@@ -54,8 +55,19 @@ export function ProveedorRiel({ children }: { children: ReactNode }) {
 function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => void }) {
   const pathname = usePathname();
   const [organizaciones, setOrganizaciones] = useState<Organization[]>([]);
-  /** Por organización, a dónde lleva su chapa. Se resuelve una vez. */
-  const [destinos, setDestinos] = useState<Record<string, string>>({});
+  /**
+   * De qué organización es cada espacio de trabajo.
+   *
+   * ES LO QUE ARREGLA QUE EL RIEL PARECIERA MUERTO. La chapa activa se marcaba
+   * solo con `/app/o/<id>` en la URL, y bajo `/app/w/<id>` —que es donde se
+   * está casi siempre— no coincidía ninguna: se trabajaba una hora entera con
+   * el riel sin una sola marca, como si no supiera dónde estás.
+   *
+   * No hace falta contexto nuevo para saberlo: el riel ya pide los espacios de
+   * cada organización para otra cosa, así que de paso se apunta a quién
+   * pertenece cada uno.
+   */
+  const [orgDeEspacio, setOrgDeEspacio] = useState<Record<string, string>>({});
   const [logos, setLogos] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -68,22 +80,17 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
       if (!vigente) return;
       setOrganizaciones(organizations);
 
-      // El destino de cada chapa es su primer espacio de trabajo, no la
-      // organización: entrar a una organización para elegir espacio es
-      // exactamente el salto de dos pasos que este riel viene a quitar. Si no
-      // tiene ninguno, cae a la organización, que es donde se crea el primero.
-      const resueltos: Record<string, string> = {};
+      // A quién pertenece cada espacio, para saber qué chapa marcar.
+      const deQuien: Record<string, string> = {};
       await Promise.all(
         organizations.map(async (o) => {
           const { workspaces } = await api
             .get<{ workspaces: Workspace[] }>(`/organizations/${o.id}/workspaces`)
             .catch(() => ({ workspaces: [] as Workspace[] }));
-          resueltos[o.id] = workspaces[0]
-            ? `/app/w/${workspaces[0].id}`
-            : `/app/o/${o.id}/ventas`;
+          for (const w of workspaces) deQuien[w.id] = o.id;
         }),
       );
-      if (vigente) setDestinos(resueltos);
+      if (vigente) setOrgDeEspacio(deQuien);
 
       // Los logos van después y por separado: son una petición por
       // organización que puede fallar sin impedir nada. Sin ellos queda la
@@ -124,6 +131,12 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
     onVisible(visible);
   }, [visible, onVisible]);
 
+  // Qué organización se está mirando: la de la URL si es de organización, y si
+  // no, la del espacio en el que se está.
+  const enEspacio = pathname.match(/^\/app\/w\/([^/]+)/)?.[1];
+  const enOrganizacion = pathname.match(/^\/app\/o\/([^/]+)/)?.[1];
+  const activaEs = enOrganizacion ?? (enEspacio ? orgDeEspacio[enEspacio] : undefined);
+
   if (!visible) return null;
 
   return (
@@ -154,25 +167,19 @@ function RielOrganizaciones({ onVisible }: { onVisible: (visible: boolean) => vo
           key={o.id}
           organizacion={o}
           logo={logos[o.id]}
-          href={destinos[o.id] ?? `/app/o/${o.id}/ventas`}
-          // Activa por la organización que hay en la URL. Bajo `/app/w/…` no
-          // está, así que ahí no se marca ninguna: marcar la equivocada sería
-          // peor que no marcar, y la cabecera de la barra ya dice dónde estás.
-          activa={pathname.startsWith(`/app/o/${o.id}`)}
+          // A la organización, no a uno de sus espacios. Antes saltaba al
+          // primero que tuviera, y eso está mal cuando hay varios: elegir por
+          // alguien cuál abre es peor que el paso de más que se ahorraba.
+          // Ahora pulsar una organización enseña LO QUE TIENE, y desde ahí se
+          // entra al espacio que toque.
+          href={`/app/o/${o.id}`}
+          activa={activaEs === o.id}
         />
       ))}
 
       <span aria-hidden className="my-1 h-px w-6 bg-line-strong" />
 
-      <Link
-        href="/app/organizaciones"
-        title="Todas las organizaciones"
-        aria-label="Todas las organizaciones"
-        className="presionable grid size-10 place-items-center rounded-xl border border-dashed
-          border-line-strong text-faint transition-colors hover:border-accent hover:text-accent-bright"
-      >
-        <Plus size={16} />
-      </Link>
+      <Mas />
     </nav>
   );
 }
@@ -221,5 +228,96 @@ function Chapa({
         </span>
       )}
     </Link>
+  );
+}
+
+/**
+ * El «+» del riel: crear, o entrar con lo que te hayan pasado.
+ *
+ * ANTES ERA UN ENLACE A LA LISTA, y eso dejaba fuera el caso que de verdad
+ * cuesta: alguien te manda una invitación y no hay ningún sitio evidente donde
+ * meterla. Había que abrir el enlace exacto —si aún lo tienes a mano— o
+ * rendirse. Ahora el menú tiene las dos salidas: crear una, o entrar a una que
+ * ya existe.
+ *
+ * ES UN MENÚ Y NO TRES BOTONES en el riel. El riel es la lista de dónde puedes
+ * estar; llenarlo de acciones lo convierte en una barra de herramientas y deja
+ * de leerse de un vistazo, que es lo único que tiene que hacer bien.
+ */
+function Mas() {
+  const [abierto, setAbierto] = useState(false);
+  const [codigo, setCodigo] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+
+  // Cerrar al pulsar fuera. Sin esto el menú se queda abierto tapando el riel
+  // mientras se navega.
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (evento: MouseEvent) => {
+      if (!caja.current?.contains(evento.target as Node)) setAbierto(false);
+    };
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, [abierto]);
+
+  return (
+    <div ref={caja} className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((a) => !a)}
+        title="Crear o entrar a una organización"
+        aria-label="Crear o entrar a una organización"
+        aria-expanded={abierto}
+        aria-haspopup="menu"
+        className="presionable grid size-10 place-items-center rounded-xl border border-dashed
+          border-line-strong text-faint transition-colors hover:border-accent hover:text-accent-bright"
+      >
+        <Plus size={16} />
+      </button>
+
+      {abierto && (
+        <div
+          role="menu"
+          // A la derecha del riel y no debajo: debajo se saldría de la pantalla
+          // cuando el riel está cerca del borde inferior, que es donde vive
+          // este botón.
+          className="devup-emerge cristal absolute bottom-0 left-full z-40 ml-2 w-56 overflow-hidden rounded-xl p-1"
+        >
+          <Link
+            href="/app/organizaciones"
+            onClick={() => setAbierto(false)}
+            className="presionable flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-ink hover:bg-raised/70"
+          >
+            <Building2 size={14} className="shrink-0 text-faint" />
+            Nueva organización
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAbierto(false);
+              setCodigo(true);
+            }}
+            className="presionable flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-ink hover:bg-raised/70"
+          >
+            <KeyRound size={14} className="shrink-0 text-faint" />
+            Entrar con un código
+          </button>
+
+          <span aria-hidden className="my-1 block h-px bg-line" />
+
+          <Link
+            href="/app/organizaciones"
+            onClick={() => setAbierto(false)}
+            className="presionable flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-muted hover:bg-raised/70"
+          >
+            <LayoutGrid size={14} className="shrink-0 text-faint" />
+            Todas las organizaciones
+          </Link>
+        </div>
+      )}
+
+      {codigo && <EntrarConCodigo onCerrar={() => setCodigo(false)} />}
+    </div>
   );
 }

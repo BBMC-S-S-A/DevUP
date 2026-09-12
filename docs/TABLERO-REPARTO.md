@@ -134,9 +134,6 @@ qué sin preguntar.
 - **Capa de datos: acabar con los 88 `api.*` y 71 efectos sueltos** — Y escribir
   de paso la regla de errores: el de un campo junto al campo, el de una acción
   en un aviso flotante.
-- **«Te espera» con trabajo real, no avisos** — Hoy lista notificaciones sin
-  leer, que son hechos que ocurrieron, no trabajo pendiente. Con `is_terminal`
-  ya se puede construir de las tareas en columnas no terminales.
 - **Partir las pantallas grandes** — Ventas tiene 1.273 líneas. Después de la
   capa de datos, no antes.
 

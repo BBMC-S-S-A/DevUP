@@ -321,6 +321,8 @@ export type OrganizationMember = {
   /** A qué se dedica, escrito por la propia persona en su perfil. */
   title: string | null;
   presence: Presencia;
+  /** Desde cuándo está en la organización. La API ya lo devolvía. */
+  joinedAt: string;
 };
 
 export type OrganizationLink = {

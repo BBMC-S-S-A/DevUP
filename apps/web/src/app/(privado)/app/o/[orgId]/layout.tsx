@@ -208,9 +208,9 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             <GrupoRotulo titulo="Espacios de trabajo" contador={workspaces.length} />
             {workspaces.length === 0 ? (
               <p className="px-3 py-1.5 text-[11px] leading-relaxed text-faint">
-                Todavía no hay ninguno. Se crean desde{" "}
-                <Link href="/app/organizaciones" className="text-accent hover:underline">
-                  organizaciones
+                Todavía no hay ninguno. Se crean{" "}
+                <Link href={`/app/o/${orgId}`} className="text-accent hover:underline">
+                  aquí mismo
                 </Link>
                 .
               </p>
