@@ -392,7 +392,18 @@ export function TaskBoard({
           accion={<NewColumn workspaceId={workspaceId} onCreated={load} compacto />}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-2">
+        /* `snap-x snap-mandatory`: al desplazar a lo ancho se aterriza en el
+           canto de una columna, no a mitad de dos. En pantalla ancha no cambia
+           nada —caben todas y no hay desplazamiento—; en una estrecha es la
+           diferencia entre pasar de columna y quedarse leyendo dos mitades.
+
+           NO SE TOCA EL ANCHO de la columna, y lo comprobé antes de dejarlo:
+           19rem sobre una ventana de 375 px deja la columna entera más 55 px de
+           la siguiente asomando, que es justo lo que hace falta —una columna
+           legible y la señal de que hay más—. Y por debajo de 768 px la barra
+           lateral ya se vuelve cajón, así que el tablero recibe la pantalla
+           completa. */
+        <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
           {visibles.map((column, indice) => {
             const sobrevolada = dropTarget === column.id;
 
@@ -420,7 +431,7 @@ export function TaskBoard({
                   event.preventDefault();
                   void drop(column.id, null);
                 }}
-                className="devup-entrada relative flex h-full w-[19rem] shrink-0 flex-col overflow-hidden"
+                className="devup-entrada relative flex h-full w-[19rem] shrink-0 snap-start flex-col overflow-hidden"
                 style={{ "--retraso": `${Math.min(indice, 8) * 50}ms` } as CSSProperties}
               >
                 {/* El lavado de acento sobre toda la columna al sobrevolarla:
