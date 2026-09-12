@@ -16,6 +16,7 @@
     "test:migraciones": "tsx src/connectors/migraciones.test.ts",
     "test:terraform": "tsx src/connectors/terraform.test.ts",
     "test:repositorio": "tsx src/connectors/repositorio.test.ts",
+    "test:codigo": "tsx src/lib/codigo.test.ts",
     "test:arquitectura": "tsx src/connectors/arquitectura.test.ts",
     "test:world": "tsx src/realtime/world.test.ts",
     "test:agente": "tsx src/realtime/agente.test.ts",

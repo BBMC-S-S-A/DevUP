@@ -5,6 +5,7 @@ import { requireSession } from "../auth/plugin.js";
 import { hashPassword } from "../auth/password.js";
 import { type Db, withUser } from "../db/pool.js";
 import { googleConfigurado } from "../auth/google.js";
+import { normalizarCodigo, nuevoCodigo } from "../lib/codigo.js";
 import { env } from "../env.js";
 import {
   badRequest,
@@ -22,6 +23,16 @@ const correo = z.string().trim().toLowerCase().email().max(254);
 const HORA = 3600_000;
 const CADUCIDAD = {
   invitacion: 7 * 24 * HORA,
+  /**
+   * El código corto vive MUCHO menos que el enlace, y no es una manía.
+   *
+   * Ocho caracteres se prueban a lo bruto de una forma que un token de 32
+   * bytes no. Se dicta en el momento —por teléfono, en una reunión— y se usa
+   * en el momento, así que un día es de sobra para su trabajo y recorta la
+   * ventana a la centésima parte de la del enlace. Quien lo pierda, que
+   * vuelva a invitar: el nuevo sustituye al anterior.
+   */
+  codigo: 24 * HORA,
   verificacion: 24 * HORA,
   recuperacion: 1 * HORA,
 } as const;
@@ -36,6 +47,25 @@ const CADUCIDAD = {
 function nuevoToken(): { token: string; hash: string } {
   const token = randomBytes(32).toString("base64url");
   return { token, hash: createHash("sha256").update(token).digest("hex") };
+}
+
+/**
+ * El hash con el que se busca una invitación, venga como venga.
+ *
+ * Quien recibe una invitación pega lo que le pasaron: la URL entera, el
+ * token suelto, o el código corto dictado por teléfono —con guion o sin él,
+ * en minúsculas—. Las tres cosas acaban aquí, y esta función decide si lo
+ * que llega es un código (y entonces se normaliza antes de resumir) o un
+ * token (que va tal cual).
+ *
+ * Vive en un solo sitio porque lo usan la ruta de mirar y la de canjear, y
+ * si divergieran se podría CONSULTAR una invitación que luego no se puede
+ * aceptar, que es la peor forma de fallar: la pantalla enseña la
+ * organización correcta y el botón no funciona.
+ */
+export function hashDeInvitacion(entrada: string): string {
+  const codigo = normalizarCodigo(entrada);
+  return hashToken(codigo ?? entrada);
 }
 
 export function hashToken(token: string): string {
@@ -85,14 +115,16 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
 
   /** Vista previa de una invitación, antes de que haya sesión. */
   app.get("/invitations/:token", async (request) => {
-    const { token } = parseParams(z.object({ token: z.string().min(10) }), request.params);
+    // Ocho y no diez: es lo que mide un código corto. Un token largo pasa
+    // igual, y lo que no es ni una cosa ni otra no encuentra nada.
+    const { token } = parseParams(z.object({ token: z.string().min(8) }), request.params);
 
     const invitacion = await withUser(null, async (db) => {
       const { rows } = await db.query(
         `select organization_name as "organizationName", workspace_name as "workspaceName",
                 email, role, invited_by_name as "invitedByName", expired, accepted
            from public.invitation_by_token($1)`,
-        [hashToken(token)],
+        [hashDeInvitacion(token)],
       );
       return rows[0] ?? null;
     });
@@ -121,16 +153,22 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       );
 
       const { token, hash } = nuevoToken();
+      // El código se guarda igual que el token: solo su hash. Desde que hay
+      // respaldos automáticos, uno en claro viajaría dentro de cada volcado.
+      const codigo = nuevoCodigo();
+      const codigoHash = hashToken(normalizarCodigo(codigo)!);
 
       const contexto = await withUser(userId, async (db) => {
         // create_invitation comprueba dentro que quien llama es administrador.
-        await db.query("select public.create_invitation($1,$2,$3,$4,$5,$6)", [
+        await db.query("select public.create_invitation($1,$2,$3,$4,$5,$6,$7,$8)", [
           orgId,
           body.email,
           body.role,
           hash,
           new Date(Date.now() + CADUCIDAD.invitacion).toISOString(),
           body.workspaceId ?? null,
+          codigoHash,
+          new Date(Date.now() + CADUCIDAD.codigo).toISOString(),
         ]);
 
         const { rows } = await db.query<{ org: string; quien: string; workspace: string | null }>(
@@ -177,7 +215,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       // El enlace va también en la respuesta, no solo en el correo: mientras
       // el dominio de envío no esté verificado, es la única vía fiable para
       // que quien invita se lo pueda mandar por su cuenta.
-      return reply.status(201).send({ sent: true, url });
+      // El código va en la respuesta y NO en la base ni en el correo: se
+      // enseña una vez a quien invita, que es cuando lo va a dictar. Si se
+      // pierde, se vuelve a invitar y el anterior se sustituye.
+      return reply.status(201).send({ sent: true, url, codigo });
     },
   );
 
@@ -211,20 +252,32 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /** Aceptar una invitación teniendo ya sesión abierta. */
-  app.post("/invitations/accept", { onRequest: requireSession }, async (request) => {
+  /**
+   * Aceptar una invitación teniendo ya sesión abierta.
+   *
+   * CON LÍMITE DE INTENTOS desde que existe el código corto. Un token de 32
+   * bytes no se adivina; ocho caracteres, con paciencia y sin límite, sí. El
+   * límite es lo que convierte «850.000 millones de combinaciones» en una
+   * cifra que signifique algo.
+   */
+  app.post(
+    "/invitations/accept",
+    { onRequest: requireSession, ...limiteEstricto },
+    async (request) => {
     const userId = requireUser(request);
-    const { token } = parseBody(z.object({ token: z.string().min(10) }), request.body);
+    const { token } = parseBody(z.object({ token: z.string().min(8) }), request.body);
 
     const organizationId = await withUser(userId, async (db) => {
       const { rows } = await db.query<{ accept_invitation: string }>(
         "select public.accept_invitation($1,$2)",
-        [hashToken(token), userId],
+        [hashDeInvitacion(token), userId],
       );
       return rows[0]!.accept_invitation;
     });
 
     return { organizationId };
-  });
+    },
+  );
 
   // --- Verificación de correo ----------------------------------------------
   app.post("/auth/verify-email/resend", { onRequest: requireSession }, async (request, reply) => {

@@ -23,6 +23,7 @@
     "test:migraciones": "npm run test:migraciones --workspace apps/api",
     "test:terraform": "npm run test:terraform --workspace apps/api",
     "test:repositorio": "npm run test:repositorio --workspace apps/api",
+    "test:codigo": "npm run test:codigo --workspace apps/api",
     "test:arquitectura": "npm run test:arquitectura --workspace apps/api",
     "test:world": "npm run test:world --workspace apps/api",
     "test:agente": "npm run test:agente --workspace apps/api",

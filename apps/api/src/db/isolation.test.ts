@@ -1510,6 +1510,85 @@ async function main(): Promise<void> {
       ),
     );
 
+    console.log("\nEl guardián que no guardaba (0042)");
+
+    /**
+     * `is_org_admin` devolvía NULL a quien no es miembro, no `false`.
+     *
+     * Dentro de una política de RLS daba igual —NULL y `false` cierran las dos
+     * igual— y por eso el aislamiento de las tablas nunca lo notó. En plpgsql
+     * no: `if not NULL` NO entra en el `if`, así que los dos guardianes que lo
+     * usaban no saltaban. Cualquiera con sesión podía fabricarse una
+     * invitación de administrador a una organización ajena y aceptársela.
+     *
+     * Esto lo fija en el sitio exacto donde se rompió: el valor devuelto.
+     */
+    const comoRespondeAUnExtraño = await withUser(bruno, async (db) => {
+      const { rows } = await db.query<{ r: boolean | null }>(
+        "select public.is_org_admin($1) as r",
+        [acme.org],
+      );
+      return rows[0]!.r;
+    });
+    check(
+      "is_org_admin devuelve false a un extraño, no NULL —«no se sabe» se lee como «adelante»",
+      comoRespondeAUnExtraño === false,
+    );
+
+    console.log("\nCódigo corto de invitación (0041)");
+
+    // El código se guarda como hash, igual que el token: quien pueda leer la
+    // tabla no puede usar ninguna invitación. Importa más desde que hay
+    // respaldos automáticos — un código en claro viajaría en cada volcado.
+    const invitacionConCodigo = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ create_invitation: string }>(
+        "select public.create_invitation($1,$2,'member',$3,$4,null,$5,$6)",
+        [
+          acme.org,
+          "dictado@acme.test",
+          "hash-del-token-largo",
+          new Date(Date.now() + 7 * 86_400_000).toISOString(),
+          "hash-del-codigo-corto",
+          new Date(Date.now() + 86_400_000).toISOString(),
+        ],
+      );
+      return rows[0]!.create_invitation;
+    });
+    check("Ana, que administra, crea una invitación con código", Boolean(invitacionConCodigo));
+
+    const porCodigo = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ organization_name: string }>(
+        "select organization_name from public.invitation_by_token($1)",
+        ["hash-del-codigo-corto"],
+      );
+      return rows[0]?.organization_name;
+    });
+    check("y se encuentra por el código, no solo por el token", porCodigo === "Acme");
+
+    const porToken = await withUser(null, async (db) => {
+      const { rows } = await db.query("select id from public.invitation_by_token($1)", [
+        "hash-del-token-largo",
+      ]);
+      return rows.length;
+    });
+    check("el enlace largo sigue encontrándola igual", porToken === 1);
+
+    // Lo que de verdad hay que fijar: Bruno NO administra Acme. Si esto dejara
+    // de fallar, cualquiera podría fabricarse invitaciones a una organización
+    // ajena y meterse dentro.
+    await denied("Bruno no puede fabricar una invitación a una organización ajena", () =>
+      withUser(bruno, (db) =>
+        db.query("select public.create_invitation($1,$2,'admin',$3,$4,null,$5,$6)", [
+          acme.org,
+          "colado@acme.test",
+          "otro-token",
+          new Date(Date.now() + 86_400_000).toISOString(),
+          "otro-codigo",
+          new Date(Date.now() + 86_400_000).toISOString(),
+        ]),
+      ),
+    );
+
     console.log("\nJefe de rama de una categoría (0040)");
 
     // Quien lleva una rama no es quien tiene sus tareas: reparte su trabajo.
