@@ -10,6 +10,17 @@ import {
 } from "./herramientas/arquitectura.js";
 import { buscar, descripcionBuscar, esquemaBuscar } from "./herramientas/buscar.js";
 import {
+  crearEntorno,
+  descripcionCrearEntorno,
+  descripcionSincronizarEntornos,
+  descripcionVerEntornos,
+  esquemaCrearEntorno,
+  esquemaSincronizarEntornos,
+  esquemaVerEntornos,
+  sincronizarEntornos,
+  verEntornos,
+} from "./herramientas/entornos.js";
+import {
   descripcionMisTareas,
   descripcionVerTablero,
   descripcionVerTarea,
@@ -117,6 +128,31 @@ export function registrarHerramientas(
     ]),
   );
 
+  servidor.tool(
+    "ver_entornos",
+    descripcionVerEntornos,
+    esquemaVerEntornos,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await verEntornos(cliente, entrada) },
+    ]),
+  );
+
+  /**
+   * Sincronizar va con las de leer aunque escriba.
+   *
+   * Lo que guarda es un reflejo de lo que dijo GitHub, no una decisión de
+   * nadie: no crea nada que no existiera ni cambia lo que el equipo puso a
+   * mano. Volver a preguntar dos veces deja el mismo resultado.
+   */
+  servidor.tool(
+    "sincronizar_entornos",
+    descripcionSincronizarEntornos,
+    esquemaSincronizarEntornos,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await sincronizarEntornos(cliente, entrada) },
+    ]),
+  );
+
   // --- Las que escriben -----------------------------------------------------
   //
   // Escriben en el tablero de un equipo, asi que van marcadas: todo lo que
@@ -175,6 +211,22 @@ export function registrarHerramientas(
     esquemaDibujarArquitectura,
     herramienta(async (cliente, entrada) => [
       { type: "text" as const, text: await dibujarArquitectura(cliente, entrada) },
+    ]),
+  );
+
+  /**
+   * Crear un entorno no es pintar una caja: si lleva repositorio, se pone a
+   * leer despliegues de GitHub de verdad y gasta cupo de su API. Por eso la
+   * herramienta avisa cuando no va a poder leer nada —sin token no sincroniza
+   * jamás, y callarlo deja a alguien esperando despliegues que no llegan— y
+   * por eso no hay ninguna de borrar: un entorno se lleva consigo su historia.
+   */
+  servidor.tool(
+    "crear_entorno",
+    descripcionCrearEntorno,
+    esquemaCrearEntorno,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await crearEntorno(cliente, entrada) },
     ]),
   );
 }
