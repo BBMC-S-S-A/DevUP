@@ -429,9 +429,31 @@ cerró un domingo por la tarde en Bogotá cuenta en la semana siguiente. El hito
 aparece, en la casilla equivocada, y la lista se ve perfecta. Manda el del
 navegador (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
 
-**6. Reconstruir el contexto de una tarea en un botón.** El PR, los mensajes, la
-pizarra y la grabación, juntos. Es la tesis del producto en un clic, y **depende
-de 1 y 2**: sin enlaces tejidos no hay nada que reconstruir.
+~~**6. Reconstruir el contexto de una tarea en un botón.**~~ **Hecho**
+(`638ff09`). `GET /tasks/:id/contexto` devuelve la ficha, la historia y lo
+enlazado en **una** petición, y la herramienta `contexto_de_tarea` lo redacta.
+
+Para el botón, tres cosas que la API hace a propósito:
+
+**La historia viene hacia delante**, al revés que todas las demás vistas del
+registro. Allí lo último arriba es lo correcto —se mira para ponerse al día—;
+aquí se lee para reconstruir, y eso se cuenta desde el principio. No la
+inviertas.
+
+**`procedencia` distingue lo que puso una persona de lo que dedujo una regla.**
+Al pintar conviene que se note: lo primero es una afirmación de alguien, lo
+segundo se puede volver a deducir. En el MCP se marca con «(a mano)».
+
+**Y lo que falta hay que decirlo.** Un contexto que solo enseña lo que encontró
+se lee como completo, y quien lo mire dejará de buscar — justo cuando la pieza
+que falta es la que explica la decisión. El MCP cierra con una línea que nombra
+lo que no hay («ninguna conversación enlazada»); la pantalla necesita su
+equivalente, no un hueco en blanco.
+
+**Lo que todavía no puede traer:** mensajes y grabaciones, salvo que alguien los
+haya enlazado a mano. No hay de dónde deducirlos —las menciones solo resuelven
+personas y las grabaciones cuelgan de una llamada, no de una tarea— y adivinarlos
+sería meter conjeturas entre hechos.
 
 ### 9.2 Interfaz y flujo · `apps/web`
 
