@@ -1510,6 +1510,83 @@ async function main(): Promise<void> {
       ),
     );
 
+    console.log("\nRegistro de actividad (0038)");
+
+    // Lo que hace que este registro sirva para responder de algo: que nadie
+    // pueda escribirlo a nombre de otro, y que nadie pueda reescribirlo
+    // después. Sin las dos cosas es un cuaderno, no un registro.
+
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+         values ($1,$2,$3,'movio','tarea','Arreglar el panel')`,
+        [acme.ws, acme.org, ana],
+      ),
+    );
+    await withUser(ana, (db) =>
+      db.query(
+        `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+         values ($1,$2,$3,'cerro','tarea','Lo de mi cuaderno')`,
+        [acme.soloWs, acme.org, ana],
+      ),
+    );
+
+    check("Ana ve los dos renglones que escribió", (await count(ana, "activity")) === 2);
+    check(
+      "Carla ve el del espacio compartido y no el del personal",
+      (await count(carla, "activity")) === 1,
+    );
+    check("Bruno no ve nada de la historia de Acme", (await count(bruno, "activity")) === 0);
+
+    // Miembro rasa sí escribe: lo que anota es lo que acaba de hacer ella.
+    const carlaAnoto = await withUser(carla, async (db) => {
+      const { rowCount } = await db.query(
+        `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+         values ($1,$2,$3,'comento','tarea','Una que tocó Carla')`,
+        [acme.ws, acme.org, carla],
+      );
+      return rowCount ?? 0;
+    });
+    check("Carla, miembro rasa, puede anotar en su espacio", carlaAnoto === 1);
+
+    // El caso que de verdad importa. Si esto dejara de fallar, cualquiera
+    // podría escribir «Ana cerró treinta tareas» y el registro dejaría de
+    // valer para exactamente aquello para lo que se creó.
+    await denied("nadie puede anotar a nombre de otra persona", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+           values ($1,$2,$3,'cerro','tarea','No la cerró Ana')`,
+          [acme.ws, acme.org, ana],
+        ),
+      ),
+    );
+
+    await denied("ni anotar en un espacio al que no llega", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into activity (workspace_id, organization_id, actor_id, verb, subject_type, subject_label)
+           values ($1,$2,$3,'movio','tarea','Ni de lejos')`,
+          [acme.soloWs, acme.org, carla],
+        ),
+      ),
+    );
+
+    // Y la propiedad que no se consigue con código, sino NO escribiendo dos
+    // políticas: el registro no se puede retocar ni borrar. Ni siquiera Ana,
+    // que administra la organización y escribió el renglón.
+    const anaReescribio = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("update activity set verb = 'invento'");
+      return rowCount ?? 0;
+    });
+    check("ni Ana, que administra, puede reescribir el registro", anaReescribio === 0);
+
+    const anaBorro = await withUser(ana, async (db) => {
+      const { rowCount } = await db.query("delete from activity");
+      return rowCount ?? 0;
+    });
+    check("ni borrarlo", anaBorro === 0);
+
     console.log("\nEntornos y despliegues (continuación)");
 
     // El caso que de verdad importa: ni siquiera la dueña del entorno puede
