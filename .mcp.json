@@ -2,7 +2,7 @@
   "mcpServers": {
     "devup": {
       "type": "http",
-      "url": "https://api-production-7b95.up.railway.app/mcp"
+      "url": "https://api.hytrex.co/mcp"
     }
   }
 }
