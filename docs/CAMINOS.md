@@ -410,8 +410,24 @@ solo resuelve si le nombras uno.
 De aquí salió el hallazgo del §5bis: al comprobar que la ruta nueva se registra
 bien, el servidor no arrancaba. Llevaba así desde la fusión.
 
-**5. El diario del proyecto, cronológico.** Agrupar el registro por semana. La
-versión en prosa necesita al agente y va después.
+~~**5. El diario del proyecto, cronológico.**~~ **Hecho** (`992e397`).
+`GET /workspaces/:id/diario?semanas=8&tz=America/Bogota` y la herramienta
+`diario` en el MCP. La versión en prosa sigue pendiente y necesita al agente:
+esto es la materia prima ordenada, no el relato.
+
+Si vas a pintarlo, dos cosas que la API hace a propósito y que la pantalla
+puede deshacer sin darse cuenta:
+
+**Las semanas vacías vienen y hay que enseñarlas.** Filtrar `hechos === 0` al
+pintar desharía justo lo que se ganó: dos entradas seguidas parecerían
+consecutivas con un mes de silencio entre medias. Un parón es de lo que más se
+mira en un diario. En el MCP las seguidas se juntan en una línea («5 semanas sin
+movimiento»), que es enseñarlas sin que ocupen la pantalla — vale como patrón.
+
+**El huso hay que mandarlo.** Por defecto agrupa en UTC, y en UTC lo que se
+cerró un domingo por la tarde en Bogotá cuenta en la semana siguiente. El hito
+aparece, en la casilla equivocada, y la lista se ve perfecta. Manda el del
+navegador (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
 
 **6. Reconstruir el contexto de una tarea en un botón.** El PR, los mensajes, la
 pizarra y la grabación, juntos. Es la tesis del producto en un clic, y **depende
