@@ -95,15 +95,18 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     const body = parseBody(
       z.object({
         name: z.string().trim().min(1).max(40),
+        // Sin valor por defecto a propósito: «no me dices color» y «lo quiero
+        // gris» tienen que poder distinguirse, o resolver una categoría por su
+        // nombre le borra el color que ya tenía. Ver `asegurarEtiqueta`.
         color: z
           .enum(["slate", "blue", "green", "amber", "red", "violet", "pink", "teal"])
-          .default("slate"),
+          .optional(),
       }),
       request.body,
     );
 
     const tag = await withUser(userId, async (db) => {
-      return asegurarEtiqueta(db, orgId, body.name, body.color, userId);
+      return asegurarEtiqueta(db, orgId, body.name, body.color ?? null, userId);
     });
 
     return reply.status(201).send({ tag });
@@ -474,13 +477,26 @@ export async function asegurarEtiqueta(
   db: Db,
   organizationId: string,
   nombre: string,
-  color: string,
+  /**
+   * Null cuando quien llama solo sabe el NOMBRE de la categoría.
+   *
+   * POR QUÉ IMPORTA LA DIFERENCIA. El color tenía valor por defecto y el
+   * `do update` lo escribía siempre, así que resolver por nombre una categoría
+   * que ya existía le borraba a la organización el color que alguien le había
+   * puesto: «Ventas» en verde volvía a gris. Mientras solo lo llamaba la
+   * etiqueta «agente» —que siempre manda violeta— no se notaba; con la puerta
+   * MCP poniendo categorías, pasaría en cada tarea que creara un agente.
+   *
+   * Ahora null quiere decir «no toques el color», y un color de verdad sigue
+   * mandando, que es lo que hace falta cuando lo elige una persona.
+   */
+  color: string | null,
   autor: string,
 ): Promise<{ id: string; name: string; color: string }> {
   const { rows } = await db.query<{ id: string; name: string; color: string }>(
     `insert into tags (organization_id, name, color, created_by)
-     values ($1, $2, $3, $4)
-     on conflict (organization_id, name) do update set color = excluded.color
+     values ($1, $2, coalesce($3, 'slate'), $4)
+     on conflict (organization_id, name) do update set color = coalesce($3, tags.color)
      returning id, name, color`,
     [organizationId, nombre, color, autor],
   );
