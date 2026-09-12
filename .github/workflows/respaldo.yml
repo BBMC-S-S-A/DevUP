@@ -39,9 +39,12 @@
 #
 # QUÉ HAY QUE PONER EN «Settings → Secrets and variables → Actions»:
 #
-#   RAILWAY_TOKEN        Token de PROYECTO de Railway (Project Settings →
-#                        Tokens). Con él la CLI abre el túnel sin sesión
-#                        interactiva. No sirve un token personal.
+#   RAILWAY_API_TOKEN    El que YA usa el workflow de despliegue: no hay que
+#                        crear nada. Vale también un `RAILWAY_TOKEN` de
+#                        proyecto si algún día se prefiere acotarlo — la CLI
+#                        acepta los dos y aquí se prueba primero el que ya
+#                        existe. Cada secreto de más es una forma más de que
+#                        esto se quede sin configurar.
 #   POSTGRES_PASSWORD    La del superusuario del servicio Postgres. Hace falta
 #                        el rol administrador porque el de la aplicación tiene
 #                        RLS y volcaría cero filas sin dar ningún error.
@@ -100,7 +103,7 @@ jobs:
       - name: Comprobar que hay con qué entrar y con qué cifrar
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           falta=0
@@ -123,7 +126,7 @@ jobs:
       # «connection refused» y parece un problema de credenciales.
       - name: Abrir el túnel a Railway
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
         run: |
           npm install -g @railway/cli
           railway connect Postgres --tunnel-only --port 55432 &

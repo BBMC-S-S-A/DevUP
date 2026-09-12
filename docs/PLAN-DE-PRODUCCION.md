@@ -126,8 +126,9 @@ migración, y el despliegue inmediatamente después.
 1. **Poner los secretos de los respaldos.** El código está hecho y probado (12
    de septiembre de 2026): la base se vuelca contra Railway y SE RESTAURA A SÍ
    MISMA antes de guardarse, y el almacén se copia aparte. Pero hasta que estén
-   los cuatro secretos —`RAILWAY_TOKEN`, `POSTGRES_PASSWORD`,
-   `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`— no corre ninguno de los dos, y
+   los CUATRO secretos que faltan —`BACKUP_PASSPHRASE`,
+   `POSTGRES_PASSWORD`, `S3_ACCESS_KEY_ID` y `S3_SECRET_ACCESS_KEY`; el de
+   Railway se reusa del despliegue— no corre ninguno de los dos, y
    **hoy no hay copia de nada**. Es lo único que nos dejaría sin red si algo se
    cae.
 2. **Apuntar `hytrex.co` a la landing.** Está desplegada y el apex da 530.
