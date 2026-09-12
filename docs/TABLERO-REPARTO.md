@@ -74,6 +74,17 @@ trabaja, no como una lista de deseos.
   «cuánto tarda en cerrarse» calculado de hechos fechados en vez de la
   aproximación por `updated_at` que la propia `auditoria.ts` avisaba de que
   era. Con su letra pequeña en pantalla, no solo en el código.
+- **Control total de la tarjeta: tipo, prioridad, contexto, criterio, ramas y
+  evidencia** — La 0042, con su API, su interfaz y sus dos herramientas nuevas
+  del MCP (`enlazar_rama`, `marcar_hecha`). El tipo es vocabulario cerrado
+  —ese eje no depende del proyecto, al contrario que las áreas—; la prioridad
+  es número porque se ordena; contexto y criterio van separados porque se leen
+  en momentos distintos, y el criterio se enseña justo al cerrar. La evidencia
+  no se edita ni en la base: corregir es quitar y volver a poner.
+- **Agrupar el tablero por área en la interfaz** — Filtro de chips con delegado
+  y recuento. Filtro y no agrupación: agrupar partiría el tablero en una
+  cuadrícula de áreas × columnas donde arrastrar deja de significar una sola
+  cosa.
 - **Código corto de invitación** — La 0040. Ocho símbolos del alfabeto de
   Crockford, que se puede dictar por teléfono. Guardado cifrado igual que el
   token, con una ruta para pedir otro si se pierde. No sustituye al enlace: la
@@ -114,8 +125,6 @@ trabaja, no como una lista de deseos.
 - **Capa de datos: acabar con los 88 `api.*` y 71 efectos sueltos** — Y escribir
   de paso la regla de errores: el de un campo junto al campo, el de una acción
   en un aviso flotante.
-- **Agrupar el tablero por área en la interfaz** — La base ya lo devuelve; falta
-  que la pantalla lo use, con filtro y contador por área.
 - **Partir las pantallas grandes** — Ventas tiene 1.273 líneas. Después de la
   capa de datos, no antes.
 

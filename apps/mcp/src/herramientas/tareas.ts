@@ -26,7 +26,17 @@ export type Tarea = {
   dueDate: string | null;
   tags: { id: string; name: string }[];
   adjuntos: number;
+  /** La ficha de desarrollo (0042). Opcionales porque un tablero de una API
+   *  anterior al despliegue no los trae, y esto no debe reventar por eso. */
+  tipo?: string | null;
+  prioridad?: number;
+  contexto?: string;
+  criterio?: string;
+  ramas?: { id: string; nombre: string; estado: string; repo: string | null }[];
+  evidencias?: number;
 };
+
+const PRIORIDAD_EN_PALABRAS = ["baja", "normal", "alta", "urgente"] as const;
 
 type Columna = {
   id: string;
@@ -304,16 +314,42 @@ export async function verTarea(
   const ficha =
     `${espacio} / ${columna}` +
     (tarea.assigneeName ? ` · ${tarea.assigneeName}` : " · sin asignar") +
+    (tarea.tipo ? ` · ${tarea.tipo}` : "") +
+    // La prioridad normal no se nombra: es el valor por defecto, y decirlo en
+    // todas las tareas haria que la palabra dejara de significar nada cuando
+    // de verdad pone «urgente».
+    (tarea.prioridad !== undefined && tarea.prioridad !== 1
+      ? ` · prioridad ${PRIORIDAD_EN_PALABRAS[tarea.prioridad] ?? tarea.prioridad}`
+      : "") +
     (dia ? (dia < hoy() ? ` · VENCIDA el ${dia}` : ` · vence el ${dia}`) : "") +
     (tarea.tags.length > 0 ? ` · ${tarea.tags.map((t) => t.name).join("/")}` : "");
 
-  const cabecera = [
+  // Las cuatro cosas que hacen que esto sirva para EMPEZAR A TRABAJAR y no solo
+  // para saber que la tarea existe. Cada una solo aparece si tiene algo dentro:
+  // seis encabezados vacios esconden el unico que si dice algo.
+  const partes = [
     tarea.title,
     "",
     ficha,
     "",
     tarea.description?.trim() ? tarea.description.trim() : "(sin detalle escrito)",
-  ].join("\n");
+  ];
+  if (tarea.contexto?.trim()) partes.push("", "De donde sale:", tarea.contexto.trim());
+  if (tarea.criterio?.trim()) partes.push("", "Esta hecha cuando:", tarea.criterio.trim());
+  if (tarea.ramas && tarea.ramas.length > 0) {
+    partes.push(
+      "",
+      "Ramas:",
+      ...tarea.ramas.map(
+        (r) => `- ${r.nombre}${r.repo ? ` en ${r.repo}` : ""} (${r.estado})`,
+      ),
+    );
+  }
+  if (tarea.evidencias) {
+    partes.push("", `${tarea.evidencias} ${tarea.evidencias === 1 ? "prueba" : "pruebas"} de que se hizo.`);
+  }
+
+  const cabecera = partes.join("\n");
 
   const bloques: Bloque[] = [{ type: "text", text: cabecera }];
 

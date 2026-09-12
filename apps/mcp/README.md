@@ -43,6 +43,8 @@ borrando deja trabajo perdido.
 | `crear_area` | Un área del tablero, con su delegado. Lo que se cree en ella se le asigna solo. |
 | `crear_columna` | Una columna nueva en el tablero. |
 | `mover_tarea` | Pasa una tarea de columna. |
+| `enlazar_rama` | Apunta en una tarea la rama donde se trabaja, o cambia su estado. Varias, si el trabajo va por varios caminos. |
+| `marcar_hecha` | Cierra una tarea y, si se le pasa, deja en ella la prueba de que se hizo —el PR, el commit, el enlace o una nota—. Las dos cosas caen juntas. |
 | `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |
 | `dibujar_arquitectura` | Vuelca un diagrama entero —componentes y conexiones— en un espacio. Coloca las cajas ella: no hay que darle coordenadas. Reutiliza lo que ya exista con ese nombre en vez de duplicarlo. |
 

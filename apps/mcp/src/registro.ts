@@ -34,12 +34,18 @@ import {
   descripcionCrearArea,
   descripcionCrearColumna,
   descripcionCrearTarea,
+  descripcionEnlazarRama,
+  descripcionMarcarHecha,
   descripcionMoverTarea,
+  enlazarRama,
   esquemaActualizarTarea,
   esquemaCrearArea,
   esquemaCrearColumna,
   esquemaCrearTarea,
+  esquemaEnlazarRama,
+  esquemaMarcarHecha,
   esquemaMoverTarea,
+  marcarHecha,
   moverTarea,
 } from "./herramientas/escribir.js";
 
@@ -176,6 +182,34 @@ export function registrarHerramientas(
     esquemaMoverTarea,
     herramienta(async (cliente, entrada) => [
       { type: "text" as const, text: await moverTarea(cliente, entrada) },
+    ]),
+  );
+
+  servidor.tool(
+    "enlazar_rama",
+    descripcionEnlazarRama,
+    esquemaEnlazarRama,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await enlazarRama(cliente, entrada) },
+    ]),
+  );
+
+  /**
+   * Cerrar es la única escritura del agente que AFIRMA algo.
+   *
+   * Las demás proponen —crea una tarea, la mueve, la renombra— y una persona lo
+   * ve en el tablero y lo corrige. Esta dice «esto ya está hecho», y si se
+   * equivoca, el equipo deja de mirar algo que sigue roto. Por eso pide el
+   * identificador y no el título, y por eso su descripción insiste en dejar la
+   * prueba: una afirmación con su PR debajo se puede comprobar en diez
+   * segundos; una sola, hay que creérsela.
+   */
+  servidor.tool(
+    "marcar_hecha",
+    descripcionMarcarHecha,
+    esquemaMarcarHecha,
+    herramienta(async (cliente, entrada) => [
+      { type: "text" as const, text: await marcarHecha(cliente, entrada) },
     ]),
   );
 

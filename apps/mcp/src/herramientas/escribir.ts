@@ -111,6 +111,75 @@ export async function resolverPersona(
   );
 }
 
+/**
+ * La ficha de desarrollo, compartida por crear y actualizar.
+ *
+ * EL MODELO HABLA EN PALABRAS, LA API EN NÚMEROS. La prioridad se guarda como
+ * 0-3 porque se ordena (ver la 0042), pero pedirle a un modelo «prioridad: 3»
+ * es pedirle que recuerde una tabla que no tiene delante — y cuando no la
+ * recuerda, se la inventa. Aquí entra «urgente» y sale 3.
+ *
+ * Y LOS TIPOS LLEVAN SU EXPLICACIÓN EN EL PROPIO ESQUEMA. Una lista de ocho
+ * palabras sueltas se rellena a ojo; una que dice en qué se diferencia «mejora»
+ * de «deuda», no. Es la misma decisión que en el desplegable de la interfaz, y
+ * por el mismo motivo: la descripción ES la documentación que lee quien elige.
+ */
+const PRIORIDADES = ["baja", "normal", "alta", "urgente"] as const;
+
+export const esquemaFicha = {
+  tipo: z
+    .enum([
+      "funcionalidad",
+      "arreglo",
+      "mejora",
+      "deuda",
+      "investigacion",
+      "documentacion",
+      "diseno",
+      "infraestructura",
+    ])
+    .optional()
+    .describe(
+      "Qué clase de trabajo es: funcionalidad (algo que antes no se podía hacer), " +
+        "arreglo (algo que no funciona como dice), mejora (funciona pero no lo " +
+        "bastante bien), deuda (funciona y hay que rehacerlo igualmente), " +
+        "investigacion (todavía no se sabe qué hay que hacer), documentacion, " +
+        "diseno, infraestructura. Omitir si no está claro: sin clasificar es " +
+        "mejor que mal clasificado.",
+    ),
+  prioridad: z
+    .enum(PRIORIDADES)
+    .optional()
+    .describe("baja, normal, alta o urgente. Por defecto normal; marcar solo lo que no lo es."),
+  contexto: z
+    .string()
+    .max(4000)
+    .optional()
+    .describe("De dónde sale esto, qué se intentó antes, con qué no hay que romper. Se lee al empezar."),
+  criterio: z
+    .string()
+    .max(4000)
+    .optional()
+    .describe("Cómo sabremos que está hecha. Se lee al terminar, y se enseña al cerrarla."),
+};
+
+export type Ficha = {
+  tipo?: string;
+  prioridad?: (typeof PRIORIDADES)[number];
+  contexto?: string;
+  criterio?: string;
+};
+
+/** Lo que de la ficha se manda a la API, con la prioridad ya en número. */
+export function campoDeFicha(entrada: Ficha): Record<string, unknown> {
+  const salida: Record<string, unknown> = {};
+  if (entrada.tipo) salida.tipo = entrada.tipo;
+  if (entrada.prioridad) salida.prioridad = PRIORIDADES.indexOf(entrada.prioridad);
+  if (entrada.contexto !== undefined) salida.contexto = entrada.contexto;
+  if (entrada.criterio !== undefined) salida.criterio = entrada.criterio;
+  return salida;
+}
+
 export type Area = { id: string; name: string; ownerName: string | null };
 
 async function areas(cliente: ClienteApi, espacioId: string): Promise<Area[]> {
@@ -217,6 +286,7 @@ export const esquemaCrearTarea = {
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("Fecha límite en formato AAAA-MM-DD."),
+  ...esquemaFicha,
   organizacion: z.string().optional(),
 };
 
@@ -247,7 +317,7 @@ export async function crearTarea(
     area?: string;
     vence?: string;
     organizacion?: string;
-  },
+  } & Ficha,
 ): Promise<string> {
   const espacio: Espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
   const columna = resolverColumna(await tablero(cliente, espacio.id), entrada.columna);
@@ -273,10 +343,15 @@ export async function crearTarea(
       dueDate: entrada.vence ?? null,
       tagIds: [etiqueta],
       categoryId: area?.id ?? null,
+      ...campoDeFicha(entrada),
     },
   );
 
   const trozos = [`en ${espacio.name} / ${columna.name}`];
+  if (entrada.tipo) trozos.push(entrada.tipo);
+  if (entrada.prioridad && entrada.prioridad !== "normal") {
+    trozos.push(`prioridad ${entrada.prioridad}`);
+  }
   if (area) trozos.push(`área ${area.name}`);
   // Quien la lleva puede venir del área sin que nadie lo dijera: se nombra
   // igual, porque enterarse después de a quién se le asignó es peor.
@@ -386,13 +461,14 @@ export const esquemaActualizarTarea = {
     .string()
     .optional()
     .describe("AAAA-MM-DD, o cadena vacía para quitar la fecha."),
+  ...esquemaFicha,
   organizacion: z.string().optional(),
 };
 
 export const descripcionActualizarTarea = [
-  "Cambia una tarea que ya existe: su título, su detalle, quién la tiene o",
-  "cuándo vence. Solo se toca lo que se le pase; lo que se omite se queda como",
-  "estaba.",
+  "Cambia una tarea que ya existe: su título, su detalle, quién la tiene, cuándo",
+  "vence, qué clase de trabajo es, cuánto corre, de dónde sale o cuándo estará",
+  "hecha. Solo se toca lo que se le pase; lo que se omite se queda como estaba.",
   "",
   "Pide el identificador, no el título, porque esto sobrescribe: equivocarse de",
   "tarea aquí borra el trabajo escrito de otra persona. Sácalo antes con",
@@ -408,7 +484,7 @@ export async function actualizarTarea(
     responsable?: string;
     vence?: string;
     organizacion?: string;
-  },
+  } & Ficha,
 ): Promise<string> {
   if (!ES_UUID.test(entrada.tarea.trim())) {
     return (
@@ -417,7 +493,7 @@ export async function actualizarTarea(
     );
   }
 
-  const cambios: Record<string, unknown> = {};
+  const cambios: Record<string, unknown> = campoDeFicha(entrada);
   if (entrada.titulo !== undefined) cambios.title = entrada.titulo;
   if (entrada.detalle !== undefined) cambios.description = entrada.detalle;
   if (entrada.vence !== undefined) cambios.dueDate = entrada.vence === "" ? null : entrada.vence;
@@ -435,4 +511,138 @@ export async function actualizarTarea(
     cambios,
   );
   return `«${task.title}» actualizada: ${Object.keys(cambios).join(", ")}.`;
+}
+
+// ---------------------------------------------------------------------------
+// enlazar_rama
+// ---------------------------------------------------------------------------
+
+export const esquemaEnlazarRama = {
+  tarea: z.string().describe("El identificador de la tarea."),
+  rama: z.string().trim().min(1).max(255).describe("El nombre de la rama, tal cual."),
+  estado: z
+    .enum(["abierta", "fusionada", "descartada"])
+    .optional()
+    .describe(
+      "abierta por defecto. «descartada» para un camino que se probó y se " +
+        "abandonó: se deja apuntado en vez de borrarlo, porque quien lo vuelva " +
+        "a pensar merece saber que ya se intentó.",
+    ),
+  organizacion: z.string().optional(),
+};
+
+export const descripcionEnlazarRama = [
+  "Apunta en una tarea la rama donde se está trabajando, o cambia su estado.",
+  "",
+  "Una tarea puede tener varias: si el trabajo se parte en dos caminos —la API",
+  "por un lado y la interfaz por otro, o una prueba de concepto en paralelo—,",
+  "son dos ramas de la misma tarea y no dos tareas.",
+  "",
+  "Es para lo que el equipo no puede saber de otra forma: mirando el tablero,",
+  "«¿quién está tocando pagos?» solo se contesta si la rama está apuntada. No",
+  "hace falta tener el repositorio conectado — se guarda el nombre tal cual.",
+].join("\n");
+
+export async function enlazarRama(
+  cliente: ClienteApi,
+  entrada: { tarea: string; rama: string; estado?: string; organizacion?: string },
+): Promise<string> {
+  if (!ES_UUID.test(entrada.tarea.trim())) {
+    return (
+      "Para enlazar una rama hace falta el identificador de la tarea, no su " +
+      "título. Sácalo con `ver_tablero` o `mis_tareas`."
+    );
+  }
+
+  const { task } = await cliente.post<{ task: { title: string } }>(
+    `/tasks/${entrada.tarea.trim()}/ramas`,
+    { nombre: entrada.rama, estado: entrada.estado ?? "abierta" },
+  );
+  const estado = entrada.estado && entrada.estado !== "abierta" ? ` (${entrada.estado})` : "";
+  return `Rama ${entrada.rama}${estado} enlazada a «${task.title}».`;
+}
+
+// ---------------------------------------------------------------------------
+// marcar_hecha
+// ---------------------------------------------------------------------------
+
+export const esquemaMarcarHecha = {
+  tarea: z.string().describe("El identificador de la tarea."),
+  prueba_tipo: z
+    .enum(["pr", "commit", "enlace", "nota"])
+    .optional()
+    .describe("Qué clase de prueba se deja. Omitir para cerrar sin dejar ninguna."),
+  prueba_url: z
+    .string()
+    .optional()
+    .describe("El enlace, para pr, commit o enlace. No se usa con nota."),
+  prueba_nota: z
+    .string()
+    .max(2000)
+    .optional()
+    .describe("Para una nota: qué se comprobó y dónde."),
+  organizacion: z.string().optional(),
+};
+
+export const descripcionMarcarHecha = [
+  "Cierra una tarea: la mueve a la columna final del tablero y, si se le pasa,",
+  "deja en ella la prueba de que se hizo.",
+  "",
+  "No hay que decir a qué columna: la busca. Y las dos cosas —cerrar y dejar la",
+  "prueba— caen juntas, así que o se cerró con su prueba o no se cerró.",
+  "",
+  "DEJA LA PRUEBA SIEMPRE QUE LA TENGAS. Si acabas de abrir un PR que cierra",
+  "esta tarea, ese PR es la prueba; si comprobaste algo a mano, dilo como",
+  "`nota`. La evidencia queda con el nombre de quien conectó esta sesión y su",
+  "fecha, y no se puede editar después. Cerrar sin prueba está permitido —hay",
+  "trabajo que no deja rastro en ningún sitio— pero es lo segundo mejor.",
+  "",
+  "Pide el identificador, no el título: cerrar la tarea equivocada le dice al",
+  "equipo que algo está hecho cuando no lo está.",
+].join("\n");
+
+export async function marcarHecha(
+  cliente: ClienteApi,
+  entrada: {
+    tarea: string;
+    prueba_tipo?: "pr" | "commit" | "enlace" | "nota";
+    prueba_url?: string;
+    prueba_nota?: string;
+    organizacion?: string;
+  },
+): Promise<string> {
+  if (!ES_UUID.test(entrada.tarea.trim())) {
+    return (
+      "Para cerrar una tarea hace falta su identificador, no su título: cerrar " +
+      "la equivocada le dice al equipo que algo está hecho cuando no lo está. " +
+      "Sácalo con `ver_tablero` o `mis_tareas`."
+    );
+  }
+
+  // Las dos formas de mandar una prueba incompleta se contestan explicando qué
+  // falta, no dejando que la API devuelva un error de validación que el modelo
+  // no puede convertir en nada útil para la persona.
+  if (entrada.prueba_tipo && entrada.prueba_tipo !== "nota" && !entrada.prueba_url) {
+    return `Una prueba de tipo «${entrada.prueba_tipo}» tiene que apuntar a algo: falta prueba_url.`;
+  }
+  if (entrada.prueba_tipo === "nota" && !entrada.prueba_nota) {
+    return "Una nota sin texto no prueba nada: falta prueba_nota.";
+  }
+
+  const evidencia = entrada.prueba_tipo
+    ? {
+        tipo: entrada.prueba_tipo,
+        url: entrada.prueba_tipo === "nota" ? null : entrada.prueba_url,
+        nota: entrada.prueba_nota ?? "",
+      }
+    : undefined;
+
+  const { task } = await cliente.post<{ task: { title: string; evidencias: number } }>(
+    `/tasks/${entrada.tarea.trim()}/hecha`,
+    evidencia ? { evidencia } : {},
+  );
+
+  return evidencia
+    ? `«${task.title}» cerrada, con su prueba adjunta.`
+    : `«${task.title}» cerrada. No se dejó ninguna prueba de que se hizo.`;
 }

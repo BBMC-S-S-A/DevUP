@@ -53,6 +53,8 @@ const ESPERADAS = [
   "crear_area",
   "crear_columna",
   "mover_tarea",
+  "enlazar_rama",
+  "marcar_hecha",
   "actualizar_tarea",
   "dibujar_arquitectura",
 ];
