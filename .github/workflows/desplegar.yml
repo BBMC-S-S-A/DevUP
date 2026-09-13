@@ -181,14 +181,19 @@ jobs:
           # `railway up` de más abajo bajo ese nombre. Pasarlo como
           # `RAILWAY_TOKEN` dio "Unauthorized" en el primer intento real.
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_SSH_PRIVATE_KEY: ${{ secrets.RAILWAY_SSH_PRIVATE_KEY }}
         run: |
           npm install -g @railway/cli
-          # `--tunnel-only` implica `--ssh`, y el CLI rechaza mezclarlo con
-          # `--no-ssh` («cannot be used with»): tercer intento real, tercer
-          # fallo distinto. La única combinación que el propio CLI acepta es
-          # dejar `--ssh` y darle una llave — efímera, de este job, que nadie
-          # más usa ni necesita guardarse.
-          ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -q
+          # `--tunnel-only` implica `--ssh`, y Railway exige que la llave esté
+          # REGISTRADA en la cuenta — una generada al vuelo en el runner no
+          # vale («No registered SSH keys found»), cuarto intento real, cuarto
+          # fallo distinto. Esta es la privada de una llave que ya está
+          # registrada (`devup-railway-tunnel`), guardada como secreto para
+          # que cualquier corrida de este job la use, sin depender de que
+          # nadie tenga su propia sesión de Railway abierta.
+          mkdir -p ~/.ssh
+          printf '%s' "$RAILWAY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           railway connect Postgres --tunnel-only --port 55432 \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
             --environment production &
