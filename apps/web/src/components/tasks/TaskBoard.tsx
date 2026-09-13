@@ -312,6 +312,48 @@ export function TaskBoard({
     }
   };
 
+  /**
+   * Lo último que hizo el teclado, para contarlo.
+   *
+   * NO ES UN ADORNO DE ACCESIBILIDAD. Arrastrar con el ratón se explica solo:
+   * la tarjeta va detrás del cursor y aterriza donde la sueltas. Moverla con el
+   * teclado no: salta a otra columna que puede estar fuera de la pantalla, y
+   * sin decirlo el efecto es que la tarjeta desaparece. Va en un
+   * `role="status"`, así que lo lee un lector de pantalla y además se ve.
+   */
+  const [avisoTeclado, setAvisoTeclado] = useState<string | null>(null);
+
+  /**
+   * Devolver el foco a la tarjeta después de moverla.
+   *
+   * Al moverse, React vuelve a pintar la columna y el botón que tenía el foco
+   * deja de existir: el foco se caería al `body` y la siguiente pulsación no
+   * iría a ninguna parte. Sin esto, mover una tarjeta dos columnas seguidas
+   * sería imposible — y mover de una en una es justo lo que se hace.
+   *
+   * VA AQUÍ ARRIBA, Y NO JUNTO AL `return` QUE LO USA. Estaba debajo del
+   * `if (loading) return`, y eso tumbaba la pantalla entera: mientras carga, el
+   * componente sale antes y este efecto no llega a registrarse; cuando el
+   * tablero llega, sí. React cuenta los hooks de cada render y ve uno de más —
+   * es el error #310, «se renderizaron más hooks que en el render anterior»,
+   * que no avisa en desarrollo con datos ya cacheados y revienta en producción
+   * en la primera carga de verdad.
+   *
+   * La regla que lo evita es que no haya NINGÚN hook por debajo de un `return`
+   * condicional; por eso el efecto sube y el `return` se queda debajo.
+   */
+  useEffect(() => {
+    if (!avisoTeclado) return;
+    const id = ultimaMovida.current;
+    if (!id) return;
+    // Se limpia al devolver el foco, y no después. Sin esto el efecto también
+    // corre con cada recarga del tablero —`columns` está en las dependencias
+    // porque hay que esperar a que el botón nuevo exista— y le robaría el foco
+    // a quien estuviera en otra parte de la pantalla medio minuto más tarde.
+    ultimaMovida.current = null;
+    document.querySelector<HTMLButtonElement>(`[data-tarea="${id}"]`)?.focus();
+  }, [avisoTeclado, columns]);
+
   if (loading) return <TableroEsqueleto />;
 
   const hoy = hoyLocal();
@@ -340,17 +382,6 @@ export function TaskBoard({
       : columns.map((c) => ({ ...c, tasks: c.tasks.filter(filtra) }));
 
   const carga = visibles.reduce((maximo, columna) => Math.max(maximo, columna.tasks.length), 0);
-
-  /**
-   * Lo último que hizo el teclado, para contarlo.
-   *
-   * NO ES UN ADORNO DE ACCESIBILIDAD. Arrastrar con el ratón se explica solo:
-   * la tarjeta va detrás del cursor y aterriza donde la sueltas. Moverla con el
-   * teclado no: salta a otra columna que puede estar fuera de la pantalla, y
-   * sin decirlo el efecto es que la tarjeta desaparece. Va en un
-   * `role="status"`, así que lo lee un lector de pantalla y además se ve.
-   */
-  const [avisoTeclado, setAvisoTeclado] = useState<string | null>(null);
 
   /**
    * Mover una tarjeta con el teclado.
@@ -431,26 +462,6 @@ export function TaskBoard({
     void drop(otra.id, null);
     setAvisoTeclado(`«${titulo}» movida a ${otra.name}, arriba`);
   }
-
-  /**
-   * Devolver el foco a la tarjeta después de moverla.
-   *
-   * Al moverse, React vuelve a pintar la columna y el botón que tenía el foco
-   * deja de existir: el foco se caería al `body` y la siguiente pulsación no
-   * iría a ninguna parte. Sin esto, mover una tarjeta dos columnas seguidas
-   * sería imposible — y mover de una en una es justo lo que se hace.
-   */
-  useEffect(() => {
-    if (!avisoTeclado) return;
-    const id = ultimaMovida.current;
-    if (!id) return;
-    // Se limpia al devolver el foco, y no después. Sin esto el efecto también
-    // corre con cada recarga del tablero —`columns` está en las dependencias
-    // porque hay que esperar a que el botón nuevo exista— y le robaría el foco
-    // a quien estuviera en otra parte de la pantalla medio minuto más tarde.
-    ultimaMovida.current = null;
-    document.querySelector<HTMLButtonElement>(`[data-tarea="${id}"]`)?.focus();
-  }, [avisoTeclado, columns]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
