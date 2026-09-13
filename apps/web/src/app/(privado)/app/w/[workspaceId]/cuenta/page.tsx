@@ -21,6 +21,7 @@ import { useConfirmar } from "@/components/ui/Confirmar";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { Pagina } from "@/components/ui/Pagina";
 import { type ConexionDeAgente, type Sesion, ApiError, api } from "@/lib/api";
+import { Dispositivos } from "@/components/ajustes/Dispositivos";
 import { useSession } from "@/lib/session";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
@@ -50,6 +51,11 @@ export default function CuentaPage() {
       <div className="space-y-4">
         <Perfil />
         <EnEstaOrganizacion />
+        {/* Aquí y no dentro de la llamada: probar el micrófono ANTES cuesta
+            diez segundos, descubrir que estaba mal DENTRO cuesta la reunión de
+            todos. Es de «Mi cuenta» porque es de la persona en su mesa, no de
+            la organización. */}
+        <Dispositivos />
         <ClaveDeIA />
         <ConexionesDeAgente />
         <Navegadores />
