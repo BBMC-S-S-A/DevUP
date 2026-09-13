@@ -162,7 +162,15 @@ export function Mesa({
     // hay mock que discutir —la mesa parte la pantalla en zonas reales, no en
     // columnas fijas—, así que el cambio es solo de material.
     <section
-      className="capa-flotante flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl"
+      // `flex-1` ES EL ARREGLO, y es una línea que costaba media pantalla. Su
+      // envoltorio es una COLUMNA flex (ver más abajo, donde se le pone la
+      // fracción de ancho), así que el estirado automático de la fila le da a
+      // esta sección todo el ANCHO pero no el alto: en una columna hay que
+      // pedir el alto creciendo. Sin esto, cada zona medía lo que midiera su
+      // contenido y quedaban tres cajas cortas arriba con media pantalla vacía
+      // debajo — y los tiradores de los divisores, que van a `inset-y-0` de la
+      // fila, flotando sueltos por ese vacío.
+      className="capa-flotante flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl"
       aria-label={catalogo[zona.herramienta]?.titulo ?? zona.herramienta}
     >
       <header className="filo-luz flex shrink-0 items-center gap-2 px-2.5 py-1.5">
