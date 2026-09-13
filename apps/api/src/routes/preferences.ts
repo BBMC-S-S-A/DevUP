@@ -3,7 +3,29 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
 import { WIDGETS_CON_DATOS, datosDeWidgets } from "../lib/widgets.js";
-import { parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+
+/**
+ * La lista CERRADA de la 0052. Se escribe aquí además de en la base porque zod
+ * tiene que poder rechazar un valor inventado ANTES de llegar a Postgres: sin
+ * esto, un rol que no existe llega como un error de tipo del motor, que es un
+ * 500 donde debería haber un 400.
+ */
+const ROLES_DE_EQUIPO = [
+  "producto",
+  "gestion",
+  "direccion",
+  "frontend",
+  "backend",
+  "fullstack",
+  "movil",
+  "diseno",
+  "qa",
+  "datos",
+  "ia",
+  "plataforma",
+  "seguridad",
+] as const;
 
 /**
  * Cómo quiere cada persona su panel.
@@ -267,6 +289,87 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
         [userId, body.presence ?? null, body.title ?? null, body.displayName ?? null],
       );
       return rows[0]!;
+    });
+  });
+
+  /**
+   * Lo mío EN UNA ORGANIZACIÓN CONCRETA: mi oficio aquí y mi rol.
+   *
+   * POR QUÉ NO CABE EN `/me/profile`. Porque `/me/profile` es la persona en
+   * general —un solo nombre, un solo estado— y esto cambia de organización a
+   * organización: la misma persona es «backend» en un proyecto y «plataforma»
+   * en otro (0048, 0052). Meterlo allí obligaría a que la ruta de «me pongo en
+   * no molestar» supiera en qué organización está mirando quien la llama.
+   *
+   * TRES COSAS QUE SE LLAMAN PARECIDO Y NO SON LA MISMA:
+   *
+   *   · `role` (owner/admin/member) es el PERMISO. No se elige: lo da quien
+   *     administra, y por eso no se toca desde aquí.
+   *   · `title` es el OFICIO en texto libre, lo que se le enseña a los demás.
+   *     Vacío aquí = se enseña el general de `profiles`.
+   *   · `rol` es una lista CERRADA y solo sirve para elegir qué tutorial se
+   *     ofrece. Nulo = el tutorial base, que vale para todos.
+   *
+   * Las dos funciones de la base no admiten un `_user`: decir a qué me dedico,
+   * o qué tutorial quiero ver, no puede convertirse en decidírselo a otro.
+   */
+  app.get("/organizations/:orgId/me", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: z.string().uuid() }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{
+        role: string;
+        title: string | null;
+        tituloGeneral: string | null;
+        rol: string | null;
+      }>(
+        `select m.role, m.title, p.title as "tituloGeneral", m.rol::text as rol
+           from organization_members m
+           join profiles p on p.id = m.user_id
+          where m.organization_id = $1 and m.user_id = $2`,
+        [orgId, userId],
+      );
+      // Las políticas ya deciden qué filas existen: si no sale ninguna, o no
+      // pertenece o la organización no está a su alcance, y son la misma
+      // respuesta a propósito.
+      if (!rows[0]) throw notFound("no perteneces a esa organización");
+      return rows[0];
+    });
+  });
+
+  app.patch("/organizations/:orgId/me", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: z.string().uuid() }), request.params);
+    const body = parseBody(
+      z.object({
+        /** Vacío lo borra, y entonces vuelve a enseñarse el general. */
+        title: z.string().trim().max(40).optional(),
+        /** `null` explícito vuelve al tutorial base. */
+        rol: z.enum(ROLES_DE_EQUIPO).nullish(),
+      }),
+      request.body,
+    );
+    const enviado = body as Record<string, unknown>;
+
+    return withUser(userId, async (db) => {
+      if (body.title !== undefined) {
+        await db.query("select public.set_my_title($1,$2)", [orgId, body.title]);
+      }
+      if ("rol" in enviado) {
+        await db.query("select public.set_my_rol($1,$2::public.rol_de_equipo)", [
+          orgId,
+          body.rol ?? null,
+        ]);
+      }
+      const { rows } = await db.query(
+        `select m.role, m.title, p.title as "tituloGeneral", m.rol::text as rol
+           from organization_members m
+           join profiles p on p.id = m.user_id
+          where m.organization_id = $1 and m.user_id = $2`,
+        [orgId, userId],
+      );
+      return rows[0];
     });
   });
 
