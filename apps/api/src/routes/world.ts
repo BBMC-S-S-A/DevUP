@@ -21,6 +21,70 @@ const tone = z.number().int().min(0).max(15);
  * la planta entera y esconder trozos en el cliente —que revelaría los nombres
  * de los canales privados— y no enviarlos nunca.
  */
+/**
+ * El nombre con el que nace el canal del agente. Se escribe tal como se lee en
+ * el producto, porque es lo que va a ver la gente en su barra lateral.
+ */
+const NOMBRE_DEL_AGENTE = "Agente IA";
+
+/**
+ * Crea el canal del agente si el espacio no lo tiene.
+ *
+ * POR QUÉ EXISTE, Y POR QUÉ NO SE INVENTA LA SALA EN EL CLIENTE. La sala del
+ * Agente IA tenía que crearla una persona a mano, y eso convertía una parte del
+ * producto en un truco que hay que saber. Pero una zona es SIEMPRE la
+ * proyección de un canal —está grabado cuatro veces en el proyecto, y la 0007
+ * dejó dicho que ante una zona sin canal «la pregunta correcta no es quito el
+ * NOT NULL»—, así que pintarla solo en el cliente es un callejón: el servidor
+ * rechaza entrar en ella, tira sus burbujas y el asignador la pisa con el
+ * siguiente canal.
+ *
+ * La salida que respeta las dos cosas es esta: el canal sigue siendo de verdad,
+ * pero lo crea el sistema en vez de la persona. `ensure_world_room`, justo
+ * debajo, ya convierte en zona todo canal sin zona, así que la sala aparece
+ * colocada y amueblada sin una línea más.
+ *
+ * SE TRAGA EL FALLO A PROPÓSITO, y esto no es pereza. Crear un canal pasa por
+ * las políticas de la base, así que quien no tenga permiso para crearlos
+ * recibiría un error — y ese error, lanzado aquí, le tumbaría DevVerse ENTERO
+ * por no poder añadir una sala de adorno. Sin permiso se queda sin la sala del
+ * agente y con el resto del mundo intacto, que es el reparto correcto del daño.
+ *
+ * LA COMPARACIÓN NO ES EXACTA a la del cliente (`normalizar` en
+ * `lib/world/agente-ia.ts`, que además quita acentos): aquí se comparan
+ * minúsculas sin separadores, que cubre «Agente IA», «agente-ia», «agente ia» y
+ * «AGENTE_IA». Un nombre con acento —«Agénte IA»— el cliente lo aceptaría como
+ * la sala y esto crearía un segundo canal. Es un rincón que se acepta a cambio
+ * de no meter `unaccent` en una consulta que corre en cada lectura del mapa.
+ */
+async function asegurarCanalDelAgente(
+  db: { query: (texto: string, valores?: unknown[]) => Promise<{ rows: unknown[] }> },
+  workspaceId: string,
+  log: { warn: (datos: unknown, mensaje: string) => void },
+): Promise<void> {
+  try {
+    const { rows } = await db.query(
+      `select 1
+         from channels
+        where workspace_id = $1
+          and lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g')) = 'agenteia'
+        limit 1`,
+      [workspaceId],
+    );
+    if (rows.length > 0) return;
+    // De texto y no de voz a propósito: entrar en una zona de voz engancha a
+    // quien pasa en la llamada de ese canal (ver `onZoneChange` en
+    // WorldView.tsx), y asomarse a ver qué dice el agente no puede abrirle el
+    // micrófono a nadie.
+    await db.query("select public.create_channel($1, $2, 'text', false)", [
+      workspaceId,
+      NOMBRE_DEL_AGENTE,
+    ]);
+  } catch (fallo) {
+    log.warn({ fallo, workspaceId }, "[mundo] no se pudo preparar el canal del agente");
+  }
+}
+
 export async function worldRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", requireSession);
 
@@ -38,6 +102,8 @@ export async function worldRoutes(app: FastifyInstance): Promise<void> {
       if (!enabled[0]?.ok) {
         throw new HttpError(403, "la vista inmersiva está desactivada en esta organización", "world_disabled");
       }
+
+      await asegurarCanalDelAgente(db, workspaceId, request.log);
 
       // Prepara la planta y coloca los canales que aún no tengan zona. Es
       // idempotente y barato, y evita cualquier proceso de fondo vigilando la

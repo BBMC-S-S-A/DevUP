@@ -128,15 +128,25 @@ export function zonaDelAgente(zones: Zone[]): Zone | null {
  * `ahora` entra como parámetro y no se lee de `Date.now()` dentro para que la
  * rotación de frases se pueda probar sin esperar nueve segundos.
  */
-export function peerDelAgente(zones: Zone[], live: LiveData | null, ahora: number): Peer | null {
+export function casillaDelAgente(zones: Zone[]): { x: number; y: number } | null {
   const zona = zonaDelAgente(zones);
   if (!zona) return null;
+  // En el centro de la sala: el amueblado deducido pega los escritorios a las
+  // paredes, así que el centro es lo que queda libre en cualquier tamaño de
+  // zona, sin coordenadas a mano por sala.
+  return { x: zona.x + Math.floor(zona.width / 2), y: zona.y + Math.floor(zona.height / 2) };
+}
 
-  // En el centro de la sala y mirando al sur: el amueblado deducido pega los
-  // escritorios a las paredes, así que el centro es lo que queda libre en
-  // cualquier tamaño de zona, sin coordenadas a mano por sala.
-  const x = zona.x + Math.floor(zona.width / 2);
-  const y = zona.y + Math.floor(zona.height / 2);
+export function peerDelAgente(zones: Zone[], live: LiveData | null, ahora: number): Peer | null {
+  const zona = zonaDelAgente(zones);
+  const casilla = casillaDelAgente(zones);
+  if (!zona || !casilla) return null;
+
+  // La casilla sale de `casillaDelAgente` y no se calcula aquí: la necesita
+  // también `findAction`, para no ofrecer «Sentarse» en la silla que el muñeco
+  // está ocupando. Dos copias de una posición acaban separándose, y entonces se
+  // podría sentar justo encima de él.
+  const { x, y } = casilla;
 
   return {
     peerId: "agente-ia",
