@@ -2939,6 +2939,108 @@ async function main(): Promise<void> {
       quedan.rowCount === 0 && quedanPruebas.rowCount === 0,
     );
 
+    console.log("\nReuniones con hora, y quien puede verlas");
+
+    const reunionDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into meeting_events
+           (workspace_id, channel_id, title, starts_at, duration_minutes, created_by)
+         values ($1,$2,$3,$4,$5,$6) returning id`,
+        [
+          acme.ws,
+          acme.publicChannel,
+          "planning semanal",
+          new Date(Date.now() + 3_600_000).toISOString(),
+          30,
+          ana,
+        ],
+      );
+      return rows[0]!.id;
+    });
+
+    check(
+      "Carla, del mismo espacio, ve la reunion",
+      (
+        await withUser(carla, (db) =>
+          db.query("select id from meeting_events where id = $1", [reunionDeAcme]),
+        )
+      ).rowCount === 1,
+    );
+    check(
+      "Bruno, de otra organizacion, no la ve",
+      (
+        await withUser(bruno, (db) =>
+          db.query("select id from meeting_events where id = $1", [reunionDeAcme]),
+        )
+      ).rowCount === 0,
+    );
+
+    await denied("Bruno no puede convocar una reunion en el espacio de Acme", () =>
+      withUser(bruno, (db) =>
+        db.query(
+          `insert into meeting_events (workspace_id, title, starts_at, duration_minutes, created_by)
+           values ($1,$2,$3,$4,$5)`,
+          [acme.ws, "intrusion", new Date().toISOString(), 15, bruno],
+        ),
+      ),
+    );
+
+    // Apuntarse es de uno mismo.
+    await withUser(carla, (db) =>
+      db.query("insert into meeting_attendees (event_id, user_id) values ($1,$2)", [
+        reunionDeAcme,
+        carla,
+      ]),
+    );
+    check(
+      "Carla se apunta a la reunion",
+      (
+        await withUser(ana, (db) =>
+          db.query(
+            "select 1 from meeting_attendees where event_id = $1 and user_id = $2",
+            [reunionDeAcme, carla],
+          ),
+        )
+      ).rowCount === 1,
+    );
+
+    await denied("nadie apunta a un tercero a una reunion", () =>
+      withUser(carla, (db) =>
+        db.query("insert into meeting_attendees (event_id, user_id) values ($1,$2)", [
+          reunionDeAcme,
+          bruno,
+        ]),
+      ),
+    );
+
+    check(
+      "Bruno, de otra organizacion, no ve quien va a la reunion de Acme",
+      (
+        await withUser(bruno, (db) =>
+          db.query("select 1 from meeting_attendees where event_id = $1", [reunionDeAcme]),
+        )
+      ).rowCount === 0,
+    );
+
+    const intentoBorrarAjena = await withUser(ana, (db) =>
+      db.query("delete from meeting_attendees where event_id = $1 and user_id = $2", [
+        reunionDeAcme,
+        carla,
+      ]),
+    );
+    check("nadie borra la asistencia de otro (0 filas, no error)", intentoBorrarAjena.rowCount === 0);
+    check(
+      "la asistencia de Carla sigue ahi",
+      (
+        await withUser(ana, (db) =>
+          db.query(
+            "select 1 from meeting_attendees where event_id = $1 and user_id = $2",
+            [reunionDeAcme, carla],
+          ),
+        )
+      ).rowCount === 1,
+    );
+
     console.log("\nNadie se invita solo a una organizacion ajena");
 
     // ESTO ES UNA REGRESION, NO UNA COMPROBACION DE RUTINA. Hasta la 0041,

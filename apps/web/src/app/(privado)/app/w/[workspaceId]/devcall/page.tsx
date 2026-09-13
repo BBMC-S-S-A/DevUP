@@ -1,14 +1,26 @@
 "use client";
 
-import { Headphones, Loader2, Mic, PhoneCall, Plus, Radio, Video } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  Headphones,
+  Loader2,
+  Mic,
+  PhoneCall,
+  Plus,
+  Radio,
+  Video,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ApiError, type Channel, api } from "@/lib/api";
-import { Boton } from "@/components/ui/Boton";
+import { ApiError, type Channel, type MeetingEvent, api } from "@/lib/api";
+import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { useConfirmar } from "@/components/ui/Confirmar";
 import { useWorkspaceId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
@@ -33,8 +45,6 @@ import { Avatar } from "@/components/perfil/Avatar";
  *  - **Quién está dentro de una sala sin entrar.** Esa presencia vive en la
  *    memoria del servidor de tiempo real y ninguna ruta la expone. Es lo que
  *    hace que Discord se lea de un vistazo, y está delegado.
- *  - **Agenda y reuniones programadas.** No hay tabla donde guardarlas. Una
- *    reunión con hora es una fila, no una pantalla, y va delegada también.
  *
  * Mientras tanto esta pantalla no dibuja huecos con «próximamente»: enseña lo
  * que hay y dice en una línea lo que todavía no.
@@ -42,11 +52,15 @@ import { Avatar } from "@/components/perfil/Avatar";
 export default function DevCallPage() {
   const workspaceId = useWorkspaceId();
   const router = useRouter();
+  const confirmar = useConfirmar();
   const { room, activeChannelId, activeChannelName, joinChannel, leaveChannel } = useVoiceCall();
 
   const canales = useRecurso<{ channels: Channel[] }>(`/workspaces/${workspaceId}/channels`);
   const salas = (canales.datos?.channels ?? []).filter((c) => c.kind === "voice");
   const enLlamada = Boolean(activeChannelId) && room.status !== "idle";
+
+  const reuniones = useRecurso<{ events: MeetingEvent[] }>(`/workspaces/${workspaceId}/events`);
+  const eventos = reuniones.datos?.events ?? [];
 
   return (
     <Pagina
@@ -171,14 +185,244 @@ export default function DevCallPage() {
 
           <NuevaSala workspaceId={workspaceId} onCreada={() => void canales.recargar()} />
 
+          <div className="pt-2">
+            <Rotulo className="mb-2 block px-1">Agenda</Rotulo>
+            {eventos.length === 0 ? (
+              <p className="px-1 text-[11px] leading-relaxed text-faint">
+                Todavía no hay ninguna reunión convocada en este espacio.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {eventos.map((evento) => (
+                  <EventoFila
+                    key={evento.id}
+                    evento={evento}
+                    onCambio={() => void reuniones.recargar()}
+                    onCancelar={async () => {
+                      if (
+                        !(await confirmar({
+                          titulo: `¿Cancelar «${evento.title}»?`,
+                          descripcion: "Se avisa a nadie automáticamente: quienes se apuntaron dejan de verla.",
+                          accion: "Cancelar reunión",
+                          peligro: true,
+                        }))
+                      )
+                        return;
+                      try {
+                        await api.delete(`/events/${evento.id}`);
+                        void reuniones.recargar();
+                      } catch (caught) {
+                        toast.error(
+                          caught instanceof ApiError ? caught.message : "no se pudo cancelar",
+                        );
+                      }
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
+
+            <NuevaReunion
+              workspaceId={workspaceId}
+              salas={salas}
+              onCreada={() => void reuniones.recargar()}
+            />
+          </div>
+
           <p className="px-1 text-[11px] leading-relaxed text-faint">
-            Todavía no se ve quién hay dentro de una sala sin entrar, ni se pueden agendar reuniones
-            con hora. Lo primero vive en el servidor de tiempo real y lo segundo necesita dónde
-            guardarlas; las dos están repartidas en el tablero.
+            Todavía no se ve quién hay dentro de una sala sin entrar: esa presencia vive en el
+            servidor de tiempo real y ninguna ruta la expone todavía.
           </p>
         </div>
       )}
     </Pagina>
+  );
+}
+
+/** Una reunión de la agenda, con su hora y quién va. */
+function EventoFila({
+  evento,
+  onCambio,
+  onCancelar,
+}: {
+  evento: MeetingEvent;
+  onCambio: () => void;
+  onCancelar: () => void;
+}) {
+  const [ocupado, setOcupado] = useState(false);
+
+  const cuando = new Date(evento.startsAt).toLocaleString("es-ES", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const alternarAsistencia = async () => {
+    setOcupado(true);
+    try {
+      if (evento.attending) {
+        await api.delete(`/events/${evento.id}/asistencia`);
+      } else {
+        await api.post(`/events/${evento.id}/asistencia`);
+      }
+      onCambio();
+    } catch (caught) {
+      toast.error(caught instanceof ApiError ? caught.message : "no se pudo actualizar");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <li>
+      <Tarjeta className="flex flex-wrap items-center gap-3 p-3.5">
+        <span
+          aria-hidden
+          className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong bg-raised text-faint"
+        >
+          <Calendar size={15} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-ink">{evento.title}</span>
+          <span className="block text-[11px] text-faint">
+            {cuando} · {evento.durationMinutes} min
+            {evento.channelName ? ` · ${evento.channelName}` : ""}
+            {evento.attendeeCount > 0
+              ? ` · ${evento.attendeeCount} ${evento.attendeeCount === 1 ? "persona va" : "personas van"}`
+              : ""}
+          </span>
+        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Boton
+            tamano="sm"
+            variante={evento.attending ? "fantasma" : "primario"}
+            disabled={ocupado}
+            onClick={alternarAsistencia}
+          >
+            {evento.attending ? <Check size={13} /> : null}
+            {evento.attending ? "Voy" : "Apuntarme"}
+          </Boton>
+          <BotonIcono etiqueta="Cancelar reunión" onClick={onCancelar} className="hover:text-danger">
+            <X size={14} />
+          </BotonIcono>
+        </div>
+      </Tarjeta>
+    </li>
+  );
+}
+
+/** Convocar una reunión: título, cuándo, cuánto dura y en qué sala. */
+function NuevaReunion({
+  workspaceId,
+  salas,
+  onCreada,
+}: {
+  workspaceId: string;
+  salas: Channel[];
+  onCreada: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [titulo, setTitulo] = useState("");
+  const [cuando, setCuando] = useState("");
+  const [duracion, setDuracion] = useState("30");
+  const [salaId, setSalaId] = useState("");
+  const [creando, setCreando] = useState(false);
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="presionable mt-2 flex w-full items-center gap-2.5 rounded-2xl border border-dashed
+          border-line px-4 py-3 text-sm text-faint hover:border-accent/40 hover:bg-accent-soft/20 hover:text-muted"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-dashed border-line">
+          <Plus size={15} />
+        </span>
+        Convocar reunión
+      </button>
+    );
+  }
+
+  return (
+    <Tarjeta className="mt-2 p-4">
+      <Rotulo>Convocar reunión</Rotulo>
+      <form
+        className="mt-3 space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const limpio = titulo.trim();
+          const minutos = Number(duracion);
+          if (!limpio || !cuando || !Number.isFinite(minutos) || minutos <= 0) return;
+
+          setCreando(true);
+          try {
+            await api.post(`/workspaces/${workspaceId}/events`, {
+              title: limpio,
+              startsAt: new Date(cuando).toISOString(),
+              durationMinutes: Math.round(minutos),
+              channelId: salaId || null,
+            });
+            setTitulo("");
+            setCuando("");
+            setDuracion("30");
+            setSalaId("");
+            setAbierto(false);
+            onCreada();
+          } catch (caught) {
+            toast.error(caught instanceof ApiError ? caught.message : "no se pudo convocar");
+          } finally {
+            setCreando(false);
+          }
+        }}
+      >
+        <Field label="Título" value={titulo} onChange={setTitulo} autoFocus maxLength={120} />
+        <div className="flex flex-wrap gap-2">
+          <div className="min-w-[10rem] flex-1">
+            <Field
+              label="Cuándo"
+              type="datetime-local"
+              value={cuando}
+              onChange={setCuando}
+            />
+          </div>
+          <div className="w-24">
+            <Field label="Minutos" type="number" value={duracion} onChange={setDuracion} />
+          </div>
+        </div>
+        {salas.length > 0 && (
+          <label className="block">
+            <Rotulo className="mb-1.5 block">Sala (opcional)</Rotulo>
+            <select
+              value={salaId}
+              onChange={(e) => setSalaId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-line bg-canvas/60 px-3.5 text-sm outline-none
+                transition-[border-color,box-shadow,background-color] duration-200
+                hover:border-line-strong
+                focus:border-accent/60 focus:bg-canvas focus:shadow-[0_0_0_3px_var(--anillo-foco)]"
+            >
+              <option value="">Sin sala fija</option>
+              {salas.map((sala) => (
+                <option key={sala.id} value={sala.id}>
+                  {sala.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <div className="flex justify-end gap-2">
+          <Boton type="button" variante="fantasma" onClick={() => setAbierto(false)}>
+            Cancelar
+          </Boton>
+          <Boton type="submit" disabled={!titulo.trim() || !cuando || creando}>
+            {creando ? <Loader2 size={14} className="animate-spin" /> : null}
+            Convocar
+          </Boton>
+        </div>
+      </form>
+    </Tarjeta>
   );
 }
 

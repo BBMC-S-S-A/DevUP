@@ -264,6 +264,21 @@ export type Channel = {
   createdAt: string;
 };
 
+export type MeetingEvent = {
+  id: string;
+  workspaceId: string;
+  channelId: string | null;
+  channelName: string | null;
+  title: string;
+  description: string;
+  startsAt: string;
+  durationMinutes: number;
+  createdBy: string;
+  createdAt: string;
+  attendeeCount: number;
+  attending: boolean;
+};
+
 export type Tag = {
   id: string;
   name: string;

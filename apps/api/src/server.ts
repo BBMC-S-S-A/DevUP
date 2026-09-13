@@ -33,6 +33,7 @@ import { notificationRoutes } from "./routes/notifications.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { preferenceRoutes } from "./routes/preferences.js";
 import { recordingRoutes } from "./routes/recordings.js";
+import { reunionesRoutes } from "./routes/reuniones.js";
 import { salesRoutes } from "./routes/sales.js";
 import { searchRoutes } from "./routes/search.js";
 import { spotifyRoutes } from "./routes/spotify.js";
@@ -177,6 +178,7 @@ await app.register(grafoRoutes);
 await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
+await app.register(reunionesRoutes);
 await app.register(notificationRoutes);
 await app.register(oauthRoutes);
 
