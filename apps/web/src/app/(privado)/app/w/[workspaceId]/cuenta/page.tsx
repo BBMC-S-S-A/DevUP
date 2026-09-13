@@ -4,6 +4,7 @@ import {
   Bot,
   Check,
   Copy,
+  ImagePlus,
   KeyRound,
   Loader2,
   Monitor,
@@ -13,7 +14,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
@@ -22,6 +23,7 @@ import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies"
 import { Pagina } from "@/components/ui/Pagina";
 import { type ConexionDeAgente, type Sesion, ApiError, api } from "@/lib/api";
 import { Dispositivos } from "@/components/ajustes/Dispositivos";
+import { uploadAvatar } from "@/lib/files/upload";
 import { useSession } from "@/lib/session";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
@@ -291,12 +293,133 @@ const FICHA: Record<
  * que se escribió, y la única pantalla que llamaba a esa ruta mandaba
  * únicamente la presencia. Otra función construida que no se podía encontrar.
  *
- * LA FOTO NO ESTÁ, Y NO SE FINGE. `profiles.avatar_url` existe, pero solo se
- * escribe al entrar con Google y no se pinta en ninguna pantalla: en toda la
- * aplicación el avatar es la inicial. Añadir la subida sin cambiar además todos
- * los sitios que dibujan esa chapa daría una foto que solo se ve aquí, que es
- * peor que no tenerla.
+ * LA FOTO YA SE PUEDE PONER (0057), y hay que decir hasta dónde llega. Antes
+ * `profiles.avatar_url` solo la escribía entrar con Google, así que quien se
+ * registró con correo no tenía ninguna forma de tener foto. Ahora se sube, se
+ * cambia y se quita desde aquí.
+ *
+ * Lo que TODAVÍA no pasa: casi todas las pantallas siguen dibujando la inicial,
+ * porque cada una construye su chapa por su cuenta. Eso es lo siguiente, y se
+ * dice en vez de dejar que alguien descubra solo que su foto se ve en un sitio
+ * y en otro no.
+ *
+ * QUITARLA NO BORRA LA DE GOOGLE, y por eso se siente como deshacer: quien
+ * entró con Google vuelve a la suya, y quien no, a la inicial.
  */
+/**
+ * La foto de perfil: ponerla, cambiarla y quitarla.
+ *
+ * SE PINTA LO QUE SE ACABA DE ELEGIR, sin esperar a recargar la sesión. El
+ * viaje de subir y confirmar dura lo suyo, y durante ese rato la pantalla
+ * seguiría enseñando la foto anterior — que es justo lo que hace dudar de si el
+ * cambio funcionó y lleva a subirla otra vez.
+ *
+ * EL TAMAÑO SE COMPRUEBA AQUÍ aunque el almacén acepte lo que sea: una foto de
+ * diez megas se sube entera, se guarda, y luego se pinta en una chapa de
+ * cuarenta píxeles en cada tarjeta del tablero. El coste lo paga quien la mira,
+ * no quien la sube, así que no se nota al elegirla.
+ */
+function FotoDePerfil() {
+  const { user, refresh } = useSession();
+  const entrada = useRef<HTMLInputElement | null>(null);
+  const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  const actual = vistaPrevia ?? user?.avatarUrl ?? null;
+
+  const elegir = async (fichero: File | undefined) => {
+    if (!fichero) return;
+    if (!fichero.type.startsWith("image/")) {
+      toast.error("tiene que ser una imagen");
+      return;
+    }
+    if (fichero.size > 5 * 1024 * 1024) {
+      toast.error("la foto pesa más de 5 MB", {
+        description: "Se va a pintar en chapas pequeñas: con menos sobra.",
+      });
+      return;
+    }
+
+    setOcupado(true);
+    try {
+      const url = await uploadAvatar(fichero);
+      setVistaPrevia(url);
+      // La sesión también, porque el avatar se lee de ahí en la barra.
+      await refresh();
+      toast.success("foto actualizada");
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo subir la foto");
+    } finally {
+      setOcupado(false);
+      // Se limpia el campo para que volver a elegir EL MISMO fichero dispare el
+      // evento: si no, corregir una foto mal recortada y volver a elegirla no
+      // hace nada, y parece que la aplicación la ignora.
+      if (entrada.current) entrada.current.value = "";
+    }
+  };
+
+  const quitar = async () => {
+    setOcupado(true);
+    try {
+      await api.delete("/me/avatar");
+      setVistaPrevia(null);
+      await refresh();
+      toast.success("foto quitada");
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo quitar");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3.5">
+      <span
+        aria-hidden
+        className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-2xl border
+          border-line-strong bg-accent-soft/70 font-display text-base font-semibold text-accent-bright"
+      >
+        {actual ? (
+          // eslint-disable-next-line @next/next/no-img-element -- la URL viene
+          // firmada y caduca; el optimizador de Next no puede con eso.
+          <img src={actual} alt="" className="size-full object-cover" />
+        ) : (
+          iniciales(user?.displayName || "?")
+        )}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <input
+          ref={entrada}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+          hidden
+          onChange={(e) => void elegir(e.target.files?.[0])}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Boton
+            variante="fantasma"
+            tamano="sm"
+            icono={<ImagePlus size={14} />}
+            cargando={ocupado}
+            onClick={() => entrada.current?.click()}
+          >
+            {actual ? "Cambiar foto" : "Poner foto"}
+          </Boton>
+          {actual && (
+            <Boton variante="fantasma" tamano="sm" disabled={ocupado} onClick={() => void quitar()}>
+              Quitar
+            </Boton>
+          )}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+          Se ve al lado de tu nombre. Cuadrada queda mejor: se recorta al centro.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /**
  * El huso horario.
  *
@@ -476,15 +599,11 @@ function Perfil() {
         Cómo te ve el resto del equipo: en la barra, en las menciones y en cada tarea que lleves.
       </p>
 
-      <div className="mt-4 flex items-start gap-3.5">
-        <span
-          aria-hidden
-          className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line-strong
-            bg-accent-soft/70 font-display text-base font-semibold text-accent-bright"
-        >
-          {iniciales(nombre || user?.displayName || "?")}
-        </span>
+      <div className="mt-4">
+        <FotoDePerfil />
+      </div>
 
+      <div className="mt-4 flex items-start gap-3.5">
         <div className="min-w-0 flex-1 space-y-3">
           <Field
             label="Nombre"

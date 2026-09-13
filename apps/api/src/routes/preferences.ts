@@ -3,7 +3,16 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
 import { WIDGETS_CON_DATOS, datosDeWidgets } from "../lib/widgets.js";
-import { notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { badRequest, notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { env } from "../env.js";
+import {
+  buildUserAssetKey,
+  deleteObject,
+  headObject,
+  signDownload,
+  signUpload,
+  userOfKey,
+} from "../storage/s3.js";
 
 /**
  * La lista CERRADA de la 0052. Se escribe aquí además de en la base porque zod
@@ -307,6 +316,137 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
       );
       return rows[0]!;
     });
+  });
+
+  /**
+   * La foto de perfil, en tres pasos: pedir, confirmar, y quitarla.
+   *
+   * POR QUÉ TRES PASOS Y NO UNO. El archivo NO pasa por la API: se firma una
+   * URL y el navegador sube contra el almacén. Es lo mismo que hacen los
+   * archivos y el logo de una organización, y el motivo es que una foto de
+   * cinco megas atravesando el servidor lo ocupa entero durante la subida.
+   *
+   * EL PASO DE CONFIRMAR ES DONDE ESTÁ LA SEGURIDAD, no un trámite. Sin él,
+   * cualquiera con sesión podría decir «mi foto es esta clave» apuntando a la
+   * de otro. Se comprueban dos cosas: que la clave sea SUYA —empieza por
+   * `users/<su id>/`— y que el objeto exista de verdad en el almacén, porque
+   * una subida que se cortó a medias dejaría el perfil apuntando a nada.
+   */
+  app.post("/me/avatar", async (request) => {
+    const userId = requireUser(request);
+    const body = parseBody(
+      z.object({
+        fileName: z.string().trim().min(1).max(255),
+        mimeType: z.string().trim().max(255).default("application/octet-stream"),
+      }),
+      request.body,
+    );
+
+    // Solo imágenes. No es por gusto: lo que se suba aquí se va a pintar en un
+    // `<img>` en todas las pantallas, y un SVG es un documento que puede traer
+    // guion dentro — por eso tampoco vale.
+    if (!/^image\/(png|jpe?g|webp|gif|avif)$/i.test(body.mimeType)) {
+      throw badRequest("la foto tiene que ser una imagen (PNG, JPG, WEBP, GIF o AVIF)");
+    }
+
+    const avatarKey = buildUserAssetKey(userId, body.fileName);
+    return {
+      avatarKey,
+      uploadUrl: await signUpload(avatarKey, body.mimeType),
+      expiresIn: env.S3_SIGNED_URL_TTL,
+    };
+  });
+
+  app.post("/me/avatar/confirm", async (request) => {
+    const userId = requireUser(request);
+    const body = parseBody(z.object({ avatarKey: z.string().min(1).max(500) }), request.body);
+
+    if (userOfKey(body.avatarKey) !== userId) {
+      throw badRequest("esa clave no es tuya");
+    }
+    const head = await headObject(body.avatarKey);
+    if (!head) throw badRequest("la subida no llegó a completarse");
+
+    const anterior = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ set_my_avatar_key: string | null }>(
+        "select public.set_my_avatar_key($1)",
+        [body.avatarKey],
+      );
+      return rows[0]?.set_my_avatar_key ?? null;
+    });
+
+    // La anterior se borra del almacén DESPUÉS de que la base apunte a la
+    // nueva. Al revés, un fallo entre medias dejaría el perfil apuntando a un
+    // objeto ya borrado — una foto rota en todas las pantallas.
+    if (anterior) await deleteObject(anterior);
+
+    return { url: await signDownload(body.avatarKey, "foto", "inline") };
+  });
+
+  /**
+   * Quitarse la foto.
+   *
+   * NO TOCA LA DE GOOGLE, y eso es lo que hace que esto se sienta como
+   * deshacer: quien entró con Google vuelve a la suya, y quien no, a la
+   * inicial. Borrar las dos convertiría «quitar mi foto» en «quedarme sin
+   * ninguna para siempre», que no es lo que nadie pide.
+   */
+  app.delete("/me/avatar", async (request, reply) => {
+    const userId = requireUser(request);
+
+    const anterior = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ set_my_avatar_key: string | null }>(
+        "select public.set_my_avatar_key(null)",
+      );
+      return rows[0]?.set_my_avatar_key ?? null;
+    });
+
+    if (anterior) await deleteObject(anterior);
+    return reply.status(204).send();
+  });
+
+  /**
+   * Las fotos de varias personas de golpe.
+   *
+   * POR QUÉ EN LOTE. Un tablero enseña veinte tarjetas con su responsable, y
+   * una petición por cara son veinte peticiones para pintar una pantalla. Y
+   * meterlas en cada listado tampoco vale: se firmarían en cada recarga, las
+   * gaste quien las gaste.
+   *
+   * SE DEVUELVE SOLO LO QUE SE PUEDE VER, y no es una comprobación aparte: es
+   * el mismo SELECT. `profiles` solo deja ver a quien comparte organización
+   * (0001), así que preguntar por un desconocido no devuelve un error que
+   * confirme que existe — devuelve un hueco, igual que un identificador
+   * inventado.
+   */
+  app.post("/avatars/urls", async (request) => {
+    const userId = requireUser(request);
+    const { ids } = parseBody(
+      z.object({ ids: z.array(z.string().uuid()).min(1).max(60) }),
+      request.body,
+    );
+
+    const gente = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string; avatarKey: string | null; avatarUrl: string | null }>(
+        `select id, avatar_key as "avatarKey", avatar_url as "avatarUrl"
+           from profiles where id = any($1::uuid[])`,
+        [ids],
+      );
+      return rows;
+    });
+
+    const urls: Record<string, string> = {};
+    for (const persona of gente) {
+      // La subida gana a la de Google: si alguien se molestó en poner una foto,
+      // esa es la que quiere. La de Google llegó sola.
+      if (persona.avatarKey) {
+        urls[persona.id] = await signDownload(persona.avatarKey, "foto", "inline");
+      } else if (persona.avatarUrl) {
+        urls[persona.id] = persona.avatarUrl;
+      }
+    }
+
+    return { urls, expiresIn: env.S3_SIGNED_URL_TTL };
   });
 
   /**

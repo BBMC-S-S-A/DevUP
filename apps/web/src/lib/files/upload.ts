@@ -103,6 +103,25 @@ export async function uploadOrgLogo(organizationId: string, file: File): Promise
   return reserved.logoKey;
 }
 
+/**
+ * La foto de perfil. Mismos tres pasos que el logo, y por el mismo motivo.
+ *
+ * Devuelve la URL ya firmada para poder pintarla en el acto: sin eso habría que
+ * recargar la sesión entera solo para ver la foto que se acaba de elegir, y
+ * durante ese viaje la pantalla seguiría enseñando la anterior.
+ */
+export async function uploadAvatar(file: File): Promise<string> {
+  const reservado = await api.post<{ avatarKey: string; uploadUrl: string }>("/me/avatar", {
+    fileName: file.name,
+    mimeType: file.type || "application/octet-stream",
+  });
+  await put(reservado.uploadUrl, file, {});
+  const { url } = await api.post<{ url: string }>("/me/avatar/confirm", {
+    avatarKey: reservado.avatarKey,
+  });
+  return url;
+}
+
 export async function downloadUrl(
   fileId: string,
   disposition: "inline" | "attachment" = "inline",
