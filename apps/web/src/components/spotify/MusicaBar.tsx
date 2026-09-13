@@ -3,6 +3,7 @@
 import { Music, Pause, Play, SkipForward } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { BotonIcono } from "@/components/ui/Boton";
+import { enDevVerse } from "@/lib/barras-de-abajo";
 import { useSpotify } from "@/lib/spotify/SpotifyProvider";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { SpotifyWidget } from "./SpotifyWidget";
@@ -31,7 +32,10 @@ export function MusicaBar() {
   const { activeChannelId, room } = useVoiceCall();
   const pathname = usePathname();
 
-  const enDevVerse = pathname?.includes("/devverse") ?? false;
+  // La misma comprobación que usa `ActiveCallBar`, en un solo sitio. Ver
+  // `lib/barras-de-abajo.ts` para la regla entera: dentro de DevVerse manda el
+  // mundo, porque su pista de abajo cae justo donde caen estas barras.
+  const esDevVerse = enDevVerse(pathname);
   const hayLlamada = Boolean(activeChannelId) && room.status !== "idle";
 
   // Se pinta si este navegador está reproduciendo, o si la sala tiene algo
@@ -39,7 +43,7 @@ export function MusicaBar() {
   // eres quien pincha.
   const pista = player.estado.pista;
   const enSala = sesion?.trackName ? sesion : null;
-  if (enDevVerse || !canal || (!pista && !enSala)) return null;
+  if (esDevVerse || !canal || (!pista && !enSala)) return null;
 
   const puedeControlar = player.estado.listo && !player.estado.sinPremium && pista !== null;
   const titulo = pista?.nombre ?? enSala?.trackName ?? "";

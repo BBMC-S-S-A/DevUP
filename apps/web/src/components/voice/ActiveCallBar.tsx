@@ -3,6 +3,7 @@
 import { Circle, Mic, MicOff, PhoneOff } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { enDevVerse } from "@/lib/barras-de-abajo";
 import { SpotifyWidget } from "@/components/spotify/SpotifyWidget";
 import { BotonIcono } from "@/components/ui/Boton";
 import { useElapsed } from "@/lib/voice/useElapsed";
@@ -25,6 +26,29 @@ export function ActiveCallBar() {
   const elapsed = useElapsed(room.startedAt);
 
   if (!activeChannelId || room.status === "idle") return null;
+
+  /**
+   * En DevVerse no, y por dos razones a la vez.
+   *
+   * LA PRIMERA, QUE ES LA QUE SE VE: esta barra es `fixed bottom-4` centrada, y
+   * la pista de DevVerse —«Muévete con WASD…», y el aviso de «E» para actuar—
+   * es `absolute bottom-0 p-4` también centrada. Caen en el mismo sitio exacto
+   * y la barra tapa la pista. Y no es un caso raro: en DevVerse se entra en una
+   * llamada CAMINANDO hasta una sala de voz, así que estar en llamada es el
+   * caso normal, no la excepción.
+   *
+   * LA SEGUNDA, QUE ES LA QUE DECIDE: allí no hace falta. DevVerse tiene su
+   * propio `PanelLlamada` —con colgar, cámara y quién está— así que la barra
+   * global no añade nada y se lleva por delante lo único que explica los
+   * controles del mundo.
+   *
+   * `MusicaBar` ya hacía esto mismo, por el mismo motivo. La comprobación vive
+   * en `lib/barras-de-abajo.ts` para que las dos barras usen LA MISMA: en cuanto
+   * fueran dos copias, cambiar la ruta apartaría una y no la otra, y eso se ve
+   * como un fallo de dibujo y se busca en el CSS.
+   */
+  if (enDevVerse(pathname)) return null;
+
   const channelHref = `/app/w/${activeWorkspaceId}/c/${activeChannelId}`;
   const onOwnPage = pathname === channelHref;
 
