@@ -27,7 +27,7 @@
  *   npm run test:grafo --workspace apps/api
  */
 import { closePool, withUser } from "../db/pool.js";
-import { olvidarNodo, retejerTarea, tejer, vecinosDe } from "../lib/grafo.js";
+import { olvidarNodo, retejerMensaje, retejerTarea, tejer, vecinosDe } from "../lib/grafo.js";
 
 let total = 0;
 const fallos: string[] = [];
@@ -399,6 +399,121 @@ async function main(): Promise<void> {
     // Y una vez encallado, ya no hay forma de llegar a él desde la API — ni
     // para verlo ni para quitarlo. Solo el dueño de la base puede.
     await admin.query("delete from graph_links where target_id = $1", [segundo]);
+    /* =======================================================================
+     * De qué conversación salió esto
+     *
+     * Era el único hueco real que le quedaba al grafo: `contexto_de_tarea`
+     * contestaba «ninguna conversación enlazada» casi siempre, y no porque no
+     * las hubiera — las menciones solo saben apuntar a personas.
+     *
+     * Lo que se vigila aquí no es que enlace, que es lo fácil. Es que NO enlace
+     * de más, porque un enlace falso en un grafo se lee con la misma confianza
+     * que uno verdadero:
+     *
+     *   · un identificador que no es de ninguna tarea
+     *   · uno de una tarea de OTRO espacio, aunque quien escribe la vea
+     *   · y que editar el mensaje para quitar la cita quite la arista
+     * ==================================================================== */
+
+    console.log("\nDe qué conversación salió esto");
+
+    // El canal lo crea el dueño de la base: crearlo bajo RLS pide condiciones
+    // que no son lo que se está probando aquí. Lo que sí corre bajo RLS —que es
+    // lo que importa— es `retejerMensaje`.
+    const canal = (
+      await admin.query<{ id: string }>(
+        `insert into channels (workspace_id, name, kind, is_private, created_by)
+         values ($1,'general','text',false,$2) returning id`,
+        [acme.ws, ana],
+      )
+    ).rows[0]!.id;
+
+    const escribir = (texto: string) =>
+      withUser(ana, async (db) => {
+        const { rows } = await db.query<{ id: string }>(
+          "insert into messages (channel_id, author_id, body) values ($1,$2,$3) returning id",
+          [canal, ana, texto],
+        );
+        await retejerMensaje(db, rows[0]!.id);
+        return rows[0]!.id;
+      });
+
+    const citaPagos = await escribir(
+      `Lo de la pasarela lo dejamos para el sprint que viene [tarea ${acme.pagos}]`,
+    );
+
+    const desdeMensaje = await withUser(ana, (db) => vecinosDe(db, "mensaje", citaPagos));
+    check("citar una tarea por su identificador la enlaza", desdeMensaje.length === 1);
+    check("y apunta a la tarea citada", desdeMensaje[0]?.nodoId === acme.pagos);
+    check("con la flecha saliendo del mensaje", desdeMensaje[0]?.direccion === "sale");
+
+    // Y desde la tarea se ve la conversación: es la mitad que hace útil esto.
+    const desdeTarea = await withUser(ana, (db) => vecinosDe(db, "tarea", acme.pagos));
+    check(
+      "y desde la tarea se ve de qué conversación salió",
+      desdeTarea.some((v) => v.nodoId === citaPagos && v.direccion === "entra"),
+    );
+
+    console.log("\nLo que NO enlaza");
+
+    const conUuidFalso = await escribir(
+      "mirad este identificador 00000000-0000-0000-0000-000000000000 a ver",
+    );
+    check(
+      "un identificador que no es de nadie no enlaza nada",
+      (await withUser(ana, (db) => vecinosDe(db, "mensaje", conUuidFalso))).length === 0,
+    );
+
+    // LA QUE MÁS IMPORTA. Ana ve las dos tareas y los dos espacios, así que la
+    // política dejaría tejer esto. Lo que lo impide es la regla: un canal de un
+    // proyecto no queda unido al tablero de otro porque alguien pegó algo sin
+    // darse cuenta — y el grafo se lee después como si dijera la verdad.
+    const otroEspacio = await withUser(ana, async (db) => {
+      const { rows: ws } = await db.query<{ id: string }>(
+        "insert into workspaces (organization_id, name, created_by) values ($1,'Otro',$2) returning id",
+        [acme.org, ana],
+      );
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [ws[0]!.id],
+      );
+      const { rows: t } = await db.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by)
+         values ($1,$2,'De otro proyecto',1000,$3) returning id`,
+        [ws[0]!.id, col[0]!.id, ana],
+      );
+      return t[0]!.id;
+    });
+
+    const citaAjena = await escribir(`y esta otra [tarea ${otroEspacio}]`);
+    check(
+      "una tarea de otro espacio no se enlaza desde este canal",
+      (await withUser(ana, (db) => vecinosDe(db, "mensaje", citaAjena))).length === 0,
+    );
+
+    console.log("\nY si se edita o se borra");
+
+    const editado = await withUser(ana, async (db) => {
+      await db.query("update messages set body = 'ya no digo nada' where id = $1", [citaPagos]);
+      await retejerMensaje(db, citaPagos);
+      return (await vecinosDe(db, "mensaje", citaPagos)).length;
+    });
+    check("quitar la cita al editar quita la arista", editado === 0);
+
+    const trasBorrar = await withUser(ana, async (db) => {
+      const otro = await db.query<{ id: string }>(
+        "insert into messages (channel_id, author_id, body) values ($1,$2,$3) returning id",
+        [canal, ana, `otra vez [tarea ${acme.pagos}]`],
+      );
+      await retejerMensaje(db, otro.rows[0]!.id);
+      await db.query(
+        "update messages set deleted_at = now(), body = '(mensaje eliminado)' where id = $1",
+        [otro.rows[0]!.id],
+      );
+      await retejerMensaje(db, otro.rows[0]!.id);
+      return (await vecinosDe(db, "mensaje", otro.rows[0]!.id)).length;
+    });
+    check("y borrarlo se lleva la suya", trasBorrar === 0);
   } finally {
     await admin.query("delete from public.organizations where slug like $1", [`%-grafo-${sufijo}`]);
     await admin.query("delete from public.users where email like $1", [
