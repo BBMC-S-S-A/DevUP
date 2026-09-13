@@ -130,8 +130,15 @@ export default function OrganizationsPage() {
       {/* Cabecera de cabina: identidad a la izquierda, mandos a la derecha y una
           fila de cifras debajo. La rejilla va en una capa aparte para que su
           máscara radial no recorte también el texto. */}
-      <Tarjeta className="relative mb-8 overflow-hidden px-5 py-5">
-        <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
+      {/* SIN `overflow-hidden` EN LA TARJETA A PROPÓSITO: lo llevaba para que la
+          rejilla de fondo no se saliera de las esquinas redondeadas, y de paso
+          recortaba el panel de notificaciones — que tiene que poder abrirse
+          por encima del resto de la pantalla. El recorte se aísla en su propio
+          envoltorio, del tamaño exacto de la rejilla y nada más. */}
+      <Tarjeta className="relative mb-8 px-5 py-5">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
+          <div className="rejilla absolute inset-0" />
+        </div>
 
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
