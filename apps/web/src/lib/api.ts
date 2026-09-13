@@ -319,6 +319,38 @@ export type Evidencia = {
 };
 
 /**
+ * Lo que lleva ganado una persona: `GET /organizations/:orgId/puntos`.
+ *
+ * `aSolas` NO ES UN DETALLE QUE SE PUEDA DEJAR FUERA AL PINTAR. Los puntos se
+ * ganan cerrando tareas (0055), así que quien quiera inflar su número puede
+ * crear tareas fáciles y cerrárselas. No se prohíbe —alguien puede montar su
+ * proyecto aquí él solo, y eso es lo que atrae—: se dice. Este campo es cuánto
+ * de ese total se ganó en tareas por las que no pasó nadie más, y va en la
+ * misma línea que el total. Debajo, o en otra vista, es lo mismo que no tenerlo.
+ */
+export type PuntosDePersona = {
+  id: string;
+  nombre: string | null;
+  total: number;
+  aSolas: number;
+  tareas: number;
+  /** `cerro_tarea` y `dejo_prueba`, con lo sumado en cada uno. */
+  porMotivo: Record<string, number>;
+};
+
+/** De dónde sale cada punto: `GET /organizations/:orgId/puntos/:personaId`. */
+export type AsientoDePuntos = {
+  id: string;
+  tarea: string | null;
+  /** Copiado al ganarlo, así que sigue diciendo de qué tarea vino aunque ya no exista. */
+  titulo: string;
+  motivo: string;
+  cantidad: number;
+  aSolas: boolean;
+  cuando: string;
+};
+
+/**
  * Una rama de trabajo, tal como la devuelve `GET /workspaces/:id/ramas`.
  *
  * NO ES LO MISMO QUE `Tag`, y confundirlas es el error que esta pantalla vino a
