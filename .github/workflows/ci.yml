@@ -135,6 +135,17 @@ jobs:
         # cambio, y confundirlos manda a media plantilla a repetir algo hecho.
         run: npm run test:recuperar --workspace apps/api
 
+      - name: Silenciar avisos
+        # La que justifica el fichero es la invitacion. Las otras cuatro clases
+        # avisan de algo que ya puedes ver por tu cuenta —la mencion esta en el
+        # canal, la tarea en tu tablero— asi que silenciarlas es menos ruido. La
+        # invitacion no: si no te avisan no hay ninguna pantalla donde
+        # descubrirla, porque todavia no eres de esa organizacion. Silenciarla
+        # seria quedarte fuera sin enterarte. Mas: que silenciar NO cree la fila
+        # —si no, el contador contaria lo que nadie va a ver— y que una clase
+        # inventada se rechace en vez de ignorarse.
+        run: npm run test:avisos --workspace apps/api
+
       - name: El recorrido de bienvenida
         # La lista de trece roles vive en la base (0052) y aqui se reparte en
         # tres familias a mano. El dia que alguien anada uno al enumerado y no
