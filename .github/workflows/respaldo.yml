@@ -39,20 +39,22 @@
 #
 # QUÉ HAY QUE PONER EN «Settings → Secrets and variables → Actions»:
 #
-#   RAILWAY_API_TOKEN    El que YA usa el workflow de despliegue: no hay que
-#                        crear nada. Vale también un `RAILWAY_TOKEN` de
-#                        proyecto si algún día se prefiere acotarlo — la CLI
-#                        acepta los dos y aquí se prueba primero el que ya
-#                        existe. Cada secreto de más es una forma más de que
-#                        esto se quede sin configurar.
-#   POSTGRES_PASSWORD    La del superusuario del servicio Postgres. Hace falta
-#                        el rol administrador porque el de la aplicación tiene
-#                        RLS y volcaría cero filas sin dar ningún error.
-#   S3_ACCESS_KEY_ID     Las del almacén, las mismas que usa la API. El
-#   S3_SECRET_ACCESS_KEY endpoint y el bucket no son secretos y van arriba.
-#   BACKUP_PASSPHRASE    Una frase larga. **Guárdala donde no esté solo aquí:**
-#                        sin ella los respaldos no se pueden abrir, y entonces
-#                        no son respaldos.
+#   RAILWAY_API_TOKEN     El que YA usa el workflow de despliegue: no hay que
+#                         crear nada nuevo.
+#   RAILWAY_SSH_PRIVATE_KEY  Ídem — la llave del túnel que ya usa `migrar` en
+#                         `desplegar.yml`, registrada a nivel de WORKSPACE en
+#                         Railway (no personal): cualquier token con acceso al
+#                         proyecto la ve, no solo quien la registró.
+#   S3_ACCESS_KEY_ID      Las del almacén, las mismas que usa la API. El
+#   S3_SECRET_ACCESS_KEY  endpoint y el bucket no son secretos y van arriba.
+#   BACKUP_PASSPHRASE     Una frase larga. **Guárdala donde no esté solo aquí:**
+#                         sin ella los respaldos no se pueden abrir, y entonces
+#                         no son respaldos.
+#
+# LA CONTRASEÑA DEL SUPERUSUARIO DE POSTGRES NO ES UN SECRETO APARTE: el
+# trabajo la lee en el momento con `railway variables`, con el mismo token de
+# arriba — igual que ya hace `migrar`. Un secreto menos que mantener, y uno
+# menos que se queda desactualizado el día que Railway la rote.
 #
 # SON DOS TRABAJOS INDEPENDIENTES a propósito: que falle el de la base no
 # puede dejar sin copia al del almacén, que es lo que pasaría encadenándolos.
@@ -100,14 +102,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Este trabajo nunca había llegado a correr de verdad — se escribió a la
+      # vez que el `migrar` de `desplegar.yml`, y los dos compartían la misma
+      # receta sin probar del túnel. `migrar` sí llegó a producción (13 de
+      # septiembre) y reveló, uno por uno, seis fallos reales en ese camino;
+      # se portan aquí de una vez, en vez de descubrirlos otra vez a mano:
+      # `--project` que faltaba, `RAILWAY_TOKEN` en vez de `RAILWAY_API_TOKEN`,
+      # `--tunnel-only` sin una llave SSH registrada, y esa llave sin su
+      # `.pub` al lado. Ver `desplegar.yml` para el detalle de cada uno.
       - name: Comprobar que hay con qué entrar y con qué cifrar
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_SSH_PRIVATE_KEY: ${{ secrets.RAILWAY_SSH_PRIVATE_KEY }}
         run: |
           falta=0
-          for nombre in RAILWAY_TOKEN POSTGRES_PASSWORD; do
+          for nombre in RAILWAY_API_TOKEN RAILWAY_SSH_PRIVATE_KEY; do
             if [ -z "$(eval echo \$$nombre)" ]; then
               echo "::error::Falta el secreto $nombre."
               falta=1
@@ -126,10 +136,22 @@ jobs:
       # «connection refused» y parece un problema de credenciales.
       - name: Abrir el túnel a Railway
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_SSH_PRIVATE_KEY: ${{ secrets.RAILWAY_SSH_PRIVATE_KEY }}
         run: |
           npm install -g @railway/cli
-          railway connect Postgres --tunnel-only --port 55432 &
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s' "$RAILWAY_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '\n' >> ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 -P "" > ~/.ssh/id_ed25519.pub || {
+            echo "::error::La llave escrita en el runner no es una llave OpenSSH válida."
+            exit 1
+          }
+          railway connect Postgres --tunnel-only --port 55432 \
+            --project d05dd021-3636-4957-bc2f-55359f2690cf \
+            --environment production &
           for i in $(seq 1 30); do
             if timeout 1 bash -c ">/dev/tcp/127.0.0.1/55432" 2>/dev/null; then
               echo "túnel abierto"
@@ -140,13 +162,30 @@ jobs:
           echo "::error::El túnel a Railway no abrió en 60 segundos."
           exit 1
 
+      # La contraseña del superusuario, leída en el momento y no guardada como
+      # secreto aparte: es la misma que ya lee `migrar` en `desplegar.yml`, con
+      # el mismo token. Un secreto menos que poner, y uno menos que se puede
+      # quedar desactualizado el día que Railway la rote.
+      - name: Leer la contraseña de Railway
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          pg=$(railway variables --service Postgres --json \
+            --project d05dd021-3636-4957-bc2f-55359f2690cf \
+            --environment production \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).POSTGRES_PASSWORD||''))")
+          if [ -n "$pg" ]; then echo "::add-mask::$pg"; fi
+          if [ -z "$pg" ]; then
+            echo "::error::No pude leer la contraseña del superusuario desde Railway."
+            exit 1
+          fi
+          echo "POSTGRES_PASSWORD=$pg" >> "$GITHUB_ENV"
+
       # `pg_dump` dentro de un contenedor y no con el cliente del ejecutor: la
       # versión tiene que ser igual o mayor que la del servidor, y la del
       # ejecutor cambia sin avisar. Anclarla aquí es que un cambio de imagen de
       # GitHub no rompa los respaldos un martes cualquiera.
       - name: Volcar
-        env:
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           sello=$(date -u +%Y%m%d-%H%M%SZ)
           echo "SELLO=$sello" >> "$GITHUB_ENV"
