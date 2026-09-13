@@ -29,6 +29,7 @@ import {
   api,
 } from "@/lib/api";
 import { AjustesDelEspacio } from "@/components/ajustes/AjustesDelEspacio";
+import { EstadoTecnico } from "@/components/ajustes/EstadoTecnico";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { uploadOrgLogo } from "@/lib/files/upload";
@@ -135,6 +136,14 @@ export default function OrganizationSettingsPage() {
         <FotoOrganizacion orgId={orgId} puedeEditar={administro} />
         <Miembros orgId={orgId} members={members} yo={user?.id ?? null} administro={administro} onChange={load} />
         <Enlaces orgId={orgId} puedeEditar={administro} />
+
+        {/* EL ESTADO DE LA INSTALACIÓN VA AL FINAL Y SOLO A QUIEN ADMINISTRA.
+            Al final porque nadie entra en «Ajustes» buscando esto: se entra a
+            invitar a alguien o a cambiar la foto, y quien viene a mirar si el
+            almacén responde ya sabe que baja. Y solo a quien administra porque
+            es lo que el servidor contesta —lo pide `is_org_admin`—: pintarlo a
+            todo el mundo sería enseñar un 403 con forma de tarjeta. */}
+        {administro && <EstadoTecnico orgId={orgId} />}
       </div>
     </Pagina>
   );

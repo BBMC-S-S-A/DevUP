@@ -43,7 +43,7 @@
     "test:grafo": "npm run test:grafo --workspace apps/api",
     "test:codigo": "npm run test:codigo --workspace apps/api && npm run test:invitacion --workspace apps/api",
     "test:asistente": "npm run test:asistente --workspace apps/api",
-    "test:web": "npm run test:enlaces --workspace apps/web && npm run test:fechas --workspace apps/web && npm run test:dinero --workspace apps/web && npm run test:invitacion --workspace apps/web && npm run test:trazado --workspace apps/web && npm run test:agente-ia --workspace apps/web && npm run test:riel --workspace apps/web && npm run test:quien-entro --workspace apps/web && npm run test:actividad --workspace apps/web && npm run test:espacios --workspace apps/web && npm run test:dispositivos --workspace apps/web && npm run test:recorrido --workspace apps/web && npm run test:tablero-teclado --workspace apps/web",
+    "test:web": "npm run test:enlaces --workspace apps/web && npm run test:fechas --workspace apps/web && npm run test:dinero --workspace apps/web && npm run test:invitacion --workspace apps/web && npm run test:trazado --workspace apps/web && npm run test:agente-ia --workspace apps/web && npm run test:riel --workspace apps/web && npm run test:quien-entro --workspace apps/web && npm run test:actividad --workspace apps/web && npm run test:espacios --workspace apps/web && npm run test:dispositivos --workspace apps/web && npm run test:recorrido --workspace apps/web && npm run test:salud --workspace apps/web && npm run test:tablero-teclado --workspace apps/web",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
