@@ -7,7 +7,7 @@ import { ApiError, type Workspace, api } from "@/lib/api";
 import { useRecurso } from "@/lib/datos";
 import { useSession } from "@/lib/session";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
-import { esSalaDelAgente, peersConAgente } from "@/lib/world/agente-ia";
+import { casillaDelAgente, esSalaDelAgente, peersConAgente } from "@/lib/world/agente-ia";
 import { TILE } from "@/lib/world/atlas";
 import { render, type Camera } from "@/lib/world/renderer";
 import { seatsOf } from "@/lib/world/props";
@@ -21,6 +21,7 @@ import { DevVerseEntrance } from "./DevVerseEntrance";
 import { ZoneEditor } from "./ZoneEditor";
 import { useLlamada } from "@/lib/world/useLlamada";
 import { LlamadaEntrante, MenuCercania, PanelLlamada } from "./Cercania";
+import { PanelAgente } from "./PanelAgente";
 import { PanelTablero } from "./PanelTablero";
 import { ProximityAudio } from "./ProximityAudio";
 
@@ -245,6 +246,26 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       // vuelta por la sala mientras se teclea.
       if (talkingRef.current) return;
 
+      /**
+       * Y LO MISMO CON CUALQUIER CAMPO DE TEXTO, no solo con la burbuja.
+       *
+       * El oyente está en `window`, así que las teclas de un campo que vive en
+       * un panel flotante llegaban igual aquí: escribir en el tablero movía el
+       * avatar por debajo. El panel del agente lo convierte en seguro —es un
+       * chat, se escribe siempre—, pero el fallo ya estaba con el tablero.
+       *
+       * `Escape` se deja pasar a propósito: cerrar el panel tiene que
+       * funcionar también con el cursor dentro del campo, que es justo donde
+       * está cuando uno quiere salir.
+       */
+      const donde = event.target as HTMLElement | null;
+      const escribiendo =
+        donde?.isContentEditable === true ||
+        donde?.tagName === "INPUT" ||
+        donde?.tagName === "TEXTAREA" ||
+        donde?.tagName === "SELECT";
+      if (escribiendo && event.code !== "Escape") return;
+
       if (event.code === "KeyT" && zoneRef.current) {
         event.preventDefault();
         setTalking(true);
@@ -263,6 +284,12 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       if (event.code === "Escape" && tableroAbiertoRef.current) {
         event.preventDefault();
         setTableroAbierto(false);
+        return;
+      }
+
+      if (event.code === "Escape" && agenteAbiertoRef.current) {
+        event.preventDefault();
+        setAgenteAbierto(false);
         return;
       }
 
@@ -287,6 +314,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         if (current.kind === "sit") sitRef.current(current.seat);
         else if (current.kind === "stand") sitRef.current(null);
         else if (current.kind === "board") setTableroAbierto(true);
+        else if (current.kind === "agente") setAgenteAbierto(true);
         else router.push(current.href);
         return;
       }
@@ -492,6 +520,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   type Action =
     | { kind: "link"; label: string; href: string }
     | { kind: "board"; label: string }
+    | { kind: "agente"; label: string }
     | { kind: "sit"; label: string; seat: { x: number; y: number; facing: "n" | "s" | "e" | "o" } }
     | { kind: "stand"; label: string };
 
@@ -518,6 +547,10 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const tableroAbiertoRef = useRef(tableroAbierto);
   tableroAbiertoRef.current = tableroAbierto;
 
+  const [agenteAbierto, setAgenteAbierto] = useState(false);
+  const agenteAbiertoRef = useRef(agenteAbierto);
+  agenteAbiertoRef.current = agenteAbierto;
+
   const findAction = useCallback((): Action | null => {
     if (!scene || editor.active) return null;
     const self = stateRef.current.self;
@@ -533,8 +566,27 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
     // Las plazas primero: si hay una silla al lado, sentarse gana sobre abrir
     // un panel. Es la acción más inmediata y la que menos cuesta deshacer.
+    // La casilla del muñeco del agente. Sirve para dos cosas: ofrecer hablar
+    // con él, y NO ofrecer la silla que está ocupando.
+    const agente = casillaDelAgente(zonesRef.current);
+
+    // HABLAR CON EL AGENTE GANA A TODO LO DEMÁS EN SU SALA, y va antes que las
+    // plazas a propósito: su sala lleva escritorios con silla, y si la silla
+    // compitiera por cercanía, acercarse al muñeco ofrecería sentarse al lado
+    // en vez de hablarle. El muñeco es lo único que hay ahí que no está en
+    // ninguna otra sala.
+    if (agente) {
+      const cerca = Math.hypot(agente.x + 0.5 - self.x, agente.y + 0.9 - self.y);
+      if (cerca <= 2.2) return { kind: "agente", label: "Hablar con el agente" };
+    }
+
     for (const piece of scene.props) {
       for (const seat of seatsOf(piece)) {
+        // NO SE OFRECE LA SILLA QUE OCUPA EL AGENTE. Su sala lleva el tema
+        // `work`, que pone escritorios con su silla, y el muñeco está en el
+        // centro — justo encima de una. Sin esto, «Sentarse» te mete dentro de
+        // él: dos figuras en la misma casilla, y la suya tapada.
+        if (agente && Math.round(seat.x) === agente.x && Math.round(seat.y) === agente.y) continue;
         const distance = Math.hypot(seat.x + 0.5 - self.x, seat.y + 0.9 - self.y);
         // 1,8 y no 1,4. Con 1,4, estar de pie en la fila del escritorio y la
         // silla justo debajo daba 1,49 — fuera por cinco centésimas, y desde
@@ -802,6 +854,12 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
             organizationId={organizationId}
             onCerrar={() => setTableroAbierto(false)}
           />
+        </div>
+      )}
+
+      {agenteAbierto && (
+        <div className="pointer-events-auto fixed inset-6 z-50 md:inset-12">
+          <PanelAgente workspaceId={workspaceId} onCerrar={() => setAgenteAbierto(false)} />
         </div>
       )}
 
