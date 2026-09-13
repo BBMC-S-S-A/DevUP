@@ -22,6 +22,8 @@ import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies"
 import { Pagina } from "@/components/ui/Pagina";
 import { type ConexionDeAgente, type Sesion, ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useOrgId } from "@/lib/workspace-context";
+import { useRecurso } from "@/lib/datos";
 import { iniciales } from "@/lib/fechas";
 
 /**
@@ -47,11 +49,168 @@ export default function CuentaPage() {
     >
       <div className="space-y-4">
         <Perfil />
+        <EnEstaOrganizacion />
         <ClaveDeIA />
         <ConexionesDeAgente />
         <Navegadores />
       </div>
     </Pagina>
+  );
+}
+
+/**
+ * Lo que cambia de una organización a otra: el oficio de aquí y el rol.
+ *
+ * VA APARTE DEL PERFIL A PROPÓSITO, aunque los dos hablen de «a qué te
+ * dedicas». El de arriba es la persona en general —un nombre, un cargo— y este
+ * cambia de proyecto en proyecto: la misma persona es «backend» en uno y
+ * «plataforma» en otro (migración 0048). Juntarlos obligaría a elegir cuál de
+ * los dos gana, y la respuesta es que no gana ninguno: son dos datos.
+ *
+ * Y TRES COSAS QUE SE LLAMAN PARECIDO Y NO SON LA MISMA. Si esta pantalla las
+ * juntara, repartiría permisos sin querer:
+ *
+ *  · El PERMISO (owner/admin/member) no se elige: lo da quien administra. Aquí
+ *    se enseña y no se toca.
+ *  · El OFICIO es texto libre y es lo que ve el resto. Vacío = se enseña el
+ *    general del perfil de arriba.
+ *  · El ROL es una lista cerrada de trece y su única función es elegir qué
+ *    tutorial se ofrece (migración 0052). Nadie más lo ve.
+ *
+ * NO ES OBLIGATORIO ELEGIR ROL, y es deliberado: un formulario en la puerta es
+ * la forma más rápida de que alguien cierre la pestaña. Sin rol se ofrece el
+ * tutorial base, que vale para todos.
+ */
+const ROLES: { valor: string; etiqueta: string }[] = [
+  { valor: "producto", etiqueta: "Producto" },
+  { valor: "gestion", etiqueta: "Gestión de proyecto" },
+  { valor: "direccion", etiqueta: "Dirección técnica" },
+  { valor: "frontend", etiqueta: "Frontend" },
+  { valor: "backend", etiqueta: "Backend" },
+  { valor: "fullstack", etiqueta: "Fullstack" },
+  { valor: "movil", etiqueta: "Móvil" },
+  { valor: "diseno", etiqueta: "Diseño (UX/UI)" },
+  { valor: "qa", etiqueta: "Calidad y pruebas" },
+  { valor: "datos", etiqueta: "Datos" },
+  { valor: "ia", etiqueta: "IA" },
+  { valor: "plataforma", etiqueta: "Plataforma / DevOps" },
+  { valor: "seguridad", etiqueta: "Seguridad" },
+];
+
+const PERMISOS: Record<string, string> = {
+  owner: "Propietario",
+  admin: "Administra",
+  member: "Miembro",
+};
+
+type MiFicha = {
+  role: string;
+  title: string | null;
+  tituloGeneral: string | null;
+  rol: string | null;
+};
+
+function EnEstaOrganizacion() {
+  const orgId = useOrgId();
+  const ficha = useRecurso<MiFicha>(`/organizations/${orgId}/me`);
+  const [oficio, setOficio] = useState("");
+  const [sembrado, setSembrado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  // Se siembra una sola vez, igual que el perfil de arriba: reasignarlo en cada
+  // renderizado haría imposible escribir en el campo.
+  useEffect(() => {
+    if (sembrado || !ficha.datos) return;
+    setOficio(ficha.datos.title ?? "");
+    setSembrado(true);
+  }, [ficha.datos, sembrado]);
+
+  const guardar = async (cambio: { title?: string; rol?: string | null }) => {
+    setGuardando(true);
+    try {
+      await api.patch(`/organizations/${orgId}/me`, cambio);
+      await ficha.recargar();
+      toast.success("guardado");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (ficha.error || (!ficha.datos && !ficha.cargando)) return null;
+
+  const cambiado = sembrado && oficio.trim() !== (ficha.datos?.title ?? "");
+
+  return (
+    <Tarjeta className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Rotulo>En esta organización</Rotulo>
+        {ficha.datos && (
+          <Chip tono={ficha.datos.role === "member" ? "neutro" : "accent"}>
+            {PERMISOS[ficha.datos.role] ?? ficha.datos.role}
+          </Chip>
+        )}
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+        Lo de arriba vale en todas partes. Esto solo aquí: la misma persona puede
+        ser «backend» en un proyecto y «plataforma» en otro.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        <div>
+          <Field
+            label="Tu oficio aquí"
+            value={oficio}
+            onChange={setOficio}
+            maxLength={40}
+            placeholder={ficha.datos?.tituloGeneral ?? "backend, diseño, producto…"}
+          />
+          <p className="mt-1.5 text-[11px] text-faint">
+            {ficha.datos?.tituloGeneral
+              ? `Si lo dejas en blanco se enseña «${ficha.datos.tituloGeneral}», el de tu perfil.`
+              : "Si lo dejas en blanco se enseña el de tu perfil."}
+          </p>
+          {cambiado && (
+            <Boton
+              variante="primario"
+              tamano="sm"
+              className="mt-2"
+              cargando={guardando}
+              onClick={() => void guardar({ title: oficio.trim() })}
+            >
+              Guardar
+            </Boton>
+          )}
+        </div>
+
+        <div className="border-t border-line pt-3">
+          <label className="block">
+            <Rotulo className="mb-1.5 block">A qué te dedicas</Rotulo>
+            <select
+              value={ficha.datos?.rol ?? ""}
+              disabled={guardando}
+              onChange={(e) => void guardar({ rol: e.target.value || null })}
+              className="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink"
+            >
+              <option value="">Sin elegir</option>
+              {ROLES.map((r) => (
+                <option key={r.valor} value={r.valor}>
+                  {r.etiqueta}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* Se dice qué hace y qué NO hace. Un desplegable junto a un permiso
+              se lee como si repartiera permisos, y este no toca ninguno. */}
+          <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+            Solo sirve para ofrecerte el recorrido de bienvenida que te encaje.
+            No cambia lo que puedes hacer, y no lo ve nadie más. Puedes dejarlo
+            sin elegir.
+          </p>
+        </div>
+      </div>
+    </Tarjeta>
   );
 }
 
