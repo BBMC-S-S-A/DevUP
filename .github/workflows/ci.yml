@@ -105,6 +105,15 @@ jobs:
         # El script de la raíz encadena las dos.
         run: npm run test:codigo
 
+      - name: El clasificador de ramas
+        # El guion que reordena el tablero mueve tarjetas de verdad, y se
+        # equivoca sin hacer ruido: una tarea mal clasificada no falla, se queda
+        # en la rama de otro y ahi la busca quien no la puso. Lo que hace
+        # peligroso a un clasificador no es acertar poco, es acertar bastante —
+        # porque entonces nadie revisa el resto. Se prueba contra los titulos
+        # REALES del tablero, no contra ejemplos inventados.
+        run: npm run test:ramas
+
       - name: Los datos de los widgets
         # Un panel es la primera pantalla de un espacio y esta hecho de trozos
         # independientes, asi que todo lo que se rompe aqui sale en pantalla

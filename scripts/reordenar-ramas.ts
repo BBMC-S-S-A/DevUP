@@ -37,7 +37,22 @@
  * título: una tarea se cierra a mano, con su contexto y su evidencia. Un guion
  * que cerrara tareas por su cuenta estaría escribiendo historia que no pasó.
  *
- * EL REPARTO SE HACE POR PALABRAS DEL TÍTULO, y eso es adivinar. Por eso:
+ * CÓMO REPARTE, EN DOS PASADAS Y EN ESTE ORDEN:
+ *
+ *   1. **Por el prefijo del título**, cuando lo tiene. El tablero ya venía
+ *      clasificado sin que nadie se diera cuenta: `Flujo ·`, `Base ·`,
+ *      `Infra ·`, `DevVerse ·`, `Visual ·`. Eso lo escribió una persona al
+ *      crear cada tarea, así que es una afirmación, no una conjetura — y vale
+ *      infinitamente más que cualquier lista de palabras que yo invente.
+ *
+ *   2. **Por palabras del título**, solo para las que no llevan prefijo.
+ *
+ * `Visual ·` VA A WORKFLOW Y NO A DEVVERSE, que es la única del mapa que no es
+ * obvia: lo visual es interfaz, y la regla dice que la interfaz es de Workflow.
+ * Que algunas estén hoy asignadas a otra persona no cambia de qué rama son —
+ * son dos cosas distintas, y esto no toca la segunda.
+ *
+ * EL RESTO SE HACE POR PALABRAS DEL TÍTULO, y eso sí es adivinar. Por eso:
  *   · `--ver` no escribe nada y enseña la propuesta entera. **Ejecútalo así la
  *     primera vez.** Es el modo en que esto está pensado para usarse.
  *   · Lo que no encaja con nada **se deja quieto** y sale listado aparte. Un
@@ -74,7 +89,10 @@ const RAMAS = [
       "workflow", "flujo", "interfaz", "menu", "menú", "sidebar", "lateral",
       "navegacion", "navegación", "ajuste", "ajustes", "login", "sesion", "sesión",
       "portada", "inicio", "panel", "pantalla", "vista", "onboarding", "tutorial",
-      "perfil", "tema oscuro", "responsive", "movil", "móvil",
+      "perfil", "tema", "temas", "responsive", "movil", "móvil",
+      // Del lote antiguo sin prefijo, que es casi todo retoque de interfaz.
+      "barra", "boton", "botón", "rework", "landing", "notificacion", "notificación",
+      "formulario", "visual", "embudo", "riel",
     ],
   },
   {
@@ -83,6 +101,8 @@ const RAMAS = [
     pistas: [
       "devverse", "devvers", "mundo", "world", "avatar", "sala", "salas", "zona",
       "oficina virtual", "personaje", "sprite", "muñeco", "proximidad", "edificio",
+      // «temas ya de realizar modelos y todo eso, dáselas a Carlos».
+      "modelo", "modelos", "animacion", "animación", "3d",
     ],
   },
   {
@@ -119,13 +139,55 @@ type Tarea = {
 type Columna = { id: string; name: string; isTerminal?: boolean; tasks: Tarea[] };
 type Categoria = { id: string; name: string; ownerId?: string | null };
 
+/**
+ * Los prefijos que el tablero ya usa, y a qué rama van.
+ *
+ * Se mira antes que las palabras porque **esto no es una conjetura**: lo puso
+ * una persona al crear la tarea. Una lista de palabras clave adivina; un
+ * prefijo es lo que alguien dijo que era.
+ */
+const PREFIJOS: Record<string, string> = {
+  flujo: "Workflow",
+  visual: "Workflow",     // lo visual es interfaz; ver la cabecera
+  base: "Funcionalidades",
+  infra: "Funcionalidades",
+  devverse: "DevVerse",
+};
+
+/**
+ * Prefijos que se reconocen para NO clasificar.
+ *
+ * `Decidir ·` son decisiones de producto, y las hay de las tres ramas. Lo
+ * importante es que **no caigan a las palabras**: «Decidir · Dos *modelos* de
+ * categoría conviven» se iba a DevVerse porque «modelo» está en su lista — y ahí
+ * «modelo» significa otra cosa completamente. Esa tarjeta habría acabado en la
+ * rama de Carlos, en silencio, y la habría buscado quien no la puso.
+ *
+ * Reconocer el prefijo y parar es lo que impide que una palabra con dos sentidos
+ * decida por su cuenta.
+ */
+const PREFIJOS_SIN_RAMA = ["decidir"];
+
 /** Sin tildes y en minúsculas, para comparar títulos escritos como salga. */
 const plano = (t: string) =>
   t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /** A qué rama pertenece un título, o null si no está claro. */
-function ramaDe(titulo: string): (typeof RAMAS)[number] | null {
+export function ramaDe(titulo: string): (typeof RAMAS)[number] | null {
   const t = plano(titulo);
+
+  // Primera pasada: el prefijo, si lo hay. `Flujo · lo que sea` → Workflow.
+  const conPrefijo = /^([a-zA-Záéíóúñ]+)\s*·/.exec(titulo.trim());
+  if (conPrefijo) {
+    const prefijo = plano(conPrefijo[1]!);
+    if (PREFIJOS_SIN_RAMA.includes(prefijo)) return null;
+    const destino = PREFIJOS[prefijo];
+    if (destino) {
+      const rama = RAMAS.find((r) => r.nombre === destino);
+      if (rama) return rama;
+    }
+  }
+
   // Se cuenta cuántas pistas encaja con cada rama y gana la que más, no la
   // primera: «la pantalla del grafo» toca interfaz y funcionalidades, y quedarse
   // con la primera de la lista sería un orden arbitrario decidiendo el reparto.
@@ -136,13 +198,26 @@ function ramaDe(titulo: string): (typeof RAMAS)[number] | null {
 
   const mejor = marcador[0];
   if (!mejor || mejor.puntos === 0) return null;
-  // Empate entre dos ramas: no se elige. Sale en «sin clasificar» para que lo
-  // decida una persona, que es lo que un empate significa.
-  if (marcador[1] && marcador[1].puntos === mejor.puntos) return null;
+
+  /**
+   * NO BASTA CON GANAR: HAY QUE GANAR CLARO.
+   *
+   * Una diferencia de un solo punto no es una decisión, es un desempate por la
+   * palabra que a mí se me ocurrió meter en una lista. «Mejora del menú del
+   * DevVerse en vista profesional» toca las dos ramas de verdad, y elegir por
+   * un punto convierte una duda legítima en una afirmación — que además nadie
+   * va a revisar, porque la tarjeta ya estará colocada.
+   *
+   * Con dos de diferencia, el título habla de una rama y menciona la otra de
+   * paso. Con uno, habla de las dos.
+   */
+  const segundo = marcador[1]?.puntos ?? 0;
+  if (segundo > 0 && mejor.puntos - segundo < 2) return null;
+
   return mejor.rama;
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const soloVer = args.includes("--ver");
   const repartir = args.includes("--repartir");
@@ -297,7 +372,11 @@ async function main(): Promise<void> {
   if (soloVer) console.log("Nada se ha escrito. Quita `--ver` para aplicarlo.");
 }
 
-main().catch((error: unknown) => {
-  console.error(`\nNo se pudo: ${(error as Error).message}`);
-  process.exit(1);
-});
+// Solo arranca si se ejecuta directamente: así la prueba puede importar
+// `ramaDe` sin que el guion intente hablar con la API.
+if (process.argv[1]?.endsWith("reordenar-ramas.ts")) {
+  main().catch((error: unknown) => {
+    console.error(`\nNo se pudo: ${(error as Error).message}`);
+    process.exit(1);
+  });
+}

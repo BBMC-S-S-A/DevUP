@@ -38,6 +38,7 @@
     "test:youtube": "npm run test:youtube --workspace apps/api",
     "test:puerta": "npm run test:puerta --workspace apps/api",
     "test:mcp": "npm run test:mcp --workspace apps/mcp",
+    "test:ramas": "tsx scripts/reordenar-ramas.test.ts",
     "test:grafo": "npm run test:grafo --workspace apps/api",
     "test:codigo": "npm run test:codigo --workspace apps/api && npm run test:invitacion --workspace apps/api",
     "test:asistente": "npm run test:asistente --workspace apps/api",
