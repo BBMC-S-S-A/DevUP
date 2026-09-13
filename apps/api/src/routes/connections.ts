@@ -15,7 +15,9 @@ const uuid = z.string().uuid();
 // `gemini` es la segunda opcion de clave de IA (0031): capa gratuita real,
 // para quien no quiera gastar nada en el asistente. Google usa ese contenido
 // para mejorar sus productos, y eso lo dice la pantalla, no solo aqui.
-const PROVIDERS = ["github", "spotify", "anthropic", "gemini"] as const;
+// `railway` y `aws` (0063) son proveedores de despliegue: el mismo baúl de
+// secretos, para un token que la app usa para actuar en vez de solo leer.
+const PROVIDERS = ["github", "spotify", "anthropic", "gemini", "railway", "aws"] as const;
 
 const CONNECTION_COLUMNS = `
   id, provider, display_name as "displayName", created_at as "createdAt"`;

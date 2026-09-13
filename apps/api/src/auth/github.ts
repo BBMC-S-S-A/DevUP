@@ -14,6 +14,11 @@ import { env } from "../env.js";
  * hora, webhooks de instalación) para un problema que hoy es solo fricción,
  * no necesidad de aislar por repositorio.
  *
+ * `workflow` VA SUMADO A `repo` DESDE LA 0063. Sin él, GitHub deja leer y
+ * escribir el repositorio pero rechaza en concreto disparar un workflow por
+ * `workflow_dispatch` — es el único permiso que pide aparte, y es lo que
+ * hace falta para desplegar y migrar desde la pantalla de Infraestructura.
+ *
  * POR QUÉ NO HAY PKCE AQUÍ. El flujo de autorización de un OAuth App clásico
  * de GitHub no lo soporta — a diferencia de Google (ver auth/google.ts), que
  * sí. El anti-CSRF de `estado` es el único que hace falta y el único que
@@ -48,7 +53,10 @@ export function comenzar(workspaceId: string): { url: string; transito: Transito
   const url = new URL(AUTORIZACION);
   url.searchParams.set("client_id", env.GITHUB_OAUTH_CLIENT_ID);
   url.searchParams.set("redirect_uri", env.GITHUB_OAUTH_REDIRECT_URI);
-  url.searchParams.set("scope", "repo");
+  // `workflow` además de `repo` (0063): sin él, GitHub rechaza disparar un
+  // workflow por `workflow_dispatch` aunque el token sí pueda leer y escribir
+  // el resto del repositorio — es el único alcance que exige aparte.
+  url.searchParams.set("scope", "repo workflow");
   url.searchParams.set("state", estado);
 
   return { url: url.toString(), transito: { estado, workspaceId } };

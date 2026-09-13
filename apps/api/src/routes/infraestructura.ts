@@ -2,8 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { fetchDespliegues } from "../connectors/despliegues.js";
+import { dispararWorkflow } from "../connectors/github.js";
+import { proveedorPara } from "../connectors/proveedores.js";
 import { type Db, withUser } from "../db/pool.js";
-import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { badRequest, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
 
 /**
@@ -27,7 +29,8 @@ const FULL_NAME = /^[\w.-]+\/[\w.-]+$/;
 const COLUMNAS = `
   e.id, e.name, e.kind, e.url, e.external_id as "externalId",
   e.connection_id as "connectionId", e.synced_at as "syncedAt",
-  e.last_error as "lastError", e.created_at as "createdAt"`;
+  e.last_error as "lastError", e.created_at as "createdAt",
+  e.provider_config as "providerConfig"`;
 
 /** El último despliegue de cada entorno, que es lo que se enseña en la tarjeta. */
 const ULTIMO = `
@@ -266,5 +269,129 @@ export async function infraestructuraRoutes(app: FastifyInstance): Promise<void>
       if (!rowCount) throw notFound("entorno no encontrado");
     });
     return reply.status(204).send();
+  });
+
+  /**
+   * Configurar CÓMO se llega a este entorno para poder actuar sobre él
+   * (0063) — no solo mirarlo. `providerConfig` es de forma libre a propósito
+   * (ver connectors/proveedores.ts): lo que pide Railway no se parece a lo
+   * que pediría otro proveedor.
+   */
+  app.patch("/environments/:envId", async (request) => {
+    const userId = requireUser(request);
+    const { envId } = parseParams(z.object({ envId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        connectionId: uuid.nullable().optional(),
+        providerConfig: z.record(z.string(), z.unknown()).optional(),
+      }),
+      request.body,
+    );
+
+    await withUser(userId, async (db) => {
+      const { rowCount } = await db.query(
+        `update environments set
+           connection_id = coalesce($2, connection_id),
+           provider_config = coalesce($3::jsonb, provider_config)
+         where id = $1`,
+        [envId, body.connectionId, body.providerConfig ? JSON.stringify(body.providerConfig) : null],
+      );
+      if (!rowCount) throw notFound("entorno no encontrado");
+    });
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select ${COLUMNAS}, ${ULTIMO} from environments e where e.id = $1`,
+        [envId],
+      );
+      return { environment: rows[0] };
+    });
+  });
+
+  /**
+   * Desplegar de verdad, contra el proveedor que tenga conectado el entorno.
+   *
+   * QUÉ NO ES ESTO. No espera a que termine — Railway (y cualquier otro
+   * proveedor real) tarda minutos en construir e implantar, y una petición
+   * HTTP no se deja abierta ese tiempo. Dispara y devuelve; el estado se
+   * entera por `sync`, igual que ya hacía antes de esto.
+   */
+  app.post("/environments/:envId/deploy", async (request) => {
+    const userId = requireUser(request);
+    const { envId } = parseParams(z.object({ envId: uuid }), request.params);
+
+    const resultado = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{
+        connection_id: string | null;
+        provider_config: unknown;
+        provider: string | null;
+      }>(
+        `select e.connection_id, e.provider_config, c.provider::text as provider
+           from environments e
+           left join connections c on c.id = e.connection_id
+          where e.id = $1`,
+        [envId],
+      );
+      const fila = rows[0];
+      if (!fila) throw notFound("entorno no encontrado");
+      if (!fila.connection_id || !fila.provider) {
+        throw badRequest("este entorno no tiene un proveedor de despliegue conectado");
+      }
+
+      const proveedor = proveedorPara(fila.provider);
+      if (!proveedor) {
+        throw badRequest(`«${fila.provider}» no es un proveedor de despliegue — solo lectura`);
+      }
+
+      const token = await getDecryptedSecret(db, fila.connection_id);
+      return proveedor.desplegar(fila.provider_config, token);
+    });
+
+    return resultado;
+  });
+
+  /**
+   * Migrar de verdad, disparando el mismo workflow de GitHub Actions que ya
+   * migra con respaldo y verificación (ver `.github/workflows/desplegar.yml`,
+   * job `migrar`) — no un camino nuevo. Vive en `providerConfig.migracion`,
+   * separado de la config del proveedor de despliegue: son dos conexiones
+   * distintas (Railway para desplegar, GitHub para migrar) y no siempre
+   * coinciden en la misma.
+   */
+  app.post("/environments/:envId/migrate", async (request) => {
+    const userId = requireUser(request);
+    const { envId } = parseParams(z.object({ envId: uuid }), request.params);
+
+    await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ provider_config: unknown }>(
+        "select provider_config from environments where id = $1",
+        [envId],
+      );
+      const fila = rows[0];
+      if (!fila) throw notFound("entorno no encontrado");
+
+      const migracion = (fila.provider_config as { migracion?: Record<string, unknown> } | null)
+        ?.migracion;
+      const config = z
+        .object({
+          githubConnectionId: uuid,
+          fullName: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+          workflow: z.string().min(1).max(200),
+          ref: z.string().min(1).max(200).default("claude/sales-control-workspace-platform-i99syv"),
+        })
+        .safeParse(migracion);
+
+      if (!config.success) {
+        throw badRequest(
+          "este entorno no tiene configurada la migración — hace falta providerConfig.migracion " +
+            "con githubConnectionId, fullName y workflow",
+        );
+      }
+
+      const token = await getDecryptedSecret(db, config.data.githubConnectionId);
+      await dispararWorkflow(token, config.data.fullName, config.data.workflow, config.data.ref);
+    });
+
+    return { ok: true, mensaje: "Migración disparada — sigue su curso en GitHub Actions." };
   });
 }

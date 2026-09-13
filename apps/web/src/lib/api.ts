@@ -529,7 +529,7 @@ export type Recording = {
 
 export type Connection = {
   id: string;
-  provider: "github" | "spotify";
+  provider: "github" | "spotify" | "anthropic" | "gemini" | "railway" | "aws";
   displayName: string;
   createdAt: string;
 };
@@ -669,6 +669,9 @@ export type Entorno = {
   createdAt: string;
   /** El último despliegue, que es lo que enseña la tarjeta. */
   ultimo: Despliegue | null;
+  /** Cómo llegar a este entorno para actuar sobre él (0063) — forma libre,
+   *  distinta por proveedor. Ver connectors/proveedores.ts en la API. */
+  providerConfig: Record<string, unknown>;
 };
 
 export type TipoNodoArquitectura =

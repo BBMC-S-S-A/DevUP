@@ -472,7 +472,10 @@ function ConectarGithub({ workspaceId, onConnected }: { workspaceId: string; onC
       <p className="mt-5 rounded-xl border border-line bg-canvas/40 px-3.5 py-3 text-xs leading-relaxed text-muted">
         Pega un token de acceso personal de alcance fino, limitado solo a los
         repositorios que quieras ver aquí — con permisos de lectura de
-        contenido, pull requests, issues y Actions.{" "}
+        contenido, pull requests e issues. Si vas a desplegar o migrar desde
+        Infraestructura con este token, Actions necesita quedar en{" "}
+        <strong className="font-medium text-ink">lectura y escritura</strong>,
+        no solo lectura.{" "}
         <a
           href="https://github.com/settings/personal-access-tokens/new"
           target="_blank"

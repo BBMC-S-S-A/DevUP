@@ -8,11 +8,15 @@ import {
   ExternalLink,
   Loader2,
   Plus,
+  Rocket,
   RefreshCw,
   Server,
+  Settings2,
   Trash2,
+  Wrench,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { DiagramaArquitectura } from "@/components/arquitectura/Diagrama";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -32,9 +36,11 @@ type Pestana = (typeof PESTANAS)[number]["id"];
 /**
  * La vista unificada de infraestructura.
  *
- * QUÉ PROMETE Y QUÉ NO. Enseña dónde corre lo que el equipo escribe y en qué
- * estado quedó lo último que se desplegó, sin entrar en la consola de cada
- * proveedor. No despliega: DevUP orquesta, y esa decisión está cerrada.
+ * QUÉ PROMETE. Enseña dónde corre lo que el equipo escribe, y desde el 13 de
+ * septiembre YA NO SOLO MIRA (0063): un entorno con un proveedor de
+ * despliegue conectado (Railway hoy, otros después) puede desplegarse y
+ * migrarse desde aquí mismo. Sigue siendo un reflejo entre medias — lo que
+ * de verdad pasó lo cuenta el proveedor, no un estado que DevUP se invente.
  *
  * LA TARJETA ES UN INSTRUMENTO, NO UN RESUMEN. Lo primero que alguien quiere
  * saber es si producción está en pie, y lo segundo es qué fue lo último que
@@ -166,6 +172,8 @@ export default function InfraestructuraPage() {
                     entorno={entorno}
                     indice={indice}
                     clave={`/workspaces/${workspaceId}/environments`}
+                    conexiones={conexiones.datos?.connections ?? []}
+                    workspaceId={workspaceId}
                   />
                 ))}
               </div>
@@ -190,14 +198,26 @@ function TarjetaEntorno({
   entorno,
   indice,
   clave,
+  conexiones,
+  workspaceId,
 }: {
   entorno: Entorno;
   indice: number;
   clave: string;
+  conexiones: Connection[];
+  workspaceId: string;
 }) {
   const confirmar = useConfirmar();
+  const [configurando, setConfigurando] = useState(false);
   const estado = entorno.ultimo ? ESTADOS[entorno.ultimo.state] : null;
   const Icono = estado?.icono;
+
+  const conexionDelEntorno = conexiones.find((c) => c.id === entorno.connectionId);
+  const puedeDesplegar = conexionDelEntorno?.provider === "railway" || conexionDelEntorno?.provider === "aws";
+  const migracion = entorno.providerConfig?.migracion as
+    | { githubConnectionId?: string; fullName?: string; workflow?: string }
+    | undefined;
+  const puedeMigrar = Boolean(migracion?.githubConnectionId && migracion.fullName && migracion.workflow);
 
   const sincronizar = useMutacion(() => api.post(`/environments/${entorno.id}/sync`), {
     invalida: [clave],
@@ -209,6 +229,23 @@ function TarjetaEntorno({
     exito: "Entorno retirado",
     fallo: "No se pudo retirar el entorno.",
   });
+
+  const desplegar = useMutacion(
+    () => api.post<{ mensaje: string }>(`/environments/${entorno.id}/deploy`),
+    {
+      invalida: [clave],
+      fallo: "No se pudo disparar el despliegue.",
+      alTerminar: (r) => toast.success(r.mensaje),
+    },
+  );
+
+  const migrar = useMutacion(
+    () => api.post<{ mensaje: string }>(`/environments/${entorno.id}/migrate`),
+    {
+      fallo: "No se pudo disparar la migración.",
+      alTerminar: (r) => toast.success(r.mensaje),
+    },
+  );
 
   return (
     <Tarjeta
@@ -253,6 +290,46 @@ function TarjetaEntorno({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {puedeDesplegar && (
+            <Boton
+              tamano="sm"
+              variante="secundario"
+              icono={<Rocket size={13} />}
+              cargando={desplegar.enviando}
+              onClick={() => void desplegar.ejecutar()}
+            >
+              Desplegar
+            </Boton>
+          )}
+          {puedeMigrar && (
+            <Boton
+              tamano="sm"
+              variante="secundario"
+              icono={<Wrench size={13} />}
+              cargando={migrar.enviando}
+              onClick={async () => {
+                if (
+                  !(await confirmar({
+                    titulo: `¿Migrar «${entorno.name}»?`,
+                    descripcion:
+                      "Dispara el workflow de GitHub Actions que aplica las migraciones pendientes contra este entorno, con su propio respaldo antes de tocar el esquema.",
+                    accion: "Migrar",
+                  }))
+                )
+                  return;
+                await migrar.ejecutar();
+              }}
+            >
+              Migrar
+            </Boton>
+          )}
+          <BotonIcono
+            etiqueta={`Configurar ${entorno.name}`}
+            onClick={() => setConfigurando((c) => !c)}
+            className={configurando ? "text-accent" : ""}
+          >
+            <Settings2 size={14} />
+          </BotonIcono>
           <BotonIcono
             etiqueta={`Sincronizar ${entorno.name}`}
             onClick={() => void sincronizar.ejecutar()}
@@ -281,6 +358,16 @@ function TarjetaEntorno({
           </BotonIcono>
         </div>
       </div>
+
+      {configurando && (
+        <ConfigurarEntorno
+          entorno={entorno}
+          conexiones={conexiones}
+          clave={clave}
+          workspaceId={workspaceId}
+          onCerrar={() => setConfigurando(false)}
+        />
+      )}
 
       {entorno.lastError && (
         <Fallo className="mt-3 text-xs">
@@ -327,6 +414,281 @@ function TarjetaEntorno({
         </p>
       )}
     </Tarjeta>
+  );
+}
+
+/**
+ * Cómo llegar a este entorno para desplegar y migrar (0063).
+ *
+ * DOS CONEXIONES DISTINTAS Y NO UNA. Desplegar habla con el proveedor de
+ * infraestructura (Railway, o el simulacro de AWS); migrar dispara el mismo
+ * workflow de GitHub Actions que ya migra con respaldo y verificación. Un
+ * entorno puede tener las dos, una sola, o ninguna — no coinciden siempre
+ * en la misma cuenta.
+ */
+function ConfigurarEntorno({
+  entorno,
+  conexiones,
+  clave,
+  workspaceId,
+  onCerrar,
+}: {
+  entorno: Entorno;
+  conexiones: Connection[];
+  clave: string;
+  workspaceId: string;
+  onCerrar: () => void;
+}) {
+  const conexionesClave = `/workspaces/${workspaceId}/connections`;
+  const deDespliegue = conexiones.filter((c) => c.provider === "railway" || c.provider === "aws");
+  const deGithub = conexiones.filter((c) => c.provider === "github");
+
+  const migracionActual = entorno.providerConfig?.migracion as
+    | { githubConnectionId?: string; fullName?: string; workflow?: string; ref?: string }
+    | undefined;
+  const railwayActual = entorno.providerConfig?.railway as
+    | { projectId?: string; environmentId?: string; serviceId?: string }
+    | undefined;
+
+  const [conexionDespliegue, setConexionDespliegue] = useState(entorno.connectionId ?? "");
+  const [projectId, setProjectId] = useState(railwayActual?.projectId ?? "");
+  const [environmentId, setEnvironmentId] = useState(railwayActual?.environmentId ?? "");
+  const [serviceId, setServiceId] = useState(railwayActual?.serviceId ?? "");
+
+  const [conexionGithub, setConexionGithub] = useState(migracionActual?.githubConnectionId ?? "");
+  const [fullName, setFullName] = useState(migracionActual?.fullName ?? "");
+  const [workflow, setWorkflow] = useState(migracionActual?.workflow ?? "desplegar.yml");
+  const [ref, setRef] = useState(migracionActual?.ref ?? "");
+
+  const guardar = useMutacion(
+    () =>
+      api.patch(`/environments/${entorno.id}`, {
+        connectionId: conexionDespliegue || null,
+        providerConfig: {
+          ...(projectId && environmentId && serviceId ? { railway: { projectId, environmentId, serviceId } } : {}),
+          ...(conexionGithub && fullName && workflow
+            ? {
+                migracion: {
+                  githubConnectionId: conexionGithub,
+                  fullName,
+                  workflow,
+                  ...(ref ? { ref } : {}),
+                },
+              }
+            : {}),
+        },
+      }),
+    {
+      invalida: [clave],
+      exito: "Configuración guardada",
+      fallo: "No se pudo guardar la configuración.",
+      alTerminar: onCerrar,
+    },
+  );
+
+  return (
+    <div className="mt-3 space-y-4 border-t border-line pt-3">
+      <div>
+        <Rotulo className="mb-2 block">Desplegar</Rotulo>
+        {deDespliegue.length === 0 ? (
+          <ConectarProveedor conexionesClave={conexionesClave} workspaceId={workspaceId} />
+        ) : (
+          <div className="space-y-2">
+            <Desplegable
+              contenedor="w-full"
+              value={conexionDespliegue}
+              onChange={(e) => setConexionDespliegue(e.target.value)}
+            >
+              <option className="bg-surface" value="">
+                Ninguna
+              </option>
+              {deDespliegue.map((c) => (
+                <option className="bg-surface" key={c.id} value={c.id}>
+                  {c.displayName || c.provider} ({c.provider})
+                </option>
+              ))}
+            </Desplegable>
+            {conexionDespliegue &&
+              conexiones.find((c) => c.id === conexionDespliegue)?.provider === "railway" && (
+                <div className="grid grid-cols-3 gap-2">
+                  <Entrada
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    placeholder="projectId"
+                    aria-label="Project ID de Railway"
+                  />
+                  <Entrada
+                    value={environmentId}
+                    onChange={(e) => setEnvironmentId(e.target.value)}
+                    placeholder="environmentId"
+                    aria-label="Environment ID de Railway"
+                  />
+                  <Entrada
+                    value={serviceId}
+                    onChange={(e) => setServiceId(e.target.value)}
+                    placeholder="serviceId"
+                    aria-label="Service ID de Railway"
+                  />
+                </div>
+              )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <Rotulo className="mb-2 block">Migrar</Rotulo>
+        {deGithub.length === 0 ? (
+          <p className="text-[11px] leading-relaxed text-faint">
+            No hay ninguna cuenta de GitHub conectada — hace falta una con alcance de Actions en
+            escritura para poder disparar el workflow.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <Desplegable
+              contenedor="w-full"
+              value={conexionGithub}
+              onChange={(e) => setConexionGithub(e.target.value)}
+            >
+              <option className="bg-surface" value="">
+                Ninguna
+              </option>
+              {deGithub.map((c) => (
+                <option className="bg-surface" key={c.id} value={c.id}>
+                  {c.displayName || "cuenta de GitHub"}
+                </option>
+              ))}
+            </Desplegable>
+            {conexionGithub && (
+              <>
+                <div className="flex gap-2">
+                  <Entrada
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="organización/repositorio"
+                    aria-label="Repositorio"
+                  />
+                  <Entrada
+                    value={workflow}
+                    onChange={(e) => setWorkflow(e.target.value)}
+                    placeholder="desplegar.yml"
+                    aria-label="Archivo del workflow"
+                    className="max-w-[9rem]"
+                  />
+                </div>
+                <Entrada
+                  value={ref}
+                  onChange={(e) => setRef(e.target.value)}
+                  placeholder="rama (opcional, por defecto la principal)"
+                  aria-label="Rama"
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Boton type="button" variante="fantasma" tamano="sm" onClick={onCerrar}>
+          Cancelar
+        </Boton>
+        <Boton
+          type="button"
+          variante="primario"
+          tamano="sm"
+          cargando={guardar.enviando}
+          onClick={() => void guardar.ejecutar()}
+        >
+          Guardar
+        </Boton>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Conectar un token de Railway o del simulacro de AWS.
+ *
+ * NO HAY TODAVÍA UNA PANTALLA GENÉRICA DE CONEXIONES para esto, así que vive
+ * aquí mismo, donde hace falta — el mismo baúl de secretos de siempre
+ * (`connections`/`connection_secrets`, 0015), solo que con un proveedor
+ * nuevo (0063).
+ */
+function ConectarProveedor({
+  conexionesClave,
+  workspaceId,
+}: {
+  conexionesClave: string;
+  workspaceId: string;
+}) {
+  const [proveedor, setProveedor] = useState<"railway" | "aws">("railway");
+  const [nombre, setNombre] = useState("");
+  const [secreto, setSecreto] = useState("");
+
+  const conectar = useMutacion(
+    () =>
+      api.post(`/workspaces/${workspaceId}/connections`, {
+        provider: proveedor,
+        displayName: nombre.trim(),
+        secret: secreto,
+      }),
+    {
+      invalida: [conexionesClave],
+      exito: "Cuenta conectada",
+      fallo: "No se pudo conectar.",
+      alTerminar: () => {
+        setNombre("");
+        setSecreto("");
+      },
+    },
+  );
+
+  return (
+    <div className="space-y-2 rounded-xl border border-line bg-canvas/40 p-3">
+      <p className="text-[11px] leading-relaxed text-faint">
+        No hay ninguna cuenta de Railway o AWS conectada en esta organización todavía.
+        {proveedor === "aws" && " AWS es un simulacro por ahora: no hay una cuenta real detrás."}
+      </p>
+      <div className="flex gap-2">
+        <Desplegable
+          value={proveedor}
+          onChange={(e) => setProveedor(e.target.value as "railway" | "aws")}
+          className="max-w-[8rem]"
+        >
+          <option className="bg-surface" value="railway">
+            Railway
+          </option>
+          <option className="bg-surface" value="aws">
+            AWS (simulacro)
+          </option>
+        </Desplegable>
+        <Entrada
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Nombre (opcional)"
+          className="min-w-0 flex-1"
+        />
+      </div>
+      <Entrada
+        type="password"
+        value={secreto}
+        onChange={(e) => setSecreto(e.target.value)}
+        placeholder={proveedor === "railway" ? "Token de proyecto de Railway" : "Cualquier texto — es un simulacro"}
+        autoComplete="off"
+        style={{ fontFamily: "var(--font-mono)" }}
+      />
+      <div className="flex justify-end">
+        <Boton
+          type="button"
+          tamano="sm"
+          variante="primario"
+          disabled={secreto.trim().length === 0}
+          cargando={conectar.enviando}
+          onClick={() => void conectar.ejecutar()}
+        >
+          Conectar
+        </Boton>
+      </div>
+    </div>
   );
 }
 

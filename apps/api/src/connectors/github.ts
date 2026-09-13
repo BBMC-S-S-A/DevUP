@@ -377,3 +377,49 @@ export async function fetchAvailableRepos(token: string): Promise<RepoDisponible
 
   return repos;
 }
+
+/**
+ * Dispara un workflow por `workflow_dispatch`, para desplegar o migrar sin
+ * salir de DevUP.
+ *
+ * NECESITA `workflow` EN EL ALCANCE, NO SOLO `repo`. GitHub lo exige así para
+ * esta llamada en concreto — el mismo token que ya lista repos y lee
+ * ejecuciones de CI no basta para dispararlas: hay que autorizar el alcance
+ * de nuevo si el token es viejo y no lo pedía.
+ *
+ * NO SE LEE LA RESPUESTA COMO CONFIRMACIÓN DE NADA. GitHub responde 204 en
+ * cuanto acepta la petición, no cuando el workflow termina — ni siquiera
+ * cuando empieza. Saber si de verdad corrió y cómo salió es cosa de
+ * `fetchDespliegues` (deployments.ts), que sigue leyendo el resultado por
+ * separado.
+ */
+export async function dispararWorkflow(
+  token: string,
+  fullName: string,
+  workflow: string,
+  ref: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API}/repos/${fullName}/actions/workflows/${encodeURIComponent(workflow)}/dispatches`,
+    {
+      method: "POST",
+      headers: headers(token),
+      body: JSON.stringify({ ref }),
+    },
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(
+        `no encontré el workflow «${workflow}» en «${fullName}» — o el token no llega a ese repositorio.`,
+      );
+    }
+    if (response.status === 403 || response.status === 401) {
+      throw new Error(
+        "el token no tiene permiso para disparar workflows — hace falta el alcance «workflow», no solo «repo».",
+      );
+    }
+    const detalle = await response.text().catch(() => "");
+    throw new Error(`GitHub respondió ${response.status} al disparar el workflow: ${detalle.slice(0, 200)}`);
+  }
+}
