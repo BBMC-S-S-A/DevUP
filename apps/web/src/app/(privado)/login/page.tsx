@@ -254,7 +254,7 @@ function LoginForm() {
 
   return (
     <main
-      className={`grid min-h-[100svh] ${vuelve ? "place-items-center px-6 py-12" : "lg:grid-cols-2"}`}
+      className={`relative grid min-h-[100svh] ${vuelve ? "place-items-center px-6 py-12" : "lg:grid-cols-2"}`}
     >
       {/* Panel de marca. Oculto en móvil: en una pantalla pequeña es la
           mitad del sitio gastada en algo que no ayuda a entrar.
@@ -266,6 +266,37 @@ function LoginForm() {
       {/* La explicación de qué es DevUP, solo para quien llega. Ver `vuelve`
           arriba: a quien entra cada mañana esto le ocupa media pantalla para
           contarle algo que ya sabe. */}
+      {/* LA OFICINA, EN EL HUECO DEL MEDIO DE LA PANTALLA.
+
+          Va suelta y colocada sobre el `main` —no dentro de ninguna de las dos
+          columnas— porque el hueco que llena no es de ninguna: es lo que queda
+          ENTRE el texto de la izquierda y el cuadro de acceso de la derecha, y
+          es el mayor vacío de la pantalla. Dentro de la columna izquierda
+          cabía, pero quedaba del tamaño de una de las fichas de abajo, que era
+          justo lo que no se quería.
+
+          El 48 % y no el 50 %: el centro del HUECO no es el centro de la
+          pantalla. A la izquierda el texto llega hasta su `max-w-md`, y a la
+          derecha el cuadro está centrado en su mitad, así que el aire libre
+          queda un poco escorado. Medido en el navegador a 1280 y a 1500.
+
+          `pointer-events-none` porque no se toca, y `-z-0` para que el cuadro
+          de acceso siga por encima si alguna vez se rozan.
+
+          Solo desde `lg`, que es donde existen las dos columnas: por debajo el
+          formulario ocupa la pantalla entera y aquí no hay hueco que llenar. Y
+          nunca cuando se vuelve de un correo (`vuelve`), porque entonces la
+          pantalla es solo el mensaje. */}
+      {!vuelve && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-[49.5%] top-1/2 z-0 hidden -translate-x-1/2
+            -translate-y-1/2 lg:block"
+        >
+          <OficinaViva className="devup-entrada rounded-2xl" />
+        </div>
+      )}
+
       <aside
         hidden={vuelve}
         className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12"
@@ -330,15 +361,6 @@ function LoginForm() {
             <span className="absolute inset-y-2 left-0 w-px bg-gradient-to-b from-transparent via-accent to-transparent" />
             <MaquinaDeEscribir />
           </div>
-        </div>
-
-        {/* LA OFICINA, EN EL HUECO QUE HABÍA EN MEDIO. Con `justify-between`
-            el titular queda arriba y las fichas abajo, y entre los dos sobraba
-            media columna sin decir nada. Va aquí y no arriba a propósito: lo
-            primero que hay que leer es qué es esto, y solo después se enseña.
-            Son los muñecos de verdad del mundo — ver `OficinaViva`. */}
-        <div className="devup-entrada relative my-6" style={retraso(200)}>
-          <OficinaViva className="rounded-xl border border-line/70" />
         </div>
 
         <div className="relative max-w-md">
