@@ -160,9 +160,9 @@ jobs:
       - name: Comprobar que hay con qué entrar a Railway
         if: steps.pendientes.outputs.hay == 'si'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          if [ -z "$RAILWAY_TOKEN" ]; then
+          if [ -z "$RAILWAY_API_TOKEN" ]; then
             echo "::error::Hay migraciones sin desplegar y no hay RAILWAY_API_TOKEN." \
                  "Sin él no se puede abrir el túnel ni leer las contraseñas: aplícalas" \
                  "a mano (docs/PLAN-DE-PRODUCCION.md) y relanza este workflow."
@@ -175,13 +175,14 @@ jobs:
       - name: Abrir el túnel a Railway
         if: steps.pendientes.outputs.hay == 'si'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+          # `RAILWAY_API_TOKEN`, no `RAILWAY_TOKEN`: son dos mecanismos de auth
+          # distintos del CLI. `RAILWAY_TOKEN` es un token DE PROYECTO, y este
+          # secreto no lo es — es el mismo token de cuenta que ya usa
+          # `railway up` de más abajo bajo ese nombre. Pasarlo como
+          # `RAILWAY_TOKEN` dio "Unauthorized" en el primer intento real.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           npm install -g @railway/cli
-          # SIN `--project` el CLI no resuelve el proyecto solo con el token y
-          # falla con «Invalid RAILWAY_TOKEN» — aunque el mismo secreto SÍ
-          # funciona en `railway up` de más abajo, porque esas llamadas ya
-          # pasan `--project` explícito. Mismo ID que usa `desplegar`.
           railway connect Postgres --tunnel-only --port 55432 \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
             --environment production &
@@ -209,7 +210,7 @@ jobs:
       - name: Leer las contraseñas de Railway
         if: steps.pendientes.outputs.hay == 'si'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           pg=$(railway variables --service Postgres --json \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
