@@ -172,6 +172,8 @@ export type AspectoDePersonaje = {
 export type SignupPolicy = {
   /** Si la instancia tiene configurado entrar con Google. */
   google?: boolean;
+  /** Si la instancia tiene configurado conectar GitHub sin pegar un token. */
+  githubConector?: boolean;
   mode: "invite" | "open";
   /** Instancia vacía: la primera cuenta siempre se puede crear. */
   bootstrap: boolean;

@@ -158,6 +158,17 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().default(""),
   GOOGLE_REDIRECT_URI: z.string().default(""),
 
+  // --- Conectar GitHub sin pegar un token a mano -------------------------------
+  // Un OAuth App clásico de GitHub (Settings → Developer settings → OAuth
+  // Apps), no una GitHub App: con alcance `repo` da acceso a todos los repos
+  // de quien conecta en un solo click, en vez de elegir uno por uno como el
+  // token de acceso personal que sigue existiendo al lado. Mismo trato que
+  // Google arriba: sin las tres, la ruta no se registra y la web no enseña
+  // el botón.
+  GITHUB_OAUTH_CLIENT_ID: z.string().default(""),
+  GITHUB_OAUTH_CLIENT_SECRET: z.string().default(""),
+  GITHUB_OAUTH_REDIRECT_URI: z.string().default(""),
+
   // --- Almacenamiento S3-compatible ------------------------------------------
   //
   // DOS DIRECCIONES PARA EL MISMO ALMACÉN, Y NO ES REDUNDANCIA.

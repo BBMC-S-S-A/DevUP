@@ -1,7 +1,9 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
+import { canjear, comenzar, githubOauthConfigurado, type TransitoGithub } from "../auth/github.js";
 import { type Db, withUser } from "../db/pool.js";
+import { env } from "../env.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { decryptSecret, encryptSecret } from "../security/vault.js";
 
@@ -92,6 +94,102 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.status(201).send({ connection });
   });
+
+  // --- Conectar GitHub sin pegar un token a mano -----------------------------
+  //
+  // Solo existen si las tres variables de entorno están puestas — mismo trato
+  // que `/auth/google`: un botón que lleva a una ruta que no existe es peor
+  // que no tener botón. Ver auth/github.ts para el porqué del alcance `repo`
+  // y de por qué no hay PKCE aquí.
+  if (githubOauthConfigurado()) {
+    const COOKIE_TRANSITO = "devup_github_oauth";
+
+    const volver = (reply: FastifyReply, workspaceId: string | null, motivo?: string) => {
+      const destino = workspaceId ? `/app/w/${workspaceId}/github` : "/app";
+      const query = motivo ? `?error=${encodeURIComponent(motivo)}` : "?connected=1";
+      return reply.redirect(`${env.APP_BASE_URL}${destino}${query}`);
+    };
+
+    app.get("/workspaces/:workspaceId/connections/github/start", async (request, reply) => {
+      requireUser(request);
+      const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+      const { url, transito } = comenzar(workspaceId);
+
+      void reply.setCookie(COOKIE_TRANSITO, JSON.stringify(transito), {
+        httpOnly: true,
+        secure: env.COOKIE_SECURE,
+        // `lax`, no `strict`: GitHub trae de vuelta al navegador con una
+        // navegación de nivel superior, igual que Google — con `strict` la
+        // cookie no viajaría y el callback no encontraría el estado.
+        sameSite: "lax",
+        path: "/connections/github",
+        maxAge: 600,
+      });
+
+      return reply.redirect(url);
+    });
+
+    app.get("/connections/github/callback", async (request, reply) => {
+      const userId = requireUser(request);
+      const { code, state, error } = request.query as { code?: string; state?: string; error?: string };
+
+      const crudo = request.cookies[COOKIE_TRANSITO];
+      void reply.clearCookie(COOKIE_TRANSITO, { path: "/connections/github" });
+
+      let transito: TransitoGithub | null = null;
+      if (crudo) {
+        try {
+          transito = JSON.parse(crudo) as TransitoGithub;
+        } catch {
+          transito = null;
+        }
+      }
+
+      // Cancelar en la pantalla de GitHub es un caso normal, no una avería.
+      if (error) return volver(reply, transito?.workspaceId ?? null, "se canceló la conexión con GitHub");
+      if (!transito || !code || !state) {
+        return volver(reply, transito?.workspaceId ?? null, "la sesión de conexión caducó, inténtalo otra vez");
+      }
+      // El anti-CSRF: sin esto, alguien podría hacer que tu navegador complete
+      // el callback con SU código y conectaras SU cuenta de GitHub a tu
+      // organización.
+      if (transito.estado !== state) {
+        return volver(reply, transito.workspaceId, "la sesión de conexión no coincide");
+      }
+
+      try {
+        const identidad = await canjear(code);
+
+        await withUser(userId, async (db) => {
+          const { rows } = await db.query<{ id: string }>(
+            `insert into connections (provider, workspace_id, display_name, created_by)
+             values ('github',$1,$2,$3) returning id`,
+            [transito!.workspaceId, identidad.login, userId],
+          );
+          const id = rows[0]!.id;
+          await db.query(
+            "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
+            [id, encryptSecret(identidad.token)],
+          );
+          // Mismo motivo que en el alta manual de más arriba: adoptar los
+          // repositorios públicos que ya estaban sin token en este workspace.
+          await db.query(
+            `update github_repos set connection_id = $1
+              where workspace_id = $2 and connection_id is null`,
+            [id, transito!.workspaceId],
+          );
+        });
+
+        return volver(reply, transito.workspaceId);
+      } catch (fallo) {
+        request.log.warn(
+          { err: fallo instanceof Error ? fallo.message : fallo },
+          "falló la conexión OAuth con GitHub",
+        );
+        return volver(reply, transito.workspaceId, "no se pudo completar la conexión con GitHub");
+      }
+    });
+  }
 
   // --- De organización --------------------------------------------------------
   app.get("/organizations/:orgId/connections", async (request) => {

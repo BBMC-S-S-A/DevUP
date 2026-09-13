@@ -18,22 +18,23 @@ import {
   Unplug,
   XCircle,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useWorkspaceId } from "@/lib/workspace-context";
-import { ApiError, type Connection, type GithubRepo, api } from "@/lib/api";
+import { API_URL, ApiError, type Connection, type GithubRepo, type SignupPolicy, api } from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Pagina } from "@/components/ui/Pagina";
 
 /**
- * Conector de GitHub (S7, primera pieza). Un token de acceso personal de
- * alcance fino por organización — no una GitHub App con OAuth, ver §5.1 de
- * y los repositorios que se
- * conecten con él. Las estadísticas las refresca el barrendero del servidor
- * cada diez minutos; el botón de refrescar solo adelanta esa espera.
+ * Conector de GitHub (S7, primera pieza). Dos formas de conectar una cuenta:
+ * un botón OAuth que da acceso a todos los repos en un click (0004, ampliado
+ * después), o un token de acceso personal de alcance fino, repositorio por
+ * repositorio, para quien prefiera no dar todo de una vez. Ambos terminan en
+ * la misma bóveda de conexiones y sirven igual para leer sus repositorios.
  *
  * La pantalla se lee como un panel de telemetría porque eso es lo que es: nada
  * de aquí se edita, todo son lecturas que llegan de fuera y que pueden estar
@@ -64,11 +65,21 @@ function semaforo(conclusion: string | null): Semaforo {
 export default function GithubPage() {
   const confirmar = useConfirmar();
   const workspaceId = useWorkspaceId();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [connection, setConnection] = useState<Connection | null | undefined>(undefined);
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<SignupPolicy | null>(null);
+
+  useEffect(() => {
+    api
+      .get<SignupPolicy>("/auth/signup-policy")
+      .then(setPolicy)
+      .catch(() => setPolicy(null));
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +97,24 @@ export default function GithubPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // El viaje de ida y vuelta del OAuth termina en esta misma pantalla, con
+  // `?connected=1` o `?error=...` en la URL — el servidor no tiene otra forma
+  // de avisar. Se limpia enseguida para que recargar la página no repita el
+  // toast ni deje el error pegado en la barra de direcciones.
+  useEffect(() => {
+    const conectado = searchParams.get("connected");
+    const motivo = searchParams.get("error");
+    if (!conectado && !motivo) return;
+
+    if (conectado) {
+      toast.success("GitHub conectado");
+      void load();
+    } else if (motivo) {
+      toast.error(motivo);
+    }
+    router.replace(`/app/w/${workspaceId}/github`);
+  }, [searchParams, router, workspaceId, load]);
 
   const refresh = useCallback(
     async (repoId: string) => {
@@ -230,6 +259,7 @@ export default function GithubPage() {
             {/* El token va al final y plegado: es lo que hace falta para lo
                 privado, no para empezar. Arriba, como puerta, era donde se
                 caía la gente. */}
+            {!connection && policy?.githubConector && <ConectarGithubOAuth workspaceId={workspaceId} />}
             {!connection && <ConectarGithub workspaceId={workspaceId} onConnected={load} />}
           </>
         )}
@@ -313,13 +343,56 @@ function Cargando() {
 }
 
 /**
- * Conectar un token, que ya no es la puerta de entrada.
+ * Conectar con GitHub en un click.
+ *
+ * NO ES UN `<a>` NORMAL: es una navegación de nivel superior a propósito
+ * (`window.location.href`, no un `<Link>` ni un `fetch`) — el servidor tiene
+ * que fijar una cookie y redirigir a github.com, y eso solo funciona como
+ * navegación real del navegador. Da acceso a todos los repos de la cuenta que
+ * conecte de una vez; quien prefiera elegir repositorio por repositorio sigue
+ * teniendo el token de alcance fino, plegado más abajo.
+ */
+function ConectarGithubOAuth({ workspaceId }: { workspaceId: string }) {
+  return (
+    <Tarjeta className="devup-entrada mt-4 p-6">
+      <div className="flex items-center gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-accent/30 bg-accent-soft/60 text-accent">
+          <Github size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold">Conectar con GitHub</h2>
+          <Rotulo className="mt-0.5 block">Un click, acceso a todos tus repositorios</Rotulo>
+        </div>
+      </div>
+
+      <p className="mt-5 text-xs leading-relaxed text-muted">
+        Entrás a GitHub, aceptás, y volvés con la cuenta conectada — sin crear
+        ni pegar ningún token.
+      </p>
+
+      <Boton
+        variante="primario"
+        className="mt-5 w-full"
+        onClick={() => {
+          window.location.href = `${API_URL}/workspaces/${workspaceId}/connections/github/start`;
+        }}
+      >
+        Conectar con GitHub
+      </Boton>
+    </Tarjeta>
+  );
+}
+
+/**
+ * Conectar un token, alternativa al botón de arriba.
  *
  * ANTES ESTA TARJETA TAPABA LA PANTALLA ENTERA y no se podía hacer nada sin
  * rellenarla. Para un repositorio público el token no hace ninguna falta — la
  * API de GitHub contesta sin credencial—, así que pedirlo por adelantado era
  * mandar a la gente a otra web a entender qué es «alcance fino» antes de
- * poder ver nada. Ahora va plegada y al final: se abre quien la necesita.
+ * poder ver nada. Ahora va plegada y al final: se abre quien la necesita, o
+ * quien prefiera elegir repositorio por repositorio en vez del acceso total
+ * que da el botón de arriba.
  */
 function ConectarGithub({ workspaceId, onConnected }: { workspaceId: string; onConnected: () => Promise<void> }) {
   const [abierto, setAbierto] = useState(false);

@@ -5,6 +5,7 @@ import { requireSession } from "../auth/plugin.js";
 import { hashPassword } from "../auth/password.js";
 import { type Db, withUser } from "../db/pool.js";
 import { googleConfigurado } from "../auth/google.js";
+import { githubOauthConfigurado } from "../auth/github.js";
 import { normalizarCodigo, nuevoCodigo } from "../lib/codigo.js";
 import { env } from "../env.js";
 import {
@@ -110,6 +111,11 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       // a una ruta que no existe es peor que no tener botón: la persona sale a
       // Google y vuelve a un 404 que no puede interpretar.
       google: googleConfigurado(),
+      // Mismo trato para el botón de conectar GitHub sin pegar un token: esta
+      // ruta ya es la que consulta la web para saber qué mostrar, así que
+      // sumar una bandera aquí es menos superficie nueva que otra ruta pública
+      // para una sola casilla.
+      githubConector: githubOauthConfigurado(),
     };
   });
 
