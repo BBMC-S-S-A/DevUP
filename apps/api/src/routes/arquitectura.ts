@@ -116,6 +116,13 @@ export async function fusionarArquitectura(
   workspaceId: string,
   userId: string,
   entrada: z.infer<typeof ENTRADA_FUSION>,
+  /**
+   * De qué repositorio vino esto, si vino de uno (0064). Solo lo rellena
+   * `/importar/repositorio` — un agente por MCP o alguien a mano siguen
+   * dejando `null`, que es como se protege ese trabajo de que una futura
+   * importación lo confunda con el rastro de un repositorio.
+   */
+  origen: string | null = null,
 ): Promise<Fusion> {
   const { rows: existentes } = await db.query<NodoFila>(
     `select ${NODE_COLUMNS} from architecture_nodes where workspace_id = $1`,
@@ -164,9 +171,9 @@ export async function fusionarArquitectura(
 
     const { rows } = await db.query<NodoFila>(
       `insert into architecture_nodes
-         (workspace_id, organization_id, kind, name, description, pos_x, pos_y, created_by)
+         (workspace_id, organization_id, kind, name, description, pos_x, pos_y, created_by, imported_from)
        values ($1,(select organization_id from workspaces where id = $1),
-               $2::architecture_node_kind,$3,$4,$5,$6,$7)
+               $2::architecture_node_kind,$3,$4,$5,$6,$7,$8)
        returning ${NODE_COLUMNS}`,
       [
         workspaceId,
@@ -176,6 +183,7 @@ export async function fusionarArquitectura(
         posX,
         posY,
         userId,
+        origen,
       ],
     );
     const nodo = rows[0]!;
@@ -490,20 +498,50 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     // quedaron fuera: callarlo dejaría un mapa con agujeros que parecen
     // decisiones.
     const recortados = Math.max(0, componentes.length - TOPE_COMPONENTES);
-    const fusion = await withUser(userId, (db) =>
-      fusionarArquitectura(db, workspaceId, userId, {
-        componentes: componentes.slice(0, TOPE_COMPONENTES).map((c) => ({
-          nombre: c.nombre.slice(0, 60),
-          tipo: c.tipo,
-          descripcion: c.descripcion,
-        })),
-        conexiones: conexiones.slice(0, TOPE_CONEXIONES).map((c) => ({
-          de: c.de.slice(0, 60),
-          a: c.a.slice(0, 60),
-          etiqueta: c.etiqueta,
-        })),
-      }),
-    );
+
+    const { fusion, reemplazados } = await withUser(userId, async (db) => {
+      /**
+       * Cambiar de repositorio conectado REEMPLAZA su diagrama, no lo apila
+       * encima del anterior (0064). Solo se borra lo que trajo una
+       * importación previa de OTRO repositorio — `imported_from` distinto al
+       * de ahora. Un nodo puesto a mano, o traído por `dibujar_arquitectura`
+       * (`imported_from` nulo), no se toca nunca por esta vía.
+       */
+      const { rows: previos } = await db.query<{ importedFrom: string }>(
+        `select distinct imported_from as "importedFrom" from architecture_nodes
+          where workspace_id = $1 and imported_from is not null and imported_from <> $2`,
+        [workspaceId, fullName],
+      );
+      let reemplazados = 0;
+      if (previos.length > 0) {
+        const { rowCount } = await db.query(
+          `delete from architecture_nodes
+            where workspace_id = $1 and imported_from = any($2::text[])`,
+          [workspaceId, previos.map((p) => p.importedFrom)],
+        );
+        reemplazados = rowCount ?? 0;
+      }
+
+      const fusion = await fusionarArquitectura(
+        db,
+        workspaceId,
+        userId,
+        {
+          componentes: componentes.slice(0, TOPE_COMPONENTES).map((c) => ({
+            nombre: c.nombre.slice(0, 60),
+            tipo: c.tipo,
+            descripcion: c.descripcion,
+          })),
+          conexiones: conexiones.slice(0, TOPE_CONEXIONES).map((c) => ({
+            de: c.de.slice(0, 60),
+            a: c.a.slice(0, 60),
+            etiqueta: c.etiqueta,
+          })),
+        },
+        fullName,
+      );
+      return { fusion, reemplazados };
+    });
 
     return {
       fullName,
@@ -512,6 +550,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
       omitidos,
       ilegibles,
       recortados,
+      reemplazados,
       ...fusion,
     };
   });

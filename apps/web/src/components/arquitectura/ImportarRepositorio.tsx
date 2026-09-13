@@ -41,6 +41,8 @@ type Resultado = {
   omitidos: number;
   ilegibles: string[];
   recortados: number;
+  /** Cajas de un repositorio DISTINTO que se quitaron al leer este (0064). */
+  reemplazados: number;
   creados: string[];
   reutilizados: string[];
   enlazados: string[];
@@ -182,20 +184,40 @@ function DeDondeLoSaca() {
           Una dependencia declarada <strong>puede no usarse ya</strong>, y lo que solo existe en
           producción —un balanceador, una CDN— no está en el repositorio.
         </li>
-        <li>Nada se borra ni se recoloca: lo que ya esté en el lienzo se queda donde está.</li>
+        <li>
+          Nada puesto a mano se borra ni se recoloca. Lo único que se quita es lo que trajo una
+          lectura anterior <strong>de otro repositorio</strong>: leer uno nuevo reemplaza su
+          diagrama, no lo apila encima.
+        </li>
       </ul>
     </div>
   );
 }
 
 function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onCerrar: () => void }) {
-  const { creados, reutilizados, enlazados, archivos, omitidos, ilegibles, recortados, sinResolver, fuentes } =
-    resultado;
+  const {
+    creados,
+    reutilizados,
+    enlazados,
+    archivos,
+    omitidos,
+    ilegibles,
+    recortados,
+    reemplazados,
+    sinResolver,
+    fuentes,
+  } = resultado;
 
   const nadaNuevo = creados.length === 0 && enlazados.length === 0;
 
   return (
     <div className="space-y-3">
+      {reemplazados > 0 && (
+        <p className="rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-[11px] leading-relaxed text-accent">
+          Se quitaron <strong>{reemplazados}</strong> caja(s) que venían de otro repositorio
+          conectado antes — este diagrama ahora es solo de {resultado.fullName}.
+        </p>
+      )}
       {fuentes.length === 0 ? (
         <p className="text-xs text-muted">
           Miré el repositorio y no encontré de dónde sacar la arquitectura: ni Terraform, ni{" "}
