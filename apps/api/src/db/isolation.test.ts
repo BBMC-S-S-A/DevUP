@@ -2755,6 +2755,34 @@ async function main(): Promise<void> {
     });
     check("poner la misma no pide borrar nada", repetida === null);
 
+    // Y elegir el personaje como cara (0058). Misma forma que las demas de la
+    // persona: una columna, una fila, la de quien llama. Lo que se fija es que
+    // elegirlo NO toca la foto guardada — asi volver a la foto la recupera, en
+    // vez de haberla perdido por probar.
+    await withUser(ana, (db) => db.query("select public.set_my_avatar_key($1)", ["users/x/3.png"]));
+    await withUser(ana, (db) => db.query("select public.set_my_usa_personaje(true)"));
+    const trasElegir = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ avatar_key: string | null; usa_personaje: boolean }>(
+        "select avatar_key, usa_personaje from profiles where id = $1",
+        [ana],
+      );
+      return rows[0]!;
+    });
+    check("elegir el personaje se guarda", trasElegir.usa_personaje === true);
+    check("y no borra la foto: volver a ella la recupera", trasElegir.avatar_key === "users/x/3.png");
+
+    await withUser(carla, (db) =>
+      db.query("update profiles set usa_personaje = false where id = $1", [ana]),
+    );
+    const sigue = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ usa_personaje: boolean }>(
+        "select usa_personaje from profiles where id = $1",
+        [ana],
+      );
+      return rows[0]!.usa_personaje;
+    });
+    check("y nadie le elige la cara a otro", sigue === true);
+
     console.log("\nLos puntos");
 
     // La 0055 abre `puntos` a TODA la organizacion a proposito: unos puntos que

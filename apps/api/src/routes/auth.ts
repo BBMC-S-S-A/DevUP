@@ -54,6 +54,8 @@ export type Me = {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  /** Si su cara es el personaje de DevVerse en vez de una foto (0058). */
+  usaPersonaje: boolean;
   emailVerified: boolean;
   /** La cartelera. Viaja con la sesión porque el selector de presencia
    *  vive en la barra y está en pantalla siempre. */
@@ -74,8 +76,9 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
   const { rows } = await db.query<Me>(
     `select u.id, u.email::text as "email",
             p.display_name as "displayName",
-            p.avatar_key   as "avatarKey",
-            p.avatar_url   as "avatarUrl",
+            p.avatar_key    as "avatarKey",
+            p.avatar_url    as "avatarUrl",
+            p.usa_personaje as "usaPersonaje",
             p.presence, p.title, p.timezone,
             (u.email_verified_at is not null) as "emailVerified"
        from users u
@@ -101,9 +104,13 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
   const { avatarKey, ...resto } = me;
   return {
     ...resto,
-    avatarUrl: avatarKey
-      ? await signDownload(avatarKey, "foto", "inline")
-      : resto.avatarUrl,
+    // Si eligió el personaje, no se manda ninguna foto: quien pinta la chapa
+    // decide por lo que RECIBE, no por una regla que tenga que recordar.
+    avatarUrl: resto.usaPersonaje
+      ? null
+      : avatarKey
+        ? await signDownload(avatarKey, "foto", "inline")
+        : resto.avatarUrl,
   };
 }
 

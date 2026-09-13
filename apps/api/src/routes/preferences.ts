@@ -427,26 +427,82 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const gente = await withUser(userId, async (db) => {
-      const { rows } = await db.query<{ id: string; avatarKey: string | null; avatarUrl: string | null }>(
-        `select id, avatar_key as "avatarKey", avatar_url as "avatarUrl"
-           from profiles where id = any($1::uuid[])`,
+      const { rows } = await db.query<{
+        id: string;
+        avatarKey: string | null;
+        avatarUrl: string | null;
+        usaPersonaje: boolean;
+        look: Record<string, number> | null;
+      }>(
+        `select p.id,
+                p.avatar_key as "avatarKey",
+                p.avatar_url as "avatarUrl",
+                p.usa_personaje as "usaPersonaje",
+                -- El personaje va como los dieciséis números que es, no como
+                -- una imagen: lo dibuja el navegador con el mismo atlas del
+                -- mundo. Un PNG guardado habría que regenerarlo cada vez que
+                -- alguien se cambia el gorro, y el día que se olvide, la cara
+                -- se queda vieja sin que nada falle.
+                case when p.usa_personaje and w.user_id is not null then
+                  json_build_object(
+                    'body', w.body, 'hair', w.hair, 'top', w.top, 'bottom', w.bottom,
+                    'skinTone', w.skin_tone, 'hairTone', w.hair_tone,
+                    'topTone', w.top_tone, 'bottomTone', w.bottom_tone,
+                    'hat', w.hat, 'glasses', w.glasses, 'beard', w.beard,
+                    'shoes', w.shoes, 'hatTone', w.hat_tone, 'shoesTone', w.shoes_tone
+                  )
+                end as look
+           from profiles p
+           left join world_avatars w on w.user_id = p.id
+          where p.id = any($1::uuid[])`,
         [ids],
       );
       return rows;
     });
 
-    const urls: Record<string, string> = {};
+    /**
+     * Cómo se pinta cada quien, resuelto AQUÍ y no en las pantallas.
+     *
+     * El orden —personaje si lo eligió, foto subida, foto de Google, y si no,
+     * nada— se decide en un solo sitio a propósito. Repartido por cada vista
+     * que dibuja una chapa, la que se lo saltara enseñaría la foto de Google a
+     * quien acaba de elegir su personaje, y se vería perfectamente normal.
+     */
+    const caras: Record<string, { tipo: "foto"; url: string } | { tipo: "personaje"; look: unknown }> =
+      {};
     for (const persona of gente) {
-      // La subida gana a la de Google: si alguien se molestó en poner una foto,
-      // esa es la que quiere. La de Google llegó sola.
-      if (persona.avatarKey) {
-        urls[persona.id] = await signDownload(persona.avatarKey, "foto", "inline");
+      if (persona.usaPersonaje && persona.look) {
+        caras[persona.id] = { tipo: "personaje", look: persona.look };
+      } else if (persona.avatarKey) {
+        caras[persona.id] = {
+          tipo: "foto",
+          url: await signDownload(persona.avatarKey, "foto", "inline"),
+        };
       } else if (persona.avatarUrl) {
-        urls[persona.id] = persona.avatarUrl;
+        caras[persona.id] = { tipo: "foto", url: persona.avatarUrl };
       }
+      // Sin entrada = la inicial. Un hueco es una respuesta, no un fallo.
     }
 
-    return { urls, expiresIn: env.S3_SIGNED_URL_TTL };
+    return { caras, expiresIn: env.S3_SIGNED_URL_TTL };
+  });
+
+  /**
+   * Elegir entre la foto y el personaje.
+   *
+   * Ruta propia y no un campo de `/me/profile` porque no es un dato del
+   * perfil: es qué se pinta con los datos que ya hay. Y porque el gesto es un
+   * interruptor —lo enciendes desde la propia chapa— y no un formulario que se
+   * guarda entero.
+   */
+  app.put("/me/avatar/personaje", async (request) => {
+    const userId = requireUser(request);
+    const { usar } = parseBody(z.object({ usar: z.boolean() }), request.body);
+
+    await withUser(userId, (db) =>
+      db.query("select public.set_my_usa_personaje($1)", [usar]),
+    );
+    return { usaPersonaje: usar };
   });
 
   /**

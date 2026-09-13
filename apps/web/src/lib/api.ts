@@ -132,6 +132,39 @@ export type User = {
    * UTC — que para media Colombia corre los domingos a la semana siguiente.
    */
   timezone: string | null;
+  /**
+   * Si su cara es el personaje de DevVerse (0058). Cuando es cierto,
+   * `avatarUrl` llega nulo aunque haya foto guardada: quien pinta la chapa
+   * decide por lo que RECIBE y no por una regla que tenga que recordar.
+   */
+  usaPersonaje: boolean;
+};
+
+/**
+ * Cómo se pinta la cara de alguien, tal como lo resuelve `POST /avatars/urls`.
+ *
+ * Sin entrada en el mapa = la inicial. Un hueco es una respuesta, no un fallo.
+ */
+export type Cara =
+  | { tipo: "foto"; url: string }
+  | { tipo: "personaje"; look: AspectoDePersonaje };
+
+/** Los dieciséis números que describen un personaje (`world_avatars`, 0010). */
+export type AspectoDePersonaje = {
+  body: number;
+  hair: number;
+  top: number;
+  bottom: number;
+  skinTone: number;
+  hairTone: number;
+  topTone: number;
+  bottomTone: number;
+  hat: number;
+  glasses: number;
+  beard: number;
+  shoes: number;
+  hatTone: number;
+  shoesTone: number;
 };
 
 export type SignupPolicy = {

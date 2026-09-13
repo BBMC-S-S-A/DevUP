@@ -21,9 +21,17 @@ import { Field } from "@/components/ui/Field";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { Pagina } from "@/components/ui/Pagina";
-import { type ConexionDeAgente, type Sesion, ApiError, api } from "@/lib/api";
+import {
+  type AspectoDePersonaje,
+  type ConexionDeAgente,
+  type Sesion,
+  ApiError,
+  api,
+} from "@/lib/api";
 import { Dispositivos } from "@/components/ajustes/Dispositivos";
 import { uploadAvatar } from "@/lib/files/upload";
+import { CaraDePersonaje } from "@/components/perfil/CaraDePersonaje";
+import { ignorar } from "@/lib/fallo";
 import { useSession } from "@/lib/session";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
@@ -325,7 +333,47 @@ function FotoDePerfil() {
   const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
+  /**
+   * El personaje se pide aparte y SIEMPRE, se esté usando o no.
+   *
+   * Es lo que permite enseñar las dos caras a la vez para elegir. Ofrecer
+   * «usar mi personaje» sin enseñarlo obliga a elegir a ciegas, ir a DevVerse a
+   * verlo, y volver — y quien haga eso dos veces deja de tocarlo.
+   */
+  const [personaje, setPersonaje] = useState<AspectoDePersonaje | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let vigente = true;
+    // Por `/world/avatars` y no por una ruta propia: es la que ya existe y la
+    // que usa DevVerse, así que comparte caché con ella. Devuelve los de la
+    // organización y de ahí se saca el propio — pedir una ruta nueva para una
+    // sola fila sería una segunda forma de preguntar lo mismo.
+    api
+      .get<{ avatars: (AspectoDePersonaje & { userId: string })[] }>("/world/avatars")
+      .then(({ avatars }) => {
+        const mio = avatars.find((a) => a.userId === user.id);
+        if (vigente && mio) setPersonaje(mio);
+      })
+      .catch(ignorar("no se pudo cargar tu personaje"));
+    return () => {
+      vigente = false;
+    };
+  }, [user]);
+
+  const usaPersonaje = user?.usaPersonaje ?? false;
   const actual = vistaPrevia ?? user?.avatarUrl ?? null;
+
+  const elegirFuente = async (usar: boolean) => {
+    setOcupado(true);
+    try {
+      await api.put("/me/avatar/personaje", { usar });
+      await refresh();
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo cambiar");
+    } finally {
+      setOcupado(false);
+    }
+  };
 
   const elegir = async (fichero: File | undefined) => {
     if (!fichero) return;
@@ -373,50 +421,111 @@ function FotoDePerfil() {
   };
 
   return (
-    <div className="flex items-center gap-3.5">
+    <div>
+      {/* LAS DOS CARAS A LA VEZ, y por eso el personaje se pide aunque no se
+          esté usando. Ofrecer «usa tu personaje» sin enseñarlo obliga a elegir
+          a ciegas, ir a DevVerse a verlo y volver — y quien hace eso dos veces
+          deja de tocarlo. */}
+      <div className="flex flex-wrap gap-2">
+        <OpcionDeCara
+          elegida={!usaPersonaje}
+          titulo="Una foto"
+          disabled={ocupado}
+          onElegir={() => void elegirFuente(false)}
+        >
+          {actual ? (
+            // eslint-disable-next-line @next/next/no-img-element -- la URL
+            // viene firmada y caduca; el optimizador de Next no puede con eso.
+            <img src={actual} alt="" className="size-full object-cover" />
+          ) : (
+            <span className="font-display text-base font-semibold text-accent-bright">
+              {iniciales(user?.displayName || "?")}
+            </span>
+          )}
+        </OpcionDeCara>
+
+        <OpcionDeCara
+          elegida={usaPersonaje}
+          titulo="Tu personaje"
+          disabled={ocupado || !personaje}
+          onElegir={() => void elegirFuente(true)}
+        >
+          {personaje ? (
+            <CaraDePersonaje look={personaje} tamano={40} />
+          ) : (
+            <span className="text-[10px] text-faint">…</span>
+          )}
+        </OpcionDeCara>
+      </div>
+
+      <input
+        ref={entrada}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+        hidden
+        onChange={(e) => void elegir(e.target.files?.[0])}
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Boton
+          variante="fantasma"
+          tamano="sm"
+          icono={<ImagePlus size={14} />}
+          cargando={ocupado}
+          onClick={() => entrada.current?.click()}
+        >
+          {actual ? "Cambiar foto" : "Subir una foto"}
+        </Boton>
+        {actual && (
+          <Boton variante="fantasma" tamano="sm" disabled={ocupado} onClick={() => void quitar()}>
+            Quitar la foto
+          </Boton>
+        )}
+      </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-faint">
+        {usaPersonaje
+          ? "Tu personaje se dibuja al vuelo: si te cambias de ropa en DevVerse, cambia aquí también."
+          : "Se ve al lado de tu nombre. Cuadrada queda mejor: se recorta al centro."}
+      </p>
+    </div>
+  );
+}
+
+/** Una de las dos caras, para poder compararlas antes de elegir. */
+function OpcionDeCara({
+  elegida,
+  titulo,
+  disabled,
+  onElegir,
+  children,
+}: {
+  elegida: boolean;
+  titulo: string;
+  disabled: boolean;
+  onElegir: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onElegir}
+      aria-pressed={elegida}
+      className={`presionable flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left
+        transition-colors disabled:opacity-60 ${
+          elegida ? "border-accent/50 bg-accent-soft/40" : "border-line hover:border-line-strong"
+        }`}
+    >
       <span
         aria-hidden
-        className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-2xl border
-          border-line-strong bg-accent-soft/70 font-display text-base font-semibold text-accent-bright"
+        className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl border
+          border-line-strong bg-accent-soft/70"
       >
-        {actual ? (
-          // eslint-disable-next-line @next/next/no-img-element -- la URL viene
-          // firmada y caduca; el optimizador de Next no puede con eso.
-          <img src={actual} alt="" className="size-full object-cover" />
-        ) : (
-          iniciales(user?.displayName || "?")
-        )}
+        {children}
       </span>
-
-      <div className="min-w-0 flex-1">
-        <input
-          ref={entrada}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-          hidden
-          onChange={(e) => void elegir(e.target.files?.[0])}
-        />
-        <div className="flex flex-wrap gap-2">
-          <Boton
-            variante="fantasma"
-            tamano="sm"
-            icono={<ImagePlus size={14} />}
-            cargando={ocupado}
-            onClick={() => entrada.current?.click()}
-          >
-            {actual ? "Cambiar foto" : "Poner foto"}
-          </Boton>
-          {actual && (
-            <Boton variante="fantasma" tamano="sm" disabled={ocupado} onClick={() => void quitar()}>
-              Quitar
-            </Boton>
-          )}
-        </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
-          Se ve al lado de tu nombre. Cuadrada queda mejor: se recorta al centro.
-        </p>
-      </div>
-    </div>
+      <span className="text-xs font-medium text-ink">{titulo}</span>
+    </button>
   );
 }
 
