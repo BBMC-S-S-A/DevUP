@@ -167,6 +167,28 @@ export async function signDownload(
 }
 
 /** Tamaño y tipo reales del objeto subido, o null si no llegó a existir. */
+/**
+ * Si el almacén contesta.
+ *
+ * POR QUÉ NO VALE `headObject`. Esa se traga cualquier error y devuelve `null`,
+ * porque a quien la llama solo le importa si el objeto está. Aquí la diferencia
+ * entre «ese objeto no existe» y «el almacén no responde» es TODO lo que se
+ * quiere saber: la primera es normal, la segunda significa que nadie puede
+ * subir ni ver un archivo y que nadie se ha enterado.
+ *
+ * `HeadBucket` y no un objeto de prueba: no escribe nada, no depende de que
+ * exista ninguna clave concreta, y contesta lo mismo que contestaría una
+ * subida — si las credenciales o la dirección están mal, falla aquí igual.
+ */
+export async function almacenResponde(): Promise<boolean> {
+  try {
+    await s3Interno.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function headObject(
   key: string,
 ): Promise<{ size: number; contentType: string } | null> {

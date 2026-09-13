@@ -3,7 +3,16 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
 import { WIDGETS_CON_DATOS, datosDeWidgets } from "../lib/widgets.js";
-import { badRequest, notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  parseBody,
+  parseParams,
+  parseQuery,
+  requireUser,
+} from "../lib/http.js";
+import { saludDeLaInstalacion } from "../lib/salud.js";
 import { env } from "../env.js";
 import {
   buildUserAssetKey,
@@ -315,6 +324,36 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
         [userId, body.presence ?? null, body.title ?? null, body.displayName ?? null],
       );
       return rows[0]!;
+    });
+  });
+
+  /**
+   * El estado de esta instalación.
+   *
+   * SOLO QUIEN ADMINISTRA, y se comprueba con `is_org_admin` y no mirando el
+   * rol en la sesión: la regla de quién administra vive en la base y consultarla
+   * ahí es lo que impide que una copia se quede vieja.
+   *
+   * VA COLGADO DE UNA ORGANIZACIÓN aunque lo que cuenta sea de la instalación
+   * entera, y conviene saber por qué: en DevUP no existe un «administrador del
+   * sistema» — el permiso más alto que hay es administrar una organización. Así
+   * que la pregunta que se puede contestar no es «¿eres superusuario?» sino
+   * «¿administras esto?», y eso obliga a nombrar cuál.
+   *
+   * No devuelve ni una clave ni una dirección: ver `lib/salud.ts`. Una pantalla
+   * de diagnóstico que enseña la mitad de un secreto es una filtración con
+   * buena intención.
+   */
+  app.get("/organizations/:orgId/salud", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: z.string().uuid() }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ ok: boolean }>("select public.is_org_admin($1) as ok", [
+        orgId,
+      ]);
+      if (!rows[0]?.ok) throw forbidden("solo quien administra puede ver el estado técnico");
+      return saludDeLaInstalacion(db);
     });
   });
 
