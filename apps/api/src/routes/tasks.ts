@@ -376,21 +376,33 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const category = await withUser(userId, async (db) => {
-      const { rows } = await db.query(
-        `insert into task_categories (workspace_id, name, color, owner_id, position, created_by)
+      const { rows } = await db.query<{ id: string }>(
+        `insert into task_categories (workspace_id, name, color, position, created_by)
          values (
-           $1, $2, $3, $4,
-           coalesce((select max(position) from task_categories where workspace_id = $1), 0) + $5,
-           $6
+           $1, $2, $3,
+           coalesce((select max(position) from task_categories where workspace_id = $1), 0) + $4,
+           $5
          )
-         returning id, name, color, position, owner_id as "ownerId"`,
-        [workspaceId, body.name, body.color ?? 0, body.ownerId ?? null, STEP, userId],
+         returning id, name, color, position`,
+        [workspaceId, body.name, body.color ?? 0, STEP, userId],
       );
       if (!rows[0]) throw notFound("workspace no encontrado");
+
+      // EL `ownerId` DE ENTRADA SE SIGUE ACEPTANDO, PERO YA NO ESCRIBE LA
+      // COLUMNA. La 0050 retiró `task_categories.owner_id` —«no escribir
+      // aquí»— y movió los gerentes a su propia tabla, en plural. Quitar el
+      // campo de la petición habría roto en silencio a quien lo manda (el MCP
+      // manda un responsable al crear un área), así que se traduce.
+      if (body.ownerId) {
+        await db.query("select public.set_category_owner($1,$2,true)", [
+          rows[0].id,
+          body.ownerId,
+        ]);
+      }
       return rows[0];
     });
 
-    return reply.status(201).send({ category: { ...category, tareas: 0 } });
+    return reply.status(201).send({ category: { ...category, tareas: 0, gerentes: [] } });
   });
 
   app.patch("/categories/:categoryId", async (request) => {
@@ -400,29 +412,18 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       z.object({
         name: z.string().trim().min(1).max(40).optional(),
         color: z.number().int().min(0).max(15).optional(),
-        ownerId: uuid.nullish(),
       }),
       request.body,
     );
-    const enviado = body as Record<string, unknown>;
 
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
         `update task_categories
             set name = coalesce($2, name),
-                color = coalesce($3, color),
-                owner_id = case when $4 then $5::uuid else owner_id end
+                color = coalesce($3, color)
           where id = $1
-          returning id, name, color, position, owner_id as "ownerId"`,
-        [
-          categoryId,
-          body.name ?? null,
-          body.color ?? null,
-          // `null` explícito significa «quítale el dueño», que no es lo mismo
-          // que no mandar el campo. Mismo patrón que el responsable de una tarea.
-          "ownerId" in enviado,
-          body.ownerId ?? null,
-        ],
+          returning id, name, color, position`,
+        [categoryId, body.name ?? null, body.color ?? null],
       );
       if (!rows[0]) throw notFound("categoría no encontrada");
       return { category: rows[0] };
@@ -437,6 +438,46 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       db.query("delete from task_categories where id = $1", [categoryId]),
     );
     return reply.status(204).send();
+  });
+
+  /**
+   * Quién responde de una rama. En plural desde la 0050.
+   *
+   * POR QUÉ UNA RUTA APARTE Y NO UN CAMPO DEL PATCH. Porque ya no es un campo:
+   * son varias personas, y el gesto real es «añade a este» o «quita a este»,
+   * no «la lista de gerentes ahora es esta». Mandar la lista entera convierte
+   * dos personas editando a la vez en una que borra a la otra sin enterarse.
+   *
+   * QUIÉN PUEDE: lo decide `set_category_owner`, y pide poder GESTIONAR el
+   * espacio, no solo verlo — nombrar a quien responde de un área es repartir
+   * poder, no clasificar. La misma respuesta para «no existe» y «no es tuya»,
+   * para que no se puedan probar identificadores.
+   *
+   * Idempotentes las dos: poner a quien ya está, o quitar a quien no está, no
+   * es un error — es el estado que se pedía.
+   */
+  app.put("/categories/:categoryId/gerentes/:userId", async (request) => {
+    const quienLlama = requireUser(request);
+    const { categoryId, userId } = parseParams(
+      z.object({ categoryId: uuid, userId: uuid }),
+      request.params,
+    );
+    await withUser(quienLlama, (db) =>
+      db.query("select public.set_category_owner($1,$2,true)", [categoryId, userId]),
+    );
+    return { gerente: true };
+  });
+
+  app.delete("/categories/:categoryId/gerentes/:userId", async (request) => {
+    const quienLlama = requireUser(request);
+    const { categoryId, userId } = parseParams(
+      z.object({ categoryId: uuid, userId: uuid }),
+      request.params,
+    );
+    await withUser(quienLlama, (db) =>
+      db.query("select public.set_category_owner($1,$2,false)", [categoryId, userId]),
+    );
+    return { gerente: false };
   });
 
   app.post("/workspaces/:workspaceId/columns", async (request, reply) => {

@@ -202,6 +202,88 @@ async function main(): Promise<void> {
     check("mudada la tarea, su historia deja de contar en la rama vieja", trasMudarse.front.length === 0);
     check("y cuenta en la nueva", trasMudarse.back.length === 2);
 
+    console.log("\nNombrar y quitar gerentes");
+
+    /** Lo mismo que hacen PUT/DELETE /categories/:id/gerentes/:userId. */
+    const gerente = (quienLlama: string, categoria: string, persona: string, esGerente: boolean) =>
+      withUser(quienLlama, (db) =>
+        db.query("select public.set_category_owner($1,$2,$3)", [categoria, persona, esGerente]),
+      );
+    const gerentesDe = async (categoria: string): Promise<number> =>
+      Number(
+        (
+          await admin.query<{ n: string }>(
+            "select count(*) as n from task_category_owners where category_id = $1",
+            [categoria],
+          )
+        ).rows[0]!.n,
+      );
+
+    await gerente(ana, backend, beto, true);
+    check("se puede nombrar gerente de una rama que no tenía", (await gerentesDe(backend)) === 1);
+
+    // Idempotente: el gesto es «que esté», no «añade una fila».
+    await gerente(ana, backend, beto, true);
+    check("nombrar dos veces a la misma persona no la duplica", (await gerentesDe(backend)) === 1);
+
+    await gerente(ana, backend, beto, false);
+    check("y se puede quitar", (await gerentesDe(backend)) === 0);
+    await gerente(ana, backend, beto, false);
+    check("quitar a quien ya no está tampoco es un error", (await gerentesDe(backend)) === 0);
+
+    // Quitar al gerente NO puede llevarse la rama ni sus tareas: nombrar a
+    // quien responde es repartir poder, no clasificar trabajo.
+    check(
+      "quitar al gerente deja la rama y sus tareas donde estaban",
+      (
+        await admin.query("select 1 from task_categories where id = $1", [backend])
+      ).rowCount === 1 &&
+        (await admin.query("select 1 from tasks where id = $1 and category_id = $2", [
+          deBackend,
+          backend,
+        ])).rowCount === 1,
+    );
+
+    console.log("\nY quién puede nombrarlos");
+
+    const mirona = await alta("Mirona");
+    await admin.query(
+      `insert into organization_members (organization_id, user_id, role, all_workspaces)
+       values ($1,$2,'member',true) on conflict do nothing`,
+      [org, mirona],
+    );
+
+    /** El SQLSTATE del fallo, o "sin error" si dejó pasar. */
+    const codigoDe = async (accion: () => Promise<unknown>): Promise<string> => {
+      try {
+        await accion();
+        return "sin error";
+      } catch (fallo) {
+        return (fallo as { code?: string }).code ?? "desconocido";
+      }
+    };
+
+    // LOS DOS RECHAZOS SON DISTINTOS A PROPÓSITO, y por eso se comprueba el
+    // código y no solo que falle. «No puedes nombrar aquí» es 42501 y la API lo
+    // traduce a un 403; «esa persona no está en este espacio» es 23503 y sale
+    // como un 400 — es un error de quien lo pide, no una puerta cerrada.
+    // Juntarlos en un único «no» haría que nombrar a un compañero recién
+    // invitado se leyera como falta de permisos propios.
+    check(
+      "quien solo puede VER el espacio no nombra gerentes",
+      (await codigoDe(() => gerente(mirona, backend, mirona, true))) === "42501",
+    );
+    const extrania = await alta("Extrania");
+    check(
+      "y quien no es de la organización tampoco",
+      (await codigoDe(() => gerente(extrania, backend, extrania, true))) === "42501",
+    );
+    check(
+      "nombrar a alguien ajeno al espacio se rechaza como dato malo, no como permiso",
+      (await codigoDe(() => gerente(ana, backend, extrania, true))) === "23503",
+    );
+    check("después de todo eso la rama sigue sin gerentes", (await gerentesDe(backend)) === 0);
+
     console.log("\nY el aislamiento");
 
     const deFuera = await alta("Fuera");
