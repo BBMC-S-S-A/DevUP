@@ -104,8 +104,14 @@ export default function InfraestructuraPage() {
         ancho="completo"
         acciones={
           pestana === "entornos" ? (
+            // CEDE EL ACENTO MIENTRAS NO HAY ENTORNOS. El estado vacío pinta su
+            // propio «Añadir el primero» en acento, y tiene EL MISMO `onClick`
+            // que este botón: dos veces la acción principal a la vez, y
+            // entonces ninguna lo es. Se mira también `cargando`, porque
+            // mientras carga el vacío no está pintado todavía y este sigue
+            // siendo el único.
             <Boton
-              variante="primario"
+              variante={!entornos.cargando && lista.length === 0 ? "fantasma" : "primario"}
               tamano="sm"
               icono={<Plus size={13} />}
               onClick={() => setCreando(true)}
