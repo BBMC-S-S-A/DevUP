@@ -349,35 +349,30 @@ export type RepoDisponible = { fullName: string; private: boolean; description: 
  * Los repositorios a los que la cuenta conectada por OAuth dio acceso, para
  * elegir de una lista en vez de tener que pegar un enlace por cada uno.
  *
- * SOLO SIRVE PARA UN TOKEN DE LA GITHUB APP (auth/github.ts), NO PARA EL
- * TOKEN DE ACCESO PERSONAL DE ALCANCE FINO QUE SIGUE EXISTIENDO AL LADO. El
- * botón "Conectar con GitHub" registra una GitHub App —lo delata el propio
- * Client ID, GitHub unificó el prefijo `Ov23li` para App, no para OAuth App
- * clásico— y ese tipo de token no lista repos con `/user/repos` como un PAT:
- * hay que preguntar primero en qué instalaciones quedó (`/user/installations`)
- * y a qué repos entra cada una.
+ * SOLO SIRVE PARA EL TOKEN DEL BOTÓN "Conectar con GitHub" (auth/github.ts),
+ * NO PARA EL TOKEN DE ACCESO PERSONAL DE ALCANCE FINO QUE SIGUE EXISTIENDO AL
+ * LADO. La primera versión de esto asumía una GitHub App y preguntaba por
+ * instalaciones (`/user/installations`) — GitHub contestó 403: el registrado
+ * es un OAuth App clásico, con alcance `repo` de toda la vida, y ese token
+ * lista sus repos exactamente como lo haría un token de acceso personal.
  */
 export async function fetchAvailableRepos(token: string): Promise<RepoDisponible[]> {
-  const instalaciones = (await get(`${API}/user/installations`, token)) as {
-    installations: { id: number }[];
-  };
-
   const repos: RepoDisponible[] = [];
-  for (const instalacion of instalaciones.installations) {
-    // Paginado: una cuenta con "todos los repositorios" puede traer más de
-    // cien, y GitHub los reparte de a cien por página.
-    for (let pagina = 1; ; pagina += 1) {
-      const resultado = (await get(
-        `${API}/user/installations/${instalacion.id}/repositories?per_page=100&page=${pagina}`,
-        token,
-      )) as { repositories: { full_name: string; private: boolean; description: string | null }[] };
+  // Paginado: una cuenta con muchos repos puede traer más de cien, y GitHub
+  // los reparte de a cien por página. `affiliation=owner,collaborator,
+  // organization_member` es la lista completa de "a qué repos llega esta
+  // cuenta", no solo los propios.
+  for (let pagina = 1; ; pagina += 1) {
+    const pagina_ = (await get(
+      `${API}/user/repos?per_page=100&page=${pagina}&affiliation=owner,collaborator,organization_member`,
+      token,
+    )) as { full_name: string; private: boolean; description: string | null }[];
 
-      for (const repo of resultado.repositories) {
-        repos.push({ fullName: repo.full_name, private: repo.private, description: repo.description });
-      }
-
-      if (resultado.repositories.length < 100) break;
+    for (const repo of pagina_) {
+      repos.push({ fullName: repo.full_name, private: repo.private, description: repo.description });
     }
+
+    if (pagina_.length < 100) break;
   }
 
   return repos;
