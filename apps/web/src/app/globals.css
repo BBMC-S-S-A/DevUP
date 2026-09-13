@@ -314,6 +314,14 @@ body::before {
   transition: background 240ms var(--ease-out);
 }
 
+/* Apagada donde se mira una imagen o un diagrama de verdad: el foco quedaba
+   más oscuro justo en las esquinas opuestas a los dos focos, y ahí es donde
+   se nota como un borde oscuro alrededor de lo que se está mirando — se
+   reportó con la previsualización de un archivo. Ver `useSinAtmosfera`. */
+body.sin-atmosfera::before {
+  opacity: 0;
+}
+
 /* Todo lo que se pinta va por encima de esa luz. */
 body > * {
   position: relative;

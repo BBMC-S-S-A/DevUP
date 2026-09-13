@@ -7,6 +7,7 @@ import { downloadUrl, formatBytes, kindOf } from "@/lib/files/upload";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Chip, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { useSinAtmosfera } from "@/lib/atmosfera";
 import { TagBadge } from "./TagBadge";
 
 /** Nombre corto del tipo, para el chip de la cabecera. */
@@ -44,6 +45,8 @@ export function FilePreview({
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  useSinAtmosfera();
 
   const kind = kindOf(file.mimeType);
 

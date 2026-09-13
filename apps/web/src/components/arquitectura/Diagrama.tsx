@@ -9,6 +9,7 @@ import { Cargando, Fallo } from "@/components/ui/Pagina";
 import { Dialogo, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import type { EnlaceArquitectura, NodoArquitectura, TipoNodoArquitectura } from "@/lib/api";
 import { api, sembrar, useMutacion, useRecurso } from "@/lib/datos";
+import { useSinAtmosfera } from "@/lib/atmosfera";
 import { trazarEnlace } from "./Enlaces";
 import { ALTO_NODO, ANCHO_NODO, FormaNodo, INSET } from "./Formas";
 import { ImportarRepositorio } from "./ImportarRepositorio";
@@ -59,6 +60,8 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
   const recurso = useRecurso<Respuesta>(clave);
   const lienzoRef = useRef<HTMLDivElement>(null);
   const confirmar = useConfirmar();
+
+  useSinAtmosfera();
 
   const [creando, setCreando] = useState(false);
   const [importando, setImportando] = useState(false);
