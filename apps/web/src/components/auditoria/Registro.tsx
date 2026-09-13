@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, History, ScrollText } from "lucide-react";
+import { Bot, GitCommitHorizontal, History, ScrollText } from "lucide-react";
+import { Desplegable } from "@/components/ui/Field";
+import { GraficoBarras } from "@/components/ui/GraficoBarras";
 import { Cargando, Fallo } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import type { GithubRepo } from "@/lib/api";
 import { useRecurso } from "@/lib/datos";
 import { useOrgId } from "@/lib/workspace-context";
 
@@ -123,6 +126,7 @@ export function AuditoriaDelRegistro({ workspaceId }: { workspaceId: string }) {
           titulo="El registro todavía no tiene nada que contar"
           pista={`Nadie ha creado, movido ni cerrado tareas en este espacio en los últimos ${dias} días. El registro empezó a escribirse con la migración 0038: lo anterior a eso no está aquí, y no se puede reconstruir.`}
         />
+        <ColaboradoresGitHub workspaceId={workspaceId} />
       </div>
     );
   }
@@ -148,6 +152,15 @@ export function AuditoriaDelRegistro({ workspaceId }: { workspaceId: string }) {
         <Rotulo>Los últimos {dias} días</Rotulo>
         {selector}
       </div>
+
+      {ordenadas.length > 1 && (
+        <Tarjeta className="p-4">
+          <Rotulo className="mb-3 block">Quién hizo más</Rotulo>
+          <GraficoBarras
+            barras={ordenadas.map(([, p]) => ({ etiqueta: comoSeLlama(p.nombre), valor: p.total }))}
+          />
+        </Tarjeta>
+      )}
 
       {ordenadas.map(([actorId, persona]) => {
         const cierre = cierres.find((c) => c.actorId === actorId);
@@ -219,6 +232,8 @@ export function AuditoriaDelRegistro({ workspaceId }: { workspaceId: string }) {
         );
       })}
 
+      <ColaboradoresGitHub workspaceId={workspaceId} />
+
       {/*
         LA LETRA PEQUEÑA VA EN LA PANTALLA Y NO SOLO EN EL CÓDIGO. Estos números
         se van a leer sobre personas, y el que los lea tiene que poder saber qué
@@ -234,6 +249,88 @@ export function AuditoriaDelRegistro({ workspaceId }: { workspaceId: string }) {
         propósito: cuánto vale cerrar una tarea frente a crearla es una decisión que no
         está tomada.
       </p>
+    </div>
+  );
+}
+
+type Colaborador = { login: string; avatarUrl: string; commits: number; adiciones: number; borrados: number };
+
+/**
+ * Commits y líneas cambiadas, leídos de GitHub y no del tablero.
+ *
+ * POR QUÉ VA APARTE Y NO SE SUMA A LO DE ARRIBA. Lo de arriba cuenta hechos
+ * del tablero — crear, mover, cerrar una tarjeta—. Esto cuenta commits: dos
+ * formas de participar que no miden lo mismo ni le pasan a la misma gente —
+ * quien revisa y aprueba no aparece aquí, y quien commitea sin pasar por una
+ * tarea no aparece arriba. Sumarlas inventaría una unidad que no existe.
+ */
+function ColaboradoresGitHub({ workspaceId }: { workspaceId: string }) {
+  const [repoId, setRepoId] = useState("");
+  const repos = useRecurso<{ repos: GithubRepo[] }>(`/workspaces/${workspaceId}/github/repos`);
+  const lista = repos.datos?.repos ?? [];
+  const elegido = repoId || lista[0]?.id || "";
+
+  const datos = useRecurso<{ listo: boolean; colaboradores: Colaborador[] }>(
+    elegido ? `/github/repos/${elegido}/colaboradores` : null,
+    { frescura: 3_600_000 },
+  );
+
+  if (lista.length === 0) return null;
+
+  return (
+    <div className="border-t border-line pt-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <Rotulo>Commits y líneas, por GitHub</Rotulo>
+        {lista.length > 1 && (
+          <Desplegable tamano="sm" value={elegido} onChange={(e) => setRepoId(e.target.value)}>
+            {lista.map((r) => (
+              <option className="bg-surface" key={r.id} value={r.id}>
+                {r.fullName}
+              </option>
+            ))}
+          </Desplegable>
+        )}
+      </div>
+
+      {datos.error ? (
+        <Fallo onReintentar={() => void datos.recargar()}>{datos.error}</Fallo>
+      ) : datos.cargando ? (
+        <Cargando etiqueta="Leyendo GitHub" />
+      ) : datos.datos && !datos.datos.listo ? (
+        // GitHub calcula estas estadísticas la primera vez que se piden, y
+        // puede tardar hasta un minuto — decirlo en vez de enseñar un vacío.
+        <EstadoVacio
+          icono={<GitCommitHorizontal size={20} />}
+          titulo="GitHub está calculando estas estadísticas"
+          pista="Pasa solo la primera vez que se piden para un repositorio. Vuelve a intentarlo en un minuto."
+        />
+      ) : (datos.datos?.colaboradores.length ?? 0) === 0 ? (
+        <EstadoVacio
+          icono={<GitCommitHorizontal size={20} />}
+          titulo="No encontré commits en este repositorio"
+          pista=""
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Tarjeta className="p-4">
+            <Rotulo className="mb-3 block">Commits</Rotulo>
+            <GraficoBarras
+              color="var(--c-cyan)"
+              barras={(datos.datos?.colaboradores ?? [])
+                .slice(0, 8)
+                .map((c) => ({ etiqueta: c.login, valor: c.commits }))}
+            />
+          </Tarjeta>
+          <Tarjeta className="p-4">
+            <Rotulo className="mb-3 block">Líneas añadidas</Rotulo>
+            <GraficoBarras
+              barras={(datos.datos?.colaboradores ?? [])
+                .slice(0, 8)
+                .map((c) => ({ etiqueta: c.login, valor: c.adiciones }))}
+            />
+          </Tarjeta>
+        </div>
+      )}
     </div>
   );
 }

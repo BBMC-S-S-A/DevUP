@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import {
   fetchAvailableRepos,
+  fetchContributorStats,
   fetchGithubFileContent,
   fetchGithubStats,
   fetchGithubTree,
@@ -308,6 +309,21 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return { fullName, carpetasMiradas: CARPETAS, migraciones, omitidas };
+  });
+
+  /**
+   * Commits y líneas cambiadas por persona, para el Registro (0038 lo cuenta
+   * por el tablero; esto lo cuenta por el código — dos cosas distintas que no
+   * se suman entre sí, ver `Registro.tsx`).
+   */
+  app.get("/github/repos/:repoId/colaboradores", async (request) => {
+    const userId = requireUser(request);
+    const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
+    const { token, fullName } = await withUser(userId, (db) => repoConCredencial(db, repoId));
+
+    return fetchContributorStats(token, fullName).catch((error: unknown) => {
+      throw badGateway(error instanceof Error ? error.message : "no se pudo leer GitHub");
+    });
   });
 
   /**

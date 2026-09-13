@@ -278,6 +278,55 @@ export async function fetchGithubStats(token: string | null, fullName: string): 
   };
 }
 
+export type Colaborador = {
+  login: string;
+  avatarUrl: string;
+  commits: number;
+  adiciones: number;
+  borrados: number;
+};
+
+/**
+ * Commits y líneas cambiadas por persona, para el registro (0038 lo cuenta
+ * por el tablero; esto lo cuenta por el código).
+ *
+ * NO PASA POR `get()` A PROPÓSITO. Esta llamada puede contestar 202 —GitHub
+ * todavía está calculando las estadísticas, la primera vez que se pide un
+ * repositorio puede tardar hasta un minuto— y cachear ese cuerpo vacío como si
+ * fuera la respuesta buena dejaría la pantalla en blanco para siempre. Se
+ * dice `listo: false` y quien llama decide si reintenta.
+ */
+export async function fetchContributorStats(
+  token: string | null,
+  fullName: string,
+): Promise<{ listo: boolean; colaboradores: Colaborador[] }> {
+  const response = await fetch(`${API}/repos/${fullName}/stats/contributors`, {
+    headers: headers(token),
+  });
+
+  if (response.status === 202) return { listo: false, colaboradores: [] };
+  if (!response.ok) throw new Error(traducirFallo(response.status, fullName, Boolean(token)));
+
+  const body = (await response.json()) as {
+    total: number;
+    author: { login: string; avatar_url: string } | null;
+    weeks: { a: number; d: number }[];
+  }[];
+
+  const colaboradores = body
+    .filter((c) => c.author)
+    .map((c) => ({
+      login: c.author!.login,
+      avatarUrl: c.author!.avatar_url,
+      commits: c.total,
+      adiciones: c.weeks.reduce((suma, s) => suma + s.a, 0),
+      borrados: c.weeks.reduce((suma, s) => suma + s.d, 0),
+    }))
+    .sort((a, b) => b.commits - a.commits);
+
+  return { listo: true, colaboradores };
+}
+
 /**
  * Árbol completo de un repositorio, para el entorno de desarrollo embebido.
  *
