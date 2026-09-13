@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { BoardColumn, Tag } from "@/lib/api";
+import type { BoardColumn, Rama } from "@/lib/api";
 import { Rotulo } from "@/components/ui/Superficies";
 
 /**
@@ -43,18 +43,39 @@ type Nodo = {
 
 type Arista = { de: Nodo; a: Nodo; categorias: string[] };
 
+/**
+ * El nodo de «sin rama».
+ *
+ * Es una cadena y no `null` porque el resto del dibujo trabaja con listas de
+ * identificadores, y meter un nulo ahí obligaría a comprobarlo en cada sitio —
+ * que es como se cuela el caso que nadie miró.
+ */
+const SIN_RAMA = "sin-rama";
+
 const ALTO_FILA = 34;
 const MARGEN = 28;
 const COLUMNAS = { persona: 130, tarea: 470, categoria: 810 };
 
+/**
+ * DIBUJA RAMAS, NO ETIQUETAS, y ese cambio no es cosmético.
+ *
+ * Antes leía `task.tags`, que son las etiquetas de la 0002 —las de cruzar, de
+ * muchas a muchas—. Así que una tarea con tres etiquetas salía con tres líneas
+ * y la red enseñaba un reparto que no existe en ningún tablero. Ahora lee
+ * `task.categoryId`: una tarea cuelga de UNA rama, y el dibujo tiene tantas
+ * líneas como decisiones se tomaron de verdad.
+ *
+ * De paso se gana lo que faltaba: las tareas SIN rama. Con etiquetas eran
+ * invisibles —no tener ninguna no dibuja nada— y son justo las que hay que ver.
+ */
 export function RedDeTrabajo({
   columnas,
-  tags,
+  ramas,
   elegidas,
 }: {
   columnas: BoardColumn[];
-  tags: Tag[];
-  /** Categorías seleccionadas. Vacío = se ven todas por igual. */
+  ramas: Rama[];
+  /** Ramas señaladas. Vacío = se ven todas por igual. */
   elegidas: string[];
 }) {
   const [encima, setEncima] = useState<string | null>(null);
@@ -74,7 +95,7 @@ export function RedDeTrabajo({
     y: MARGEN + i * ALTO_FILA,
     categorias: tareas
       .filter((t) => t.assigneeId === id)
-      .flatMap((t) => t.tags.map((g) => g.id)),
+      .map((t) => t.categoryId ?? SIN_RAMA),
   }));
 
   const nodosTarea: Nodo[] = tareas.map((t, i) => ({
@@ -83,33 +104,40 @@ export function RedDeTrabajo({
     texto: t.title,
     x: COLUMNAS.tarea,
     y: MARGEN + i * ALTO_FILA,
-    categorias: t.tags.map((g) => g.id),
+    categorias: [t.categoryId ?? SIN_RAMA],
   }));
 
-  // Solo las categorías que tienen algo sin terminar: una rama vacía en el
-  // dibujo es una línea que no lleva a ninguna parte.
-  const usadas = tags.filter((g) => tareas.some((t) => t.tags.some((x) => x.id === g.id)));
-  const nodosCategoria: Nodo[] = usadas.map((g, i) => ({
-    id: `c:${g.id}`,
+  // Solo las ramas que tienen algo sin terminar: una rama vacía en el dibujo es
+  // una línea que no lleva a ninguna parte.
+  //
+  // Y AL FINAL, «sin rama», que es el nodo que más dice. Archivar en una rama no
+  // asigna a nadie y clasificar es voluntario, así que lo que nadie clasificó se
+  // acumula ahí — y hasta ahora no se veía en ningún sitio.
+  const usadas = ramas.filter((r) => tareas.some((t) => t.categoryId === r.id));
+  const huerfanas = tareas.some((t) => !t.categoryId);
+  const columnaDerecha: { id: string; nombre: string }[] = [
+    ...usadas.map((r) => ({ id: r.id, nombre: r.nombre })),
+    ...(huerfanas ? [{ id: SIN_RAMA, nombre: "sin rama" }] : []),
+  ];
+  const nodosCategoria: Nodo[] = columnaDerecha.map((r, i) => ({
+    id: `c:${r.id}`,
     tipo: "categoria",
-    texto: g.name,
+    texto: r.nombre,
     x: COLUMNAS.categoria,
     y: MARGEN + i * ALTO_FILA,
-    categorias: [g.id],
+    categorias: [r.id],
   }));
 
   const aristas: Arista[] = [];
   for (const t of tareas) {
     const nodoT = nodosTarea.find((n) => n.id === `t:${t.id}`)!;
-    const suyas = t.tags.map((g) => g.id);
+    const suya = t.categoryId ?? SIN_RAMA;
     if (t.assigneeId) {
       const nodoP = nodosPersona.find((n) => n.id === `p:${t.assigneeId}`);
-      if (nodoP) aristas.push({ de: nodoP, a: nodoT, categorias: suyas });
+      if (nodoP) aristas.push({ de: nodoP, a: nodoT, categorias: [suya] });
     }
-    for (const g of t.tags) {
-      const nodoC = nodosCategoria.find((n) => n.id === `c:${g.id}`);
-      if (nodoC) aristas.push({ de: nodoT, a: nodoC, categorias: [g.id] });
-    }
+    const nodoC = nodosCategoria.find((n) => n.id === `c:${suya}`);
+    if (nodoC) aristas.push({ de: nodoT, a: nodoC, categorias: [suya] });
   }
 
   const alto =
@@ -136,7 +164,7 @@ export function RedDeTrabajo({
         style={{ minWidth: 700, height: alto }}
         className="w-full"
         role="img"
-        aria-label="Red de personas, tareas y categorías"
+        aria-label="Red de personas, tareas y ramas de trabajo"
       >
         <g>
           {aristas.map((a, i) => {
