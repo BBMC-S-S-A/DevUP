@@ -166,6 +166,58 @@ async function main(): Promise<void> {
     check("y lo empezado, que es menos", resumen.enCurso === 3);
     check("y lo cerrado en la ventana", resumen.cerradas === 0);
 
+    console.log("\nLo que se cerró sin decir cómo");
+
+    const terminal = cols.find((c) => c.is_terminal)!;
+    const cerradaBien = await tarea(terminal.id, "Cerrada con su prueba", ana, null);
+    const cerradaSeca = await tarea(terminal.id, "Cerrada y a otra cosa", ana, null);
+
+    // Estar en la columna terminal no basta: hace falta que conste el cierre.
+    for (const t of [cerradaBien, cerradaSeca]) {
+      await admin.query(
+        `insert into activity
+           (organization_id, workspace_id, actor_id, verb, subject_type, subject_id,
+            subject_label, source)
+         values ($1,$2,$3,'cerro','tarea',$4,'x','persona')`,
+        [org, ws, ana, t],
+      );
+    }
+    await admin.query(
+      `insert into task_evidence (task_id, tipo, url, titulo, nota, created_by)
+       values ($1,'pr','https://github.com/acme/x/pull/1','El PR','',$2)`,
+      [cerradaBien, ana],
+    );
+
+    const sinJustificar = (await pedir(ana, ["sin_justificar"]))["sin_justificar"] as {
+      id: string;
+      titulo: string;
+    }[];
+
+    // LA QUE DEFINE LA FUNCIÓN. No basta con `criterio` —se escribe al empezar y
+    // dice cuándo estará hecha, no que lo esté— ni con `contexto`. La evidencia
+    // es lo único que se escribe DESPUÉS y afirma algo sobre lo que pasó.
+    check("sale la que se cerró sin evidencia", sinJustificar.some((t) => t.id === cerradaSeca));
+    check("y no la que dejó su prueba", !sinJustificar.some((t) => t.id === cerradaBien));
+
+    const conNumeros = (await pedir(ana, ["resumen"]))["resumen"] as {
+      cerradas: number;
+      cerradasSinJustificar: number;
+    };
+    // Va PEGADO a «cerradas» y no en un widget aparte: «2 cerradas» a secas
+    // invita a felicitarse, y «2 cerradas, 1 sin contar cómo» es otra semana.
+    check("y el recuento va al lado del de cerradas", conNumeros.cerradas === 2);
+    check("con cuántas no dijeron cómo", conNumeros.cerradasSinJustificar === 1);
+
+    // ES REVERSIBLE A PROPÓSITO: no es un castigo por cerrar deprisa, es una
+    // lista de lo que falta por contar. Añadir la prueba después la saca sola.
+    await admin.query(
+      `insert into task_evidence (task_id, tipo, nota, titulo, created_by)
+       values ($1,'nota','se arregló cambiando el orden de dos líneas','',$2)`,
+      [cerradaSeca, ana],
+    );
+    const tras = (await pedir(ana, ["sin_justificar"]))["sin_justificar"] as { id: string }[];
+    check("y contarlo después la saca de la lista", !tras.some((t) => t.id === cerradaSeca));
+
     console.log("\nEl canal al que no se pertenece");
 
     const privado = (
