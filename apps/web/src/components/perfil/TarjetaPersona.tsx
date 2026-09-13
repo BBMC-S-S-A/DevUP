@@ -5,6 +5,7 @@ import Link from "next/link";
 import { type BoardColumn, type OrganizationMember } from "@/lib/api";
 import { Dialogo, Rotulo } from "@/components/ui/Superficies";
 import { fechaLarga, iniciales } from "@/lib/fechas";
+import { Avatar } from "@/components/perfil/Avatar";
 import { useRecurso } from "@/lib/datos";
 import { useOrgIdOpcional } from "@/lib/workspace-context";
 import { fraseDeRenglon, type Renglon } from "@/lib/actividad";
@@ -75,13 +76,9 @@ export function TarjetaPersona({
   return (
     <Dialogo titulo={miembro.displayName} descripcion={miembro.title ?? undefined} onCerrar={onCerrar}>
       <div className="flex items-start gap-3.5">
-        <span
-          aria-hidden
-          className="grid size-14 shrink-0 place-items-center rounded-2xl border border-line-strong
-            bg-accent-soft/70 font-display text-lg font-semibold text-accent-bright"
-        >
-          {iniciales(miembro.displayName)}
-        </span>
+        {/* Redonda aquí también: una chapa que cambia de forma según la
+            pantalla se lee como dos cosas distintas. */}
+        <Avatar userId={miembro.userId} nombre={miembro.displayName} tamano={56} />
 
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="flex items-center gap-1.5 text-xs text-muted">

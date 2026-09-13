@@ -561,6 +561,49 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  /**
+   * Firmar varias de golpe, para poder pintar miniaturas en una rejilla.
+   *
+   * POR QUÉ NO VALE LA DE ARRIBA REPETIDA. La biblioteca enseña veinte archivos
+   * a la vez: veinte peticiones para pintar una pantalla es lo que convierte
+   * «se ve la imagen» en «la pantalla tarda». Y meterlas en el listado tampoco
+   * vale — firmaría cada vez que alguien ordena o filtra, gaste o no las
+   * miniaturas.
+   *
+   * SE FIRMA SOLO LO QUE SE PUEDE VER, y eso no es una comprobación aparte: es
+   * el mismo SELECT. Lo que RLS no devuelva no sale en el mapa, así que pedir
+   * el identificador de un archivo ajeno no devuelve un error que confirme que
+   * existe — devuelve un hueco, igual que uno inventado.
+   *
+   * `inline` y no `attachment`: esto es para MIRAR. El tope de cincuenta es el
+   * de una pantalla larga, no un límite de seguridad.
+   */
+  app.post("/files/urls", async (request) => {
+    const userId = requireUser(request);
+    const { ids } = parseBody(
+      z.object({ ids: z.array(uuid).min(1).max(50) }),
+      request.body,
+    );
+
+    const archivos = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string; storage_key: string; name: string }>(
+        `select id, storage_key, name from files
+          where id = any($1::uuid[]) and deleted_at is null and status = 'ready'`,
+        [ids],
+      );
+      return rows;
+    });
+
+    const urls: Record<string, string> = {};
+    // En serie y no con Promise.all: firmar es cálculo local, no red, y cuando
+    // una firma falla queremos saber cuál — con `all` se pierde el resto.
+    for (const archivo of archivos) {
+      urls[archivo.id] = await signDownload(archivo.storage_key, archivo.name, "inline");
+    }
+
+    return { urls, expiresIn: env.S3_SIGNED_URL_TTL };
+  });
+
   // --- Edición y borrado ----------------------------------------------------
   app.patch("/files/:fileId", async (request) => {
     const userId = requireUser(request);

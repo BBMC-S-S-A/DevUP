@@ -29,6 +29,7 @@
     "respaldo:ahora": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/respaldo-base-de-datos.sh",
     "respaldo:probar": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/probar-restauracion.sh",
     "grafo": "node scripts/grafo.mjs",
+    "vault": "node scripts/exportar-vault.mjs",
     "doc:pdf": "node scripts/md-a-pdf.mjs",
     "correo:probar": "node scripts/probar-correo.mjs",
     "boveda:rotar": "node scripts/rotar-clave-boveda.mjs",
@@ -42,8 +43,7 @@
     "test:grafo": "npm run test:grafo --workspace apps/api",
     "test:codigo": "npm run test:codigo --workspace apps/api && npm run test:invitacion --workspace apps/api",
     "test:asistente": "npm run test:asistente --workspace apps/api",
-    "test:web": "npm run test:enlaces --workspace apps/web && npm run test:fechas --workspace apps/web && npm run test:dinero --workspace apps/web && npm run test:invitacion --workspace apps/web && npm run test:trazado --workspace apps/web && npm run test:agente-ia --workspace apps/web && npm run test:riel --workspace apps/web && npm run test:quien-entro --workspace apps/web && npm run test:actividad --workspace apps/web && npm run test:espacios --workspace apps/web && npm run test:tablero-teclado --workspace apps/web && npm run test:barras --workspace apps/web",
-    "test:e2e": "playwright test",
+    "test:web": "npm run test:enlaces --workspace apps/web && npm run test:fechas --workspace apps/web && npm run test:dinero --workspace apps/web && npm run test:invitacion --workspace apps/web && npm run test:trazado --workspace apps/web && npm run test:agente-ia --workspace apps/web && npm run test:riel --workspace apps/web && npm run test:quien-entro --workspace apps/web && npm run test:actividad --workspace apps/web && npm run test:espacios --workspace apps/web && npm run test:dispositivos --workspace apps/web && npm run test:recorrido --workspace apps/web && npm run test:salud --workspace apps/web && npm run test:tablero-teclado --workspace apps/web && npm run test:barras --workspace apps/web",    "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "sembrar:caminos": "tsx scripts/sembrar-caminos.ts"

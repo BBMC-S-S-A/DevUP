@@ -28,6 +28,8 @@ import {
   ApiError,
   api,
 } from "@/lib/api";
+import { AjustesDelEspacio } from "@/components/ajustes/AjustesDelEspacio";
+import { EstadoTecnico } from "@/components/ajustes/EstadoTecnico";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { uploadOrgLogo } from "@/lib/files/upload";
@@ -37,6 +39,24 @@ import { Fallo, Pagina } from "@/components/ui/Pagina";
 import { IdentidadOrganizacion } from "@/components/organizacion/IdentidadOrganizacion";
 import { TarjetaPersona } from "@/components/perfil/TarjetaPersona";
 import { useWorkspaceIdOpcional } from "@/lib/workspace-context";
+
+/** Si un instante ya pasó. */
+function caducado(iso: string): boolean {
+  return new Date(iso).getTime() <= Date.now();
+}
+
+/**
+ * Cuánto le queda a un código, dicho como se dice en voz alta.
+ *
+ * En horas y no en días porque dura UNO: «caduca mañana» sobre algo que se
+ * muere en cuarenta minutos es la clase de redondeo que hace que alguien lo
+ * dicte tarde.
+ */
+function cuandoCaduca(iso: string): string {
+  const minutos = Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
+  if (minutos < 60) return `${Math.max(1, minutos)} min`;
+  return `${Math.round(minutos / 60)} h`;
+}
 
 const ROLES: Record<OrganizationMember["role"], string> = {
   owner: "Propietario",
@@ -58,6 +78,22 @@ const ROLES: Record<OrganizationMember["role"], string> = {
 export default function OrganizationSettingsPage() {
   const orgId = useOrgId();
   const { user } = useSession();
+
+  /**
+   * Si se llegó desde dentro de un espacio, sus ajustes van PRIMERO.
+   *
+   * Esta pantalla se monta en dos direcciones: `/app/o/<org>/ajustes` y
+   * `/app/w/<espacio>/ajustes`. Quien pulsa «Ajustes» estando dentro de un
+   * proyecto viene casi siempre a por ese proyecto —a renombrarlo, a abrirlo al
+   * equipo, a borrarlo—, y hasta ahora se encontraba con la foto y los miembros
+   * de la organización, que es lo que menos buscaba. Desde la barra de la
+   * organización no hay espacio en contexto y no se pinta: no hay «el espacio»
+   * del que hablar.
+   */
+  const workspaceId = useWorkspaceIdOpcional();
+  const espacio = useRecurso<{ workspace: Workspace }>(
+    workspaceId ? `/workspaces/${workspaceId}` : null,
+  );
 
   // Cuatro lecturas de esta pantalla estaban escritas a mano, cada una con su
   // `useState`, su `useCallback` y su efecto — unas quince líneas por sitio
@@ -83,6 +119,15 @@ export default function OrganizationSettingsPage() {
           <Fallo onReintentar={() => void load()}>{equipo.error}</Fallo>
         )}
 
+        {espacio.datos && (
+          <AjustesDelEspacio
+            workspace={espacio.datos.workspace}
+            puedoAdministrar={administro}
+            soyQuienLoCreo={espacio.datos.workspace.createdBy === user?.id}
+            onCambiado={() => void espacio.recargar()}
+          />
+        )}
+
         <IdentidadOrganizacion
           orgId={orgId}
           puedeEditar={administro}
@@ -91,6 +136,14 @@ export default function OrganizationSettingsPage() {
         <FotoOrganizacion orgId={orgId} puedeEditar={administro} />
         <Miembros orgId={orgId} members={members} yo={user?.id ?? null} administro={administro} onChange={load} />
         <Enlaces orgId={orgId} puedeEditar={administro} />
+
+        {/* EL ESTADO DE LA INSTALACIÓN VA AL FINAL Y SOLO A QUIEN ADMINISTRA.
+            Al final porque nadie entra en «Ajustes» buscando esto: se entra a
+            invitar a alguien o a cambiar la foto, y quien viene a mirar si el
+            almacén responde ya sabe que baja. Y solo a quien administra porque
+            es lo que el servidor contesta —lo pide `is_org_admin`—: pintarlo a
+            todo el mundo sería enseñar un 403 con forma de tarjeta. */}
+        {administro && <EstadoTecnico orgId={orgId} />}
       </div>
     </Pagina>
   );
@@ -351,6 +404,9 @@ function Invitar({ orgId }: { orgId: string }) {
    * abajo ofrece pedir otro en vez de enseñar el que hubo.
    */
   const [codigo, setCodigo] = useState<string | null>(null);
+  /** Cuál se está renovando, para apagar solo su botón y no todos. */
+  const [renovando, setRenovando] = useState<string | null>(null);
+  const confirmar = useConfirmar();
   const [copiado, setCopiado] = useState<"enlace" | "codigo" | null>(null);
   // Vacío = toda la organización. Los personales no salen: a un workspace
   // personal no se invita a nadie, es de una sola persona por definición.
@@ -532,32 +588,73 @@ function Invitar({ orgId }: { orgId: string }) {
               </span>
               {invitacion.workspaceName && <Chip tono="accent">{invitacion.workspaceName}</Chip>}
               <Chip>{invitacion.role}</Chip>
+              {/* LA CADUCIDAD DEL CÓDIGO, que NO es la de la invitación: un día
+                  contra siete. Sin decirlo, quien ve «caduca en 6 días» arriba
+                  dicta por teléfono un código que dejó de valer anoche, y se
+                  encuentra con que la otra persona no entra sin nada que
+                  explique por qué. */}
+              {invitacion.hasCode && invitacion.codeExpiresAt && (
+                <Chip tono={caducado(invitacion.codeExpiresAt) ? "neutro" : "warn"}>
+                  {caducado(invitacion.codeExpiresAt)
+                    ? "código caducado"
+                    : `código ${cuandoCaduca(invitacion.codeExpiresAt)}`}
+                </Chip>
+              )}
               {/* PEDIR OTRO CÓDIGO, no ver el que hubo: el que hubo no existe
                   en ninguna parte. Es la consecuencia de guardarlo cifrado, y
                   la alternativa —borrar la invitación y rehacerla— invalidaría
                   también su enlace, que a estas alturas puede estar ya abierto
                   en el móvil de la otra persona.
 
-                  DESACTIVADO AL FUSIONAR LOS DOS CAMINOS, y conviene decir por
-                  qué en vez de borrarlo. Los dos lados escribieron el código
-                  corto a la vez con esquemas distintos; ganó el del tronco
-                  porque su migración ya está aplicada y el checksum no deja
-                  reescribirla.
+                  ESTUVO DESACTIVADO porque faltaba `set_invitation_code`: dar
+                  otro código a una invitación que ya existía no tenía ruta
+                  detrás, y la salida era reinvitar —que además rompe el enlace
+                  que la otra persona pueda tener abierto—. La 0047 lo resolvió.
 
-                  LO QUE FALTA ES SOLO RENOVAR. Canjear por código sí funciona:
-                  la 0041 lo resuelve por el mismo sitio que el enlace
-                  —`invitation_by_token` y `accept_invitation` miran las dos
-                  columnas—, y está comprobado en `invitacion-codigo.test.ts`.
-                  Lo que no existe es `set_invitation_code`, así que dar otro
-                  código a una invitación que ya existe no tiene ruta detrás.
-                  Mientras tanto la salida es reinvitar, que genera uno nuevo e
-                  invalida el anterior. */}
+                  SE PREGUNTA ANTES SOLO SI YA HAY CÓDIGO, y esa asimetría es la
+                  gracia: pedir el primero no invalida nada, así que preguntar
+                  sería un trámite. Pedir OTRO sí — el que la otra persona tiene
+                  apuntado deja de valer en ese instante. Quien solo quería
+                  volver a verlo tiene que enterarse ANTES de pulsar, porque
+                  después ya no hay vuelta: en la base solo está el hash. */}
               <button
                 type="button"
-                disabled
-                title="Todavía no se puede renovar un código: falta `set_invitation_code`. Mientras tanto, vuelve a invitar — el nuevo código invalida el anterior."
-                onClick={() => {
-                  /* sin ruta detrás hasta que entre la migración */
+                disabled={renovando === invitacion.id}
+                title={
+                  invitacion.hasCode
+                    ? "Genera otro código. El anterior deja de valer."
+                    : "Genera un código corto para dictarlo por teléfono."
+                }
+                onClick={async () => {
+                  if (invitacion.hasCode) {
+                    const seguro = await confirmar({
+                      titulo: "¿Otro código para esta invitación?",
+                      descripcion:
+                        "El código anterior deja de valer en cuanto se cree el nuevo. Si alguien lo tiene apuntado, ya no le servirá. El enlace del correo NO se toca: sigue funcionando.",
+                      accion: "Sí, dame otro",
+                    });
+                    if (!seguro) return;
+                  }
+                  setRenovando(invitacion.id);
+                  try {
+                    const { codigo: nuevo } = await api.post<{ codigo: string }>(
+                      `/invitations/${invitacion.id}/codigo`,
+                      {},
+                    );
+                    // Se enseña por el mismo panel que el de invitar: es el que
+                    // ya dice que es la única vez que se ve, y tener dos sitios
+                    // donde aparece un código sería dos sitios donde
+                    // acordarse de decirlo.
+                    setCodigo(nuevo);
+                    setCopiado(null);
+                    await cargar();
+                  } catch (caught) {
+                    toast.error(
+                      caught instanceof ApiError ? caught.message : "no se pudo dar el código",
+                    );
+                  } finally {
+                    setRenovando(null);
+                  }
                 }}
                 className="presionable flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-0.5
                   font-display text-[10px] font-semibold uppercase tracking-wider

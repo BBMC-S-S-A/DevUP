@@ -21,7 +21,10 @@
     "test:riel": "tsx --tsconfig tsconfig.json src/lib/riel.test.ts",
     "test:quien-entro": "tsx --tsconfig tsconfig.json src/lib/quien-entro.test.ts",
     "test:actividad": "tsx --tsconfig tsconfig.json src/lib/actividad.test.ts",
-    "test:espacios": "tsx --tsconfig tsconfig.json src/lib/espacios-por-organizacion.test.ts"
+    "test:espacios": "tsx --tsconfig tsconfig.json src/lib/espacios-por-organizacion.test.ts",
+    "test:dispositivos": "tsx --tsconfig tsconfig.json src/lib/dispositivos.test.ts",
+    "test:recorrido": "tsx --tsconfig tsconfig.json src/lib/recorrido.test.ts",
+    "test:salud": "tsx --tsconfig tsconfig.json src/lib/salud.test.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
