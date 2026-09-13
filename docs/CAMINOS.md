@@ -323,6 +323,46 @@ si se fusionan.
 
 ---
 
+### Los puntos ya se ganan solos, y falta dónde verlos
+
+`GET /organizations/:orgId/puntos?dias=30` → `{ dias, gente: [...] }`
+`GET /organizations/:orgId/puntos/:personaId?dias=30&limite=50` → `{ dias, asientos: [...] }`
+
+```
+gente:    [{ id, nombre, total, aSolas, tareas, porMotivo: { cerro_tarea, dejo_prueba } }]
+asientos: [{ id, tarea, titulo, motivo, cantidad, aSolas, cuando }]
+```
+
+No hay ruta para DAR puntos y no la va a haber: se ganan en la base al entrar
+una tarea en una columna final (0055). Una ruta que los reparta los convierte en
+algo que se puede pedir.
+
+**Lo único que esta pantalla no puede hacer es enseñar el total y callarse
+`aSolas`.** Los puntos se ganan cerrando tareas, así que quien quiera inflar su
+número puede crear tareas fáciles y cerrárselas. No se prohíbe —alguien puede
+montar su proyecto aquí él solo, y eso es lo que atrae—: se dice. `aSolas` es
+cuánto de ese total se ganó en tareas por las que no pasó nadie más, y va **en
+la misma línea que el total**. Debajo, en una pestaña o en un tooltip es lo
+mismo que no tenerlo: nadie abre la segunda vista. Con eso, un número inflado
+sigue ahí y se le ve el inflado.
+
+Tres cosas más:
+
+- **Los asientos van con el marcador, no en otro sitio.** Un total sin
+  asientos detrás es un número que hay que creerse; con ellos es una afirmación
+  que se puede ir a comprobar tarea por tarea.
+- **No lo pintes como un ranking de productividad.** Cuenta tareas cerradas, no
+  trabajo hecho: quien pasa un mes con una sola tarea difícil sale último. Un
+  podio con medallas convierte eso en una acusación.
+- **Cuando todo el periodo se ganó a solas, dilo en el conjunto.** Línea a
+  línea cada persona se lee normal; lo que solo se ve mirando el total es que
+  nadie ha revisado nada de nadie.
+
+En el MCP ya está como herramienta `puntos`, y su redacción vale de referencia:
+`apps/mcp/src/herramientas/puntos.ts`.
+
+---
+
 ### La pantalla de categorías está mirando la tabla equivocada
 
 Esto es lo más importante de esta tanda, y no se ve desde la pantalla: se ve
