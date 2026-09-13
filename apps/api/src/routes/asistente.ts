@@ -51,7 +51,31 @@ const uuid = z.string().uuid();
  *  misma herramienta gasta la clave de la persona hasta que se cansa. */
 const MAX_VUELTAS = 8;
 
-const MODELO_ANTHROPIC = "claude-opus-5";
+/**
+ * Sonnet y no Opus, y es una decisión de latencia, no de ahorro.
+ *
+ * La 0004 ya dejó los dos escritos: «claude-opus-5 para tareas de desarrollo
+ * reales — es el modelo recomendado por defecto salvo que se priorice
+ * explícitamente costo/latencia sobre calidad, en cuyo caso claude-sonnet-5 es
+ * la alternativa razonable (near-Opus en tareas de código y agentic, a menor
+ * coste)».
+ *
+ * Aquí se prioriza la latencia a propósito, por lo que este asistente ES: una
+ * consulta sobre el tablero —«¿qué tareas tengo?», «¿cómo va el sprint?»— que
+ * se contesta leyendo con herramientas y resumiendo. No es escribir código. Y
+ * es una conversación: alguien está mirando la pantalla esperando, y cada vuelta
+ * del bucle de herramientas suma una ida y vuelta más al modelo (hasta ocho).
+ *
+ * Cambiar esta línea de vuelta a Opus es todo lo que hace falta si alguna vez
+ * la calidad de las respuestas no alcanza. Y la clave la paga cada
+ * organización, así que el coste tampoco es abstracto para quien pregunta.
+ *
+ * LO QUE ESTO NO ARREGLA, y conviene no confundirlo: la respuesta sigue
+ * llegando DE GOLPE al final, con todas las vueltas de herramientas por
+ * delante. Mientras eso siga así, la espera se nota aunque el modelo sea más
+ * rápido — emitir por partes es la mejora grande, y va aparte.
+ */
+const MODELO_ANTHROPIC = "claude-sonnet-5";
 /** «Flash» y no «Pro»: la capa gratuita de Pro es de apenas decenas de
  *  peticiones al día, y la de Flash alcanza de sobra para un asistente de uso
  *  normal. Ver docs/HEARTH-Y-LA-PUERTA-MCP.md para las cifras.

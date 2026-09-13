@@ -7,6 +7,7 @@ import { Boton } from "@/components/ui/Boton";
 import { AreaTexto } from "@/components/ui/Field";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, api } from "@/lib/api";
+import { bloquesDe, type Trozo } from "@/lib/respuesta-del-modelo";
 
 /**
  * El asistente, dentro del espacio de trabajo.
@@ -185,6 +186,82 @@ function SinClave({ workspaceId }: { workspaceId: string }) {
   );
 }
 
+/**
+ * La respuesta del modelo, leída.
+ *
+ * Se pinta de una estructura y no de una cadena de HTML, así que no hay nada
+ * que sanear: lo que el modelo escriba acaba en un nodo de texto de React,
+ * pase lo que pase. El lector está en `lib/respuesta-del-modelo.ts`, aparte y
+ * probado.
+ */
+function Respuesta({ texto }: { texto: string }) {
+  const bloques = bloquesDe(texto);
+
+  // Sin bloques —una respuesta vacía— se enseña el texto crudo antes que nada:
+  // una burbuja en blanco parece un fallo de red.
+  if (bloques.length === 0) return <span className="whitespace-pre-wrap">{texto}</span>;
+
+  return (
+    <div className="space-y-2">
+      {bloques.map((bloque, i) => {
+        if (bloque.tipo === "titulo") {
+          return (
+            <p key={i} className="font-display text-[13px] font-semibold text-ink">
+              <Trozos trozos={bloque.trozos} />
+            </p>
+          );
+        }
+        if (bloque.tipo === "lista") {
+          return (
+            // Viñeta propia y no `list-disc`: el punto va en su columna con
+            // `shrink-0`, así que una línea que da la vuelta sangra debajo del
+            // texto y no debajo del punto.
+            <ul key={i} className="space-y-1">
+              {bloque.puntos.map((punto, j) => (
+                <li key={j} className="flex gap-2">
+                  <span aria-hidden className="mt-[0.45em] size-1 shrink-0 rounded-full bg-faint" />
+                  <span className="min-w-0">
+                    <Trozos trozos={punto} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <p key={i}>
+            <Trozos trozos={bloque.trozos} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function Trozos({ trozos }: { trozos: Trozo[] }) {
+  return (
+    <>
+      {trozos.map((trozo, i) => {
+        if (trozo.tipo === "fuerte") {
+          return (
+            <strong key={i} className="font-semibold text-ink">
+              {trozo.texto}
+            </strong>
+          );
+        }
+        if (trozo.tipo === "codigo") {
+          return (
+            <code key={i} className="rounded bg-canvas/60 px-1 py-0.5 font-mono text-[12px]">
+              {trozo.texto}
+            </code>
+          );
+        }
+        return <span key={i}>{trozo.texto}</span>;
+      })}
+    </>
+  );
+}
+
 function TurnoVista({ turno }: { turno: Turno }) {
   const mio = turno.rol === "usuario";
   return (
@@ -198,10 +275,19 @@ function TurnoVista({ turno }: { turno: Turno }) {
 
       <div className={`min-w-0 flex-1 ${mio ? "flex flex-col items-end" : ""}`}>
         <div
-          className={`max-w-prose whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-relaxed
+          className={`max-w-prose rounded-xl px-3 py-2 text-sm leading-relaxed
             ${mio ? "border border-line bg-raised/40 text-ink" : "capa text-ink"}`}
         >
-          {turno.texto}
+          {/* LO QUE ESCRIBE UNA PERSONA VA TAL CUAL; lo que contesta el modelo
+              se lee. La pregunta la escribió alguien y no lleva markdown: si se
+              interpretara, preguntar por un `**` lo haría desaparecer de su
+              propia pregunta. La respuesta sí viene en markdown — ver
+              `lib/respuesta-del-modelo.ts` para el porqué de leerlo aquí. */}
+          {mio ? (
+            <span className="whitespace-pre-wrap">{turno.texto}</span>
+          ) : (
+            <Respuesta texto={turno.texto} />
+          )}
         </div>
 
         {/* Qué miró para contestar. Va plegado y en pequeño: importa poder
