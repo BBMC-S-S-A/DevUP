@@ -12,8 +12,23 @@ import { resolverOrganizacion } from "../organizaciones.js";
  * de lectura da una respuesta pobre, y uno de escritura deja basura en el
  * tablero de otras personas.
  *
- * PROCEDENCIA, Y POR QUÉ CON UNA ETIQUETA. Todo lo que crea el agente lleva la
- * etiqueta `agente`. No es decoración: es la condición para que dejar escribir
+ * PROCEDENCIA — Y YA NO CON UNA ETIQUETA. Durante un tiempo todo lo que creaba
+ * el agente llevaba a la fuerza la etiqueta `agente`, y tenía sentido: era lo
+ * único que distinguía su trabajo del de una persona.
+ *
+ * Dejó de tenerlo con la 0038. El registro de actividad guarda **las dos
+ * cosas** en cada hecho —`actor_id`, quien lo pidió, y `source = 'agente'`,
+ * cómo se hizo— y ese sitio es estrictamente mejor que una etiqueta por tres
+ * motivos: no se puede borrar (una etiqueta la quita cualquiera, así que nunca
+ * fue una garantía de nada), se puede consultar y cruzar, y **no ensucia el
+ * tablero**. La etiqueta se colaba en el filtro de áreas y hacía que todo
+ * pareciera de un área llamada «agente», que no es un área ni la pidió nadie.
+ *
+ * Así que la marca sigue, entera, donde debe estar. Lo que se fue es la copia
+ * peor. Ver la cabecera de `lib/actividad.ts` en la API.
+ *
+ * (Lo de abajo describe lo que se hacía antes, y se conserva porque explica por
+ * qué existía:) No era decoración: era la condición para que dejar escribir
  * a un modelo sea aceptable. Con ella, lo que hizo se ve de un vistazo en el
  * tablero, se filtra, se revisa en bloque y se puede deshacer entero. Sin
  * ella, un tablero con cuarenta tareas inventadas solo se puede vaciar a mano
@@ -348,7 +363,10 @@ export const descripcionCrearTarea = [
   "las que filtra el tablero—, y conviene usar las que el equipo ya tenga en vez",
   "de inventar una parecida: «Workflow» y «workflow» son dos etiquetas distintas.",
   "",
-  "Todo lo que se cree por aquí queda con la etiqueta «agente», para que el",
+  "Lo que se cree por aquí queda anotado como hecho por un agente en el registro",
+  "de actividad, junto a quién lo pidió. Ahí no se puede borrar y se puede",
+  "consultar — a diferencia de una etiqueta, que quita cualquiera y además",
+  "ensuciaba el filtro de áreas del tablero.",
   "equipo vea de un vistazo qué salió de un modelo y pueda revisarlo o",
   "deshacerlo en bloque. No se puede desactivar, y es lo que hace aceptable que",
   "un modelo escriba en el tablero de otros.",
@@ -397,10 +415,10 @@ export async function crearTarea(
       description: entrada.detalle ?? "",
       assigneeId: responsable,
       dueDate: entrada.vence ?? null,
-      // La de procedencia siempre, y las categorías que se pidan. El orden no
-      // importa —la tarjeta las ordena por nombre— pero la de agente no es
-      // opcional: es lo que hace aceptable que un modelo escriba aquí.
-      tagIds: [etiqueta, ...categorias],
+      // Solo las categorías que se pidan. La marca de que esto lo escribió un
+      // agente NO va aquí: va en el registro de actividad, que la guarda junto a
+      // quien lo pidió y que nadie puede borrar. Ver la cabecera.
+      tagIds: categorias,
       categoryId: area?.id ?? null,
       ...campoDeFicha(entrada),
     },
@@ -522,14 +540,27 @@ export const esquemaActualizarTarea = {
     .string()
     .optional()
     .describe("AAAA-MM-DD, o cadena vacía para quitar la fecha."),
+  area: z
+    .string()
+    .optional()
+    .describe(
+      "A qué área o rama de trabajo pasa, por su nombre. Cadena vacía para " +
+        "dejarla sin clasificar. Tiene que existir ya: no se inventa una.",
+    ),
   ...esquemaFicha,
   organizacion: z.string().optional(),
 };
 
 export const descripcionActualizarTarea = [
   "Cambia una tarea que ya existe: su título, su detalle, quién la tiene, cuándo",
-  "vence, qué clase de trabajo es, cuánto corre, de dónde sale o cuándo estará",
-  "hecha. Solo se toca lo que se le pase; lo que se omite se queda como estaba.",
+  "vence, de qué área es, qué clase de trabajo es, cuánto corre, de dónde sale o",
+  "cuándo estará hecha. Solo se toca lo que se le pase; lo que se omite se queda",
+  "como estaba.",
+  "",
+  "ES LA HERRAMIENTA PARA REORGANIZAR UN TABLERO: mover tareas de un área a otra",
+  "cuando el equipo reparte el trabajo de otra manera. Antes solo se podía decir",
+  "de qué área era una tarea al crearla, así que reordenar había que hacerlo a",
+  "mano, tarjeta por tarjeta.",
   "",
   "Pide el identificador, no el título, porque esto sobrescribe: equivocarse de",
   "tarea aquí borra el trabajo escrito de otra persona. Sácalo antes con",
@@ -544,6 +575,13 @@ export async function actualizarTarea(
     detalle?: string;
     responsable?: string;
     vence?: string;
+    /**
+     * A qué área pasa. Faltaba, y era un agujero raro: se podía decir de qué
+     * área era una tarea **al crearla y nunca más**. Reorganizar el tablero
+     * —que es justo cuando las áreas cambian— quedaba fuera del alcance del
+     * asistente, y había que hacerlo a mano, tarjeta por tarjeta.
+     */
+    area?: string;
     organizacion?: string;
   } & Ficha,
 ): Promise<string> {
@@ -563,6 +601,28 @@ export async function actualizarTarea(
       entrada.responsable === ""
         ? null
         : await resolverPersona(cliente, entrada.responsable, entrada.organizacion);
+  }
+
+  /**
+   * El área, que obliga a un viaje de más y merece la pena.
+   *
+   * Para resolver «Workflow» a un identificador hace falta saber de qué espacio
+   * es la tarea, y aquí solo llega su id. Así que se pide la tarea primero. Lo
+   * alternativo —que quien llama tuviera que decir también el espacio— haría
+   * que el asistente tuviera que averiguarlo antes, que es el mismo viaje pero
+   * puesto donde molesta.
+   */
+  if (entrada.area !== undefined) {
+    if (entrada.area === "") {
+      cambios.categoryId = null;
+    } else {
+      const { task: laTarea } = await cliente.get<{ task: { workspaceId: string } }>(
+        `/tasks/${entrada.tarea.trim()}`,
+      );
+      const resuelta = resolverArea(await areas(cliente, laTarea.workspaceId), entrada.area);
+      if (typeof resuelta === "string") return resuelta;
+      cambios.categoryId = resuelta.id;
+    }
   }
 
   if (Object.keys(cambios).length === 0) return "No me dijiste qué cambiar.";

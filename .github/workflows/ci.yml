@@ -96,7 +96,79 @@ jobs:
         # código no dé más acceso que canjear por enlace. Es una puerta de
         # entrada a una organización: lo que falle aquí mete a alguien donde
         # no debía sin que nadie abra una incidencia.
-        run: npm run test:codigo --workspace apps/api
+        #
+        # SIN `--workspace apps/api`, y ese es el arreglo. Con él solo corría
+        # `test:codigo` de la API, que es la mitad de arriba —lógica pura, sin
+        # base—. La mitad contra Postgres vive en `test:invitacion`, y es
+        # precisamente la que comprueba quién puede abrir la puerta: llevaba
+        # desde la fusión sin ejecutarse aquí, en verde, sin que nada lo dijera.
+        # El script de la raíz encadena las dos.
+        run: npm run test:codigo
+
+      - name: El clasificador de ramas
+        # El guion que reordena el tablero mueve tarjetas de verdad, y se
+        # equivoca sin hacer ruido: una tarea mal clasificada no falla, se queda
+        # en la rama de otro y ahi la busca quien no la puso. Lo que hace
+        # peligroso a un clasificador no es acertar poco, es acertar bastante —
+        # porque entonces nadie revisa el resto. Se prueba contra los titulos
+        # REALES del tablero, no contra ejemplos inventados.
+        run: npm run test:ramas
+
+      - name: Los datos de los widgets
+        # Un panel es la primera pantalla de un espacio y esta hecho de trozos
+        # independientes, asi que todo lo que se rompe aqui sale en pantalla
+        # como un panel perfectamente normal: un canal privado ajeno colado en
+        # los no leidos —una linea de mas, no un error—, «atascada» convertida
+        # en «vencida» —y una tarea sin fecha no vence nunca, que es justo la
+        # que el widget existe para sacar a la superficie— y que se calcule lo
+        # que no se pidio, que deshace en silencio la unica razon de esta ruta.
+        run: npm run test:widgets --workspace apps/api
+
+      - name: El panel por espacio
+        # La 0049 junto el Panel con la Mesa dandole alcance de espacio, y para
+        # eso solto la clave primaria de user_dashboard_prefs. Dos cosas se
+        # rompen ahi sin que los tipos digan nada: el destino del `on conflict`,
+        # que era `(user_id)` y ya no es un indice unico —compila, y falla en el
+        # segundo guardado—, y el panel de partida multiplicado, porque sin
+        # `nulls not distinct` dos filas con workspace_id nulo son distintas
+        # para Postgres y nadie se queja.
+        run: npm run test:panel --workspace apps/api
+
+      - name: La portada de una organización
+        # Lo que se vigila no es que salga, es lo que NO sale. Desde 0035 cada
+        # espacio se aísla por sí mismo, así que pertenecer a una organización
+        # no es pertenecer a todos sus espacios — y una portada que resume la
+        # organización entera es justo donde esa diferencia se pierde. La fuga
+        # no sería un error visible: sería una línea de más con el nombre del
+        # proyecto de un cliente que no es suyo.
+        run: npm run test:panorama --workspace apps/api
+
+      - name: El diario del proyecto
+        # Tres formas de contar una historia falsa con datos verdaderos, y
+        # ninguna falla: saltarse las semanas vacías —que comprime el tiempo y
+        # hace parecer constante un proyecto que estuvo parado—, agrupar en UTC
+        # —que mete lo cerrado un domingo por la tarde en Bogotá en la semana
+        # siguiente— y contar movimientos como hitos, que daría las semanas más
+        # llenas a quien más arrastra tarjetas. Las tres salen en pantalla como
+        # un diario perfectamente creíble.
+        run: npm run test:diario --workspace apps/api
+
+      - name: Los enlaces del grafo
+        # Tres formas de estar mal que las políticas no pueden cazar, porque
+        # ninguna falla: dibujar las flechas al revés, devolver solo los
+        # vecinos de salida —y dejar media red invisible según por dónde se
+        # entre—, y que tejer dos veces reviente la petición cuando en realidad
+        # decía «esto ya estaba bien». Más la que sí es de seguridad: que
+        # enlazar hacia algo que no se ve falle Y no deje rastro a medias.
+        #
+        # Y desde que las reglas tejen solas, lo que de verdad se vigila aquí es
+        # que DESTEJAN: que quitar una rama se lleve su arista, que recalcular
+        # no borre lo que escribió una persona —eso no se puede volver a
+        # deducir— y que borrar una fila limpie sus enlaces ANTES de irse. Lo
+        # último tiene su propia comprobación al revés, porque hacerlo en el
+        # orden equivocado no falla: deja enlaces que ya no se pueden ni ver ni
+        # borrar desde la API, apuntando a algo que no existe.
+        run: npm run test:grafo --workspace apps/api
 
       - name: El criterio de migraciones
         # Comprueba el analizador que se le aplica al repositorio de un
@@ -177,6 +249,19 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Y la API arranca de verdad
+        # El paso que faltaba, y se notó tarde: la API llevaba registrado un
+        # módulo de rutas DOS veces —una línea duplicada al fusionar dos
+        # caminos— y Fastify rechaza declarar dos veces la misma ruta, así que
+        # el proceso se caía nada más empezar. Todo lo demás estaba en verde:
+        # compilar no lo ve, porque registrar dos veces el mismo módulo es
+        # correcto para TypeScript, y las pruebas tampoco, porque hablan con
+        # Postgres directamente y ninguna levanta el HTTP. El único sitio donde
+        # se veía era al desplegar.
+        #
+        # No pide nada: arranca y comprueba que se queda escuchando.
+        run: npm run arranca --workspace apps/api
 
       - name: La imagen de la API construye
         # `npm run build` compila TypeScript; esto comprueba otra cosa que se

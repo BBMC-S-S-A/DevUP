@@ -221,6 +221,115 @@ async function main(): Promise<void> {
       "y por el enlace sí se entra",
       (await codigoDeError(() => canjear(elena, suEnlace))) === "sin error",
     );
+
+    /* =======================================================================
+     * Dar otro código a una invitación que ya existe (0047)
+     *
+     * Es una puerta de entrada a una organización, así que lo que se comprueba
+     * no es que funcione —eso se ve en cuanto se usa— sino las cuatro formas
+     * que tiene de estar mal sin hacer ruido: que el código viejo siga
+     * abriendo, que el enlace se rompa de paso, que lo pueda hacer quien no es
+     * administrador, y que decir «esa invitación no existe» y «no es tuya» con
+     * frases distintas convierta la ruta en un detector de invitaciones ajenas.
+     * ==================================================================== */
+
+    console.log("\nDar otro código");
+
+    // Una persona que está en la organización pero NO manda: es el caso que
+    // más se parece a alguien legítimo, y el que más importa que falle.
+    const raso = await alta("raso");
+    await admin.query(
+      `insert into organization_members (organization_id, user_id, role, all_workspaces)
+       values ($1,$2,'member',true) on conflict do nothing`,
+      [org, raso],
+    );
+
+    const conCodigo = `renueva-invit-${sufijo}@devup.test`;
+    const { codigo: viejo, token: suToken } = await invitar(conCodigo, null);
+    const invitacionId = (
+      await admin.query<{ id: string }>(
+        "select id from invitations where organization_id = $1 and email = $2",
+        [org, conCodigo],
+      )
+    ).rows[0]!.id;
+
+    const darCodigo = (quien: string, invitacion: string, codigo: string) =>
+      withUser(quien, (db) =>
+        db.query("select public.set_invitation_code($1,$2,$3)", [
+          invitacion,
+          hashDeInvitacion(codigo),
+          new Date(Date.now() + UN_DIA).toISOString(),
+        ]),
+      );
+
+    const nuevo = nuevoCodigo();
+    check(
+      "quien manda en la organización puede dar otro código",
+      (await codigoDeError(() => darCodigo(ana, invitacionId, nuevo))) === "sin error",
+    );
+
+    // La que justifica que exista la función: renovar NO puede romper el
+    // enlace, porque puede estar ya abierto en el móvil de la otra persona. Es
+    // toda la diferencia con reinvitar, que era la salida de mientras.
+    const mirarPorToken = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ expired: boolean }>(
+        "select expired from public.invitation_by_token($1)",
+        [hashDeInvitacion(suToken)],
+      );
+      return rows[0]?.expired;
+    });
+    check("y el enlace de esa invitación sigue vivo", mirarPorToken === false);
+
+    const fulano = await alta("fulano");
+    check(
+      "el código viejo ya no abre nada",
+      (await codigoDeError(() => canjear(fulano, viejo))) === "P0002",
+    );
+    check(
+      "y el nuevo sí",
+      (await codigoDeError(() => canjear(fulano, nuevo))) === "sin error",
+    );
+
+    console.log("\nY quién no puede");
+
+    const otra = `otra-invit-${sufijo}@devup.test`;
+    await invitar(otra, null);
+    const otraId = (
+      await admin.query<{ id: string }>(
+        "select id from invitations where organization_id = $1 and email = $2",
+        [org, otra],
+      )
+    ).rows[0]!.id;
+
+    // Lo que estaría en juego si esto pasara: quien pueda dar código a una
+    // invitación de administrador se pone a sí mismo de administrador.
+    check(
+      "un miembro raso no puede dar código",
+      (await codigoDeError(() => darCodigo(raso, otraId, nuevoCodigo()))) === "42501",
+    );
+    check(
+      "y alguien de fuera tampoco",
+      (await codigoDeError(() => darCodigo(carla, otraId, nuevoCodigo()))) === "42501",
+    );
+
+    // Y las dos negativas tienen que ser INDISTINGUIBLES de la de una
+    // invitación inventada. Si «no existe» contestara distinto de «no es
+    // tuya», se podrían probar identificadores hasta averiguar qué
+    // invitaciones tiene abiertas otra organización.
+    const inventada = "00000000-0000-0000-0000-000000000000";
+    check(
+      "y una invitación inventada contesta lo mismo que una ajena",
+      (await codigoDeError(() => darCodigo(carla, inventada, nuevoCodigo()))) ===
+        (await codigoDeError(() => darCodigo(carla, otraId, nuevoCodigo()))),
+    );
+
+    // Sobre una ya aceptada se dice que no en vez de escribir en silencio: el
+    // código quedaría vivo para quien lo dicta y muerto para `accept_invitation`,
+    // que exige `accepted_at is null`. Nadie ataría los dos cabos.
+    check(
+      "sobre una invitación ya aceptada, no",
+      (await codigoDeError(() => darCodigo(ana, invitacionId, nuevoCodigo()))) === "23505",
+    );
   } finally {
     await admin.query("delete from public.organizations where slug like $1", [`%-invit-${sufijo}`]);
     await admin.query("delete from public.users where email like $1", [

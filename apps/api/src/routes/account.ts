@@ -232,7 +232,20 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         const { rows } = await db.query(
           `select i.id, i.email, i.role, i.workspace_id as "workspaceId", w.name as "workspaceName",
                   i.created_at as "createdAt", i.expires_at as "expiresAt",
-                  i.accepted_at as "acceptedAt"
+                  i.accepted_at as "acceptedAt",
+                  -- Si TIENE código, no cuál: el código no está en ninguna
+                  -- parte —se guarda su hash— y esto es lo único que se puede
+                  -- contestar. Le sirve a la pantalla para decidir entre «dar
+                  -- código» y «otro código», que no es lo mismo para quien mira:
+                  -- lo segundo avisa de que el anterior va a dejar de valer.
+                  (i.code_hash is not null) as "hasCode",
+                  -- Y su propia caducidad, que es mucho más corta que la del
+                  -- enlace (un día contra siete). Sin esto la pantalla enseñaría
+                  -- el expiresAt de arriba junto al código y diría que queda una
+                  -- semana de algo que caduca mañana.
+                  -- (Sin comillas invertidas ahí: esto vive dentro de una
+                  -- plantilla de JavaScript y una sola cerraría la cadena.)
+                  i.code_expires_at as "codeExpiresAt"
              from invitations i
              left join workspaces w on w.id = i.workspace_id
             where i.organization_id = $1
@@ -243,6 +256,63 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  /**
+   * Dar otro código a una invitación que ya existe.
+   *
+   * LO QUE ESTA RUTA **NO** HACE ES ENSEÑAR EL CÓDIGO DE ANTES, y no es una
+   * limitación que haya que disculpar: no existe en ninguna parte. En la base
+   * está su hash, igual que el del token. Así que el gesto de la pantalla no es
+   * «ver el código», es «dame otro» — y el de antes deja de valer en el mismo
+   * movimiento, que suele ser justo lo que se quiere cuando alguien pide esto.
+   *
+   * LO QUE CONSERVA ES EL ENLACE, que es toda la diferencia con reinvitar.
+   * Reinvitar borra la invitación entera y le rompe la URL a quien puede
+   * tenerla ya abierta; esto solo escribe encima del código.
+   *
+   * QUIÉN PUEDE, LO DECIDE LA FUNCIÓN Y NO ESTE `if`. `set_invitation_code` es
+   * `security definer` y comprueba `is_org_admin` dentro. Repetirlo aquí daría
+   * una segunda copia de la regla, que es la que se queda atrás.
+   */
+  app.post("/invitations/:id/codigo", { onRequest: requireSession }, async (request, reply) => {
+    const userId = requireUser(request);
+    const { id } = parseParams(z.object({ id: uuid }), request.params);
+
+    const codigo = await withUser(userId, async (db) => {
+      /**
+       * Se sortea hasta que no choque con otro código vivo.
+       *
+       * El índice único de la 0041 solo mira las invitaciones sin aceptar, así
+       * que un choque es del orden de uno entre 850.000 millones — pero
+       * «improbable» y «contemplado» no son lo mismo, y la diferencia se paga
+       * el día raro, con un 500 y sin ninguna pista. Tres intentos y se rinde.
+       */
+      for (let intento = 0; ; intento += 1) {
+        const nuevo = nuevoCodigo();
+        try {
+          await db.query("select public.set_invitation_code($1,$2,$3)", [
+            id,
+            hashToken(normalizarCodigo(nuevo)!),
+            new Date(Date.now() + CADUCIDAD.codigo).toISOString(),
+          ]);
+          return nuevo;
+        } catch (fallo) {
+          const codigoSql = (fallo as { code?: string }).code;
+          // 23505 lo lanzan dos cosas distintas: el choque de arriba, que se
+          // reintenta, y la invitación ya aceptada, que no tiene reintento
+          // posible. Se distinguen por el mensaje porque la función usa el
+          // mismo SQLSTATE a propósito — las dos son «esto ya está ocupado».
+          const esChoque = codigoSql === "23505" && !/ya se aceptó/.test(String(fallo));
+          if (!esChoque || intento >= 2) throw fallo;
+        }
+      }
+    });
+
+    // El código va en la respuesta y en ningún otro sitio: se enseña una vez a
+    // quien invita, que es cuando lo va a dictar. No se manda por correo —el
+    // correo ya lleva el enlace— porque el caso de uso es dictarlo de viva voz.
+    return reply.status(201).send({ codigo });
+  });
 
   app.delete("/invitations/:id", { onRequest: requireSession }, async (request, reply) => {
     const userId = requireUser(request);

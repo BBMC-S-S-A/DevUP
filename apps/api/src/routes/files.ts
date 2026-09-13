@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
 import { env } from "../env.js";
+import { olvidarNodo, retejerTarea } from "../lib/grafo.js";
 import { badRequest, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { announceFileChange } from "../realtime/signaling.js";
 import {
@@ -409,11 +410,17 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return withUser(userId, async (db) => {
-      await db.query(
-        `update files set status = 'ready', size_bytes = $2, mime_type = $3 where id = $1`,
+      const { rows: confirmado } = await db.query<{ task_id: string | null }>(
+        `update files set status = 'ready', size_bytes = $2, mime_type = $3
+          where id = $1 returning task_id`,
         [fileId, head.size, head.contentType],
       );
       await attachTags(db, fileId, body.tagIds);
+
+      // Aquí —y no al reservar— es donde el archivo empieza a existir de verdad:
+      // `retejerTarea` solo mira los que están en `ready`, así que tejer antes
+      // no habría encontrado nada.
+      if (confirmado[0]?.task_id) await retejerTarea(db, confirmado[0].task_id);
       const file = await loadFile(db, fileId);
       announceFileChange(String(file.workspaceId), "created", fileId);
       return { file };
@@ -489,16 +496,29 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     const { fileId } = parseParams(z.object({ fileId: uuid }), request.params);
 
     const removed = await withUser(userId, async (db) => {
-      // RLS decide quién puede borrar: el que subió o un administrador. Si la
-      // política no deja, esto borra cero filas y no hay nada que limpiar.
-      const { rows } = await db.query<{ storage_key: string; workspace_id: string }>(
-        "delete from files where id = $1 returning storage_key, workspace_id",
-        [fileId],
-      );
-      return rows[0] ?? null;
+      // El borrado de un archivo es DEFINITIVO —la fila se va— y `graph_links`
+      // no guarda clave ajena hacia él. Se limpia ANTES por lo que explica
+      // `olvidarNodo`: en cuanto la fila no está, la política de enlaces exige
+      // ver los dos extremos, contesta que no, y esas aristas quedan sin forma
+      // de borrarse ni de leerse. Si el borrado de abajo acaba no ocurriendo
+      // —RLS decide quién puede: el que subió o un administrador—, se lanza y
+      // la transacción de `withUser` devuelve los enlaces a su sitio.
+      await olvidarNodo(db, "archivo", fileId);
+
+      const { rows } = await db.query<{
+        storage_key: string;
+        workspace_id: string;
+        task_id: string | null;
+      }>("delete from files where id = $1 returning storage_key, workspace_id, task_id", [fileId]);
+
+      if (!rows[0]) throw notFound("archivo no encontrado");
+
+      // Y la tarea se retejé porque le falta un adjunto: `retejerTarea` mira lo
+      // que hay ahora, así que la arista que sobraba no se vuelve a escribir.
+      if (rows[0].task_id) await retejerTarea(db, rows[0].task_id);
+      return rows[0];
     });
 
-    if (!removed) throw notFound("archivo no encontrado");
     await deleteObject(removed.storage_key);
     announceFileChange(removed.workspace_id, "deleted", fileId);
     return reply.status(204).send();

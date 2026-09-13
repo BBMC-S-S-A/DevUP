@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ClienteApi } from "../api.js";
 import { resolverEspacio } from "../espacios.js";
+import { resolverOrganizacion } from "../organizaciones.js";
 
 /**
  * «¿Qué ha pasado aquí desde…?», que es la herramienta del contexto compartido.
@@ -38,19 +39,44 @@ export const esquemaQueHaPasado = {
       "Desde cuándo. Una fecha «AAAA-MM-DD», un instante completo en ISO, o " +
         "un número de horas como «8h». Si se omite, el último día.",
     ),
-  espacio: z.string().optional().describe("Nombre del espacio de trabajo. Omitir si solo hay uno."),
-  organizacion: z.string().optional().describe("Nombre de la organización. Omitir si solo hay una."),
+  espacio: z
+    .string()
+    .optional()
+    .describe("Nombre del espacio de trabajo. Omitir para mirar en todos."),
+  organizacion: z
+    .string()
+    .optional()
+    .describe("Nombre de la organización. Omitir para cruzar todas."),
+  quien: z
+    .string()
+    .optional()
+    .describe("Nombre (o parte) de una persona, para ver solo lo suyo. Omitir para ver a todos."),
+  verbo: z
+    .string()
+    .optional()
+    .describe(
+      "Un solo tipo de hecho: creo, movio, cerro, reabrio, asigno, desasigno, " +
+        "renombro, comento, adjunto, etiqueto, borro. Omitir para verlos todos.",
+    ),
 };
 
 export const descripcionQueHaPasado = [
-  "Cuenta qué ha pasado en un espacio de trabajo de DevUP desde un momento:",
-  "qué tareas se crearon, se movieron, se cerraron o se asignaron, quién lo",
-  "hizo y si salió de una persona, de una regla del producto o de un agente.",
+  "Cuenta qué ha pasado en DevUP desde un momento: qué tareas se crearon, se",
+  "movieron, se cerraron o se asignaron, quién lo hizo y si salió de una",
+  "persona, de una regla del producto o de un agente.",
+  "",
+  "SIN DECIR DÓNDE, MIRA EN TODO: todas las organizaciones y espacios a los que",
+  "llega quien pregunta. Esa es la forma de contestar «¿qué me he perdido?»",
+  "después de unos días fuera, sin ir proyecto por proyecto. Nombra un espacio",
+  "o una organización solo si de verdad quieres mirar únicamente ahí.",
   "",
   "ÚSALA AL EMPEZAR A TRABAJAR en un proyecto que llevas un rato sin tocar, o",
   "cuando alguien pregunte «¿qué me he perdido?», «¿en qué anda el equipo?» o",
   "«¿qué ha cambiado desde ayer?». Es la forma barata de tomar el contexto de",
   "lo que han hecho los demás sin que nadie tenga que contártelo.",
+  "",
+  "Se puede acotar a una persona («¿en qué anda Carlos?») o a un tipo de hecho",
+  "(«¿qué se ha cerrado esta semana?»).",
   "",
   "Agrupa por día y NO dice la hora de cada hecho: sirve para saber qué se",
   "hizo, no para saber a qué hora trabaja cada quien.",
@@ -66,6 +92,9 @@ type Renglon = {
   procedencia: "persona" | "regla" | "agente";
   cuando: string;
   actorNombre: string | null;
+  /** Solo llegan al cruzar varios sitios; ver `dondeFue`. */
+  espacio?: string | null;
+  organizacion?: string | null;
 };
 
 /**
@@ -125,27 +154,92 @@ function dia(iso: string): string {
   });
 }
 
+/**
+ * Dónde pasó algo, dicho solo cuando hace falta.
+ *
+ * Al mirar un espacio concreto, poner su nombre en cada renglón es repetir
+ * cincuenta veces lo que la cabecera ya dijo. Al cruzar varios, no ponerlo deja
+ * una lista de frases que no sitúan a nadie: «Ana movió Pagos» no significa lo
+ * mismo si Pagos está en el proyecto del cliente o en el interno.
+ *
+ * La organización solo se nombra si de verdad hay más de una en la respuesta.
+ * Para quien tiene una sola empresa, repetir su nombre en cada línea es ruido.
+ */
+function dondeFue(r: Renglon, variasOrgs: boolean): string {
+  if (!r.espacio) return "";
+  return variasOrgs && r.organizacion ? ` · ${r.organizacion}/${r.espacio}` : ` · ${r.espacio}`;
+}
+
 export async function queHaPasado(
   cliente: ClienteApi,
-  entrada: { desde?: string; espacio?: string; organizacion?: string },
+  entrada: {
+    desde?: string;
+    espacio?: string;
+    organizacion?: string;
+    quien?: string;
+    verbo?: string;
+  },
 ): Promise<string> {
-  const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
   const desde = momentoDesde(entrada.desde);
 
+  /**
+   * SOLO SE RESUELVE UN ESPACIO SI LO NOMBRARON.
+   *
+   * Antes se resolvía siempre, y eso es lo que hacía que la pregunta más
+   * frecuente —«¿qué me he perdido?»— fuera la que peor contestaba: sin decir
+   * dónde, o adivinaba un espacio (si solo había uno) o se plantaba pidiendo
+   * que eligieras entre cinco. Ninguna de las dos es la respuesta.
+   */
+  const acotado = entrada.espacio
+    ? await resolverEspacio(cliente, entrada.espacio, entrada.organizacion)
+    : null;
+
+  const parametros = new URLSearchParams({ desde: desde.toISOString() });
+  if (acotado) parametros.set("workspaceId", acotado.id);
+  if (entrada.quien) parametros.set("quien", entrada.quien);
+  if (entrada.verbo) parametros.set("verbo", entrada.verbo.trim().toLowerCase());
+
+  // Nombrar SOLO la organización acota a ella sin obligar a elegir espacio, que
+  // es «¿qué ha pasado en el cliente tal?» — una pregunta que antes no se podía
+  // hacer: había que nombrar un espacio o recorrerlos.
+  if (!acotado && entrada.organizacion) {
+    const { id } = await resolverOrganizacion(cliente, entrada.organizacion);
+    parametros.set("organizationId", id);
+  }
+
   const { actividad, hayMas } = await cliente.get<{ actividad: Renglon[]; hayMas: boolean }>(
-    `/workspaces/${espacio.id}/actividad?desde=${encodeURIComponent(desde.toISOString())}`,
+    `/me/actividad?${parametros.toString()}`,
   );
 
+  /** Cómo se llama lo que se acaba de mirar, para decirlo en la respuesta. */
+  const ambito = acotado
+    ? `«${acotado.name}»`
+    : entrada.organizacion
+      ? `«${entrada.organizacion}»`
+      : "ninguno de tus espacios";
+
   if (actividad.length === 0) {
-    return `No ha pasado nada en «${espacio.name}» desde ${dia(desde.toISOString())}.`;
+    // Con filtros puestos, «no ha pasado nada» sería mentira: puede haber
+    // pasado mucho y no encajar. Decir cuál fue el filtro es lo que evita que
+    // alguien cierre la pregunta creyendo que el equipo estuvo parado.
+    const acotaciones = [
+      entrada.quien ? `de ${entrada.quien}` : null,
+      entrada.verbo ? `del tipo «${entrada.verbo}»` : null,
+    ].filter(Boolean);
+
+    const cola = acotaciones.length > 0 ? ` que encaje con lo que pediste (${acotaciones.join(", ")})` : "";
+    return `No ha pasado nada en ${ambito} desde ${dia(desde.toISOString())}${cola}.`;
   }
 
   // Vienen del más reciente al más antiguo, que es lo correcto para una lista
   // paginada. Para contar una historia se leen al revés.
   const enOrden = [...actividad].reverse();
 
+  const variasOrgs = new Set(enOrden.map((r) => r.organizacion ?? "")).size > 1;
+  const donde = acotado ? `en ${ambito}` : variasOrgs ? "en todo lo tuyo" : `en ${ambito}`;
+
   const lineas: string[] = [
-    `${actividad.length} cosa(s) en «${espacio.name}» desde ${dia(desde.toISOString())}:`,
+    `${actividad.length} cosa(s) ${donde} desde ${dia(desde.toISOString())}:`,
   ];
 
   // Si todo cayó el mismo día, la cabecera ya lo dijo: repetirlo debajo sobra.
@@ -168,7 +262,10 @@ export async function queHaPasado(
     const salto =
       typeof d["de"] === "string" && typeof d["a"] === "string" ? ` (de ${d["de"]} a ${d["a"]})` : "";
 
-    lineas.push(`- ${quien} ${verbo} ${r.sujeto} «${r.sujetoNombre}»${salto}${procedencia}`);
+    // El sitio no se repite cuando ya se acotó a uno: la cabecera lo dijo.
+    const sitio = acotado ? "" : dondeFue(r, variasOrgs);
+
+    lineas.push(`- ${quien} ${verbo} ${r.sujeto} «${r.sujetoNombre}»${salto}${procedencia}${sitio}`);
   }
 
   if (hayMas) {
