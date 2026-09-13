@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import {
+  fetchAvailableRepos,
   fetchGithubFileContent,
   fetchGithubStats,
   fetchGithubTree,
@@ -118,6 +119,44 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
       );
       return { repos: rows };
     });
+  });
+
+  /**
+   * Los repositorios que la conexión de GitHub de este workspace puede ver,
+   * para elegir de una lista en vez de pegar un enlace por cada uno — solo
+   * tiene sentido detrás del botón OAuth (auth/github.ts): un token de
+   * acceso personal pegado a mano no viene de una instalación y no tiene qué
+   * listar aquí.
+   */
+  app.get("/workspaces/:workspaceId/github/available-repos", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    const { token, yaConectados } = await withUser(userId, async (db) => {
+      const { rows: conexiones } = await db.query<{ id: string }>(
+        `select id from connections
+          where workspace_id = $1 and provider = 'github'
+          order by created_at limit 1`,
+        [workspaceId],
+      );
+      const connectionId = conexiones[0]?.id;
+      if (!connectionId) return { token: null, yaConectados: new Set<string>() };
+
+      const { rows } = await db.query<{ full_name: string }>(
+        "select full_name from github_repos where workspace_id = $1",
+        [workspaceId],
+      );
+      return {
+        token: await getDecryptedSecret(db, connectionId),
+        yaConectados: new Set(rows.map((r) => r.full_name)),
+      };
+    });
+
+    if (!token) return { repos: [] };
+
+    const disponibles = await fetchAvailableRepos(token);
+    // Los que ya están en el panel no hace falta ofrecerlos otra vez.
+    return { repos: disponibles.filter((r) => !yaConectados.has(r.fullName)) };
   });
 
   /**

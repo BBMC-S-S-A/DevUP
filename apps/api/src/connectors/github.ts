@@ -342,3 +342,43 @@ export async function fetchGithubFileContent(
 
   return Buffer.from(file.content, "base64").toString("utf8");
 }
+
+export type RepoDisponible = { fullName: string; private: boolean; description: string | null };
+
+/**
+ * Los repositorios a los que la cuenta conectada por OAuth dio acceso, para
+ * elegir de una lista en vez de tener que pegar un enlace por cada uno.
+ *
+ * SOLO SIRVE PARA UN TOKEN DE LA GITHUB APP (auth/github.ts), NO PARA EL
+ * TOKEN DE ACCESO PERSONAL DE ALCANCE FINO QUE SIGUE EXISTIENDO AL LADO. El
+ * botón "Conectar con GitHub" registra una GitHub App —lo delata el propio
+ * Client ID, GitHub unificó el prefijo `Ov23li` para App, no para OAuth App
+ * clásico— y ese tipo de token no lista repos con `/user/repos` como un PAT:
+ * hay que preguntar primero en qué instalaciones quedó (`/user/installations`)
+ * y a qué repos entra cada una.
+ */
+export async function fetchAvailableRepos(token: string): Promise<RepoDisponible[]> {
+  const instalaciones = (await get(`${API}/user/installations`, token)) as {
+    installations: { id: number }[];
+  };
+
+  const repos: RepoDisponible[] = [];
+  for (const instalacion of instalaciones.installations) {
+    // Paginado: una cuenta con "todos los repositorios" puede traer más de
+    // cien, y GitHub los reparte de a cien por página.
+    for (let pagina = 1; ; pagina += 1) {
+      const resultado = (await get(
+        `${API}/user/installations/${instalacion.id}/repositories?per_page=100&page=${pagina}`,
+        token,
+      )) as { repositories: { full_name: string; private: boolean; description: string | null }[] };
+
+      for (const repo of resultado.repositories) {
+        repos.push({ fullName: repo.full_name, private: repo.private, description: repo.description });
+      }
+
+      if (resultado.repositories.length < 100) break;
+    }
+  }
+
+  return repos;
+}

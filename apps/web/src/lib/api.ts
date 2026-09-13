@@ -544,6 +544,13 @@ export type GithubTreeEntry = {
   size?: number;
 };
 
+/** Un repositorio que la conexión OAuth puede ver pero que todavía no está en el panel. */
+export type RepoDisponible = {
+  fullName: string;
+  private: boolean;
+  description: string | null;
+};
+
 /**
  * Una canción buscable, venga de donde venga.
  *

@@ -25,7 +25,15 @@ import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useWorkspaceId } from "@/lib/workspace-context";
-import { API_URL, ApiError, type Connection, type GithubRepo, type SignupPolicy, api } from "@/lib/api";
+import {
+  API_URL,
+  ApiError,
+  type Connection,
+  type GithubRepo,
+  type RepoDisponible,
+  type SignupPolicy,
+  api,
+} from "@/lib/api";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Pagina } from "@/components/ui/Pagina";
 
@@ -73,6 +81,7 @@ export default function GithubPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [policy, setPolicy] = useState<SignupPolicy | null>(null);
+  const [disponibles, setDisponibles] = useState<RepoDisponible[]>([]);
 
   useEffect(() => {
     api
@@ -97,6 +106,20 @@ export default function GithubPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Solo tiene sentido preguntar cuando hay una conexión: sin ella no hay
+  // token con qué listar nada, y la ruta del servidor devuelve vacío igual —
+  // pero evitarlo aquí ahorra la petición de balde en el caso común.
+  useEffect(() => {
+    if (!connection) {
+      setDisponibles([]);
+      return;
+    }
+    api
+      .get<{ repos: RepoDisponible[] }>(`/workspaces/${workspaceId}/github/available-repos`)
+      .then(({ repos }) => setDisponibles(repos))
+      .catch(() => setDisponibles([]));
+  }, [connection, workspaceId]);
 
   // El viaje de ida y vuelta del OAuth termina en esta misma pantalla, con
   // `?connected=1` o `?error=...` en la URL — el servidor no tiene otra forma
@@ -252,6 +275,17 @@ export default function GithubPage() {
                   />
                 ))}
               </div>
+            )}
+
+            {connection && disponibles.length > 0 && (
+              <SeleccionarRepos
+                workspaceId={workspaceId}
+                repos={disponibles}
+                onAdded={(repo) => {
+                  setRepos((prev) => [...prev, repo]);
+                  setDisponibles((prev) => prev.filter((r) => r.fullName !== repo.fullName));
+                }}
+              />
             )}
 
             <NuevoRepo workspaceId={workspaceId} onAdded={(repo) => setRepos((prev) => [...prev, repo])} />
@@ -504,6 +538,77 @@ function ConectarGithub({ workspaceId, onConnected }: { workspaceId: string; onC
           Conectar
         </Boton>
       </form>
+    </Tarjeta>
+  );
+}
+
+/**
+ * Elegir de la lista, en vez de pegar un enlace por cada uno.
+ *
+ * SOLO APARECE CON UNA CONEXIÓN OAUTH DETRÁS. Un token de acceso personal
+ * pegado a mano no viene de una instalación de GitHub y no tiene qué listar
+ * — para ese camino sigue estando `NuevoRepo`, más abajo. Cada fila se añade
+ * por separado con el mismo endpoint que ya usa pegar un enlace; no hace
+ * falta un botón de "añadir todos" que nadie pidió y que agotaría el cupo de
+ * lectura de golpe con los `refreshRepo` de cada uno.
+ */
+function SeleccionarRepos({
+  workspaceId,
+  repos,
+  onAdded,
+}: {
+  workspaceId: string;
+  repos: RepoDisponible[];
+  onAdded: (repo: GithubRepo) => void;
+}) {
+  const [agregando, setAgregando] = useState<string | null>(null);
+
+  const agregar = async (fullName: string) => {
+    setAgregando(fullName);
+    try {
+      const { repo } = await api.post<{ repo: GithubRepo }>(`/workspaces/${workspaceId}/github/repos`, {
+        url: fullName,
+      });
+      toast.success(`«${fullName}» conectado`);
+      onAdded(repo);
+    } catch (caught) {
+      toast.error(caught instanceof ApiError ? caught.message : "no se pudo añadir");
+    } finally {
+      setAgregando(null);
+    }
+  };
+
+  return (
+    <Tarjeta className="devup-entrada mt-4 overflow-hidden">
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold">Repositorios disponibles</h2>
+        <Rotulo className="mt-0.5 block">De la cuenta que conectaste, todavía sin añadir aquí</Rotulo>
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        {repos.map((repo) => (
+          <div
+            key={repo.fullName}
+            className="flex items-center justify-between gap-3 border-b border-line/60 px-4 py-2.5 last:border-0"
+          >
+            <div className="min-w-0">
+              <p className="truncate font-mono text-xs text-ink">{repo.fullName}</p>
+              {repo.description && (
+                <p className="mt-0.5 truncate text-[11px] text-faint">{repo.description}</p>
+              )}
+            </div>
+            <Boton
+              variante="fantasma"
+              tamano="sm"
+              icono={<Plus size={13} />}
+              cargando={agregando === repo.fullName}
+              onClick={() => agregar(repo.fullName)}
+              className="shrink-0"
+            >
+              Añadir
+            </Boton>
+          </div>
+        ))}
+      </div>
     </Tarjeta>
   );
 }
