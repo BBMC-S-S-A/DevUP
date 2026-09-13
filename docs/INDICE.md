@@ -88,6 +88,30 @@ sin la mitad de sus referencias.
 
 ---
 
+## Cómo llevar esto a las bóvedas de Obsidian
+
+Hay dos bóvedas —la local y la del repositorio `boveda-obsidian`— y la
+documentación vive en una tercera parte: este repositorio. **Tres copias a mano
+se desincronizan la primera semana**, y entonces cada una dice algo distinto sin
+que ninguna avise, que es exactamente el problema que este índice viene a
+arreglar.
+
+Así que hay UNA fuente —`docs/`, aquí— y las bóvedas reciben una copia marcada:
+
+```
+npm run vault -- /ruta/a/la/boveda-local/DevUP
+npm run vault -- /ruta/al/clon/de/boveda-obsidian/DevUP
+```
+
+Se puede correr las veces que haga falta: la carpeta de destino se regenera
+entera. Cada nota sale con una cabecera que dice de dónde viene y que **no se
+edita ahí** — sin eso, alguien corrige una nota en la bóveda, la siguiente
+exportación se la lleva, y el trabajo desaparece sin que nada lo diga.
+
+Se copia y no se enlaza a propósito: un enlace simbólico se rompe al clonar en
+otra máquina y no sobrevive a Git, y un submódulo mete el repositorio de código
+entero dentro de una bóveda de notas.
+
 ## Cómo se mantiene esto
 
 Tres reglas, y la tercera es la que suele saltarse.
