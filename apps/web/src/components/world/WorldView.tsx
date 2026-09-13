@@ -190,6 +190,20 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   voiceRef.current = { joinChannel, leaveChannel };
 
   /**
+   * Si la llamada que suena ahora la empezó el mundo, caminando.
+   *
+   * ES LA PIEZA QUE DECIDE SI SE PUEDE COLGAR. Antes DevVerse colgaba en dos
+   * sitios sin preguntarse de quién era la llamada: al ver que no estabas en
+   * una zona de voz, y al desmontarse. Consecuencia: estabas hablando en un
+   * canal desde la vista profesional, entrabas a DevVerse —o te ibas al panel—
+   * y se te caía la llamada sin que nadie la hubiera colgado.
+   *
+   * Con esto, el mundo solo cuelga lo que el mundo conectó. Una llamada que
+   * empezó en otra pantalla no es suya y no la toca.
+   */
+  const unidoCaminando = useRef(false);
+
+  /**
    * Cruzar una puerta es entrar en el canal.
    *
    * Aquí es donde la regla del documento 0002 deja de ser prosa: una zona de
@@ -202,10 +216,19 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       if (!zone || zone.channelKind !== "voice") {
         // Una zona de texto no arrastra a nadie a una llamada: se entra y se
         // sale de un canal de texto leyendo, no hablando.
-        voiceRef.current.leaveChannel();
+        //
+        // SOLO SE CUELGA LO QUE SE CONECTÓ CAMINANDO. Salir de una sala de voz
+        // dentro del mundo sí cuelga —si no, estar dentro de la sala no
+        // significaría nada—, pero una llamada que venía de otra pantalla
+        // sobrevive a pasear por aquí.
+        if (unidoCaminando.current) {
+          voiceRef.current.leaveChannel();
+          unidoCaminando.current = false;
+        }
         return;
       }
       voiceRef.current.joinChannel(zone.channelId, workspaceId, zone.channelName);
+      unidoCaminando.current = true;
     },
     [workspaceId],
   );
@@ -623,11 +646,17 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const findActionRef = useRef(findAction);
   findActionRef.current = findAction;
 
-  // Salir de la oficina cuelga la llamada: quedarse dentro de un canal al que
-  // se entró caminando, después de cerrar la vista, no lo espera nadie.
-  // Sin dependencias y a través de la referencia: ver el comentario de
-  // `voiceRef`. Con `[leaveChannel]` esto era un bucle infinito.
-  useEffect(() => () => voiceRef.current.leaveChannel(), []);
+  // SALIR DE LA OFICINA YA NO CUELGA. Esto colgaba al desmontarse, y era el
+  // segundo sitio por el que se caía una llamada sin que nadie la colgara:
+  // pasar de DevVerse al panel, o a cualquier otra pantalla, la mataba.
+  //
+  // Una llamada solo termina cuando se cuelga o cuando se cierra la sesión. La
+  // barra de llamada activa existe justamente para eso — para llevarla contigo
+  // por el resto del producto—, así que colgarla al cambiar de pantalla era
+  // contradecir a la pieza que ya estaba construida para lo contrario.
+  //
+  // Sí se mantiene la regla DENTRO del mundo: caminar fuera de una sala de voz
+  // cuelga lo que se conectó caminando. Ver `onZoneChange`.
 
   const { refreshAvatars } = world;
   /**
