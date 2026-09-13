@@ -764,6 +764,7 @@ queda. Comprobado contra el código y contra el tablero, no contra la memoria._
 | Mirar un enlace de recuperación sin gastarlo | 0054 |
 | **Los puntos**: se ganan al cerrar, en la base, y se ven | 0055, `lib/puntos.ts`, MCP `puntos` |
 | El oficio y el rol por organización, que estaban sin puerta | 0048, 0052 + `/organizations/:id/me` |
+| **El lienzo: decidido que no se retoma**, y no había nada que borrar | — |
 
 ### 10.2 Base, API y MCP — lo que queda
 
@@ -832,6 +833,33 @@ nada antes de empezar.
 3. **Variables de entorno e infraestructura**, que no se hacen a medias:
    custodia de `VAULT_MASTER_KEY`, TURN o Metered, correo de verdad, respaldos
    fuera de la máquina con restauración probada, S3 de producción.
+
+### 10.4.1 El lienzo no se retoma, y nunca llegó a existir
+
+**Decidido el 13 de septiembre de 2026: se descarta.** Queda escrito porque lo
+contrario es que alguien lo vuelva a encontrar dentro de tres meses y no sepa si
+es trabajo a medias o resto muerto.
+
+El módulo se apartó en septiembre por ser trabajo de escalar y no de MVP, con el
+MVP encima. Al ir a borrarlo **no había nada que borrar**, y conviene decir
+exactamente qué se comprobó, porque el mapa de flujos lo describía de dos
+maneras y ninguna era esta:
+
+- `app/w/[workspaceId]/lienzo/` y su `[canvasId]/` eran **dos carpetas vacías**,
+  sin un solo archivo dentro. Git no versiona carpetas vacías, así que **nunca
+  estuvieron en el repositorio**: existían solo en un disco.
+- **Ni una ruta de API, ni una tabla, ni una migración** hablan de lienzo o de
+  canvas. No hay nada que retirar de la base — que además no se toca.
+- Ninguna pantalla lo enlazaba ni lo importaba. Las apariciones de la palabra
+  «lienzo» en el código son todas del **diagrama de arquitectura**, que llama
+  así a su superficie de dibujo. Eso se queda: es otra cosa y está viva.
+
+El hallazgo #10 del mapa de flujos («carpeta vacía sin `page.tsx`… puro resto
+muerto») era el que acertaba. La corrección posterior —«hoy contiene
+`[canvasId]/`, es el módulo apartado»— **era falsa**: ese `[canvasId]` también
+estaba vacío.
+
+Si algún día se retoma, se empieza de cero. No hay nada que recuperar.
 
 ### 10.5 Decisiones, que no son código
 
