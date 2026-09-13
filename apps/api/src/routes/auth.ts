@@ -22,6 +22,7 @@ import {
 } from "../auth/tokens.js";
 import { type Db, withUser } from "../db/pool.js";
 import { env } from "../env.js";
+import { signDownload } from "../storage/s3.js";
 import {
   HttpError,
   forbidden,
@@ -53,28 +54,74 @@ export type Me = {
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  /** Si su cara es el personaje de DevVerse en vez de una foto (0058). */
+  usaPersonaje: boolean;
+  /**
+   * Si ya vio el recorrido de bienvenida (0059).
+   *
+   * Va en la sesión y no en una ruta aparte porque lo necesita el armazón para
+   * decidir si abrirlo, y eso pasa ANTES de que la pantalla de dentro monte:
+   * una petición más ahí sería medio segundo de aplicación normal antes de que
+   * el recorrido se abriera encima, que es peor que no tenerlo.
+   */
+  recorridoVisto: boolean;
   emailVerified: boolean;
   /** La cartelera. Viaja con la sesión porque el selector de presencia
    *  vive en la barra y está en pantalla siempre. */
   presence: "available" | "busy_open" | "do_not_disturb";
   title: string | null;
+  /**
+   * El huso de esta persona (0056). Nulo = no lo ha dicho, y entonces manda
+   * UTC.
+   *
+   * Va en la sesión y no en una ruta aparte porque lo necesita cualquier
+   * pantalla que pinte una fecha, y pedirlo por su cuenta obligaría a cada una
+   * a esperar una petición más para saber en qué día vive quien mira.
+   */
+  timezone: string | null;
 };
 
 async function loadMe(db: Db, userId: string): Promise<Me> {
   const { rows } = await db.query<Me>(
     `select u.id, u.email::text as "email",
             p.display_name as "displayName",
-            p.avatar_url   as "avatarUrl",
-            p.presence, p.title,
+            p.avatar_key    as "avatarKey",
+            p.avatar_url    as "avatarUrl",
+            p.usa_personaje as "usaPersonaje",
+            (p.recorrido_visto is not null) as "recorridoVisto",
+            p.presence, p.title, p.timezone,
             (u.email_verified_at is not null) as "emailVerified"
        from users u
        join profiles p on p.id = u.id
       where u.id = $1`,
     [userId],
   );
-  const me = rows[0];
+  const me = rows[0] as (Me & { avatarKey: string | null }) | undefined;
   if (!me) throw unauthorized("la cuenta ya no existe");
-  return me;
+
+  /**
+   * La foto, YA RESUELTA, y la clave no sale de aquí.
+   *
+   * LA SUBIDA GANA A LA DE GOOGLE (0057): si alguien se molestó en poner una
+   * foto, esa es la que quiere — la de Google llegó sola. Se decide en este
+   * único sitio para que ninguna pantalla tenga que conocer la regla: la que
+   * se la olvidara enseñaría la de Google a quien acaba de cambiarla, y se
+   * vería perfectamente normal.
+   *
+   * Firmar cuesta un HMAC local, no una llamada al almacén, y esto corre una
+   * vez por sesión y no por cada pintada.
+   */
+  const { avatarKey, ...resto } = me;
+  return {
+    ...resto,
+    // Si eligió el personaje, no se manda ninguna foto: quien pinta la chapa
+    // decide por lo que RECIBE, no por una regla que tenga que recordar.
+    avatarUrl: resto.usaPersonaje
+      ? null
+      : avatarKey
+        ? await signDownload(avatarKey, "foto", "inline")
+        : resto.avatarUrl,
+  };
 }
 
 /** Abre sesión: token de acceso corto y token de refresco rotatorio. */

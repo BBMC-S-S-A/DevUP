@@ -10,6 +10,7 @@ import { Boton } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { Marcador } from "@/components/puntos/Marcador";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 
@@ -49,6 +50,15 @@ export default function OrganizacionPage() {
         <Cargando etiqueta="Cargando espacios" />
       ) : (
         <div className="space-y-4">
+          {/* EL MARCADOR VA EN LA PORTADA Y NO EN UNA PANTALLA PROPIA. Los
+              puntos se ganan solos al cerrar tareas; una pantalla a la que hay
+              que acordarse de ir no la abre nadie, y entonces lo que se gana no
+              lo ve nadie — que es lo mismo que no ganarlo.
+              Y cuando está vacío se queda igualmente, diciendo CÓMO se ganan:
+              es lo único que explica la mecánica a quien acaba de llegar, y un
+              hueco en blanco no enseña nada. */}
+          <Marcador orgId={orgId} />
+
           {lista.length === 0 ? (
             <EstadoVacio
               icono={<Users size={20} />}

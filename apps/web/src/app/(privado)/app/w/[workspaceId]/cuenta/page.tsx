@@ -4,6 +4,7 @@ import {
   Bot,
   Check,
   Copy,
+  ImagePlus,
   KeyRound,
   Loader2,
   Monitor,
@@ -13,15 +14,29 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { Pagina } from "@/components/ui/Pagina";
-import { type ConexionDeAgente, type Sesion, ApiError, api } from "@/lib/api";
+import {
+  type AspectoDePersonaje,
+  type ConexionDeAgente,
+  type Sesion,
+  ApiError,
+  api,
+} from "@/lib/api";
+import { Dispositivos } from "@/components/ajustes/Dispositivos";
+import { DatosVisibles } from "@/components/ajustes/DatosVisibles";
+import { Avisos } from "@/components/ajustes/Avisos";
+import { uploadAvatar } from "@/lib/files/upload";
+import { CaraDePersonaje } from "@/components/perfil/CaraDePersonaje";
+import { ignorar } from "@/lib/fallo";
 import { useSession } from "@/lib/session";
+import { useOrgId } from "@/lib/workspace-context";
+import { useRecurso } from "@/lib/datos";
 import { iniciales } from "@/lib/fechas";
 
 /**
@@ -47,11 +62,208 @@ export default function CuentaPage() {
     >
       <div className="space-y-4">
         <Perfil />
+        <EnEstaOrganizacion />
+        {/* Aquí y no dentro de la llamada: probar el micrófono ANTES cuesta
+            diez segundos, descubrir que estaba mal DENTRO cuesta la reunión de
+            todos. Es de «Mi cuenta» porque es de la persona en su mesa, no de
+            la organización. */}
+        <Avisos />
+        <Dispositivos />
+        {/* Detrás de lo que se rellena, y no delante: primero se pone el
+            nombre, la cara y el oficio, y ahí es cuando importa saber a quién
+            le llega. Delante sería una advertencia antes de que hubiera nada
+            que advertir. */}
+        <DatosVisibles />
         <ClaveDeIA />
         <ConexionesDeAgente />
         <Navegadores />
       </div>
     </Pagina>
+  );
+}
+
+/**
+ * Lo que cambia de una organización a otra: el oficio de aquí y el rol.
+ *
+ * VA APARTE DEL PERFIL A PROPÓSITO, aunque los dos hablen de «a qué te
+ * dedicas». El de arriba es la persona en general —un nombre, un cargo— y este
+ * cambia de proyecto en proyecto: la misma persona es «backend» en uno y
+ * «plataforma» en otro (migración 0048). Juntarlos obligaría a elegir cuál de
+ * los dos gana, y la respuesta es que no gana ninguno: son dos datos.
+ *
+ * Y TRES COSAS QUE SE LLAMAN PARECIDO Y NO SON LA MISMA. Si esta pantalla las
+ * juntara, repartiría permisos sin querer:
+ *
+ *  · El PERMISO (owner/admin/member) no se elige: lo da quien administra. Aquí
+ *    se enseña y no se toca.
+ *  · El OFICIO es texto libre y es lo que ve el resto. Vacío = se enseña el
+ *    general del perfil de arriba.
+ *  · El ROL es una lista cerrada de trece y su única función es elegir qué
+ *    tutorial se ofrece (migración 0052). Nadie más lo ve.
+ *
+ * NO ES OBLIGATORIO ELEGIR ROL, y es deliberado: un formulario en la puerta es
+ * la forma más rápida de que alguien cierre la pestaña. Sin rol se ofrece el
+ * tutorial base, que vale para todos.
+ */
+const ROLES: { valor: string; etiqueta: string }[] = [
+  { valor: "producto", etiqueta: "Producto" },
+  { valor: "gestion", etiqueta: "Gestión de proyecto" },
+  { valor: "direccion", etiqueta: "Dirección técnica" },
+  { valor: "frontend", etiqueta: "Frontend" },
+  { valor: "backend", etiqueta: "Backend" },
+  { valor: "fullstack", etiqueta: "Fullstack" },
+  { valor: "movil", etiqueta: "Móvil" },
+  { valor: "diseno", etiqueta: "Diseño (UX/UI)" },
+  { valor: "qa", etiqueta: "Calidad y pruebas" },
+  { valor: "datos", etiqueta: "Datos" },
+  { valor: "ia", etiqueta: "IA" },
+  { valor: "plataforma", etiqueta: "Plataforma / DevOps" },
+  { valor: "seguridad", etiqueta: "Seguridad" },
+];
+
+const PERMISOS: Record<string, string> = {
+  owner: "Propietario",
+  admin: "Administra",
+  member: "Miembro",
+};
+
+type MiFicha = {
+  role: string;
+  title: string | null;
+  tituloGeneral: string | null;
+  rol: string | null;
+};
+
+function EnEstaOrganizacion() {
+  const orgId = useOrgId();
+  const { refresh: refrescarSesion } = useSession();
+  const ficha = useRecurso<MiFicha>(`/organizations/${orgId}/me`);
+  const [oficio, setOficio] = useState("");
+  const [sembrado, setSembrado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  // Se siembra una sola vez, igual que el perfil de arriba: reasignarlo en cada
+  // renderizado haría imposible escribir en el campo.
+  useEffect(() => {
+    if (sembrado || !ficha.datos) return;
+    setOficio(ficha.datos.title ?? "");
+    setSembrado(true);
+  }, [ficha.datos, sembrado]);
+
+  const volverAVerRecorrido = async () => {
+    try {
+      await api.put("/me/recorrido", { visto: false });
+      // La SESIÓN y no `ficha`: la marca de «ya lo vio» viaja en `/auth/me`, no
+      // en la ficha de la organización. Recargar la ficha no la tocaría, y el
+      // mensaje de abajo estaría prometiendo algo que no pasa hasta recargar la
+      // página a mano.
+      await refrescarSesion();
+      toast.success("te la enseñamos al volver al espacio");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo");
+    }
+  };
+
+  const guardar = async (cambio: { title?: string; rol?: string | null }) => {
+    setGuardando(true);
+    try {
+      await api.patch(`/organizations/${orgId}/me`, cambio);
+      await ficha.recargar();
+      toast.success("guardado");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (ficha.error || (!ficha.datos && !ficha.cargando)) return null;
+
+  const cambiado = sembrado && oficio.trim() !== (ficha.datos?.title ?? "");
+
+  return (
+    <Tarjeta className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Rotulo>En esta organización</Rotulo>
+        {ficha.datos && (
+          <Chip tono={ficha.datos.role === "member" ? "neutro" : "accent"}>
+            {PERMISOS[ficha.datos.role] ?? ficha.datos.role}
+          </Chip>
+        )}
+      </div>
+      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+        Lo de arriba vale en todas partes. Esto solo aquí: la misma persona puede
+        ser «backend» en un proyecto y «plataforma» en otro.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        <div>
+          <Field
+            label="Tu oficio aquí"
+            value={oficio}
+            onChange={setOficio}
+            maxLength={40}
+            placeholder={ficha.datos?.tituloGeneral ?? "backend, diseño, producto…"}
+          />
+          <p className="mt-1.5 text-[11px] text-faint">
+            {ficha.datos?.tituloGeneral
+              ? `Si lo dejas en blanco se enseña «${ficha.datos.tituloGeneral}», el de tu perfil.`
+              : "Si lo dejas en blanco se enseña el de tu perfil."}
+          </p>
+          {cambiado && (
+            <Boton
+              variante="primario"
+              tamano="sm"
+              className="mt-2"
+              cargando={guardando}
+              onClick={() => void guardar({ title: oficio.trim() })}
+            >
+              Guardar
+            </Boton>
+          )}
+        </div>
+
+        <div className="border-t border-line pt-3">
+          <label className="block">
+            <Rotulo className="mb-1.5 block">A qué te dedicas</Rotulo>
+            <select
+              value={ficha.datos?.rol ?? ""}
+              disabled={guardando}
+              onChange={(e) => void guardar({ rol: e.target.value || null })}
+              className="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink"
+            >
+              <option value="">Sin elegir</option>
+              {ROLES.map((r) => (
+                <option key={r.valor} value={r.valor}>
+                  {r.etiqueta}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* Se dice qué hace y qué NO hace. Un desplegable junto a un permiso
+              se lee como si repartiera permisos, y este no toca ninguno. */}
+          <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+            Solo sirve para ofrecerte el recorrido de bienvenida que te encaje.
+            No cambia lo que puedes hacer, y no lo ve nadie más. Puedes dejarlo
+            sin elegir.
+          </p>
+
+          {/* CERRAR EL RECORRIDO CUENTA COMO VERLO, así que tiene que haber una
+              forma de pedirlo otra vez o la decisión sería irreversible. Y va
+              aquí, pegado al rol, porque es el único sitio donde alguien que
+              quiere «el de mi puesto» va a mirar. */}
+          <Boton
+            variante="fantasma"
+            tamano="sm"
+            className="mt-2"
+            icono={<Sparkles size={13} />}
+            onClick={() => void volverAVerRecorrido()}
+          >
+            Volver a ver la bienvenida
+          </Boton>
+        </div>
+      </div>
+    </Tarjeta>
   );
 }
 
@@ -126,16 +338,346 @@ const FICHA: Record<
  * que se escribió, y la única pantalla que llamaba a esa ruta mandaba
  * únicamente la presencia. Otra función construida que no se podía encontrar.
  *
- * LA FOTO NO ESTÁ, Y NO SE FINGE. `profiles.avatar_url` existe, pero solo se
- * escribe al entrar con Google y no se pinta en ninguna pantalla: en toda la
- * aplicación el avatar es la inicial. Añadir la subida sin cambiar además todos
- * los sitios que dibujan esa chapa daría una foto que solo se ve aquí, que es
- * peor que no tenerla.
+ * LA FOTO YA SE PUEDE PONER (0057), y hay que decir hasta dónde llega. Antes
+ * `profiles.avatar_url` solo la escribía entrar con Google, así que quien se
+ * registró con correo no tenía ninguna forma de tener foto. Ahora se sube, se
+ * cambia y se quita desde aquí.
+ *
+ * Lo que TODAVÍA no pasa: casi todas las pantallas siguen dibujando la inicial,
+ * porque cada una construye su chapa por su cuenta. Eso es lo siguiente, y se
+ * dice en vez de dejar que alguien descubra solo que su foto se ve en un sitio
+ * y en otro no.
+ *
+ * QUITARLA NO BORRA LA DE GOOGLE, y por eso se siente como deshacer: quien
+ * entró con Google vuelve a la suya, y quien no, a la inicial.
  */
+/**
+ * La foto de perfil: ponerla, cambiarla y quitarla.
+ *
+ * SE PINTA LO QUE SE ACABA DE ELEGIR, sin esperar a recargar la sesión. El
+ * viaje de subir y confirmar dura lo suyo, y durante ese rato la pantalla
+ * seguiría enseñando la foto anterior — que es justo lo que hace dudar de si el
+ * cambio funcionó y lleva a subirla otra vez.
+ *
+ * EL TAMAÑO SE COMPRUEBA AQUÍ aunque el almacén acepte lo que sea: una foto de
+ * diez megas se sube entera, se guarda, y luego se pinta en una chapa de
+ * cuarenta píxeles en cada tarjeta del tablero. El coste lo paga quien la mira,
+ * no quien la sube, así que no se nota al elegirla.
+ */
+function FotoDePerfil() {
+  const { user, refresh } = useSession();
+  const entrada = useRef<HTMLInputElement | null>(null);
+  const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  /**
+   * El personaje se pide aparte y SIEMPRE, se esté usando o no.
+   *
+   * Es lo que permite enseñar las dos caras a la vez para elegir. Ofrecer
+   * «usar mi personaje» sin enseñarlo obliga a elegir a ciegas, ir a DevVerse a
+   * verlo, y volver — y quien haga eso dos veces deja de tocarlo.
+   */
+  const [personaje, setPersonaje] = useState<AspectoDePersonaje | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let vigente = true;
+    // Por `/world/avatars` y no por una ruta propia: es la que ya existe y la
+    // que usa DevVerse, así que comparte caché con ella. Devuelve los de la
+    // organización y de ahí se saca el propio — pedir una ruta nueva para una
+    // sola fila sería una segunda forma de preguntar lo mismo.
+    api
+      .get<{ avatars: (AspectoDePersonaje & { userId: string })[] }>("/world/avatars")
+      .then(({ avatars }) => {
+        const mio = avatars.find((a) => a.userId === user.id);
+        if (vigente && mio) setPersonaje(mio);
+      })
+      .catch(ignorar("no se pudo cargar tu personaje"));
+    return () => {
+      vigente = false;
+    };
+  }, [user]);
+
+  const usaPersonaje = user?.usaPersonaje ?? false;
+  const actual = vistaPrevia ?? user?.avatarUrl ?? null;
+
+  const elegirFuente = async (usar: boolean) => {
+    setOcupado(true);
+    try {
+      await api.put("/me/avatar/personaje", { usar });
+      await refresh();
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo cambiar");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const elegir = async (fichero: File | undefined) => {
+    if (!fichero) return;
+    if (!fichero.type.startsWith("image/")) {
+      toast.error("tiene que ser una imagen");
+      return;
+    }
+    if (fichero.size > 5 * 1024 * 1024) {
+      toast.error("la foto pesa más de 5 MB", {
+        description: "Se va a pintar en chapas pequeñas: con menos sobra.",
+      });
+      return;
+    }
+
+    setOcupado(true);
+    try {
+      const url = await uploadAvatar(fichero);
+      setVistaPrevia(url);
+      // La sesión también, porque el avatar se lee de ahí en la barra.
+      await refresh();
+      toast.success("foto actualizada");
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo subir la foto");
+    } finally {
+      setOcupado(false);
+      // Se limpia el campo para que volver a elegir EL MISMO fichero dispare el
+      // evento: si no, corregir una foto mal recortada y volver a elegirla no
+      // hace nada, y parece que la aplicación la ignora.
+      if (entrada.current) entrada.current.value = "";
+    }
+  };
+
+  const quitar = async () => {
+    setOcupado(true);
+    try {
+      await api.delete("/me/avatar");
+      setVistaPrevia(null);
+      await refresh();
+      toast.success("foto quitada");
+    } catch (fallo) {
+      toast.error(fallo instanceof ApiError ? fallo.message : "no se pudo quitar");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <div>
+      {/* LAS DOS CARAS A LA VEZ, y por eso el personaje se pide aunque no se
+          esté usando. Ofrecer «usa tu personaje» sin enseñarlo obliga a elegir
+          a ciegas, ir a DevVerse a verlo y volver — y quien hace eso dos veces
+          deja de tocarlo. */}
+      <div className="flex flex-wrap gap-2">
+        <OpcionDeCara
+          elegida={!usaPersonaje}
+          titulo="Una foto"
+          disabled={ocupado}
+          onElegir={() => void elegirFuente(false)}
+        >
+          {actual ? (
+            // eslint-disable-next-line @next/next/no-img-element -- la URL
+            // viene firmada y caduca; el optimizador de Next no puede con eso.
+            <img src={actual} alt="" className="size-full object-cover" />
+          ) : (
+            <span className="font-display text-base font-semibold text-accent-bright">
+              {iniciales(user?.displayName || "?")}
+            </span>
+          )}
+        </OpcionDeCara>
+
+        <OpcionDeCara
+          elegida={usaPersonaje}
+          titulo="Tu personaje"
+          disabled={ocupado || !personaje}
+          onElegir={() => void elegirFuente(true)}
+        >
+          {personaje ? (
+            <CaraDePersonaje look={personaje} tamano={40} />
+          ) : (
+            <span className="text-[10px] text-faint">…</span>
+          )}
+        </OpcionDeCara>
+      </div>
+
+      <input
+        ref={entrada}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+        hidden
+        onChange={(e) => void elegir(e.target.files?.[0])}
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Boton
+          variante="fantasma"
+          tamano="sm"
+          icono={<ImagePlus size={14} />}
+          cargando={ocupado}
+          onClick={() => entrada.current?.click()}
+        >
+          {actual ? "Cambiar foto" : "Subir una foto"}
+        </Boton>
+        {actual && (
+          <Boton variante="fantasma" tamano="sm" disabled={ocupado} onClick={() => void quitar()}>
+            Quitar la foto
+          </Boton>
+        )}
+      </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-faint">
+        {usaPersonaje
+          ? "Tu personaje se dibuja al vuelo: si te cambias de ropa en DevVerse, cambia aquí también."
+          : "Se ve al lado de tu nombre. Cuadrada queda mejor: se recorta al centro."}
+      </p>
+    </div>
+  );
+}
+
+/** Una de las dos caras, para poder compararlas antes de elegir. */
+function OpcionDeCara({
+  elegida,
+  titulo,
+  disabled,
+  onElegir,
+  children,
+}: {
+  elegida: boolean;
+  titulo: string;
+  disabled: boolean;
+  onElegir: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onElegir}
+      aria-pressed={elegida}
+      className={`presionable flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left
+        transition-colors disabled:opacity-60 ${
+          elegida ? "border-accent/50 bg-accent-soft/40" : "border-line hover:border-line-strong"
+        }`}
+    >
+      <span
+        aria-hidden
+        className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl border
+          border-line-strong bg-accent-soft/70"
+      >
+        {children}
+      </span>
+      <span className="text-xs font-medium text-ink">{titulo}</span>
+    </button>
+  );
+}
+
+/**
+ * El huso horario.
+ *
+ * POR QUÉ IMPORTA, QUE NO ES OBVIO. Sin él, todo lo que el servidor cuenta por
+ * días o por semanas va en UTC — y en UTC, lo que se cerró un domingo por la
+ * tarde en Bogotá cuenta en la semana SIGUIENTE. El hito no se pierde: aparece
+ * en la casilla equivocada, y la pantalla se ve perfectamente normal. Eso ya
+ * pasó una vez con el embudo y el panel.
+ *
+ * Hasta ahora lo tapaba el navegador, que manda el suyo en cada petición. Pero
+ * eso solo funciona cuando hay un navegador delante: ni el asistente, ni un
+ * correo, ni un aviso que el servidor mande por su cuenta tienen a quién
+ * preguntárselo.
+ *
+ * LA LISTA LA PONE EL NAVEGADOR y no nosotros: `Intl.supportedValuesOf` conoce
+ * la de verdad y se actualiza con él. Una lista escrita a mano envejece, y el
+ * día que un país cambie sus reglas tendríamos una copia vieja diciendo que un
+ * huso que existe no existe.
+ *
+ * Y SE OFRECE EL DEL NAVEGADOR DE UN CLIC, porque es el acierto en el 99 % de
+ * los casos: quien abre esto está donde está. Buscar «America/Bogota» entre
+ * cuatrocientos nombres para acabar eligiendo el que ya se sabía es trabajo
+ * inventado.
+ */
+function SelectorDeHuso({
+  valor,
+  onCambiar,
+}: {
+  valor: string;
+  onCambiar: (v: string) => void;
+}) {
+  // En estado y no calculado al vuelo: `Intl` solo existe en el navegador, y
+  // leerlo al renderizar daría una pantalla en el servidor y otra al hidratar.
+  const [husos, setHusos] = useState<string[]>([]);
+  const [delNavegador, setDelNavegador] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setDelNavegador(Intl.DateTimeFormat().resolvedOptions().timeZone || null);
+      // `supportedValuesOf` no existe en todos los navegadores. Si no está, se
+      // queda la lista vacía y abajo se cae a un campo de texto, que sigue
+      // funcionando — el servidor valida contra la lista de Postgres de todos
+      // modos.
+      const conLista = Intl as unknown as { supportedValuesOf?: (k: string) => string[] };
+      setHusos(conLista.supportedValuesOf?.("timeZone") ?? []);
+    } catch {
+      // Un navegador que no sabe dónde está no es motivo para romper la página.
+    }
+  }, []);
+
+  const ahora = valor
+    ? new Date().toLocaleTimeString("es-ES", {
+        timeZone: valor,
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div>
+      <Rotulo className="mb-1.5 block">Huso horario</Rotulo>
+
+      {husos.length > 0 ? (
+        <select
+          value={valor}
+          aria-label="Huso horario"
+          onChange={(e) => onCambiar(e.target.value)}
+          className="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink"
+        >
+          <option value="">Sin decir — se usa UTC</option>
+          {husos.map((h) => (
+            <option key={h} value={h}>
+              {h}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <Field
+          label=""
+          value={valor}
+          onChange={onCambiar}
+          maxLength={60}
+          placeholder="America/Bogota"
+        />
+      )}
+
+      <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+        {ahora ? `Ahí son las ${ahora}. ` : ""}
+        Sin esto, el diario y los recuentos por semana van en UTC — y en UTC lo
+        que cierras un domingo por la tarde cuenta en la semana siguiente.
+        {delNavegador && delNavegador !== valor && (
+          <>
+            {" "}
+            <button
+              type="button"
+              onClick={() => onCambiar(delNavegador)}
+              className="presionable text-accent-bright underline underline-offset-2"
+            >
+              Usar el de este navegador ({delNavegador})
+            </button>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
 function Perfil() {
   const { user, refresh } = useSession();
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
+  const [huso, setHuso] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [reenviando, setReenviando] = useState(false);
 
@@ -145,10 +687,15 @@ function Perfil() {
     if (!user) return;
     setNombre(user.displayName ?? "");
     setCargo(user.title ?? "");
+    setHuso(user.timezone ?? "");
   }, [user]);
 
   const limpio = nombre.trim();
-  const cambiado = Boolean(user) && (limpio !== (user?.displayName ?? "") || cargo.trim() !== (user?.title ?? ""));
+  const cambiado =
+    Boolean(user) &&
+    (limpio !== (user?.displayName ?? "") ||
+      cargo.trim() !== (user?.title ?? "") ||
+      huso !== (user?.timezone ?? ""));
 
   const reenviar = async () => {
     setReenviando(true);
@@ -173,7 +720,11 @@ function Perfil() {
     }
     setGuardando(true);
     try {
-      await api.patch("/me/profile", { displayName: limpio, title: cargo.trim() });
+      await api.patch("/me/profile", {
+        displayName: limpio,
+        title: cargo.trim(),
+        timezone: huso,
+      });
       // Se recarga la sesión y no solo el estado local: el nombre se pinta en
       // la barra lateral, en las menciones y en cada tarjeta que hayas tocado.
       // Sin esto, cambiarlo aquí dejaría el resto de la pantalla diciendo el
@@ -194,15 +745,11 @@ function Perfil() {
         Cómo te ve el resto del equipo: en la barra, en las menciones y en cada tarea que lleves.
       </p>
 
-      <div className="mt-4 flex items-start gap-3.5">
-        <span
-          aria-hidden
-          className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line-strong
-            bg-accent-soft/70 font-display text-base font-semibold text-accent-bright"
-        >
-          {iniciales(nombre || user?.displayName || "?")}
-        </span>
+      <div className="mt-4">
+        <FotoDePerfil />
+      </div>
 
+      <div className="mt-4 flex items-start gap-3.5">
         <div className="min-w-0 flex-1 space-y-3">
           <Field
             label="Nombre"
@@ -220,6 +767,8 @@ function Perfil() {
             maxLength={40}
             placeholder="Backend, diseño, ventas…"
           />
+
+          <SelectorDeHuso valor={huso} onCambiar={setHuso} />
 
           <p className="text-[11px] text-faint">
             El correo ({user?.email}) no se cambia desde aquí: es con lo que entras.

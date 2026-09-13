@@ -3,7 +3,25 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
 import { WIDGETS_CON_DATOS, datosDeWidgets } from "../lib/widgets.js";
-import { notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  parseBody,
+  parseParams,
+  parseQuery,
+  requireUser,
+} from "../lib/http.js";
+import { saludDeLaInstalacion } from "../lib/salud.js";
+import { env } from "../env.js";
+import {
+  buildUserAssetKey,
+  deleteObject,
+  headObject,
+  signDownload,
+  signUpload,
+  userOfKey,
+} from "../storage/s3.js";
 
 /**
  * La lista CERRADA de la 0052. Se escribe aquí además de en la base porque zod
@@ -266,15 +284,32 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
          * pantallas tendrían que inventarse un texto de relleno.
          */
         displayName: z.string().trim().min(1).max(80).optional(),
+        /**
+         * El huso, en nombre IANA («America/Bogota»). Cadena vacía lo borra y
+         * vuelve a UTC, igual que `title`.
+         *
+         * Va aquí y no en `/organizations/:id/me` porque una persona está donde
+         * está: no cambia de huso al cambiar de proyecto. Lo que sí cambia de
+         * una organización a otra es el oficio, y eso vive allí.
+         */
+        timezone: z.string().trim().max(60).optional(),
       }),
       request.body,
     );
 
     return withUser(userId, async (db) => {
+      // Por su función y no con un UPDATE aquí: la validación contra la lista
+      // de husos de Postgres vive dentro (0056), y meterla también aquí sería
+      // una segunda copia de la misma regla, que es como acaban discrepando.
+      if (body.timezone !== undefined) {
+        await db.query("select public.set_my_timezone($1)", [body.timezone]);
+      }
+
       const { rows } = await db.query<{
         presence: string;
         title: string | null;
         displayName: string;
+        timezone: string | null;
       }>(
         `update profiles
             set presence = coalesce($2::presence_state, presence),
@@ -285,11 +320,282 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
                            end,
                 display_name = coalesce(nullif(btrim($4), ''), display_name)
           where id = $1
-      returning presence, title, display_name as "displayName"`,
+      returning presence, title, display_name as "displayName", timezone`,
         [userId, body.presence ?? null, body.title ?? null, body.displayName ?? null],
       );
       return rows[0]!;
     });
+  });
+
+  /**
+   * El estado de esta instalación.
+   *
+   * SOLO QUIEN ADMINISTRA, y se comprueba con `is_org_admin` y no mirando el
+   * rol en la sesión: la regla de quién administra vive en la base y consultarla
+   * ahí es lo que impide que una copia se quede vieja.
+   *
+   * VA COLGADO DE UNA ORGANIZACIÓN aunque lo que cuenta sea de la instalación
+   * entera, y conviene saber por qué: en DevUP no existe un «administrador del
+   * sistema» — el permiso más alto que hay es administrar una organización. Así
+   * que la pregunta que se puede contestar no es «¿eres superusuario?» sino
+   * «¿administras esto?», y eso obliga a nombrar cuál.
+   *
+   * No devuelve ni una clave ni una dirección: ver `lib/salud.ts`. Una pantalla
+   * de diagnóstico que enseña la mitad de un secreto es una filtración con
+   * buena intención.
+   */
+  app.get("/organizations/:orgId/salud", async (request) => {
+    const userId = requireUser(request);
+    const { orgId } = parseParams(z.object({ orgId: z.string().uuid() }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ ok: boolean }>("select public.is_org_admin($1) as ok", [
+        orgId,
+      ]);
+      if (!rows[0]?.ok) throw forbidden("solo quien administra puede ver el estado técnico");
+      return saludDeLaInstalacion(db);
+    });
+  });
+
+  /**
+   * De qué no quieres que te avisen.
+   *
+   * SE MANDA LA LISTA ENTERA y no «silencia esto» / «quita esto», al revés que
+   * los gerentes de una rama. Aquí sí es correcto: esto lo edita una sola
+   * persona —tú— en un formulario que se ve completo, así que no hay dos
+   * ediciones simultáneas que puedan pisarse. La regla no es «lotes malos, uno
+   * a uno bueno»: es que la forma del gesto siga a quién lo hace.
+   *
+   * Las clases válidas las decide la base (0060), no esta ruta. Repetir la
+   * lista aquí sería una segunda copia que algún día discrepará — y el día que
+   * discrepe, lo hará dejando pasar algo que la base rechaza, o rechazando algo
+   * que la base admite.
+   */
+  app.get("/me/avisos", async (request) => {
+    const userId = requireUser(request);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ silenciados: string[] }>(
+        "select avisos_silenciados as silenciados from profiles where id = $1",
+        [userId],
+      );
+      return { silenciados: rows[0]?.silenciados ?? [] };
+    });
+  });
+
+  app.put("/me/avisos", async (request) => {
+    const userId = requireUser(request);
+    const { silenciados } = parseBody(
+      z.object({ silenciados: z.array(z.string().trim().min(1).max(40)).max(10) }),
+      request.body,
+    );
+
+    await withUser(userId, (db) =>
+      db.query("select public.set_my_avisos_silenciados($1::text[])", [silenciados]),
+    );
+    return { silenciados };
+  });
+
+  /**
+   * Dar el recorrido por visto, o volver a pedirlo.
+   *
+   * SALTARLO CUENTA COMO VERLO. Quien lo cierra ha tomado una decisión —«esto
+   * no me hace falta»— y ponérselo delante otra vez mañana es no haberla
+   * respetado. Se vuelve a pedir desde ajustes, que es donde se busca algo que
+   * se cerró queriendo.
+   */
+  app.put("/me/recorrido", async (request) => {
+    const userId = requireUser(request);
+    const { visto } = parseBody(z.object({ visto: z.boolean() }), request.body);
+
+    await withUser(userId, (db) => db.query("select public.set_my_recorrido($1)", [visto]));
+    return { recorridoVisto: visto };
+  });
+
+  /**
+   * La foto de perfil, en tres pasos: pedir, confirmar, y quitarla.
+   *
+   * POR QUÉ TRES PASOS Y NO UNO. El archivo NO pasa por la API: se firma una
+   * URL y el navegador sube contra el almacén. Es lo mismo que hacen los
+   * archivos y el logo de una organización, y el motivo es que una foto de
+   * cinco megas atravesando el servidor lo ocupa entero durante la subida.
+   *
+   * EL PASO DE CONFIRMAR ES DONDE ESTÁ LA SEGURIDAD, no un trámite. Sin él,
+   * cualquiera con sesión podría decir «mi foto es esta clave» apuntando a la
+   * de otro. Se comprueban dos cosas: que la clave sea SUYA —empieza por
+   * `users/<su id>/`— y que el objeto exista de verdad en el almacén, porque
+   * una subida que se cortó a medias dejaría el perfil apuntando a nada.
+   */
+  app.post("/me/avatar", async (request) => {
+    const userId = requireUser(request);
+    const body = parseBody(
+      z.object({
+        fileName: z.string().trim().min(1).max(255),
+        mimeType: z.string().trim().max(255).default("application/octet-stream"),
+      }),
+      request.body,
+    );
+
+    // Solo imágenes. No es por gusto: lo que se suba aquí se va a pintar en un
+    // `<img>` en todas las pantallas, y un SVG es un documento que puede traer
+    // guion dentro — por eso tampoco vale.
+    if (!/^image\/(png|jpe?g|webp|gif|avif)$/i.test(body.mimeType)) {
+      throw badRequest("la foto tiene que ser una imagen (PNG, JPG, WEBP, GIF o AVIF)");
+    }
+
+    const avatarKey = buildUserAssetKey(userId, body.fileName);
+    return {
+      avatarKey,
+      uploadUrl: await signUpload(avatarKey, body.mimeType),
+      expiresIn: env.S3_SIGNED_URL_TTL,
+    };
+  });
+
+  app.post("/me/avatar/confirm", async (request) => {
+    const userId = requireUser(request);
+    const body = parseBody(z.object({ avatarKey: z.string().min(1).max(500) }), request.body);
+
+    if (userOfKey(body.avatarKey) !== userId) {
+      throw badRequest("esa clave no es tuya");
+    }
+    const head = await headObject(body.avatarKey);
+    if (!head) throw badRequest("la subida no llegó a completarse");
+
+    const anterior = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ set_my_avatar_key: string | null }>(
+        "select public.set_my_avatar_key($1)",
+        [body.avatarKey],
+      );
+      return rows[0]?.set_my_avatar_key ?? null;
+    });
+
+    // La anterior se borra del almacén DESPUÉS de que la base apunte a la
+    // nueva. Al revés, un fallo entre medias dejaría el perfil apuntando a un
+    // objeto ya borrado — una foto rota en todas las pantallas.
+    if (anterior) await deleteObject(anterior);
+
+    return { url: await signDownload(body.avatarKey, "foto", "inline") };
+  });
+
+  /**
+   * Quitarse la foto.
+   *
+   * NO TOCA LA DE GOOGLE, y eso es lo que hace que esto se sienta como
+   * deshacer: quien entró con Google vuelve a la suya, y quien no, a la
+   * inicial. Borrar las dos convertiría «quitar mi foto» en «quedarme sin
+   * ninguna para siempre», que no es lo que nadie pide.
+   */
+  app.delete("/me/avatar", async (request, reply) => {
+    const userId = requireUser(request);
+
+    const anterior = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ set_my_avatar_key: string | null }>(
+        "select public.set_my_avatar_key(null)",
+      );
+      return rows[0]?.set_my_avatar_key ?? null;
+    });
+
+    if (anterior) await deleteObject(anterior);
+    return reply.status(204).send();
+  });
+
+  /**
+   * Las fotos de varias personas de golpe.
+   *
+   * POR QUÉ EN LOTE. Un tablero enseña veinte tarjetas con su responsable, y
+   * una petición por cara son veinte peticiones para pintar una pantalla. Y
+   * meterlas en cada listado tampoco vale: se firmarían en cada recarga, las
+   * gaste quien las gaste.
+   *
+   * SE DEVUELVE SOLO LO QUE SE PUEDE VER, y no es una comprobación aparte: es
+   * el mismo SELECT. `profiles` solo deja ver a quien comparte organización
+   * (0001), así que preguntar por un desconocido no devuelve un error que
+   * confirme que existe — devuelve un hueco, igual que un identificador
+   * inventado.
+   */
+  app.post("/avatars/urls", async (request) => {
+    const userId = requireUser(request);
+    const { ids } = parseBody(
+      z.object({ ids: z.array(z.string().uuid()).min(1).max(60) }),
+      request.body,
+    );
+
+    const gente = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{
+        id: string;
+        avatarKey: string | null;
+        avatarUrl: string | null;
+        usaPersonaje: boolean;
+        look: Record<string, number> | null;
+      }>(
+        `select p.id,
+                p.avatar_key as "avatarKey",
+                p.avatar_url as "avatarUrl",
+                p.usa_personaje as "usaPersonaje",
+                -- El personaje va como los dieciséis números que es, no como
+                -- una imagen: lo dibuja el navegador con el mismo atlas del
+                -- mundo. Un PNG guardado habría que regenerarlo cada vez que
+                -- alguien se cambia el gorro, y el día que se olvide, la cara
+                -- se queda vieja sin que nada falle.
+                case when p.usa_personaje and w.user_id is not null then
+                  json_build_object(
+                    'body', w.body, 'hair', w.hair, 'top', w.top, 'bottom', w.bottom,
+                    'skinTone', w.skin_tone, 'hairTone', w.hair_tone,
+                    'topTone', w.top_tone, 'bottomTone', w.bottom_tone,
+                    'hat', w.hat, 'glasses', w.glasses, 'beard', w.beard,
+                    'shoes', w.shoes, 'hatTone', w.hat_tone, 'shoesTone', w.shoes_tone
+                  )
+                end as look
+           from profiles p
+           left join world_avatars w on w.user_id = p.id
+          where p.id = any($1::uuid[])`,
+        [ids],
+      );
+      return rows;
+    });
+
+    /**
+     * Cómo se pinta cada quien, resuelto AQUÍ y no en las pantallas.
+     *
+     * El orden —personaje si lo eligió, foto subida, foto de Google, y si no,
+     * nada— se decide en un solo sitio a propósito. Repartido por cada vista
+     * que dibuja una chapa, la que se lo saltara enseñaría la foto de Google a
+     * quien acaba de elegir su personaje, y se vería perfectamente normal.
+     */
+    const caras: Record<string, { tipo: "foto"; url: string } | { tipo: "personaje"; look: unknown }> =
+      {};
+    for (const persona of gente) {
+      if (persona.usaPersonaje && persona.look) {
+        caras[persona.id] = { tipo: "personaje", look: persona.look };
+      } else if (persona.avatarKey) {
+        caras[persona.id] = {
+          tipo: "foto",
+          url: await signDownload(persona.avatarKey, "foto", "inline"),
+        };
+      } else if (persona.avatarUrl) {
+        caras[persona.id] = { tipo: "foto", url: persona.avatarUrl };
+      }
+      // Sin entrada = la inicial. Un hueco es una respuesta, no un fallo.
+    }
+
+    return { caras, expiresIn: env.S3_SIGNED_URL_TTL };
+  });
+
+  /**
+   * Elegir entre la foto y el personaje.
+   *
+   * Ruta propia y no un campo de `/me/profile` porque no es un dato del
+   * perfil: es qué se pinta con los datos que ya hay. Y porque el gesto es un
+   * interruptor —lo enciendes desde la propia chapa— y no un formulario que se
+   * guarda entero.
+   */
+  app.put("/me/avatar/personaje", async (request) => {
+    const userId = requireUser(request);
+    const { usar } = parseBody(z.object({ usar: z.boolean() }), request.body);
+
+    await withUser(userId, (db) =>
+      db.query("select public.set_my_usa_personaje($1)", [usar]),
+    );
+    return { usaPersonaje: usar };
   });
 
   /**

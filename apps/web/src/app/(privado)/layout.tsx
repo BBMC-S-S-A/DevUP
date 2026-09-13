@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import { ProveedorConfirmar } from "@/components/ui/Confirmar";
 import { SessionProvider } from "@/lib/session";
+import { ProveedorDeCaras } from "@/lib/caras";
 
 /**
  * El armazón del producto.
@@ -28,7 +29,13 @@ export default function LayoutPrivado({ children }: { children: ReactNode }) {
   return (
     <>
       <SessionProvider>
-        <ProveedorConfirmar>{children}</ProveedorConfirmar>
+        {/* Dentro de la sesión: sin ella no hay a quién preguntarle las caras,
+            y la ruta pide sesión. Fuera de `ProveedorConfirmar` porque no tienen
+            nada que ver — el orden entre estos dos da igual, y anidarlos al
+            revés solo sugeriría una dependencia que no existe. */}
+        <ProveedorDeCaras>
+          <ProveedorConfirmar>{children}</ProveedorConfirmar>
+        </ProveedorDeCaras>
       </SessionProvider>
       {/* Los avisos siguen al tema en vez de quedarse oscuros: un toast negro
           sobre una interfaz clara se lee como un error del navegador. */}

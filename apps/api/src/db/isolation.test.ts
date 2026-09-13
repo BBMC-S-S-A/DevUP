@@ -2708,6 +2708,81 @@ async function main(): Promise<void> {
     });
     check("ni escribiendo la tabla a mano por otra puerta", ajenoEscribe === 0);
 
+    console.log("\nLa foto de perfil");
+
+    // La 0057 guarda la CLAVE del almacen, no una URL. Lo que hay que fijar es
+    // que nadie pueda ponerle una foto a otro — y la defensa no es una
+    // comprobacion de permisos: es que la funcion no acepta un `_user`. Aqui se
+    // comprueba el otro lado, el de la tabla.
+    await withUser(ana, (db) => db.query("select public.set_my_avatar_key($1)", ["users/x/1.png"]));
+    const miFoto = async (quien: string): Promise<string | null> =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ avatar_key: string | null }>(
+          "select avatar_key from profiles where id = $1",
+          [quien],
+        );
+        return rows[0]?.avatar_key ?? null;
+      });
+    check("cada quien pone la suya", (await miFoto(ana)) === "users/x/1.png");
+
+    // Escribir el perfil de otro a mano: la politica de UPDATE de profiles no
+    // afecta a ninguna fila, asi que no revienta — no encuentra nada. Por eso
+    // se comprueba contando despues, que es como RLS se rompe sin ruido.
+    await withUser(carla, (db) =>
+      db.query("update profiles set avatar_key = $2 where id = $1", [ana, "users/robada/1.png"]),
+    );
+    check("y nadie le cambia la foto a otro", (await miFoto(ana)) === "users/x/1.png");
+
+    // Quitarla devuelve la anterior, que es lo que deja borrarla del almacen.
+    const devuelta = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ set_my_avatar_key: string | null }>(
+        "select public.set_my_avatar_key(null)",
+      );
+      return rows[0]!.set_my_avatar_key;
+    });
+    check("quitarla devuelve la anterior, para poder borrarla del almacen", devuelta === "users/x/1.png");
+    check("y deja el perfil sin foto subida", (await miFoto(ana)) === null);
+
+    // Poner la MISMA no devuelve nada: si lo hiciera, quien llama borraria del
+    // almacen el objeto que acaba de guardar.
+    await withUser(ana, (db) => db.query("select public.set_my_avatar_key($1)", ["users/x/2.png"]));
+    const repetida = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ set_my_avatar_key: string | null }>(
+        "select public.set_my_avatar_key($1)",
+        ["users/x/2.png"],
+      );
+      return rows[0]!.set_my_avatar_key;
+    });
+    check("poner la misma no pide borrar nada", repetida === null);
+
+    // Y elegir el personaje como cara (0058). Misma forma que las demas de la
+    // persona: una columna, una fila, la de quien llama. Lo que se fija es que
+    // elegirlo NO toca la foto guardada — asi volver a la foto la recupera, en
+    // vez de haberla perdido por probar.
+    await withUser(ana, (db) => db.query("select public.set_my_avatar_key($1)", ["users/x/3.png"]));
+    await withUser(ana, (db) => db.query("select public.set_my_usa_personaje(true)"));
+    const trasElegir = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ avatar_key: string | null; usa_personaje: boolean }>(
+        "select avatar_key, usa_personaje from profiles where id = $1",
+        [ana],
+      );
+      return rows[0]!;
+    });
+    check("elegir el personaje se guarda", trasElegir.usa_personaje === true);
+    check("y no borra la foto: volver a ella la recupera", trasElegir.avatar_key === "users/x/3.png");
+
+    await withUser(carla, (db) =>
+      db.query("update profiles set usa_personaje = false where id = $1", [ana]),
+    );
+    const sigue = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ usa_personaje: boolean }>(
+        "select usa_personaje from profiles where id = $1",
+        [ana],
+      );
+      return rows[0]!.usa_personaje;
+    });
+    check("y nadie le elige la cara a otro", sigue === true);
+
     console.log("\nLos puntos");
 
     // La 0055 abre `puntos` a TODA la organizacion a proposito: unos puntos que

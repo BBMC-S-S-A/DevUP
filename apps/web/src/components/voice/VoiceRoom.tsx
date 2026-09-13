@@ -55,14 +55,21 @@ export function VoiceRoom({ channel }: { channel: Channel }) {
     !room.sharing &&
     !room.participants.some((p) => p.camera || p.sharing);
 
+  // El `userId` viaja en cada `publicMember` desde la señalización y lo lleva
+  // `Participant`; esta lista lo tiraba, y por eso la sala era el único sitio
+  // de la aplicación donde no se veía la cara de nadie.
   const enLaSala: EnLaSala[] = [
     {
+      userId: user?.id ?? null,
       displayName: user?.displayName ?? "Tú",
       muted: room.muted,
       audioStream: room.localAudioStream,
       esYo: true,
     },
     ...room.participants.map((p) => ({
+      // Vacío y no nulo es lo que pone `upsert` mientras no llega el payload:
+      // se normaliza aquí para que la chapa no pida la cara de «».
+      userId: p.userId || null,
       displayName: p.displayName,
       muted: p.muted,
       audioStream: p.audioStream,

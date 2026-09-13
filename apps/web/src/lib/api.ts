@@ -127,6 +127,46 @@ export type User = {
   presence: Presencia;
   /** A qué se dedica. Sale en la cartelera de DevVerse. */
   title: string | null;
+  /**
+   * Su huso horario, en nombre IANA. Nulo = no lo ha dicho, y el servidor usa
+   * UTC — que para media Colombia corre los domingos a la semana siguiente.
+   */
+  timezone: string | null;
+  /**
+   * Si su cara es el personaje de DevVerse (0058). Cuando es cierto,
+   * `avatarUrl` llega nulo aunque haya foto guardada: quien pinta la chapa
+   * decide por lo que RECIBE y no por una regla que tenga que recordar.
+   */
+  usaPersonaje: boolean;
+  /** Si ya vio el recorrido de bienvenida (0059). */
+  recorridoVisto: boolean;
+};
+
+/**
+ * Cómo se pinta la cara de alguien, tal como lo resuelve `POST /avatars/urls`.
+ *
+ * Sin entrada en el mapa = la inicial. Un hueco es una respuesta, no un fallo.
+ */
+export type Cara =
+  | { tipo: "foto"; url: string }
+  | { tipo: "personaje"; look: AspectoDePersonaje };
+
+/** Los dieciséis números que describen un personaje (`world_avatars`, 0010). */
+export type AspectoDePersonaje = {
+  body: number;
+  hair: number;
+  top: number;
+  bottom: number;
+  skinTone: number;
+  hairTone: number;
+  topTone: number;
+  bottomTone: number;
+  hat: number;
+  glasses: number;
+  beard: number;
+  shoes: number;
+  hatTone: number;
+  shoesTone: number;
 };
 
 export type SignupPolicy = {
@@ -160,15 +200,25 @@ export type PendingInvitation = {
   /**
    * Si tiene código corto vivo.
    *
-   * OPCIONAL A PROPÓSITO: la ruta que lista invitaciones todavía no lo
-   * devuelve. Marcarlo obligatorio mentiría al tipo —sería `undefined` en
-   * tiempo de ejecución y TypeScript no diría nada—, que es justo cómo un
-   * `boolean` acaba pintando siempre la misma mitad de un rótulo.
+   * YA NO ES OPCIONAL. Estuvo marcado así porque la ruta que lista invitaciones
+   * no lo devolvía —y por eso el botón decía siempre «Dar código», también
+   * sobre las que ya tenían uno—. Ahora lo devuelve, así que hacerlo
+   * obligatorio es lo honesto: un `boolean | undefined` acaba pintando siempre
+   * la misma mitad de un rótulo sin que nada falle.
    *
    * El código en sí no viaja ni viajará: en la base solo está su hash (0041),
    * así que ni la API puede volver a leerlo.
    */
-  hasCode?: boolean;
+  hasCode: boolean;
+  /**
+   * Cuándo caduca el CÓDIGO, que no es cuándo caduca la invitación.
+   *
+   * Un día contra siete. Usar `expiresAt` para hablar del código diría que
+   * sigue valiendo seis días después de haber dejado de valer — y quien lo
+   * dicte por teléfono se encontrará con que no entra, sin nada que explique
+   * por qué.
+   */
+  codeExpiresAt: string | null;
 };
 
 export type Notification = {
@@ -316,6 +366,85 @@ export type Evidencia = {
   autorId: string | null;
   autor: string | null;
   creadaEn: string;
+};
+
+/**
+ * Lo que lleva ganado una persona: `GET /organizations/:orgId/puntos`.
+ *
+ * `aSolas` NO ES UN DETALLE QUE SE PUEDA DEJAR FUERA AL PINTAR. Los puntos se
+ * ganan cerrando tareas (0055), así que quien quiera inflar su número puede
+ * crear tareas fáciles y cerrárselas. No se prohíbe —alguien puede montar su
+ * proyecto aquí él solo, y eso es lo que atrae—: se dice. Este campo es cuánto
+ * de ese total se ganó en tareas por las que no pasó nadie más, y va en la
+ * misma línea que el total. Debajo, o en otra vista, es lo mismo que no tenerlo.
+ */
+export type PuntosDePersona = {
+  id: string;
+  nombre: string | null;
+  total: number;
+  aSolas: number;
+  tareas: number;
+  /** `cerro_tarea` y `dejo_prueba`, con lo sumado en cada uno. */
+  porMotivo: Record<string, number>;
+};
+
+/** De dónde sale cada punto: `GET /organizations/:orgId/puntos/:personaId`. */
+export type AsientoDePuntos = {
+  id: string;
+  tarea: string | null;
+  /** Copiado al ganarlo, así que sigue diciendo de qué tarea vino aunque ya no exista. */
+  titulo: string;
+  motivo: string;
+  cantidad: number;
+  aSolas: boolean;
+  cuando: string;
+};
+
+/**
+ * Una rama de trabajo, tal como la devuelve `GET /workspaces/:id/ramas`.
+ *
+ * NO ES LO MISMO QUE `Tag`, y confundirlas es el error que esta pantalla vino a
+ * arreglar. La RAMA es de dónde cuelga el trabajo —una, y solo una, en
+ * `task_categories`—; la ETIQUETA es lo que cruza, todas las que hagan falta.
+ * Si una tarea pudiera estar en dos ramas, «lo que hay en Frontend» dejaría de
+ * ser una lista y pasaría a ser una opinión.
+ *
+ * `gerentes` va en PLURAL desde la 0050, y no es un adorno: con uno solo, unas
+ * vacaciones dejan la rama sin nadie que responda.
+ */
+export type Rama = {
+  id: string;
+  nombre: string;
+  color: number;
+  /** Quién RESPONDE de la rama y reparte su trabajo. Puede no tener ni una tarea suya. */
+  gerentes: { id: string; nombre: string | null }[];
+  pendientes: number;
+  cerradasReciente: number;
+  /**
+   * Lo que cayó aquí y no tiene delegado.
+   *
+   * Archivar una tarea en una rama NO asigna a nadie (0050), así que esto no es
+   * «lo que no está hecho»: es lo que está esperando a que alguien lo reparta.
+   */
+  porRepartir: number;
+};
+
+/** Lo que se abre al entrar en una rama: `GET /categories/:id/rama`. */
+export type DetalleDeRama = {
+  porRepartir: { id: string; titulo: string; prioridad: number | null; columna: string }[];
+  /**
+   * Quién ha andado por aquí, contando las tareas que HOY están en la rama.
+   *
+   * Mudar una tarea se lleva su historia con ella. Vale para «¿quién sabe de
+   * esto?» y NO vale para «¿cuánto se trabajó aquí en septiembre?» — no lo
+   * pintes como una gráfica de esfuerzo por mes.
+   */
+  quienHaTrabajado: {
+    id: string;
+    nombre: string | null;
+    porVerbo: Record<string, number>;
+    ultimaVez: string;
+  }[];
 };
 
 /** Las áreas del tablero (0039): el otro eje, el de «de qué trata y de quién es». */

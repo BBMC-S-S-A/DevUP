@@ -12,7 +12,7 @@ import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies"
 import { useWorkspaceId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
-import { iniciales } from "@/lib/fechas";
+import { Avatar } from "@/components/perfil/Avatar";
 
 /**
  * DevCall: las salas del espacio, y entrar a una sin buscarla.
@@ -99,12 +99,7 @@ export default function DevCallPage() {
                       key={p.peerId}
                       className="flex items-center gap-1.5 rounded-lg border border-line bg-canvas/60 py-0.5 pl-1 pr-2"
                     >
-                      <span
-                        aria-hidden
-                        className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[9px] font-semibold text-muted"
-                      >
-                        {iniciales(p.displayName)}
-                      </span>
+                      <Avatar userId={p.userId} nombre={p.displayName} tamano={20} />
                       <span className="text-[11px] text-muted">{p.displayName}</span>
                       {p.rtt !== null && (
                         <span className="font-mono text-[10px] tabular-nums text-faint">

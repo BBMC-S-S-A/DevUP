@@ -6,6 +6,8 @@ import { tinte } from "@/lib/tinte";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
 import { HiddenAudio } from "./ParticipantTile";
 import { iniciales } from "@/lib/fechas";
+import { CaraDePersonaje } from "@/components/perfil/CaraDePersonaje";
+import { useCara } from "@/lib/caras";
 
 /**
  * La sala como un SITIO, no como una rejilla de tarjetas.
@@ -32,7 +34,25 @@ import { iniciales } from "@/lib/fechas";
 // dos copias divergieran el día que cambie la paleta.
 
 
+/**
+ * AQUÍ SE PINTA LA CARA, Y EL DEGRADADO SIGUE DEBAJO.
+ *
+ * Este fichero decía antes que no se podía porque «la sala de voz reparte
+ * nombres y no identidades, y traerlo cruza el useVoiceRoom y la señalización».
+ * Era falso, y conviene dejarlo escrito: el servidor manda el `userId` en cada
+ * `publicMember` desde siempre, `Participant` lo tiene, y quien lo tiraba era
+ * esta misma pieza al construir su lista. Una línea, no un trabajo.
+ *
+ * Lo que sí era cierto es lo otro: este círculo no es una chapa de una lista.
+ * Tiene su degradado por persona y crece al hablar — es el escenario de la
+ * llamada. Por eso la foto va DENTRO del círculo y el degradado se queda
+ * detrás: cuando alguien no tiene cara, la inicial sobre su color sigue siendo
+ * lo que era, y cuando la tiene, se le ve la cara sin perder el tamaño que
+ * dice quién está hablando.
+ */
 export type EnLaSala = {
+  /** Para pintar su cara. Nulo solo en quien mira: la sesión ya la tiene. */
+  userId?: string | null;
   displayName: string;
   muted: boolean;
   audioStream: MediaStream | null;
@@ -55,6 +75,7 @@ export function SalaEspacial({ gente }: { gente: EnLaSala[] }) {
 
 function Presencia({ persona, indice }: { persona: EnLaSala; indice: number }) {
   const hablando = useSpeaking(persona.audioStream, !persona.muted);
+  const cara = useCara(persona.userId);
 
   // El halo va en línea y no como clase porque se construye del acento del
   // tema (`--halo-live`), que cambia entre claro y oscuro.
@@ -106,7 +127,23 @@ function Presencia({ persona, indice }: { persona: EnLaSala; indice: number }) {
             motion-reduce:transition-none
             ${hablando ? "size-[7rem] text-3xl" : "size-24 text-2xl"}`}
         >
-          {iniciales(persona.displayName)}
+          {/* LA CARA VA POR `useCara` Y NO POR `<Avatar>`, a propósito.
+              `<Avatar>` trae su propio borde, su fondo y su tamaño de letra —
+              perfectos para una chapa de una lista y equivocados aquí, donde
+              la inicial va grande, en color del lienzo y sobre el degradado de
+              cada persona. Usarlo obligaría a deshacer su estilo a golpe de
+              `!important`, que es la señal de que la pieza no era esa.
+              Así, quien tiene cara la enseña y quien no, se queda exactamente
+              como estaba. */}
+          {cara?.tipo === "foto" ? (
+            // eslint-disable-next-line @next/next/no-img-element -- URL firmada
+            // y caduca: el optimizador de Next no puede con eso.
+            <img src={cara.url} alt="" className="size-full rounded-full object-cover" />
+          ) : cara?.tipo === "personaje" ? (
+            <CaraDePersonaje look={cara.look} tamano={hablando ? 112 : 96} />
+          ) : (
+            iniciales(persona.displayName)
+          )}
         </div>
 
         {/* El micrófono cerrado se dice con un icono y no solo con la ausencia

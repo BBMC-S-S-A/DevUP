@@ -574,6 +574,139 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // --- Canales --------------------------------------------------------------
+  /**
+   * Renombrar un espacio, o cambiar quién llega a él.
+   *
+   * NO EXISTÍA, Y SE NOTABA. Una organización se puede renombrar y borrar
+   * desde el primer día; un espacio se creaba y ya. Una errata en el nombre
+   * era para siempre, y un proyecto que empezó siendo personal no tenía cómo
+   * abrirse al equipo salvo creando otro y mudando todo a mano.
+   *
+   * QUIÉN PUEDE lo decide la política de la 0035, no esta ruta: en un espacio
+   * personal, solo quien lo creó; en uno compartido, quien administra la
+   * organización.
+   *
+   * CAMBIAR LA VISIBILIDAD SE COMPRUEBA DOS VECES Y NO ES UN DESCUIDO. La
+   * política mira la fila vieja con `using` y la nueva con `with check`, así
+   * que pasar de compartido a personal exige administrar la organización Y
+   * haberlo creado. Es lo que impide que quien administra convierta en suyo un
+   * espacio del equipo — y también, en el otro sentido, que alguien publique su
+   * espacio personal al equipo sin ser administrador. Si la petición se rechaza
+   * sin más, es esto.
+   */
+  app.patch("/workspaces/:workspaceId", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const body = parseBody(
+      z
+        .object({
+          name: z.string().trim().min(1).max(80).optional(),
+          visibility: z.enum(["personal", "shared"]).optional(),
+        })
+        // Un PATCH sin nada que cambiar devolvería un 200 indistinguible de
+        // haber funcionado. Mismo criterio que en la organización.
+        .refine((v) => Object.keys(v).length > 0, {
+          message: "no hay nada que cambiar: manda «name» o «visibility»",
+        }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      // Se lee antes para poder distinguir «no existe o no lo ves» de «lo ves
+      // pero no puedes tocarlo». Sin esto, las dos salen como un 404 y quien
+      // administra se queda sin saber por qué.
+      const { rows: antes } = await db.query<{ id: string }>(
+        "select id from workspaces where id = $1",
+        [workspaceId],
+      );
+      if (!antes[0]) throw notFound("espacio de trabajo no encontrado");
+
+      const noPuedes =
+        "no puedes cambiar este espacio: los compartidos los administra la organización, " +
+        "y los personales solo quien los creó";
+
+      let rows;
+      try {
+        ({ rows } = await db.query(
+          `update workspaces set
+             name = coalesce($2, name),
+             visibility = coalesce($3::workspace_visibility, visibility)
+            where id = $1
+        returning id, organization_id as "organizationId", name, visibility,
+                  created_at as "createdAt"`,
+          [workspaceId, body.name ?? null, body.visibility ?? null],
+        ));
+      } catch (fallo) {
+        // LAS DOS MITADES DE LA POLÍTICA FALLAN DISTINTO, y las dos hay que
+        // atenderlas aquí. `using` deja cero filas en silencio (el `if` de
+        // abajo); `with check` REVIENTA con 42501 — y ese camino llega al
+        // cliente con el texto de Postgres, «new row violates row-level
+        // security policy», que no le dice nada a nadie. Se traduce.
+        if ((fallo as { code?: string }).code === "42501") throw forbidden(noPuedes);
+        throw fallo;
+      }
+
+      if (!rows[0]) throw forbidden(noPuedes);
+      return { workspace: rows[0] };
+    });
+  });
+
+  /**
+   * Borrar un espacio de trabajo.
+   *
+   * SE LLEVA POR DELANTE, EN CASCADA, todo lo que cuelga de él: sus canales con
+   * sus mensajes, los archivos, el tablero entero con sus tareas y su historia,
+   * el diagrama, los repositorios conectados, las credenciales guardadas y el
+   * registro de actividad. No hay papelera.
+   *
+   * POR ESO PIDE ESCRIBIR EL NOMBRE, igual que la organización pide su
+   * identificador. No es teatro: un borrado a secas se dispara desde un botón
+   * mal pulsado o desde una pestaña que alguien dejó abierta en el espacio
+   * equivocado, y las dos cosas pasan. Tener que teclear «Producto» obliga a
+   * mirar CUÁL se está borrando, que es justo la comprobación que falla cuando
+   * se borra el que no era.
+   *
+   * El nombre y no el identificador porque un espacio no tiene identificador
+   * legible: pedir un UUID se resuelve copiándolo de la barra de direcciones
+   * sin leer nada, que es no comprobar.
+   */
+  app.delete("/workspaces/:workspaceId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const body = parseBody(z.object({ confirmarNombre: z.string().trim().min(1) }), request.body);
+
+    await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ name: string }>(
+        "select name from workspaces where id = $1",
+        [workspaceId],
+      );
+      const espacio = rows[0];
+      // Quien no lo ve tampoco lo borra: RLS ya filtró el `select`.
+      if (!espacio) throw notFound("espacio de trabajo no encontrado");
+
+      // Sin distinguir mayúsculas ni espacios de más: lo que se comprueba es
+      // que la persona haya leído CUÁL, no que sepa teclear.
+      const escrito = body.confirmarNombre.trim().toLowerCase();
+      if (escrito !== espacio.name.trim().toLowerCase()) {
+        throw badRequest(
+          `para borrar este espacio hay que escribir su nombre exacto: ${espacio.name}`,
+        );
+      }
+
+      const { rowCount } = await db.query("delete from workspaces where id = $1", [workspaceId]);
+      // Cero filas aquí no es «no existe» —acabamos de leerlo— sino que la
+      // política de borrado lo rechazó.
+      if (!rowCount) {
+        throw forbidden(
+          "no puedes borrar este espacio: los compartidos los borra quien administra la " +
+            "organización, y los personales solo quien los creó",
+        );
+      }
+    });
+
+    return reply.status(204).send();
+  });
+
   app.get("/workspaces/:workspaceId/channels", async (request) => {
     const userId = requireUser(request);
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
