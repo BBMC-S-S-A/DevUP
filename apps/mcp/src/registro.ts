@@ -29,6 +29,7 @@ import {
 } from "./herramientas/estado.js";
 import { descripcionQueHaPasado, esquemaQueHaPasado, queHaPasado } from "./herramientas/pasado.js";
 import { descripcionDiario, diarioDelProyecto, esquemaDiario } from "./herramientas/diario.js";
+import { descripcionPuntos, esquemaPuntos, verPuntos } from "./herramientas/puntos.js";
 import { contextoDeTarea, descripcionContexto, esquemaContexto } from "./herramientas/contexto.js";
 import {
   descripcionMisTareas,
@@ -201,6 +202,15 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
    */
   registrar("diario", descripcionDiario, esquemaDiario, async (cliente, entrada) => [
     { type: "text" as const, text: await diarioDelProyecto(cliente, entrada) },
+  ]);
+
+  /**
+   * El marcador. Va detrás del diario porque contesta la otra mitad de «cómo
+   * ha ido»: el diario dice qué pasó, esto dice quién participó y cuánto de
+   * eso pasó por una sola persona. Ver `herramientas/puntos.ts`.
+   */
+  registrar("puntos", descripcionPuntos, esquemaPuntos, async (cliente, entrada) => [
+    { type: "text" as const, text: await verPuntos(cliente, entrada) },
   ]);
 
   /**

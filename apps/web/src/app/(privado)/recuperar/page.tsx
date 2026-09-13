@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, KeyRound, LogIn } from "lucide-react";
+import { AlertCircle, CheckCircle2, KeyRound, LogIn, MailPlus } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { leerUltimoCorreo } from "@/lib/quien-entro";
 import { Boton } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
@@ -19,6 +20,55 @@ const LUZ =
 /** Lo que exige el servidor. Aquí solo se usa para dar señal antes de enviar. */
 const MINIMO = 10;
 
+/**
+ * Lo que responde `POST /auth/reset-password/check`, más los dos estados que
+ * solo existen en el navegador: mientras se pregunta, y cuando la dirección ni
+ * siquiera trae token.
+ */
+type Estado = "mirando" | "valido" | "caducado" | "usado" | "desconocido" | "sin-token";
+
+/**
+ * QUÉ SE LE DICE A CADA UNO Y A DÓNDE SE LE MANDA.
+ *
+ * El fallo que esto arregla no es que el enlace caducado no funcione —eso es
+ * lo correcto—: es que antes se descubría DESPUÉS de elegir una contraseña
+ * nueva y teclearla dos veces. Y que «pide otro» sin decir desde dónde deja a
+ * la persona buscando por su cuenta una pantalla que no sabe cómo se llama:
+ * está detrás de un botón dentro de /login, no en una dirección propia.
+ *
+ * Caducado y usado se separan a propósito. A quien ya cambió la contraseña
+ * mandarle a pedir otro correo es mandarle a repetir algo que ya hizo.
+ */
+const SALIDA: Record<
+  Exclude<Estado, "mirando" | "valido">,
+  { titulo: string; explicacion: string; pedirOtro: boolean }
+> = {
+  caducado: {
+    titulo: "El enlace ha caducado",
+    explicacion:
+      "Los enlaces de recuperación duran una hora desde que se envían. Este ya no sirve, pero pedir otro cuesta un clic.",
+    pedirOtro: true,
+  },
+  usado: {
+    titulo: "Este enlace ya se usó",
+    explicacion:
+      "Con él ya se cambió la contraseña de esta cuenta. Si fuiste tú, entra con la nueva; si no reconoces el cambio, escríbenos.",
+    pedirOtro: false,
+  },
+  desconocido: {
+    titulo: "El enlace no es válido",
+    explicacion:
+      "Suele pasar cuando el correo lo parte en dos líneas y al copiarlo se queda la mitad. Pide otro y ábrelo pulsándolo, sin copiar.",
+    pedirOtro: true,
+  },
+  "sin-token": {
+    titulo: "Falta el enlace",
+    explicacion:
+      "Esta pantalla se abre desde el correo de recuperación. Sin el enlace no hay ninguna cuenta que cambiar.",
+    pedirOtro: true,
+  },
+};
+
 const retraso = (ms: number) => ({ "--retraso": `${ms}ms` }) as React.CSSProperties;
 
 export default function RecuperarPage() {
@@ -31,16 +81,57 @@ export default function RecuperarPage() {
 
 function Recuperar() {
   const token = useSearchParams().get("token") ?? "";
+  const [estado, setEstado] = useState<Estado>(token ? "mirando" : "sin-token");
   const [password, setPassword] = useState("");
   const [repetida, setRepetida] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [listo, setListo] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * Preguntar por el enlace al abrir, antes de enseñar el formulario.
+   *
+   * La ruta que se llama es la que MIRA, no la que canjea: comprobar con
+   * `/auth/reset-password` gastaría el enlace al pintar la pantalla y la
+   * persona se quedaría sin poder enviarlo — el enlace se lo habría gastado
+   * ella misma al abrirlo.
+   *
+   * Si la comprobación no llega a responder se deja pasar al formulario: el
+   * servidor vuelve a decidir al enviar, así que una red mala no puede dejar
+   * fuera a alguien con un enlace bueno.
+   */
+  useEffect(() => {
+    if (!token) return;
+    let vigente = true;
+    void api
+      .post<{ estado: Estado }>("/auth/reset-password/check", { token })
+      .then((respuesta) => {
+        if (vigente) setEstado(respuesta.estado);
+      })
+      .catch(() => {
+        if (vigente) setEstado("valido");
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [token]);
+
   // Solo para pintar: el botón ya se bloqueaba por debajo del mínimo, y un
   // bloqueo sin explicación se lee como una avería.
   const avance = Math.min(password.length / MINIMO, 1);
   const coinciden = repetida.length > 0 && password === repetida;
+
+  const problema = estado === "mirando" || estado === "valido" ? null : SALIDA[estado];
+  // Para que pedir otro sea de verdad un clic y no «busca tú la pantalla»:
+  // /login abre el formulario con el correo puesto y el botón de olvido justo
+  // debajo. Si este navegador no recuerda a nadie, se va igual — con el campo
+  // vacío, que es lo único honesto cuando no se sabe de quién es el enlace.
+  const pedirOtro = (() => {
+    const ultimo = leerUltimoCorreo();
+    return ultimo
+      ? `/login?modo=acceso&email=${encodeURIComponent(ultimo)}`
+      : "/login?modo=acceso";
+  })();
 
   return (
     <main className="relative grid min-h-[100svh] place-items-center overflow-hidden px-6 py-12">
@@ -60,17 +151,33 @@ function Recuperar() {
           <div className="mb-5 flex items-start gap-3">
             <span
               className={`grid size-10 shrink-0 place-items-center rounded-xl border ${
-                listo ? "border-live/30 bg-live/10 text-live" : "border-accent/30 bg-accent-soft/60 text-accent"
+                listo
+                  ? "border-live/30 bg-live/10 text-live"
+                  : problema
+                    ? "border-danger/30 bg-danger/10 text-danger"
+                    : "border-accent/30 bg-accent-soft/60 text-accent"
               }`}
             >
-              {listo ? <CheckCircle2 size={19} /> : <KeyRound size={19} />}
+              {listo ? (
+                <CheckCircle2 size={19} />
+              ) : problema ? (
+                <AlertCircle size={19} />
+              ) : (
+                <KeyRound size={19} />
+              )}
             </span>
             <div className="min-w-0">
               <h1 className="text-base font-semibold">
-                {listo ? "Contraseña cambiada" : "Nueva contraseña"}
+                {listo ? "Contraseña cambiada" : (problema?.titulo ?? "Nueva contraseña")}
               </h1>
               <p className="mt-0.5 text-xs text-muted">
-                {listo ? "Ya puedes entrar con la nueva." : "Elige una y repítela para confirmar."}
+                {listo
+                  ? "Ya puedes entrar con la nueva."
+                  : problema
+                    ? "Nada de lo que escribas aquí se guardaría."
+                    : estado === "mirando"
+                      ? "Comprobando el enlace…"
+                      : "Elige una y repítela para confirmar."}
               </p>
             </div>
           </div>
@@ -92,6 +199,49 @@ function Recuperar() {
                 Entrar
               </Link>
             </>
+          ) : problema ? (
+            <>
+              <p className="text-sm leading-relaxed text-muted">{problema.explicacion}</p>
+              {problema.pedirOtro ? (
+                <>
+                  <Link
+                    href={pedirOtro}
+                    className="presionable mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl
+                      bg-gradient-to-b from-accent-bright to-accent px-4 text-sm font-medium text-canvas
+                      shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)]
+                      hover:brightness-110"
+                  >
+                    <MailPlus size={15} />
+                    Pedir otro enlace
+                  </Link>
+                  {/* El botón está DENTRO de /login, no en una pantalla
+                      propia. Decirlo aquí es la diferencia entre «pide otro» y
+                      saber cómo. */}
+                  <p className="mt-2.5 text-center text-xs text-faint">
+                    Allí, «He olvidado mi contraseña», debajo de Entrar.
+                  </p>
+                </>
+              ) : (
+                <Link
+                  href="/login?modo=acceso"
+                  className="presionable mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl
+                    bg-gradient-to-b from-accent-bright to-accent px-4 text-sm font-medium text-canvas
+                    shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_4px_16px_-6px_rgb(124_58_237/0.7)]
+                    hover:brightness-110"
+                >
+                  <LogIn size={15} />
+                  Entrar
+                </Link>
+              )}
+            </>
+          ) : estado === "mirando" ? (
+            /* Mientras se pregunta no se enseña el formulario: verlo aparecer
+               y desaparecer es peor que esperar medio segundo. */
+            <div className="space-y-3" aria-busy="true">
+              <div className="h-10 animate-pulse rounded-xl bg-line/60" />
+              <div className="h-10 animate-pulse rounded-xl bg-line/40" />
+              <div className="h-10 animate-pulse rounded-xl bg-line/20" />
+            </div>
           ) : (
             <form
               onSubmit={async (event) => {
@@ -192,7 +342,7 @@ function Recuperar() {
           className="devup-entrada mt-5 text-center font-mono text-[10px] text-faint"
           style={retraso(220)}
         >
-          enlace de un solo uso
+          {problema ? "enlace de un solo uso · este ya no vale" : "enlace de un solo uso"}
         </p>
       </div>
     </main>

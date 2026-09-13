@@ -2708,6 +2708,64 @@ async function main(): Promise<void> {
     });
     check("ni escribiendo la tabla a mano por otra puerta", ajenoEscribe === 0);
 
+    console.log("\nLos puntos");
+
+    // La 0055 abre `puntos` a TODA la organizacion a proposito: unos puntos que
+    // solo ve quien los gana no se pueden contrastar con nada, y entonces
+    // vuelven a ser un numero que hay que creerse. Lo que hay que fijar aqui es
+    // el otro lado: que esa apertura llegue hasta el borde de la organizacion y
+    // ni un paso mas, y que NADIE pueda escribir en ella.
+    const tareaConPunto = await withUser(ana, async (db) => {
+      const { rows: col } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 and is_terminal order by position limit 1",
+        [acme.ws],
+      );
+      const { rows: abierta } = await db.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 and not is_terminal order by position limit 1",
+        [acme.ws],
+      );
+      const { rows } = await db.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by, assignee_id)
+         values ($1,$2,'algo que se cierra',1000,$3,$3) returning id`,
+        [acme.ws, abierta[0]!.id, ana],
+      );
+      await db.query("update tasks set column_id = $2 where id = $1", [rows[0]!.id, col[0]!.id]);
+      return rows[0]!.id;
+    });
+
+    check("cerrar una tarea deja su punto escrito", (await count(ana, "puntos")) === 1);
+    check(
+      "y lo ve toda la organizacion, que es para lo que existe",
+      (await count(carla, "puntos")) === 1,
+    );
+    check("pero nadie de fuera", (await count(bruno, "puntos")) === 0);
+
+    // No hay politica de INSERT: los puntos solo entran por los disparadores.
+    // Uno que se pueda escribir a mano no mide nada.
+    await denied("nadie se apunta puntos a mano, ni siendo administrador", () =>
+      withUser(ana, (db) =>
+        db.query(
+          `insert into puntos (organization_id, workspace_id, user_id, motivo, cantidad, a_solas)
+           values ($1,$2,$3,'cerro_tarea',9999,false)`,
+          [acme.org, acme.ws, ana],
+        ),
+      ),
+    );
+
+    // Sin politica de UPDATE ni DELETE, RLS no revienta: simplemente no
+    // encuentra filas. Por eso esto se comprueba contando despues, y no
+    // esperando un error — es justo la forma en que RLS se rompe sin ruido.
+    await withUser(ana, (db) => db.query("update puntos set cantidad = 9999"));
+    await withUser(ana, (db) => db.query("delete from puntos"));
+    const intacto = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ cantidad: number }>(
+        "select cantidad from puntos where task_id = $1",
+        [tareaConPunto],
+      );
+      return rows[0]?.cantidad;
+    });
+    check("ni los infla, ni los borra: siguen como los dejo el disparador", intacto === 10);
+
     console.log("\nRamas y evidencia de una tarea");
 
     // Las dos tablas de la 0042 NO llevan `workspace_id` propio: se apoyan en

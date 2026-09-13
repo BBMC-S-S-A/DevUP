@@ -114,6 +114,47 @@ jobs:
         # REALES del tablero, no contra ejemplos inventados.
         run: npm run test:ramas
 
+      - name: Las carpetas de la biblioteca
+        # La que justifica el fichero es el ciclo. Sin el disparador de la 0053
+        # basta con mover A dentro de B y luego B dentro de A —dos gestos
+        # normales por separado— para que la biblioteca tenga un anillo, y
+        # entonces cualquier recorrido hacia la raiz NO falla: se cuelga. Una
+        # peticion colgada es mas cara de diagnosticar que una que revienta,
+        # porque no deja ni un error que buscar. Mas que borrar una carpeta no
+        # se lleve sus archivos: reorganizar no puede perder lo que alguien
+        # subio.
+        run: npm run test:carpetas --workspace apps/api
+
+      - name: El enlace de recuperar contrasena
+        # Una comprobacion que canjea es PEOR que no comprobar nada: la
+        # pantalla se abre, el enlace se gasta al pintarla, y cuando la persona
+        # envia la contrasena nueva le dicen que ya se uso — se lo gasto ella
+        # misma al mirarlo. Por eso se mira dos veces y DESPUES se canjea. Y se
+        # fija que «caducado» y «usado» no se junten en un «no vale»: al
+        # caducado hay que decirle que pida otro correo, al usado que ya la
+        # cambio, y confundirlos manda a media plantilla a repetir algo hecho.
+        run: npm run test:recuperar --workspace apps/api
+
+      - name: Los puntos
+        # Se ganan al cerrar, en la base, y por eso hay que fijar el bucle:
+        # sin el indice unico por (tarea, motivo), cerrar una tarea, reabrirla
+        # y volver a cerrarla es una maquina de puntos infinita — y no hace
+        # falta mala fe, basta arrastrar una tarjeta de vuelta porque faltaba
+        # algo. Mas: que reabrir NO desande el punto (desandar lo ya cobrado
+        # rompe la confianza en el marcador entero), que gane el delegado y no
+        # quien arrastro la tarjeta, que justificar el martes lo cerrado el
+        # viernes tambien cuente, y que nadie pueda escribir puntos a mano.
+        run: npm run test:puntos --workspace apps/api
+
+      - name: Las ramas de trabajo
+        # «Por repartir» tiene que ser lo que NO tiene a nadie, no lo que no
+        # esta hecho: si colara lo que ya tiene dueno, el gerente veria una
+        # bandeja llena de trabajo que no le toca repartir y dejaria de mirarla,
+        # que es lo mismo que no tenerla. Y se fija a proposito el matiz que la
+        # frase corta esconde: «quien ha trabajado» cuenta las tareas que HOY
+        # estan en la rama, asi que mudar una se lleva su historia.
+        run: npm run test:ramas-api --workspace apps/api
+
       - name: Los datos de los widgets
         # Un panel es la primera pantalla de un espacio y esta hecho de trozos
         # independientes, asi que todo lo que se rompe aqui sale en pantalla

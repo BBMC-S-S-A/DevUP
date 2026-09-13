@@ -236,12 +236,22 @@ export async function olvidarNodo(db: Db, tipo: TipoDeNodo, id: string): Promise
  * otro sitio y que no se puede volver a deducir. Perderlo al recalcular sería
  * convertir una herramienta de mantenimiento en una de pérdida de datos.
  *
- * LA INVARIANTE QUE LO HACE SEGURO: todas las reglas ponen la TAREA como
- * origen. Por eso el borrado de abajo puede mirar solo `source_id` y estar
- * seguro de que no se lleva por delante un enlace ajeno que apuntara a esta
- * tarea desde otro sitio. Si alguna regla futura invierte los extremos, este
- * borrado deja de ser correcto — de ahí que esté dicho aquí y no solo en la
- * cabeza de quien lo escribió.
+ * LA INVARIANTE QUE LO HACE SEGURO, dicha mejor de lo que estaba. Escribí
+ * «todas las reglas ponen la TAREA como origen», y era verdad entonces pero no
+ * era la regla: era una consecuencia de que solo hubiera una función que
+ * recalculaba. La regla de verdad es
+ *
+ *     **cada función de recálculo es dueña de UN tipo de origen, y solo borra
+ *     los enlaces de regla que salen de ahí.**
+ *
+ * Por eso este borrado puede mirar solo `source_id`: nadie más escribe enlaces
+ * de regla con `source_kind = 'tarea'`. Y por eso `retejerMensaje` puede existir
+ * sin pisarse con esto — es dueña de `'mensaje'`, que esta función no toca.
+ *
+ * La diferencia importa el día que se añada la tercera: lo que hay que
+ * comprobar no es «¿pone la tarea como origen?», es «¿hay ya otra función que
+ * borre enlaces con este mismo `source_kind`?». Si la hay, una de las dos va a
+ * borrar lo que la otra acaba de escribir, y las dos van a parecer correctas.
  *
  * NO COMPRUEBA PERMISOS, y no le hace falta: cada `select` de abajo corre bajo
  * RLS, así que solo ve lo que quien llama ve, y `tejer` pasa por las políticas
@@ -320,6 +330,83 @@ export async function retejerTarea(db: Db, tareaId: string): Promise<void> {
       destinoTipo: "repositorio",
       destinoId: repo.id,
       etiqueta: "se probó en",
+    });
+  }
+}
+
+/**
+ * Rehace los enlaces de un mensaje: a qué tareas se refiere.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * EL ÚNICO HUECO QUE LE QUEDABA AL GRAFO. `contexto_de_tarea` contestaba
+ * «ninguna conversación enlazada» casi siempre, y no porque no las hubiera: las
+ * menciones de hoy solo saben apuntar a personas (`resolve_mentions` compara
+ * `@Nombre` con los nombres visibles), así que de dónde salió una decisión era
+ * justo lo que el producto no podía reconstruir — y es la mitad de su tesis.
+ *
+ * DE QUÉ SE DEDUCE, Y POR QUÉ NO ES UNA ADIVINANZA. Del identificador de la
+ * tarea escrito en el mensaje. No es una forma rebuscada de citar: es
+ * literalmente lo que imprimen `ver_tablero` y `mis_tareas` al final de cada
+ * línea —`[tarea a7e8ddcb-…]`— así que es lo que la gente copia y pega cuando
+ * habla de una tarea concreta. No se interpreta el texto, no se buscan títulos
+ * parecidos, no se mira quién habla de qué: se lee un identificador y se
+ * comprueba que existe.
+ *
+ * Y SE EXIGE QUE SEA DEL MISMO ESPACIO QUE EL CANAL. Un identificador pegado de
+ * otro proyecto no crea una arista: podría, y la política de la 0043 lo
+ * permitiría si quien escribe ve las dos cosas, pero un canal de un cliente no
+ * debería quedar unido al tablero de otro porque alguien pegó algo sin darse
+ * cuenta. El grafo se lee después como si dijera la verdad.
+ *
+ * BORRA Y REESCRIBE, como `retejerTarea`, y por lo mismo: editar un mensaje
+ * para quitar una referencia tiene que quitar la arista. Un índice que solo
+ * suma acaba afirmando cosas que ya nadie dijo.
+ *
+ * ES DUEÑA DE `'mensaje'` COMO ORIGEN. Ver la invariante de `retejerTarea`:
+ * ninguna otra regla escribe enlaces con ese `source_kind`, así que borrar por
+ * `source_id` es seguro aquí también.
+ */
+export async function retejerMensaje(db: Db, mensajeId: string): Promise<void> {
+  await db.query(
+    `delete from graph_links
+      where source_kind = 'mensaje' and source_id = $1 and source = 'regla'`,
+    [mensajeId],
+  );
+
+  /**
+   * Las tareas citadas, resueltas contra la base y no contra el texto.
+   *
+   * El `regexp_matches` saca los identificadores; el `join` con `tasks` decide
+   * cuáles son tareas de verdad. Un identificador inventado no encuentra fila y
+   * desaparece solo, sin necesidad de comprobarlo aparte.
+   *
+   * Corre bajo RLS, así que una tarea que quien escribió no puede ver tampoco
+   * entra — pegar un identificador ajeno no revela que existe.
+   */
+  const { rows: citadas } = await db.query<{ id: string }>(
+    `select distinct t.id
+       from messages m
+       cross join lateral regexp_matches(
+         m.body,
+         '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+         'g'
+       ) as encontrado
+       join channels c on c.id = m.channel_id
+       join tasks t on t.id = encontrado[1]::uuid
+      where m.id = $1
+        and m.deleted_at is null
+        and t.workspace_id = c.workspace_id`,
+    [mensajeId],
+  );
+
+  for (const tarea of citadas) {
+    await tejer(db, {
+      origenTipo: "mensaje",
+      origenId: mensajeId,
+      destinoTipo: "tarea",
+      destinoId: tarea.id,
+      etiqueta: "habla de",
     });
   }
 }

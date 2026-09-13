@@ -4,6 +4,7 @@ import { ArrowLeft, Code2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { DevWorkspace } from "@/components/dev/DevWorkspace";
+import { useWorkspaceActual } from "@/lib/workspace-context";
 import { Rotulo } from "@/components/ui/Superficies";
 
 /**
@@ -14,6 +15,7 @@ import { Rotulo } from "@/components/ui/Superficies";
  */
 export default function DevPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
+  const workspace = useWorkspaceActual();
 
   return (
     <div className="min-h-[100svh]">
@@ -21,12 +23,18 @@ export default function DevPage() {
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
 
         <div className="relative mx-auto max-w-5xl px-6 pb-7 pt-5">
+          {/* LA VUELTA ES AL ESPACIO, NO A LA RAÍZ. Aquí se llega desde dentro
+              de un workspace —su id está en la propia dirección—, y esta
+              flecha subía dos niveles de golpe hasta la lista de todas las
+              organizaciones: había que volver a encontrar la organización y
+              volver a encontrar el espacio para seguir donde se estaba. Una
+              vuelta que no deshace el último paso no es una vuelta. */}
           <Link
-            href="/app/organizaciones"
+            href={`/app/w/${workspaceId}`}
             className="presionable inline-flex items-center gap-1.5 text-xs text-faint hover:text-muted"
           >
             <ArrowLeft size={13} />
-            Organizaciones
+            {workspace ? workspace.name : "Volver al espacio"}
           </Link>
 
           <div className="mt-5 flex items-center gap-3.5">

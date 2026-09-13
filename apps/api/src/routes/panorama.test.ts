@@ -212,6 +212,53 @@ async function main(): Promise<void> {
     });
     check("no se puede poner oficio en una organización ajena", fuera === "42501");
 
+    console.log("\nEl rol, que no es el oficio ni el permiso");
+
+    // Tres cosas que se llaman parecido y no son la misma: `role` es el
+    // permiso, `title` es el oficio en texto libre que se le ensena a los
+    // demas, y `rol` es una lista cerrada que solo elige que tutorial se
+    // ofrece. Lo que hay que fijar es que elegir tutorial no toque las otras
+    // dos — un valor que aterrizara en `role` repartiria permisos.
+    await withUser(carla, (db) =>
+      db.query("select public.set_my_rol($1,$2::public.rol_de_equipo)", [org, "diseno"]),
+    );
+    const trasElRol = await withUser(carla, async (db) => {
+      const { rows } = await db.query<{ role: string; title: string | null; rol: string | null }>(
+        `select role, title, rol::text as rol from organization_members
+          where organization_id = $1 and user_id = $2`,
+        [org, carla],
+      );
+      return rows[0]!;
+    });
+    check("se guarda el rol elegido", trasElRol.rol === "diseno");
+    check("sin tocar el permiso", trasElRol.role === "member");
+    check("ni el oficio escrito a mano", trasElRol.title === "diseño");
+
+    const rolInventado = await withUser(carla, async (db) => {
+      try {
+        await db.query("select public.set_my_rol($1,$2::public.rol_de_equipo)", [org, "pirata"]);
+        return "coló";
+      } catch (fallo) {
+        return (fallo as { code?: string }).code ?? "?";
+      }
+    });
+    // La lista es cerrada de verdad: la rechaza el tipo, no una comprobacion
+    // que alguien pueda olvidarse de repetir en la siguiente ruta.
+    check("un rol que no está en la lista no entra", rolInventado === "22P02");
+
+    const rolFuera = await withUser(ana, async (db) => {
+      try {
+        await db.query("select public.set_my_rol($1,$2::public.rol_de_equipo)", [
+          "00000000-0000-0000-0000-000000000000",
+          "backend",
+        ]);
+        return "coló";
+      } catch (fallo) {
+        return (fallo as { code?: string }).code ?? "?";
+      }
+    });
+    check("ni se elige tutorial en una organización ajena", rolFuera === "42501");
+
     console.log("\nEn qué anda cada quien");
 
     // Sale de las tareas sin terminar que tiene asignadas, no de a qué espacios

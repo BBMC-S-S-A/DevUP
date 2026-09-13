@@ -184,8 +184,10 @@ Cada vecino trae lo que hace falta para pintarlo sin pedir nada más:
   tipo, nodoId, nombre }
 ```
 
-Los ocho tipos son `espacio`, `canal`, `mensaje`, `tarea`, `archivo`,
-`componente`, `repositorio`, `entorno`.
+Los tipos son **diez**: `espacio`, `canal`, `mensaje`, `tarea`, `archivo`,
+`componente`, `repositorio`, `entorno` y —desde la 0050/0051— `area` y
+`persona`. Con esos dos, una rama y quien la trabaja son nodos del grafo y no
+solo recuentos del tablero.
 
 **Dos cosas que conviene saber antes de dibujar.** La primera: `vecinos` viene
 en **las dos direcciones** —un nodo tiene aristas por donde sale y por donde
@@ -321,13 +323,127 @@ si se fusionan.
 
 ---
 
+### Los puntos ya se ganan solos, y falta dónde verlos
+
+`GET /organizations/:orgId/puntos?dias=30` → `{ dias, gente: [...] }`
+`GET /organizations/:orgId/puntos/:personaId?dias=30&limite=50` → `{ dias, asientos: [...] }`
+
+```
+gente:    [{ id, nombre, total, aSolas, tareas, porMotivo: { cerro_tarea, dejo_prueba } }]
+asientos: [{ id, tarea, titulo, motivo, cantidad, aSolas, cuando }]
+```
+
+No hay ruta para DAR puntos y no la va a haber: se ganan en la base al entrar
+una tarea en una columna final (0055). Una ruta que los reparta los convierte en
+algo que se puede pedir.
+
+**Lo único que esta pantalla no puede hacer es enseñar el total y callarse
+`aSolas`.** Los puntos se ganan cerrando tareas, así que quien quiera inflar su
+número puede crear tareas fáciles y cerrárselas. No se prohíbe —alguien puede
+montar su proyecto aquí él solo, y eso es lo que atrae—: se dice. `aSolas` es
+cuánto de ese total se ganó en tareas por las que no pasó nadie más, y va **en
+la misma línea que el total**. Debajo, en una pestaña o en un tooltip es lo
+mismo que no tenerlo: nadie abre la segunda vista. Con eso, un número inflado
+sigue ahí y se le ve el inflado.
+
+Tres cosas más:
+
+- **Los asientos van con el marcador, no en otro sitio.** Un total sin
+  asientos detrás es un número que hay que creerse; con ellos es una afirmación
+  que se puede ir a comprobar tarea por tarea.
+- **No lo pintes como un ranking de productividad.** Cuenta tareas cerradas, no
+  trabajo hecho: quien pasa un mes con una sola tarea difícil sale último. Un
+  podio con medallas convierte eso en una acusación.
+- **Cuando todo el periodo se ganó a solas, dilo en el conjunto.** Línea a
+  línea cada persona se lee normal; lo que solo se ve mirando el total es que
+  nadie ha revisado nada de nadie.
+
+En el MCP ya está como herramienta `puntos`, y su redacción vale de referencia:
+`apps/mcp/src/herramientas/puntos.ts`.
+
+---
+
+### La pantalla de categorías está mirando la tabla equivocada
+
+Esto es lo más importante de esta tanda, y no se ve desde la pantalla: se ve
+comparando dos ficheros.
+
+`/app/w/<espacio>/categorias` se titula «las ramas de trabajo de este espacio» y
+por dentro trabaja sobre **`tags`** — las etiquetas de la 0002, las de cruzar —
+mientras que las ramas de verdad son **`task_categories`**, que es lo que lleva
+el tablero, lo que crea `crear_area` desde el MCP y lo que el script de
+reordenar repartió entre Workflow, DevVerse y Funcionalidades. Son dos tablas
+distintas con dos listas distintas de nombres.
+
+Y el «Jefe de rama» de esa pantalla escribe en `tags.owner_id`, que la 0050 dejó
+marcada como OBSOLETA con un comentario en la propia columna: «no escribir
+aquí». Lo que se guarde ahí no lo lee nadie. Elegir un jefe en esa pantalla hoy
+no hace nada visible en ninguna otra parte.
+
+**La API para la pantalla correcta ya está entera y probada:**
+
+```
+GET    /workspaces/:id/ramas?dias=7        → { dias, ramas: [...] }
+GET    /categories/:categoryId/rama?dias=30 → { dias, porRepartir, quienHaTrabajado }
+POST   /workspaces/:id/categories          → { category }   { name, color?, ownerId? }
+PATCH  /categories/:categoryId             → { category }   { name?, color? }
+DELETE /categories/:categoryId             → 204   (las tareas NO caen con ella)
+PUT    /categories/:id/gerentes/:userId    → { gerente: true }
+DELETE /categories/:id/gerentes/:userId    → { gerente: false }
+```
+
+Cada rama de la lista viene así:
+
+```
+{ id, nombre, color,
+  gerentes: [{ id, nombre }],   // PLURAL: ver abajo
+  pendientes, cerradasReciente, porRepartir }
+```
+
+Y el detalle que se abre al entrar en una:
+
+```
+porRepartir:      [{ id, titulo, prioridad, columna }]
+quienHaTrabajado: [{ id, nombre, porVerbo: { creo: 3, movio: 7 }, ultimaVez }]
+```
+
+**Cuatro cosas que conviene saber antes de pintarla.**
+
+1. **Los gerentes son varios, y no es un adorno.** Con uno solo, unas vacaciones
+   dejan la rama sin nadie que responda. Por eso no hay «campo jefe»: hay un
+   `PUT` y un `DELETE` por persona. Si la pantalla manda la lista entera, dos
+   personas editando a la vez se borran la una a la otra sin enterarse.
+
+2. **Gerente y delegado son cosas distintas.** El gerente RESPONDE de la rama y
+   REPARTE su trabajo: puede no tener ni una tarea suya. El delegado es quien la
+   hace. Archivar una tarea en una rama **no asigna a nadie** — lo que cae sin
+   delegado es exactamente `porRepartir`, y esa lista es la razón de ser de la
+   pantalla del gerente.
+
+3. **`quienHaTrabajado` cuenta las tareas que HOY están en la rama.** Mudar una
+   tarea se lleva su historia con ella. Está bien para «¿quién sabe de esto?» y
+   está mal para «¿cuánto se trabajó aquí en septiembre?» — y solo contesta la
+   primera. No lo pintes como una gráfica de esfuerzo por mes.
+
+4. **Nombrar a alguien puede fallar de dos maneras distintas, y se notan.** Un
+   403 es «tú no puedes nombrar aquí»; un 400 es «esa persona no está en este
+   espacio». Enseñar el mismo mensaje para los dos hace que invitar a un
+   compañero nuevo se lea como falta de permisos propios.
+
+Lo que pidió el §6.1 —«quién ha trabajado» de verdad— está en esa segunda ruta.
+La red del grafo ya tiene `area` y `persona` como nodos (son **diez** tipos, no
+ocho: los dos nuevos entraron en la 0050/0051), así que la rama entera se puede
+dibujar desde el grafo y no solo contar desde el tablero.
+
+---
+
 ## 6. Lo que la web necesita de la API y no construye por su cuenta
 
 Esta sección existe por la lección del registro de actividad: **construirlo yo
 es literalmente cómo acabamos con dos**. Así que lo que falte se escribe aquí
 como pregunta que hay que poder contestar, no como esquema propuesto.
 
-### 6.1 · «¿Quién ha trabajado en esta rama?» — pendiente
+### 6.1 · ~~«¿Quién ha trabajado en esta rama?»~~ — HECHO
 
 **La pregunta:** abierta una categoría (o área), quiénes han tocado sus tareas
 últimamente y cuándo fue la última vez.
@@ -343,8 +459,33 @@ la clase de trabajo que acaba convertido en una segunda fuente de verdad.
 donde tiene sentido, y una cifra única al lado de una rama tendría el mismo
 problema que tendría al lado de una cara.
 
-**Estado en la web:** la ficha de la persona ya enseña su rastro
-(`/organizations/:id/actividad/:persona`). Lo de la rama espera a esto.
+**Ya no espera.** Dos rutas:
+
+```
+GET /workspaces/:id/ramas?dias=7
+  → { ramas: [{ id, nombre, color, gerentes: [{id,nombre}],
+                pendientes, cerradasReciente, porRepartir }] }
+
+GET /categories/:id/rama?dias=30
+  → { porRepartir: [{ id, titulo, prioridad, columna }],
+      quienHaTrabajado: [{ id, nombre, porVerbo: {...}, ultimaVez }] }
+```
+
+Tres cosas al pintarlo:
+
+**`gerentes` es una lista.** Desde la 0050 una rama puede tener varios — con uno
+solo, unas vacaciones la dejan sin nadie que responda. `ownerId` sigue en
+`/categories` pero está obsoleto: enseña un dueño que ya no es el que manda.
+
+**`porRepartir` va también en la lista, no solo en el detalle.** Es lo único de
+ahí que pide una acción, y esconderlo tras un clic por rama obliga a abrir cinco
+para descubrir que hay trabajo esperando en la tercera.
+
+**Y el matiz de `quienHaTrabajado`, que la frase corta esconde:** es quién ha
+tocado las tareas que **hoy** están en esa rama. Si una tarea se muda, su
+historia se va con ella. Correcto para «¿quién sabe de esto?», incorrecto para
+«¿cuánto se trabajó aquí en septiembre?» — y esta ruta solo contesta la primera.
+No la etiquetes como la segunda.
 
 ### 6.2 · ~~Las dos categorías~~ — DECIDIDO (0050)
 

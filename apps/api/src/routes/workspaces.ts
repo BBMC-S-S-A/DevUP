@@ -222,7 +222,16 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
                 -- se dedica no abre ninguna puerta y contesta «¿a quién le
                 -- pregunto esto?», que es de las cosas que más tiempo comen en
                 -- un equipo. Lo escribe cada cual en su propio perfil.
-                p.title,
+                --
+                -- EL DE ESTA ORGANIZACIÓN GANA AL GENERAL, que es lo que la
+                -- 0048 prometió y esta consulta se saltaba: la misma persona
+                -- es «backend» en un proyecto y «plataforma» en otro, y aquí
+                -- salía siempre el de profiles — el afinado se guardaba y no lo
+                -- enseñaba nadie. Se recorta antes de decidir porque un cargo
+                -- en blanco es «no puse ninguno», no «ninguno».
+                -- (Sin comillas invertidas: esto vive dentro de una plantilla
+                -- de JavaScript y una sola cerraría la cadena.)
+                coalesce(nullif(btrim(m.title), ''), p.title) as title,
                 p.presence
            from organization_members m
            join profiles p on p.id = m.user_id

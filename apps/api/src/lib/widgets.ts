@@ -43,6 +43,7 @@ export const WIDGETS_CON_DATOS = [
   "no_leidos",
   "repositorios",
   "resumen",
+  "sin_justificar",
 ] as const;
 
 export type WidgetConDatos = (typeof WIDGETS_CON_DATOS)[number];
@@ -172,6 +173,56 @@ const CONSULTAS: Record<WidgetConDatos, Consulta> = {
   },
 
   /**
+   * Lo que se cerró sin decir cómo.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   *
+   * POR QUÉ ESTO EXISTE EN VEZ DE UN CAMPO OBLIGATORIO. Se decidió que cerrar
+   * una tarea lleve su justificación y su evidencia, y la forma obvia era
+   * bloquear el cierre hasta que alguien rellenara un campo. Eso produce
+   * «listo», «ok» y «ya está» — un campo lleno de ruido con cara de
+   * documentación, que es peor que estar vacío: parece que hay contexto.
+   *
+   * Así que no se bloquea nada. Lo que se hace es que **se vea**. La presión la
+   * pone que el equipo lo mire, no un formulario que hay que sortear para
+   * seguir trabajando.
+   *
+   * QUÉ CUENTA COMO JUSTIFICAR: dejar una evidencia. No basta con `criterio`
+   * —eso se escribe al empezar y dice cuándo estará hecha, no que lo esté— ni
+   * con `contexto`, que dice por qué se hacía. La evidencia es lo único que se
+   * escribe DESPUÉS y afirma algo sobre lo que pasó. Una nota vale: lo que
+   * importa es que alguien se paró a decir cómo se hizo.
+   *
+   * Y ES REVERSIBLE A PROPÓSITO: añadir la evidencia después saca la tarea de
+   * aquí sola. Esto no es un castigo por cerrar deprisa, es una lista de lo que
+   * falta por contar.
+   */
+  sin_justificar: async (db, ws, dias) => {
+    const { rows } = await db.query(
+      `select t.id, t.title as titulo, p.display_name as "cerradaPor",
+              a.at as "cerradaEn"
+         from tasks t
+         join task_columns c on c.id = t.column_id
+         join lateral (
+           select a.at, a.actor_id
+             from activity a
+            where a.subject_id = t.id and a.verb = 'cerro' and a.subject_type = 'tarea'
+            order by a.at desc
+            limit 1
+         ) a on true
+         left join profiles p on p.id = a.actor_id
+        where t.workspace_id = $1
+          and c.is_terminal
+          and a.at > now() - ($2::int || ' days')::interval
+          and not exists (select 1 from task_evidence e where e.task_id = t.id)
+        order by a.at desc
+        limit $3`,
+      [ws, dias, POR_TARJETA],
+    );
+    return rows;
+  },
+
+  /**
    * Los números de arriba: pendientes, empezadas y cerradas en la ventana.
    *
    * LOS TRES JUNTOS O NINGUNO. «12 pendientes» a secas no distingue un proyecto
@@ -190,7 +241,19 @@ const CONSULTAS: Record<WidgetConDatos, Consulta> = {
                                 where c2.workspace_id = $1))::int as "enCurso",
          (select count(*) from activity a
            where a.workspace_id = $1 and a.verb = 'cerro' and a.subject_type = 'tarea'
-             and a.at > now() - ($2::int || ' days')::interval)::int as "cerradas"`,
+             and a.at > now() - ($2::int || ' days')::interval)::int as "cerradas",
+         -- Y de esas, cuántas se cerraron sin decir cómo. Va PEGADO a
+         -- «cerradas» y no en un widget aparte: «11 cerradas» a secas invita a
+         -- felicitarse, y «11 cerradas, 7 sin contar cómo» es otra semana.
+         (select count(*) from tasks t
+            join task_columns c on c.id = t.column_id
+           where t.workspace_id = $1 and c.is_terminal
+             and exists (select 1 from activity a
+                          where a.subject_id = t.id and a.verb = 'cerro'
+                            and a.subject_type = 'tarea'
+                            and a.at > now() - ($2::int || ' days')::interval)
+             and not exists (select 1 from task_evidence e where e.task_id = t.id)
+         )::int as "cerradasSinJustificar"`,
       [ws, dias],
     );
     return rows[0];

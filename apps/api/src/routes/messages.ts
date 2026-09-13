@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
+import { retejerMensaje } from "../lib/grafo.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { announceMessage } from "../realtime/signaling.js";
 import { notificar } from "./notifications.js";
@@ -95,6 +96,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       await db.query("select public.mark_channel_read($1)", [channelId]);
       const creado = await loadMessage(db, rows[0]!.id);
 
+      // Si el mensaje cita alguna tarea por su identificador, queda tejido en
+      // el grafo. Es lo que hace que «¿de qué conversación salió esto?» tenga
+      // respuesta; ver `lib/grafo.ts`.
+      await retejerMensaje(db, rows[0]!.id);
+
       // Menciones. `resolve_mentions` solo devuelve gente con acceso al canal,
       // así que escribir «@Alguien» en un canal privado no le notifica nada a
       // quien no está dentro — que además le revelaría que ese canal existe.
@@ -147,6 +153,9 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       // La política solo deja editar al autor; para cualquier otro esto son
       // cero filas y no hay que explicar por qué.
       if (rowCount === 0) throw notFound("mensaje no encontrado");
+      // Editar para quitar una referencia tiene que quitar la arista: por eso
+      // `retejerMensaje` borra y reescribe en vez de solo añadir.
+      await retejerMensaje(db, messageId);
       return loadMessage(db, messageId);
     });
 
@@ -168,6 +177,17 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
           returning channel_id`,
         [messageId],
       );
+
+      /**
+       * Y sus aristas se van con él.
+       *
+       * Aquí NO hace falta el cuidado de `olvidarNodo` —limpiar antes de que la
+       * fila desaparezca— porque el borrado es suave: el mensaje sigue
+       * existiendo y `puede_ver_nodo` sigue diciendo que sí, así que las
+       * políticas dejan borrar sus enlaces después. `retejerMensaje` los quita
+       * solo, porque el cuerpo ya no cita nada.
+       */
+      if (rows[0]) await retejerMensaje(db, messageId);
       return rows[0]?.channel_id ?? null;
     });
 

@@ -416,6 +416,39 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(202).send({ sent: true });
   });
 
+  /**
+   * Mirar el enlace al abrir la pantalla, sin gastarlo.
+   *
+   * POR QUÉ NO SIRVE `POST /auth/reset-password` PARA ESTO. Porque canjea. Si
+   * la pantalla comprobara con él, el enlace quedaría gastado antes de que la
+   * persona escribiera nada. `check_user_token` (0054) es `stable`: mira y no
+   * toca.
+   *
+   * POR QUÉ POST Y NO GET CON EL TOKEN EN LA RUTA. `/invitations/:token` sí es
+   * un GET, pero una invitación mete a alguien en una organización y esto
+   * cambia una contraseña. Un token en la ruta acaba en el registro del
+   * servidor, en el historial del navegador y en la cabecera `Referer` de la
+   * primera imagen que cargue la página. En el cuerpo, no.
+   *
+   * Devuelve el motivo, no un sí o un no, porque cada motivo tiene una salida
+   * distinta y la pantalla necesita saber cuál ofrecer. No devuelve de quién es
+   * la cuenta: quien tenga el enlace puede cambiar esa contraseña, pero no
+   * tiene por qué averiguar a qué dirección pertenece.
+   */
+  app.post("/auth/reset-password/check", limiteEstricto, async (request) => {
+    const { token } = parseBody(z.object({ token: z.string().min(10) }), request.body);
+
+    const estado = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ check_user_token: string }>(
+        "select public.check_user_token($1,'password_reset')",
+        [hashToken(token)],
+      );
+      return rows[0]?.check_user_token ?? "desconocido";
+    });
+
+    return { estado };
+  });
+
   app.post("/auth/reset-password", limiteEstricto, async (request) => {
     const body = parseBody(
       z.object({
