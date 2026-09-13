@@ -135,6 +135,15 @@ jobs:
         # cambio, y confundirlos manda a media plantilla a repetir algo hecho.
         run: npm run test:recuperar --workspace apps/api
 
+      - name: El recorrido de bienvenida
+        # La lista de trece roles vive en la base (0052) y aqui se reparte en
+        # tres familias a mano. El dia que alguien anada uno al enumerado y no
+        # lo apunte, el ultimo paso —el unico que le dice a la persona que hacer
+        # despues— se quedaria en blanco. Por eso hay valor por defecto y por
+        # eso se comprueba que los trece esten repartidos y que no todos acaben
+        # en el mismo sitio, que haria inutil el rol.
+        run: npm run test:recorrido --workspace apps/web
+
       - name: Lo que la tarjeta promete que no se ve
         # «Mi cuenta» le dice a cada persona que su correo no circula, que su
         # huso solo lo usa el servidor y que el rol del recorrido no lo ve

@@ -56,6 +56,15 @@ export type Me = {
   avatarUrl: string | null;
   /** Si su cara es el personaje de DevVerse en vez de una foto (0058). */
   usaPersonaje: boolean;
+  /**
+   * Si ya vio el recorrido de bienvenida (0059).
+   *
+   * Va en la sesión y no en una ruta aparte porque lo necesita el armazón para
+   * decidir si abrirlo, y eso pasa ANTES de que la pantalla de dentro monte:
+   * una petición más ahí sería medio segundo de aplicación normal antes de que
+   * el recorrido se abriera encima, que es peor que no tenerlo.
+   */
+  recorridoVisto: boolean;
   emailVerified: boolean;
   /** La cartelera. Viaja con la sesión porque el selector de presencia
    *  vive en la barra y está en pantalla siempre. */
@@ -79,6 +88,7 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
             p.avatar_key    as "avatarKey",
             p.avatar_url    as "avatarUrl",
             p.usa_personaje as "usaPersonaje",
+            (p.recorrido_visto is not null) as "recorridoVisto",
             p.presence, p.title, p.timezone,
             (u.email_verified_at is not null) as "emailVerified"
        from users u

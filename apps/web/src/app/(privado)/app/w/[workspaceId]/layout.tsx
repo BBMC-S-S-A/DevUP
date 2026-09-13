@@ -34,6 +34,7 @@ import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { SelectorDeEspacio } from "@/components/ui/SelectorDeEspacio";
+import { Recorrido } from "@/components/recorrido/Recorrido";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
@@ -550,6 +551,12 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     >
       <WorkspaceProvider workspace={workspace}>{children}</WorkspaceProvider>
       <PaletaComandos orgId={workspace.organizationId} workspaceId={workspaceId} />
+      {/* SOLO EN LA VISTA PROFESIONAL, y por eso va aquí y no en el otro
+          `WorkspaceProvider` de arriba: sus pasos hablan de ramas, de tableros
+          y de cerrar tareas, y encima de DevVerse serían una ventana tapando
+          justo lo que hace que esa vista valga la pena. Quien entre directo a
+          la oficina lo verá al volver. */}
+      <Recorrido />
     </Armazon>
   );
 }

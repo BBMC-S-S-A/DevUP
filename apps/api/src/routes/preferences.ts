@@ -319,6 +319,22 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
+   * Dar el recorrido por visto, o volver a pedirlo.
+   *
+   * SALTARLO CUENTA COMO VERLO. Quien lo cierra ha tomado una decisión —«esto
+   * no me hace falta»— y ponérselo delante otra vez mañana es no haberla
+   * respetado. Se vuelve a pedir desde ajustes, que es donde se busca algo que
+   * se cerró queriendo.
+   */
+  app.put("/me/recorrido", async (request) => {
+    const userId = requireUser(request);
+    const { visto } = parseBody(z.object({ visto: z.boolean() }), request.body);
+
+    await withUser(userId, (db) => db.query("select public.set_my_recorrido($1)", [visto]));
+    return { recorridoVisto: visto };
+  });
+
+  /**
    * La foto de perfil, en tres pasos: pedir, confirmar, y quitarla.
    *
    * POR QUÉ TRES PASOS Y NO UNO. El archivo NO pasa por la API: se firma una
