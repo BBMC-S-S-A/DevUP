@@ -135,6 +135,16 @@ jobs:
         # cambio, y confundirlos manda a media plantilla a repetir algo hecho.
         run: npm run test:recuperar --workspace apps/api
 
+      - name: Ajustes de un espacio de trabajo
+        # La politica de la 0035 falla de DOS maneras y solo una llega como
+        # error: `using` deja cero filas en silencio, `with check` revienta con
+        # 42501. Lo que fija esta prueba es lo que esa diferencia protege — que
+        # quien administra la organizacion no pueda convertir en SUYO un espacio
+        # del equipo. Ese movimiento no rompe nada, no deja error y deja a todo
+        # el mundo fuera de su propio proyecto. Mas: que borrar se lleve canales,
+        # tareas y columnas, y que pida el nombre escrito.
+        run: npm run test:espacios --workspace apps/api
+
       - name: Los puntos
         # Se ganan al cerrar, en la base, y por eso hay que fijar el bucle:
         # sin el indice unico por (tarea, motivo), cerrar una tarea, reabrirla
