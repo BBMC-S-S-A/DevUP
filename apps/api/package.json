@@ -36,7 +36,8 @@
     "test:grafo": "tsx src/routes/grafo.test.ts",
     "test:recuperar": "tsx src/routes/recuperar.test.ts",
     "test:puntos": "tsx src/routes/puntos.test.ts",
-    "test:espacios": "tsx src/routes/espacios.test.ts"
+    "test:espacios": "tsx src/routes/espacios.test.ts",
+    "test:datos-visibles": "tsx src/routes/datos-visibles.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

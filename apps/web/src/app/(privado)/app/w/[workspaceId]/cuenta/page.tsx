@@ -29,6 +29,7 @@ import {
   api,
 } from "@/lib/api";
 import { Dispositivos } from "@/components/ajustes/Dispositivos";
+import { DatosVisibles } from "@/components/ajustes/DatosVisibles";
 import { uploadAvatar } from "@/lib/files/upload";
 import { CaraDePersonaje } from "@/components/perfil/CaraDePersonaje";
 import { ignorar } from "@/lib/fallo";
@@ -66,6 +67,11 @@ export default function CuentaPage() {
             todos. Es de «Mi cuenta» porque es de la persona en su mesa, no de
             la organización. */}
         <Dispositivos />
+        {/* Detrás de lo que se rellena, y no delante: primero se pone el
+            nombre, la cara y el oficio, y ahí es cuando importa saber a quién
+            le llega. Delante sería una advertencia antes de que hubiera nada
+            que advertir. */}
+        <DatosVisibles />
         <ClaveDeIA />
         <ConexionesDeAgente />
         <Navegadores />

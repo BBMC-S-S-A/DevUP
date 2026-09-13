@@ -135,6 +135,16 @@ jobs:
         # cambio, y confundirlos manda a media plantilla a repetir algo hecho.
         run: npm run test:recuperar --workspace apps/api
 
+      - name: Lo que la tarjeta promete que no se ve
+        # «Mi cuenta» le dice a cada persona que su correo no circula, que su
+        # huso solo lo usa el servidor y que el rol del recorrido no lo ve
+        # nadie. Esas frases se comprobaron contra las rutas UNA vez. El dia
+        # que alguien anada `p.timezone` a la lista de miembros —por una razon
+        # perfectamente buena— la tarjeta seguira diciendo que no se ve, nada
+        # fallara, y el producto estara afirmando algo falso sobre la privacidad
+        # de sus usuarios. Esto es lo que sostiene esa promesa.
+        run: npm run test:datos-visibles --workspace apps/api
+
       - name: Ajustes de un espacio de trabajo
         # La politica de la 0035 falla de DOS maneras y solo una llega como
         # error: `using` deja cero filas en silencio, `with check` revienta con
