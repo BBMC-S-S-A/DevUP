@@ -29,6 +29,7 @@
     "respaldo:ahora": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/respaldo-base-de-datos.sh",
     "respaldo:probar": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T respaldo-base-de-datos sh scripts/probar-restauracion.sh",
     "grafo": "node scripts/grafo.mjs",
+    "vault": "node scripts/exportar-vault.mjs",
     "doc:pdf": "node scripts/md-a-pdf.mjs",
     "correo:probar": "node scripts/probar-correo.mjs",
     "boveda:rotar": "node scripts/rotar-clave-boveda.mjs",
