@@ -41,7 +41,7 @@ export type ProveedorDespliegue = {
 
 type ConfigRailway = { projectId: string; environmentId: string; serviceId: string };
 
-function esConfigRailway(config: unknown): config is ConfigRailway {
+export function esConfigRailway(config: unknown): config is ConfigRailway {
   return (
     typeof config === "object" &&
     config !== null &&
@@ -50,6 +50,7 @@ function esConfigRailway(config: unknown): config is ConfigRailway {
     typeof (config as ConfigRailway).serviceId === "string"
   );
 }
+export type { ConfigRailway };
 
 const RAILWAY_GRAPHQL = "https://backboard.railway.com/graphql/v2";
 
@@ -82,6 +83,35 @@ export async function railwayGraphql<T>(
     throw new Error(cuerpo.errors[0]!.message);
   }
   return cuerpo.data as T;
+}
+
+/**
+ * Las variables de entorno de un servicio, tal cual las tiene Railway ahora
+ * mismo — no las que alguien pegó a mano en algún sitio.
+ *
+ * PARA QUÉ SIRVE: el servicio de la API ya tiene su propia `DATABASE_URL` en
+ * Railway —así se conecta a su propia Postgres—, así que un entorno que ya
+ * apunta a ese servicio (0063) es también la forma de encontrar esa cadena
+ * de conexión sin pedirle a nadie que la copie y la pegue dos veces. Ver
+ * `conexionDeBase` en `routes/basedatos.ts`.
+ *
+ * Verificado contra la documentación oficial de Railway
+ * (docs.railway.com/integrations/api/manage-variables) antes de escribir
+ * esto: `variables(projectId, environmentId, serviceId)` devuelve un objeto
+ * plano de `{NOMBRE: valor}`, no una lista.
+ */
+export async function variablesDeRailway(
+  token: string,
+  config: ConfigRailway,
+): Promise<Record<string, string>> {
+  const data = await railwayGraphql<{ variables: Record<string, string> }>(
+    token,
+    `query($projectId: String!, $environmentId: String!, $serviceId: String) {
+      variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId)
+    }`,
+    config,
+  );
+  return data.variables;
 }
 
 function traducirEstadoRailway(status: string): EstadoProveedor["estado"] {

@@ -278,12 +278,15 @@ export async function fetchGithubStats(token: string | null, fullName: string): 
   };
 }
 
+export type UltimoCommit = { sha: string; mensaje: string; fecha: string };
+
 export type Colaborador = {
   login: string;
   avatarUrl: string;
   commits: number;
   adiciones: number;
   borrados: number;
+  ultimosCommits: UltimoCommit[];
 };
 
 /**
@@ -313,7 +316,7 @@ export async function fetchContributorStats(
     weeks: { a: number; d: number }[];
   }[];
 
-  const colaboradores = body
+  const ordenados = body
     .filter((c) => c.author)
     .map((c) => ({
       login: c.author!.login,
@@ -324,7 +327,36 @@ export async function fetchContributorStats(
     }))
     .sort((a, b) => b.commits - a.commits);
 
+  // Los últimos commits solo de quien de verdad se enseña (0025.tsx corta en
+  // 8 tarjetas): pedirlos de los cuarenta colaboradores de un repo grande
+  // sería cuarenta peticiones para nueve que nadie mira.
+  const TOPE_CON_COMMITS = 8;
+  const colaboradores: Colaborador[] = await Promise.all(
+    ordenados.map(async (c, i) => ({
+      ...c,
+      ultimosCommits: i < TOPE_CON_COMMITS ? await fetchUltimosCommits(token, fullName, c.login) : [],
+    })),
+  );
+
   return { listo: true, colaboradores };
+}
+
+/** Los últimos commits de una persona en el repositorio, para su tarjeta. */
+async function fetchUltimosCommits(
+  token: string | null,
+  fullName: string,
+  autor: string,
+): Promise<UltimoCommit[]> {
+  const commits = (await get(
+    `${API}/repos/${fullName}/commits?author=${encodeURIComponent(autor)}&per_page=5`,
+    token,
+  ).catch(() => [])) as { sha: string; commit: { message: string; author: { date: string } } }[];
+
+  return commits.map((c) => ({
+    sha: c.sha.slice(0, 7),
+    mensaje: c.commit.message.split("\n")[0]!.slice(0, 120),
+    fecha: c.commit.author.date,
+  }));
 }
 
 /**

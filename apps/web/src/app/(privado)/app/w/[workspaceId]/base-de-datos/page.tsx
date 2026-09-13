@@ -18,7 +18,7 @@ import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useWorkspaceId } from "@/lib/workspace-context";
-import type { Connection, GithubRepo, ResultadoSQL, TablaDB } from "@/lib/api";
+import type { GithubRepo, ResultadoSQL, TablaDB } from "@/lib/api";
 import { api, useMutacion, useRecurso } from "@/lib/datos";
 
 const PESTANAS = [
@@ -210,20 +210,32 @@ export default function BaseDeDatosPage() {
  * compartida de DevUP — eso rompería el aislamiento por `workspace_id` que
  * sostiene a todos los demás.
  */
+const SIN_CONECTAR = "no tiene ninguna base de datos conectada todavía";
+
+/**
+ * Se decide con el propio intento de leer las tablas, no adivinando de
+ * antemano si hay una conexión `postgres`.
+ *
+ * DESDE QUE EL API BUSCA SOLA EN RAILWAY (ver `conexionDeBase` en
+ * `basedatos.ts`), «¿hay una base conectada?» ya no es lo mismo que «¿existe
+ * una fila con provider postgres?» — puede no haber ninguna y aun así
+ * conectar sola desde un entorno con Railway configurado. Preguntarle a
+ * `/connections` en vez de a `/database/tables` habría enseñado el
+ * formulario manual a alguien que ya tiene todo resuelto.
+ */
 function Administrador({ workspaceId }: { workspaceId: string }) {
   const conexionesClave = `/workspaces/${workspaceId}/connections`;
-  const conexiones = useRecurso<{ connections: Connection[] }>(conexionesClave);
-  const tieneBase = (conexiones.datos?.connections ?? []).some((c) => c.provider === "postgres");
+  const tablas = useRecurso<{ tables: TablaDB[] }>(`/workspaces/${workspaceId}/database/tables`);
 
-  if (conexiones.cargando) return <Cargando etiqueta="Comprobando conexiones" />;
+  if (tablas.cargando) return <Cargando etiqueta="Comprobando la base de datos" />;
 
-  if (!tieneBase) {
+  if (tablas.error?.includes(SIN_CONECTAR)) {
     return (
       <div className="space-y-3">
         <EstadoVacio
           icono={<Database size={20} />}
           titulo="Este workspace no tiene ninguna base de datos conectada"
-          pista="Pega la cadena de conexión de vuestra propia Postgres — alojada donde sea, Railway incluido. Se guarda como cualquier otra credencial, y solo este workspace la usa."
+          pista="Si el workspace ya despliega en Railway, configúralo en un entorno de Infraestructura y esta pantalla encuentra sola su Postgres. Si no, pega aquí la cadena de conexión de la vuestra."
         />
         <ConectarBaseDeDatos conexionesClave={conexionesClave} workspaceId={workspaceId} />
       </div>

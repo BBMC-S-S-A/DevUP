@@ -253,7 +253,15 @@ export function AuditoriaDelRegistro({ workspaceId }: { workspaceId: string }) {
   );
 }
 
-type Colaborador = { login: string; avatarUrl: string; commits: number; adiciones: number; borrados: number };
+type UltimoCommit = { sha: string; mensaje: string; fecha: string };
+type Colaborador = {
+  login: string;
+  avatarUrl: string;
+  commits: number;
+  adiciones: number;
+  borrados: number;
+  ultimosCommits: UltimoCommit[];
+};
 
 /**
  * Commits y líneas cambiadas, leídos de GitHub y no del tablero.
@@ -311,26 +319,62 @@ function ColaboradoresGitHub({ workspaceId }: { workspaceId: string }) {
           pista=""
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Tarjeta className="p-4">
-            <Rotulo className="mb-3 block">Commits</Rotulo>
-            <GraficoBarras
-              color="var(--c-cyan)"
-              barras={(datos.datos?.colaboradores ?? [])
-                .slice(0, 8)
-                .map((c) => ({ etiqueta: c.login, valor: c.commits }))}
-            />
-          </Tarjeta>
-          <Tarjeta className="p-4">
-            <Rotulo className="mb-3 block">Líneas añadidas</Rotulo>
-            <GraficoBarras
-              barras={(datos.datos?.colaboradores ?? [])
-                .slice(0, 8)
-                .map((c) => ({ etiqueta: c.login, valor: c.adiciones }))}
-            />
-          </Tarjeta>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {(datos.datos?.colaboradores ?? []).slice(0, 8).map((c) => (
+            <TarjetaColaborador key={c.login} colaborador={c} />
+          ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** «hace 3 días», que es como se lee la fecha de un commit reciente. */
+function haceCommit(iso: string): string {
+  const dias = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  if (dias <= 0) return "hoy";
+  if (dias === 1) return "ayer";
+  return `hace ${dias} días`;
+}
+
+function TarjetaColaborador({ colaborador: c }: { colaborador: Colaborador }) {
+  return (
+    <Tarjeta className="flex flex-col p-4">
+      <div className="flex items-center gap-2.5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- avatar de GitHub, no de nuestro storage */}
+        <img src={c.avatarUrl} alt="" className="size-8 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{c.login}</p>
+          <p className="text-[11px] text-faint">
+            <span className="font-mono tabular-nums text-muted">{c.commits}</span> commits
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-2.5 flex gap-3 text-[11px]">
+        <span className="text-live">+{c.adiciones.toLocaleString("es")}</span>
+        <span className="text-danger">−{c.borrados.toLocaleString("es")}</span>
+      </div>
+
+      <div className="mt-3 border-t border-line pt-2.5">
+        <Rotulo className="mb-1.5 block">Últimos commits</Rotulo>
+        {c.ultimosCommits.length === 0 ? (
+          <p className="text-[11px] text-faint">Sin commits leídos.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {c.ultimosCommits.map((commit) => (
+              <li key={commit.sha} className="min-w-0">
+                <p className="truncate text-[11px] text-muted" title={commit.mensaje}>
+                  {commit.mensaje}
+                </p>
+                <p className="text-[10px] text-faint">
+                  <code className="font-mono">{commit.sha}</code> — {haceCommit(commit.fecha)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Tarjeta>
   );
 }
