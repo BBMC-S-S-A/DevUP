@@ -192,8 +192,21 @@ jobs:
           # que cualquier corrida de este job la use, sin depender de que
           # nadie tenga su propia sesión de Railway abierta.
           mkdir -p ~/.ssh
-          printf '%s' "$RAILWAY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 700 ~/.ssh
+          # `tr -d '\r'` y no un `printf` a secas: el secreto se guardó desde
+          # PowerShell (`Get-Content -Raw`), y si el archivo de origen llevaba
+          # algún `\r`, una llave OpenSSH con retornos de carro no es una
+          # llave válida — el CLI no avisa de eso, dice llanamente «no hay
+          # ninguna», que es justo el quinto fallo real de este paso.
+          printf '%s' "$RAILWAY_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          # Y la llave tiene que terminar en salto de línea, o el parser la
+          # da por incompleta igual de en silencio.
+          printf '\n' >> ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 -P "" > /dev/null || {
+            echo "::error::La llave escrita en el runner no es una llave OpenSSH válida."
+            exit 1
+          }
           railway connect Postgres --tunnel-only --port 55432 \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
             --environment production &
