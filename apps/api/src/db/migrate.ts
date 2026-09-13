@@ -196,11 +196,38 @@ async function main(): Promise<void> {
     let ran = 0;
     for (const file of files) {
       const sql = await readFile(join(MIGRATIONS_DIR, file), "utf8");
-      const checksum = createHash("sha256").update(sql).digest("hex").slice(0, 16);
+      // Normalizado ANTES de hashear: el checksum tiene que representar el
+      // contenido de la migración, no la representación exacta de bytes en
+      // disco. Antes de `.gitattributes` (`*.sql text eol=lf`, 13 de
+      // septiembre de 2026) un checkout en Windows podía traer `\r\n`; sin
+      // esto, la misma migración sin una sola edición real hashea distinto
+      // según quién la haya bajado y cuándo.
+      const normalizado = sql.replace(/\r\n/g, "\n");
+      const checksum = createHash("sha256").update(normalizado).digest("hex").slice(0, 16);
       const previous = appliedByName.get(file);
 
       if (previous !== undefined) {
         if (previous !== checksum) {
+          // El runner, hasta hoy, hasheaba los bytes tal cual llegaban del
+          // disco, sin normalizar saltos de línea — así quedó grabado el
+          // checksum de cada migración ya aplicada. Antes de acusar una
+          // edición real, se comprueba la ÚNICA otra explicación posible:
+          // que el archivo de hoy, reescrito con `\r\n`, sea byte a byte el
+          // que se aplicó entonces. Si coincide, es el mismo contenido de
+          // siempre bajo otro salto de línea, y el checksum se pone al día
+          // en vez de bloquear un despliegue por algo que nunca cambió.
+          const comoCRLF = normalizado.replace(/\n/g, "\r\n");
+          const checksumComoEntonces = createHash("sha256").update(comoCRLF).digest("hex").slice(0, 16);
+
+          if (checksumComoEntonces === previous) {
+            await client.query(
+              "update public.schema_migrations set checksum = $1 where name = $2",
+              [checksum, file],
+            );
+            console.log(`· ${file} — checksum reconciliado (\\r\\n → \\n, sin cambios reales)`);
+            continue;
+          }
+
           throw new Error(
             `La migración ${file} ya se aplicó pero su contenido ha cambiado ` +
               `(${previous} → ${checksum}). Escribe una migración nueva en vez ` +
