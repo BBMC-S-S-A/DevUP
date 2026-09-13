@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { AsientoDePuntos, PuntosDePersona } from "@/lib/api";
 import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useRecurso } from "@/lib/datos";
-import { iniciales } from "@/lib/fechas";
+import { Avatar } from "@/components/perfil/Avatar";
 
 /**
  * El marcador de una organización.
@@ -136,12 +136,7 @@ function FilaDePersona({
         aria-expanded={abierta}
         className="presionable flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-raised/60"
       >
-        <span
-          aria-hidden
-          className="grid size-6 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[9px] font-semibold text-muted"
-        >
-          {iniciales(persona.nombre ?? "?")}
-        </span>
+        <Avatar userId={persona.id} nombre={persona.nombre} tamano={24} />
 
         <span className="min-w-0 flex-1 truncate text-xs text-ink">
           {persona.nombre ?? "alguien"}

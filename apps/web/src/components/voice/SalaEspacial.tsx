@@ -32,6 +32,21 @@ import { iniciales } from "@/lib/fechas";
 // dos copias divergieran el día que cambie la paleta.
 
 
+/**
+ * AQUÍ NO SE PINTA LA FOTO, Y ES A PROPÓSITO — por ahora.
+ *
+ * El resto de la aplicación usa `<Avatar>`, que enseña la foto o el personaje
+ * de cada quien. Esta chapa no, por dos motivos que conviene no confundir:
+ *
+ *  1. **No tiene el identificador.** `EnLaSala` llega de la sala de voz, que
+ *     hoy reparte nombres y no identidades. Traerlo cruza el `useVoiceRoom` y
+ *     la señalización, y eso es otro trabajo — no una línea.
+ *  2. **El círculo de aquí no es una chapa.** Tiene su degradado por persona y
+ *     crece al hablar: es el escenario de la llamada, no una miniatura en una
+ *     lista. Meter una foto encima sin rehacer eso lo deja peor.
+ *
+ * Lo primero hay que hacerlo; lo segundo hay que decidirlo antes.
+ */
 export type EnLaSala = {
   displayName: string;
   muted: boolean;

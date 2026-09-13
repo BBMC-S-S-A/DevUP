@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Rotulo } from "@/components/ui/Superficies";
 import { actorLegible, fraseDeRenglon, type Renglon } from "@/lib/actividad";
-import { iniciales } from "@/lib/fechas";
+import { Avatar } from "@/components/perfil/Avatar";
 import { ignorar } from "@/lib/fallo";
 
 /**
@@ -65,17 +65,25 @@ export function HistorialDeTarea({ taskId }: { taskId: string }) {
       <ol className="space-y-2">
         {renglones.map((renglon) => (
           <li key={renglon.id} className="flex items-start gap-2.5">
-            <span
-              aria-hidden
-              className="mt-px grid size-6 shrink-0 place-items-center rounded-full border border-line
-                bg-raised font-display text-[9px] font-semibold text-muted"
-            >
-              {renglon.procedencia === "agente" ? (
+            {/* El agente conserva su icono y su chapa propia: lo que hizo una
+                regla no debe parecer que lo hizo una persona, que es media
+                tesis del registro. Las personas traen su cara. */}
+            {renglon.procedencia === "agente" ? (
+              <span
+                aria-hidden
+                className="mt-px grid size-6 shrink-0 place-items-center rounded-full border
+                  border-line bg-raised text-muted"
+              >
                 <Bot size={11} />
-              ) : (
-                iniciales(actorLegible(renglon))
-              )}
-            </span>
+              </span>
+            ) : (
+              <Avatar
+                userId={renglon.actorId}
+                nombre={actorLegible(renglon)}
+                tamano={24}
+                className="mt-px"
+              />
+            )}
 
             <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-muted">
               <span className="font-medium text-ink">{actorLegible(renglon)}</span>{" "}

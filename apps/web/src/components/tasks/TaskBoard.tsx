@@ -25,6 +25,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { fechaCorta, hoyLocal, iniciales } from "@/lib/fechas";
+import { Avatar } from "@/components/perfil/Avatar";
 import { trasQuienInsertar } from "@/lib/tablero-teclado";
 import {
   ApiError,
@@ -863,9 +864,11 @@ export function TaskBoard({
                           <span className="mt-2.5 flex items-center gap-2">
                             {task.assigneeName ? (
                               <span className="flex min-w-0 items-center gap-1.5">
-                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-elevated font-display text-[9px] font-semibold text-muted">
-                                  {iniciales(task.assigneeName)}
-                                </span>
+                                <Avatar
+                                  userId={task.assigneeId}
+                                  nombre={task.assigneeName}
+                                  tamano={20}
+                                />
                                 <span className="truncate text-[11px] text-muted">
                                   {task.assigneeName}
                                 </span>

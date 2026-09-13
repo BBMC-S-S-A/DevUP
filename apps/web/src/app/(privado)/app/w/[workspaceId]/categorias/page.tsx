@@ -18,7 +18,7 @@ import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useOrgId, useWorkspaceId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
-import { iniciales } from "@/lib/fechas";
+import { Avatar } from "@/components/perfil/Avatar";
 
 /**
  * Las ramas de trabajo de un espacio.
@@ -347,12 +347,7 @@ function FichaDeRama({
               key={g.id}
               className="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent-soft/40 py-0.5 pl-1 pr-1.5"
             >
-              <span
-                aria-hidden
-                className="grid size-5 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[9px] font-semibold text-muted"
-              >
-                {iniciales(g.nombre ?? "?")}
-              </span>
+              <Avatar userId={g.id} nombre={g.nombre} tamano={20} />
               <span className="text-[11px] text-ink">{g.nombre ?? "alguien"}</span>
               <button
                 type="button"
@@ -484,12 +479,7 @@ function PanelDeRama({ rama }: { rama: Rama }) {
               <ul className="mt-2 space-y-2">
                 {gente.map((p) => (
                   <li key={p.id} className="flex items-start gap-2">
-                    <span
-                      aria-hidden
-                      className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border border-line-strong bg-raised font-display text-[9px] font-semibold text-muted"
-                    >
-                      {iniciales(p.nombre ?? "?")}
-                    </span>
+                    <Avatar userId={p.id} nombre={p.nombre} tamano={24} className="mt-0.5" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs text-ink">{p.nombre ?? "alguien"}</p>
                       <p className="mt-0.5 text-[10px] text-faint">
