@@ -184,8 +184,10 @@ Cada vecino trae lo que hace falta para pintarlo sin pedir nada más:
   tipo, nodoId, nombre }
 ```
 
-Los ocho tipos son `espacio`, `canal`, `mensaje`, `tarea`, `archivo`,
-`componente`, `repositorio`, `entorno`.
+Los tipos son **diez**: `espacio`, `canal`, `mensaje`, `tarea`, `archivo`,
+`componente`, `repositorio`, `entorno` y —desde la 0050/0051— `area` y
+`persona`. Con esos dos, una rama y quien la trabaja son nodos del grafo y no
+solo recuentos del tablero.
 
 **Dos cosas que conviene saber antes de dibujar.** La primera: `vecinos` viene
 en **las dos direcciones** —un nodo tiene aristas por donde sale y por donde
@@ -318,6 +320,80 @@ edificio. Con el porqué de cada decisión y con la prioridad si no cabe todo.
 son la misma idea construida dos veces, y hay una decisión pendiente sobre
 fusionarlas. Lo que se monte encima de cualquiera de las dos habrá que rehacerlo
 si se fusionan.
+
+---
+
+### La pantalla de categorías está mirando la tabla equivocada
+
+Esto es lo más importante de esta tanda, y no se ve desde la pantalla: se ve
+comparando dos ficheros.
+
+`/app/w/<espacio>/categorias` se titula «las ramas de trabajo de este espacio» y
+por dentro trabaja sobre **`tags`** — las etiquetas de la 0002, las de cruzar —
+mientras que las ramas de verdad son **`task_categories`**, que es lo que lleva
+el tablero, lo que crea `crear_area` desde el MCP y lo que el script de
+reordenar repartió entre Workflow, DevVerse y Funcionalidades. Son dos tablas
+distintas con dos listas distintas de nombres.
+
+Y el «Jefe de rama» de esa pantalla escribe en `tags.owner_id`, que la 0050 dejó
+marcada como OBSOLETA con un comentario en la propia columna: «no escribir
+aquí». Lo que se guarde ahí no lo lee nadie. Elegir un jefe en esa pantalla hoy
+no hace nada visible en ninguna otra parte.
+
+**La API para la pantalla correcta ya está entera y probada:**
+
+```
+GET    /workspaces/:id/ramas?dias=7        → { dias, ramas: [...] }
+GET    /categories/:categoryId/rama?dias=30 → { dias, porRepartir, quienHaTrabajado }
+POST   /workspaces/:id/categories          → { category }   { name, color?, ownerId? }
+PATCH  /categories/:categoryId             → { category }   { name?, color? }
+DELETE /categories/:categoryId             → 204   (las tareas NO caen con ella)
+PUT    /categories/:id/gerentes/:userId    → { gerente: true }
+DELETE /categories/:id/gerentes/:userId    → { gerente: false }
+```
+
+Cada rama de la lista viene así:
+
+```
+{ id, nombre, color,
+  gerentes: [{ id, nombre }],   // PLURAL: ver abajo
+  pendientes, cerradasReciente, porRepartir }
+```
+
+Y el detalle que se abre al entrar en una:
+
+```
+porRepartir:      [{ id, titulo, prioridad, columna }]
+quienHaTrabajado: [{ id, nombre, porVerbo: { creo: 3, movio: 7 }, ultimaVez }]
+```
+
+**Cuatro cosas que conviene saber antes de pintarla.**
+
+1. **Los gerentes son varios, y no es un adorno.** Con uno solo, unas vacaciones
+   dejan la rama sin nadie que responda. Por eso no hay «campo jefe»: hay un
+   `PUT` y un `DELETE` por persona. Si la pantalla manda la lista entera, dos
+   personas editando a la vez se borran la una a la otra sin enterarse.
+
+2. **Gerente y delegado son cosas distintas.** El gerente RESPONDE de la rama y
+   REPARTE su trabajo: puede no tener ni una tarea suya. El delegado es quien la
+   hace. Archivar una tarea en una rama **no asigna a nadie** — lo que cae sin
+   delegado es exactamente `porRepartir`, y esa lista es la razón de ser de la
+   pantalla del gerente.
+
+3. **`quienHaTrabajado` cuenta las tareas que HOY están en la rama.** Mudar una
+   tarea se lleva su historia con ella. Está bien para «¿quién sabe de esto?» y
+   está mal para «¿cuánto se trabajó aquí en septiembre?» — y solo contesta la
+   primera. No lo pintes como una gráfica de esfuerzo por mes.
+
+4. **Nombrar a alguien puede fallar de dos maneras distintas, y se notan.** Un
+   403 es «tú no puedes nombrar aquí»; un 400 es «esa persona no está en este
+   espacio». Enseñar el mismo mensaje para los dos hace que invitar a un
+   compañero nuevo se lea como falta de permisos propios.
+
+Lo que pidió el §6.1 —«quién ha trabajado» de verdad— está en esa segunda ruta.
+La red del grafo ya tiene `area` y `persona` como nodos (son **diez** tipos, no
+ocho: los dos nuevos entraron en la 0050/0051), así que la rama entera se puede
+dibujar desde el grafo y no solo contar desde el tablero.
 
 ---
 
