@@ -28,6 +28,7 @@ import {
   ApiError,
   api,
 } from "@/lib/api";
+import { AjustesDelEspacio } from "@/components/ajustes/AjustesDelEspacio";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { uploadOrgLogo } from "@/lib/files/upload";
@@ -59,6 +60,22 @@ export default function OrganizationSettingsPage() {
   const orgId = useOrgId();
   const { user } = useSession();
 
+  /**
+   * Si se llegó desde dentro de un espacio, sus ajustes van PRIMERO.
+   *
+   * Esta pantalla se monta en dos direcciones: `/app/o/<org>/ajustes` y
+   * `/app/w/<espacio>/ajustes`. Quien pulsa «Ajustes» estando dentro de un
+   * proyecto viene casi siempre a por ese proyecto —a renombrarlo, a abrirlo al
+   * equipo, a borrarlo—, y hasta ahora se encontraba con la foto y los miembros
+   * de la organización, que es lo que menos buscaba. Desde la barra de la
+   * organización no hay espacio en contexto y no se pinta: no hay «el espacio»
+   * del que hablar.
+   */
+  const workspaceId = useWorkspaceIdOpcional();
+  const espacio = useRecurso<{ workspace: Workspace }>(
+    workspaceId ? `/workspaces/${workspaceId}` : null,
+  );
+
   // Cuatro lecturas de esta pantalla estaban escritas a mano, cada una con su
   // `useState`, su `useCallback` y su efecto — unas quince líneas por sitio
   // para hacer lo mismo. Por la capa de datos son una línea, y además comparten
@@ -81,6 +98,15 @@ export default function OrganizationSettingsPage() {
       <div className="space-y-5">
         {equipo.error && (
           <Fallo onReintentar={() => void load()}>{equipo.error}</Fallo>
+        )}
+
+        {espacio.datos && (
+          <AjustesDelEspacio
+            workspace={espacio.datos.workspace}
+            puedoAdministrar={administro}
+            soyQuienLoCreo={espacio.datos.workspace.createdBy === user?.id}
+            onCambiado={() => void espacio.recargar()}
+          />
         )}
 
         <IdentidadOrganizacion
