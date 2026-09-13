@@ -210,9 +210,13 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
         </div>
       </div>
 
+      {/* SIN «rejilla»: esa clase trae un `mask-image` radial pensado para un
+          fondo decorativo, y aplicada al lienzo entero difumina sus propios
+          bordes hacia oscuro — el «borde negro» que se reportó. Un lienzo que
+          hay que poder previsualizar limpio no lleva máscaras ni sombras. */}
       <div
         ref={lienzoRef}
-        className="rejilla relative overflow-auto rounded-2xl border border-line bg-canvas/40"
+        className="relative overflow-auto rounded-2xl border border-line bg-canvas/40"
         style={{ height: ALTO_LIENZO }}
       >
         {nodos.length === 0 ? (

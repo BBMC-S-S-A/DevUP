@@ -104,7 +104,7 @@ export function NavegacionOrganizacion({
         // Las ramas de trabajo del proyecto: quién lleva qué área y cuánto
         // queda en cada una. Va aquí y no en la organización porque lo que
         // enseña son las tareas de ESTE tablero.
-        { href: `${base}/categorias`, icono: <Network size={14} />, texto: "Categorías" },
+        { href: `${base}/categorias`, icono: <Network size={14} />, texto: "Ramas de trabajo" },
       ]
     : [];
 

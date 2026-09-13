@@ -560,8 +560,26 @@ h3 {
 }
 
 /* Rejilla técnica de fondo. Sin animación: una rejilla que deriva despacio en
-   pantalla completa es justo el tipo de movimiento periférico que marea. */
+   pantalla completa es justo el tipo de movimiento periférico que marea.
+
+   EN UN `::before`, NO EN EL ELEMENTO, y no es un detalle. `mask-image`
+   recorta TODO lo que se pinta de un elemento — su fondo y cualquier hijo
+   dentro—, así que puesta en el mismo elemento que enseña un diagrama o una
+   imagen, la máscara también desvanece esa imagen hacia los bordes: es
+   justo el «borde negro» que se reportó en Arquitectura y en la
+   previsualización de archivos. Con la rejilla en una capa propia detrás
+   del contenido, la máscara difumina solo la cuadrícula decorativa y el
+   contenido de encima queda intacto. */
 .rejilla {
+  position: relative;
+  isolation: isolate;
+}
+.rejilla::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
     linear-gradient(var(--rejilla-linea) 1px, transparent 1px),
     linear-gradient(90deg, var(--rejilla-linea) 1px, transparent 1px);

@@ -113,50 +113,52 @@ export default function CategoriasPage() {
           }
         />
       ) : (
-        /* Dos columnas en pantalla ancha, apiladas en móvil: el panel sigue
-           siendo lo segundo que se lee, no algo que desaparece. */
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="space-y-2.5">
-            {/* LA RED PRIMERO. Contesta «cómo está repartido esto» de un
-                vistazo; la lista de abajo es para cambiar una rama concreta.
-                Poner la lista arriba haría que el mapa solo lo viera quien se
-                desplaza. Se señala la rama abierta, que es lo que ata las dos
-                mitades de la pantalla: al elegir una en la lista, se ve en el
-                dibujo de quién cuelga. */}
-            {!tablero.cargando && (tablero.datos?.columns.length ?? 0) > 0 && (
-              <Tarjeta className="p-4">
-                <Rotulo className="mb-3 block">Red de trabajo</Rotulo>
-                <RedDeTrabajo
-                  columnas={tablero.datos?.columns ?? []}
-                  ramas={lista}
-                  elegidas={elegida ? [elegida.id] : []}
+        <div className="space-y-4">
+          {/* LA RED PRIMERO, A TODO EL ANCHO. Contesta «cómo está repartido
+              esto» de un vistazo, y necesita sitio para que los nombres no
+              se corten — metida en una columna estrecha junto a la lista era
+              justo lo contrario. Se señala la rama abierta, que es lo que ata
+              esta mitad con la de abajo: al elegir una en la lista, se ve en
+              el dibujo de quién cuelga. */}
+          {!tablero.cargando && (tablero.datos?.columns.length ?? 0) > 0 && (
+            <Tarjeta className="p-4">
+              <Rotulo className="mb-3 block">Red de trabajo</Rotulo>
+              <RedDeTrabajo
+                columnas={tablero.datos?.columns ?? []}
+                ramas={lista}
+                elegidas={elegida ? [elegida.id] : []}
+              />
+            </Tarjeta>
+          )}
+
+          {/* Dos columnas en pantalla ancha, apiladas en móvil: el panel
+              sigue siendo lo segundo que se lee, no algo que desaparece. */}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="space-y-2.5">
+              {creando && (
+                <NuevaRama
+                  workspaceId={workspaceId}
+                  onListo={() => {
+                    setCreando(false);
+                    void ramas.recargar();
+                  }}
+                  onCancelar={() => setCreando(false)}
                 />
-              </Tarjeta>
-            )}
+              )}
+              {lista.map((rama) => (
+                <FichaDeRama
+                  key={rama.id}
+                  rama={rama}
+                  abierta={elegida?.id === rama.id}
+                  miembros={miembros.datos?.members ?? []}
+                  onAbrir={() => setAbierta(rama.id)}
+                  onCambiada={() => void ramas.recargar()}
+                />
+              ))}
+            </div>
 
-            {creando && (
-              <NuevaRama
-                workspaceId={workspaceId}
-                onListo={() => {
-                  setCreando(false);
-                  void ramas.recargar();
-                }}
-                onCancelar={() => setCreando(false)}
-              />
-            )}
-            {lista.map((rama) => (
-              <FichaDeRama
-                key={rama.id}
-                rama={rama}
-                abierta={elegida?.id === rama.id}
-                miembros={miembros.datos?.members ?? []}
-                onAbrir={() => setAbierta(rama.id)}
-                onCambiada={() => void ramas.recargar()}
-              />
-            ))}
+            {elegida && <PanelDeRama rama={elegida} />}
           </div>
-
-          {elegida && <PanelDeRama rama={elegida} />}
         </div>
       )}
     </Pagina>
