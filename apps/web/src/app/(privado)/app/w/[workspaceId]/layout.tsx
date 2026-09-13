@@ -19,6 +19,7 @@ import {
   TriangleAlert,
   UserRound,
   Volume2,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -31,6 +32,7 @@ import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { guardarUltimoEspacio, olvidarUltimoEspacio } from "@/lib/ultimo-espacio";
 import { ignorar } from "@/lib/fallo";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { useConfirmar } from "@/components/ui/Confirmar";
 import { Entrada } from "@/components/ui/Field";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { SelectorDeEspacio } from "@/components/ui/SelectorDeEspacio";
@@ -654,7 +656,10 @@ function ChannelGroup({
             const pending = unread[channel.id] ?? 0;
 
             return (
-              <li key={channel.id}>
+              // `group/canal` con nombre: la barra ya tiene otros grupos
+              // anidados, y un `group` sin nombre se los pisa. `relative`
+              // porque el botón de borrar va encima del canto derecho.
+              <li key={channel.id} className="group/canal relative">
                 <ItemNav
                   href={href}
                   icono={channel.kind === "voice" ? <Volume2 size={15} /> : <Hash size={15} />}
@@ -685,12 +690,96 @@ function ChannelGroup({
                 >
                   {channel.name}
                 </ItemNav>
+                <BorrarCanal
+                  canal={channel}
+                  enEl={active}
+                  workspaceId={workspaceId}
+                  onBorrado={onCreated}
+                />
               </li>
             );
           })}
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Borrar un canal.
+ *
+ * LA RUTA YA EXISTÍA Y NADIE LA LLAMABA. `DELETE /channels/:channelId` está en
+ * la API desde el principio; lo que faltaba era la puerta. Es el cuarto caso de
+ * la misma clase, y el barrido de rutas muertas ya dejó escrita la lección: una
+ * ruta sin llamantes casi nunca es código de más, suele ser una función
+ * terminada a la que le falta el botón.
+ *
+ * VA COMO HERMANO DEL ENLACE, NO DENTRO. `sufijo` de `ItemNav` se pinta dentro
+ * del `<Link>`, y un `<button>` dentro de un `<a>` es HTML inválido —además de
+ * que pulsarlo navegaría—. Así que va aparte, colocado sobre el canto derecho.
+ *
+ * SOLO APARECE AL PASAR POR ENCIMA O AL LLEGAR CON EL TECLADO
+ * (`focus-within`). Una papelera visible en cada fila de una barra con
+ * diecisiete destinos es un accidente esperando; y sin `focus-within` sería una
+ * papelera que solo existe para quien usa ratón, que es el error que acabamos
+ * de arreglar en el tablero.
+ *
+ * EL DIÁLOGO DICE LO QUE SE PIERDE. La base borra en cascada los mensajes, las
+ * llamadas, las grabaciones y LA SALA DE DEVVERSE del canal. Eso último no lo
+ * adivina nadie: quien borra un canal de texto no espera que desaparezca una
+ * habitación. Los archivos sobreviven —`channel_id` pasa a nulo—, y también se
+ * dice, porque callarlo haría dudar antes de borrar.
+ */
+function BorrarCanal({
+  canal,
+  enEl,
+  workspaceId,
+  onBorrado,
+}: {
+  canal: Channel;
+  /** Si es el canal que se está viendo ahora mismo. */
+  enEl: boolean;
+  workspaceId: string;
+  onBorrado: () => Promise<void>;
+}) {
+  const confirmar = useConfirmar();
+  const router = useRouter();
+
+  return (
+    <span
+      className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity
+        duration-[var(--dur-hover)] group-hover/canal:opacity-100 group-focus-within/canal:opacity-100
+        motion-reduce:transition-none"
+    >
+      <BotonIcono
+        etiqueta={`Borrar ${canal.kind === "voice" ? "la sala" : "el canal"} ${canal.name}`}
+        onClick={async () => {
+          const seguro = await confirmar({
+            titulo: `¿Borrar ${canal.kind === "voice" ? "la sala" : "el canal"} «${canal.name}»?`,
+            descripcion:
+              "Se borran también sus mensajes, sus llamadas y grabaciones, y su sala de DevVerse. " +
+              "Los archivos que se compartieron ahí se quedan en la biblioteca. No se puede deshacer.",
+            accion: "Borrar",
+            peligro: true,
+          });
+          if (!seguro) return;
+          try {
+            await api.delete(`/channels/${canal.id}`);
+            // Salir ANTES de recargar la lista: quedarse en la pantalla de un
+            // canal que ya no existe da un error que no es del usuario.
+            if (enEl) router.push(`/app/w/${workspaceId}`);
+            await onBorrado();
+            toast.success(`«${canal.name}» borrado`);
+          } catch (caught) {
+            // El permiso lo decide la base, no esta pantalla. Si no se puede,
+            // hay que contarlo: un botón que no hace nada es peor que no tenerlo.
+            toast.error(caught instanceof ApiError ? caught.message : "no se pudo borrar");
+          }
+        }}
+      >
+        <Trash2 size={12} />
+      </BotonIcono>
+    </span>
   );
 }
 
