@@ -748,9 +748,12 @@ Por eso las rutas de enlaces van primero en la lista de funcionalidades: es lo
 
 ## 10. Lo que queda, a 13 de septiembre
 
-_Escrito después de fusionar el PR #67. Sustituye al §9 en lo que se solape:
-**el §9.1 entero está terminado**, así que lo de abajo es lo que de verdad
-queda. Comprobado contra el código y contra el tablero, no contra la memoria._
+_Reescrito al final de la tanda de configuración. **Sustituye a lo que decía
+antes este mismo apartado**, que se quedó viejo en unas horas: de sus nueve
+puntos de interfaz se han cerrado cinco. Se reescribe en vez de tacharse porque
+una lista con la mitad tachada se lee peor que una corta, y lo que importa de
+un «qué queda» es poder creérselo. Comprobado contra el código y contra el
+tablero, no contra la memoria._
 
 ### 10.1 Lo que se cerró y por qué no hay que volver a mirarlo
 
@@ -764,12 +767,35 @@ queda. Comprobado contra el código y contra el tablero, no contra la memoria._
 | Mirar un enlace de recuperación sin gastarlo | 0054 |
 | **Los puntos**: se ganan al cerrar, en la base, y se ven | 0055, `lib/puntos.ts`, MCP `puntos` |
 | El oficio y el rol por organización, que estaban sin puerta | 0048, 0052 + `/organizations/:id/me` |
+| **`/categorias` sobre la tabla de verdad**, con la red dentro | `task_categories`, `RedDeTrabajo` |
+| El recorrido de bienvenida, que elige por dónde empezar según el rol | 0059, `lib/recorrido.ts` |
+| **Toda la configuración de la persona** (§10.2) | 0056–0060 |
+| El estado de la instalación, sin entrar por SSH | `lib/salud.ts` |
+| Renombrar, abrir y borrar un espacio de trabajo | `PATCH`/`DELETE /workspaces/:id` |
+| Dar otro código a una invitación que ya existe | 0047, y el botón encendido |
 
-### 10.2 Base, API y MCP — lo que queda
+### 10.2 La configuración, que era el hueco más grande y ya no está
 
-Poco, y ninguna es urgente. La capa de abajo va por delante de la de arriba, y
-eso es lo que hay que aprovechar ahora: **lo que más valor suelta hoy es pintar
-lo que ya existe** (§10.3), no añadir más base.
+Se cierra entera y se apunta aquí porque era lo que más se notaba usando la
+aplicación: había una pantalla de «Mi cuenta» que solo dejaba cambiar el
+nombre.
+
+| Qué | Dónde |
+|---|---|
+| Micrófono y cámara: elegirlos, probarlos y que se recuerden | `lib/dispositivos.ts`, `Dispositivos.tsx` |
+| Foto de perfil **o** el personaje del DevVerse, a elegir | 0057, 0058, `Avatar.tsx`, `CaraDePersonaje.tsx` |
+| De qué avisa la campana, y que lo silenciado ni se escriba | 0060, `Avisos.tsx` |
+| El huso horario, que hasta ahora era UTC para todo el mundo | 0056, `huso_de()` |
+| Qué datos de uno ve el resto, dicho sin adornos | `DatosVisibles.tsx` |
+| Quién soy **en esta organización**: oficio y rol | `/organizations/:orgId/me` |
+
+Lo único que quedó fuera a propósito: **el huso no se detecta solo**. Se ofrece
+el del navegador como sugerencia y se guarda solo si se pulsa. Adivinarlo
+mueve las semanas de alguien que viaja sin que nadie lo haya pedido.
+
+### 10.3 Base, API y MCP — lo que queda
+
+Poco, y ninguna urgente. La capa de abajo sigue por delante de la de arriba.
 
 1. **Gastar los puntos.** Ganarlos ya funciona; no hay dónde gastarlos. Esto es
    la ropa y el edificio del equipo del DevVerse, y **antes de la tabla hace
@@ -781,47 +807,36 @@ lo que ya existe** (§10.3), no añadir más base.
 3. **Terminar el código corto**: faltan las dos funciones que lo canjean.
    También de Juan Bonilla.
 
-### 10.3 Interfaz — y aquí está casi todo lo que queda
+### 10.4 Interfaz — lo que sigue abierto
 
-Cada una tiene su contrato ya escrito y probado. Ninguna necesita preguntar
-nada antes de empezar.
+De los nueve de la versión anterior quedan cuatro. Cada uno tiene su contrato
+ya escrito y probado; ninguno necesita preguntar nada antes de empezar, salvo
+el último, que es una decisión disfrazada de botón.
 
-1. **`/categorias` está mirando la tabla equivocada** (§5). Trabaja sobre `tags`
-   cuando las ramas de verdad son `task_categories`, y su «Jefe de rama»
-   escribe en una columna que la 0050 marcó como obsoleta: elegir un jefe ahí
-   hoy no hace nada. **La más importante de esta lista**, porque no se ve desde
-   la pantalla.
-2. **Los puntos, en algún sitio** (§5). Con `aSolas` en la misma línea que el
-   total — esa es la regla que no se puede romper — y los asientos al lado.
-3. **«Quién ha trabajado» y la red con las aristas que faltan.** `RedDeTrabajo`
-   dibuja tres aristas y su propio comentario dice que le faltaba el registro:
-   ya no le falta, y el grafo tiene diez tipos de nodo con `area` y `persona`
-   dentro.
-4. **El tutorial por rol, y elegir oficio y rol.** `GET`/`PATCH
-   /organizations/:orgId/me` devuelve los tres campos que hacen falta. La lista
-   de roles es cerrada, de trece.
-5. **La biblioteca por carpetas, y la vista previa de una imagen.** Hoy es una
+1. **La biblioteca por carpetas, y la vista previa de una imagen.** Hoy es una
    rejilla plana donde doce archivos se llaman `image.png`. La base ya tiene
-   `file_folders`.
-6. **Las neuronas en el menú.** El grafo tiene rutas desde el §5.
-7. **DevCall se queda los canales**, y lo que hoy cuelga suelto del menú entra
+   `file_folders` (0053) y la API ya las sirve: **falta solo la pantalla**. La
+   más rentable de las cuatro.
+2. **Las neuronas en el menú.** El grafo tiene rutas desde el §5 y el generador
+   ya sigue los `lib/`, así que lo que dibuje será verdad — antes no lo era.
+3. **DevCall se queda los canales**, y lo que hoy cuelga suelto del menú entra
    ahí.
-8. **Que «ajustes técnicos» lleve a ajustes técnicos.**
-9. **Los dos hallazgos del mapa de flujos que siguen abiertos**: el #9 (la
-   asimetría entre los dos armazones) y el #3 en `/verificar` y `/invitacion` —
-   el patrón ya está resuelto en `/recuperar`, pero ahí el reenvío exige sesión
-   y quien llega a un enlace caducado no la tiene. **Eso es una decisión antes
-   que un botón.**
+4. **El hallazgo #3 en `/verificar` y `/invitacion`.** El patrón está resuelto
+   en `/recuperar`, pero ahí el reenvío exige sesión y quien llega a un enlace
+   caducado no la tiene. **Es una decisión antes que un botón** — ver §10.6.
+   (El #9, la asimetría entre los dos armazones, se cerró al unificar los
+   ajustes.)
 
-### 10.4 Personas: lo que no se puede hacer desde una sesión
+### 10.5 Personas: lo que no se puede hacer desde una sesión
 
-**Y lo primero bloquea al resto.**
+**Y lo primero bloquea a todo lo demás.**
 
-1. **Aplicar las migraciones 0047–0055 contra Railway, y desplegar.** El
+1. **Aplicar las migraciones 0047–0060 contra Railway, y desplegar.** El
    guardián de despliegue se para solo mientras haya migraciones sin aplicar —
    está haciendo su trabajo—, así que **nada de lo de arriba está vivo en
-   producción todavía**. Incluye desplegar el MCP: pasa a 21 herramientas y
-   deja de poner la etiqueta «agente» a la fuerza.
+   producción todavía**: ni la configuración, ni los puntos, ni las ramas.
+   Incluye desplegar el MCP, que pasa a 21 herramientas y deja de poner la
+   etiqueta «agente» a la fuerza.
 2. **Los 75 commits con autor «Claude» en el tronco.** Reescribirlos cambia
    todos los SHA del repositorio: rompe el `git pull` de todo el mundo y deja
    la rama de la otra sesión colgando de una historia que ya no existe. Hay que
@@ -831,18 +846,22 @@ nada antes de empezar.
    salir de la sesión de otra.
 3. **Variables de entorno e infraestructura**, que no se hacen a medias:
    custodia de `VAULT_MASTER_KEY`, TURN o Metered, correo de verdad, respaldos
-   fuera de la máquina con restauración probada, S3 de producción.
+   fuera de la máquina con restauración probada, S3 de producción. **Lo que de
+   esto esté sin poner ya se ve solo**, sin entrar por SSH: está al final de
+   los ajustes de la organización, para quien la administre.
 
-### 10.5 Decisiones, que no son código
+### 10.6 Decisiones, que no son código
 
 Media hora de conversación cada una, y mientras no se tomen, el tablero miente
 sobre cuánto queda.
 
-- **Qué cuesta qué en el DevVerse.** Bloquea el 10.2.1.
-- **Qué pantalla es la portada** para quien entra por primera vez.
+- **Qué cuesta qué en el DevVerse.** Bloquea el 10.3.1.
+- **Qué pantalla es la portada** para quien entra por primera vez. Ahora pesa
+  menos que antes: el recorrido de bienvenida ya lleva a cada quien a una según
+  su rol, así que la portada dejó de ser lo primero que ve alguien nuevo.
 - **El tamaño del sprite y cuántos cuerpos base.**
 - **El reenvío sin sesión**: ¿se abre, con límite de peticiones, o se manda a
-  iniciar sesión primero? Bloquea el 10.3.9.
+  iniciar sesión primero? Bloquea el 10.4.4.
 
 _La que estaba marcada como «la más urgente de las tres» en el §9.3 —si el área
 es una etiqueta o una pertenencia— **ya está decidida**: la 0050 la resolvió.
