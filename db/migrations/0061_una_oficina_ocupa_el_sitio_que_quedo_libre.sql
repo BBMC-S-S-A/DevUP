@@ -65,9 +65,26 @@ declare
   _total       integer;
   _rows        integer;
 begin
+  -- LOS DOS GUARDIANES DEL ORIGINAL, INTACTOS. Esta funcion es
+  -- `security definer`, asi que dentro de ella RLS no la protege: esta linea ES
+  -- la frontera de aislamiento, y no un chequeo de cortesia.
+  --
+  -- La primera version de esta migracion los sustituyo por un `return null`
+  -- silencioso, y eso convirtio una DENEGACION en un no-hacer-nada: cualquiera
+  -- con sesion habria podido preparar la planta de un espacio de otra
+  -- organizacion. Lo cazo `isolation.test.ts` con «Bruno no puede preparar la
+  -- planta de un workspace de Acme» y «Carla no puede preparar la planta del
+  -- workspace personal de Ana», que esperan que la llamada LANCE.
+  --
+  -- Y por eso se lanza en vez de devolver: quien llama tiene que poder
+  -- distinguir «no se pudo» de «no habia nada que hacer».
+  if not public.can_access_workspace(_workspace) then
+    raise exception 'sin acceso al workspace' using errcode = '42501';
+  end if;
+
   select organization_id into _org from public.workspaces where id = _workspace;
   if _org is null then
-    return null;
+    raise exception 'workspace inexistente' using errcode = 'P0002';
   end if;
 
   insert into public.world_rooms (workspace_id, organization_id)
