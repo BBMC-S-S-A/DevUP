@@ -319,6 +319,44 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
+   * De qué no quieres que te avisen.
+   *
+   * SE MANDA LA LISTA ENTERA y no «silencia esto» / «quita esto», al revés que
+   * los gerentes de una rama. Aquí sí es correcto: esto lo edita una sola
+   * persona —tú— en un formulario que se ve completo, así que no hay dos
+   * ediciones simultáneas que puedan pisarse. La regla no es «lotes malos, uno
+   * a uno bueno»: es que la forma del gesto siga a quién lo hace.
+   *
+   * Las clases válidas las decide la base (0060), no esta ruta. Repetir la
+   * lista aquí sería una segunda copia que algún día discrepará — y el día que
+   * discrepe, lo hará dejando pasar algo que la base rechaza, o rechazando algo
+   * que la base admite.
+   */
+  app.get("/me/avisos", async (request) => {
+    const userId = requireUser(request);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ silenciados: string[] }>(
+        "select avisos_silenciados as silenciados from profiles where id = $1",
+        [userId],
+      );
+      return { silenciados: rows[0]?.silenciados ?? [] };
+    });
+  });
+
+  app.put("/me/avisos", async (request) => {
+    const userId = requireUser(request);
+    const { silenciados } = parseBody(
+      z.object({ silenciados: z.array(z.string().trim().min(1).max(40)).max(10) }),
+      request.body,
+    );
+
+    await withUser(userId, (db) =>
+      db.query("select public.set_my_avisos_silenciados($1::text[])", [silenciados]),
+    );
+    return { silenciados };
+  });
+
+  /**
    * Dar el recorrido por visto, o volver a pedirlo.
    *
    * SALTARLO CUENTA COMO VERLO. Quien lo cierra ha tomado una decisión —«esto
