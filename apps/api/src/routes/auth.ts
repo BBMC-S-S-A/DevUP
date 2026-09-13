@@ -22,6 +22,7 @@ import {
 } from "../auth/tokens.js";
 import { type Db, withUser } from "../db/pool.js";
 import { env } from "../env.js";
+import { signDownload } from "../storage/s3.js";
 import {
   HttpError,
   forbidden,
@@ -73,6 +74,7 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
   const { rows } = await db.query<Me>(
     `select u.id, u.email::text as "email",
             p.display_name as "displayName",
+            p.avatar_key   as "avatarKey",
             p.avatar_url   as "avatarUrl",
             p.presence, p.title, p.timezone,
             (u.email_verified_at is not null) as "emailVerified"
@@ -81,9 +83,28 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
       where u.id = $1`,
     [userId],
   );
-  const me = rows[0];
+  const me = rows[0] as (Me & { avatarKey: string | null }) | undefined;
   if (!me) throw unauthorized("la cuenta ya no existe");
-  return me;
+
+  /**
+   * La foto, YA RESUELTA, y la clave no sale de aquí.
+   *
+   * LA SUBIDA GANA A LA DE GOOGLE (0057): si alguien se molestó en poner una
+   * foto, esa es la que quiere — la de Google llegó sola. Se decide en este
+   * único sitio para que ninguna pantalla tenga que conocer la regla: la que
+   * se la olvidara enseñaría la de Google a quien acaba de cambiarla, y se
+   * vería perfectamente normal.
+   *
+   * Firmar cuesta un HMAC local, no una llamada al almacén, y esto corre una
+   * vez por sesión y no por cada pintada.
+   */
+  const { avatarKey, ...resto } = me;
+  return {
+    ...resto,
+    avatarUrl: avatarKey
+      ? await signDownload(avatarKey, "foto", "inline")
+      : resto.avatarUrl,
+  };
 }
 
 /** Abre sesión: token de acceso corto y token de refresco rotatorio. */

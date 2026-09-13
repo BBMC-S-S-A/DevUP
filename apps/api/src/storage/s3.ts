@@ -104,6 +104,38 @@ export function buildOrgAssetKey(organizationId: string, fileName: string): stri
   return `${organizationId}/org-assets/${randomUUID()}${ext}`;
 }
 
+/**
+ * Clave de un activo de una PERSONA (hoy solo su foto).
+ *
+ * ROMPE LA CONVENCIÓN DE QUE LA PRIMERA CARPETA ES LA ORGANIZACIÓN, y por eso
+ * lleva un prefijo literal delante en vez de un identificador suelto. Una foto
+ * de perfil no es de ninguna organización: la misma persona está en varias, y
+ * meterla bajo una haría que su foto desapareciera al salir de ella.
+ *
+ * El prefijo `users/` no es cosmético: es lo que permite a `userOfKey` decir
+ * «esta clave es de una persona» sin confundir un identificador de persona con
+ * uno de organización — los dos son UUID y se ven exactamente igual.
+ */
+export function buildUserAssetKey(userId: string, fileName: string): string {
+  const raw = extname(fileName).slice(0, 12).toLowerCase();
+  const ext = /^\.[a-z0-9]+$/.test(raw) ? raw : "";
+  return `users/${userId}/${randomUUID()}${ext}`;
+}
+
+/**
+ * Extrae la persona de una clave suya, para poder verificarla.
+ *
+ * Devuelve `null` para cualquier cosa que no empiece por `users/`, incluida una
+ * clave de organización válida. Es la comprobación que impide que alguien
+ * confirme como foto suya una clave ajena — el mismo agujero que
+ * `organizationOfKey` cierra del otro lado.
+ */
+export function userOfKey(key: string): string | null {
+  const [prefijo, id] = key.split("/");
+  if (prefijo !== "users") return null;
+  return id && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
+}
+
 export async function signUpload(key: string, contentType: string): Promise<string> {
   return getSignedUrl(
     s3,
