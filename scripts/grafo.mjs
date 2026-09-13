@@ -121,8 +121,42 @@ for (const camino of archivos(dirRutas, (c) => c.endsWith(".ts") && !c.includes(
   porArea.set(area, [...(porArea.get(area) ?? []), camino]);
 }
 
+/**
+ * Las consultas que viven en `lib/`, atribuidas al área que las usa.
+ *
+ * SIN ESTO EL MAPA MIENTE, y miente del modo peor: en silencio y a favor. Un
+ * área cuya SQL se sacó a un fichero de `lib/` —`panorama`, `puntos`, `ramas`,
+ * `widgets`— aparecía SIN NINGUNA TABLA, y como el acoplamiento se calcula por
+ * tablas compartidas, salía además marcada como «isla». O sea que el documento
+ * afirmaba justo lo contrario de la verdad sobre ellas, con la misma cara con
+ * la que dice el resto.
+ *
+ * Se sigue la importación, que es la relación real: si dos áreas usan el mismo
+ * `lib`, comparten sus tablas de verdad y el cruce que aparezca es correcto.
+ * No es recursivo a propósito —un `lib` que importa a otro es raro aquí— y si
+ * el fichero no existe se ignora en vez de reventar: esto es un mapa, no un
+ * compilador.
+ */
+const dirLib = join(raiz, "apps", "api", "src", "lib");
+function conSusLibs(caminos) {
+  const textos = caminos.map((c) => readFileSync(c, "utf8"));
+  const vistos = new Set();
+  for (const texto of [...textos]) {
+    for (const m of texto.matchAll(/from\s+["'][^"']*\/lib\/([a-zA-Z0-9_-]+)\.js["']/g)) {
+      if (vistos.has(m[1])) continue;
+      vistos.add(m[1]);
+      try {
+        textos.push(readFileSync(join(dirLib, `${m[1]}.ts`), "utf8"));
+      } catch {
+        // Un lib que no está donde dice el import no es asunto de este mapa.
+      }
+    }
+  }
+  return textos.join("\n");
+}
+
 for (const [area, caminos] of porArea) {
-  const codigo = sinComentarios(caminos.map((c) => readFileSync(c, "utf8")).join("\n"));
+  const codigo = sinComentarios(conSusLibs(caminos));
 
   const puntos = [];
   for (const m of codigo.matchAll(/\bapp\.(get|post|patch|put|delete)\s*\(\s*["'`]([^"'`]+)/g)) {
@@ -337,9 +371,13 @@ lineas.push("```");
 lineas.push("");
 if (islas.length > 0) {
   lineas.push(
-    `**Islas** (con el borde punteado): ${islas.map((i) => `\`${i}\``).join(", ")}. No comparten ninguna ` +
-      "tabla con nadie. No es necesariamente un defecto —hay áreas que deben bastarse solas— pero sí " +
-      "es lo que hace que el producto se sienta como varias herramientas en la misma barra lateral.",
+    `**Islas** (con el borde punteado): ${islas.map((i) => `\`${i}\``).join(", ")}. No comparten con nadie ` +
+      "ninguna tabla PROPIA: si se cruzan con otra área, es solo en el armazón de arriba, que es " +
+      "donde se cruzan todas. Decir «no comparten ninguna tabla» a secas sería falso —`actividad` y " +
+      "`tasks` escriben las dos en `activity`— y el matiz importa: una isla de verdad se puede mover " +
+      "sola, y una que solo toca el armazón, no. No es necesariamente un defecto —hay áreas que " +
+      "deben bastarse solas— pero sí es lo que hace que el producto se sienta como varias " +
+      "herramientas en la misma barra lateral.",
   );
   lineas.push("");
 }
