@@ -189,7 +189,19 @@ export function DiagramaArquitectura({ workspaceId }: { workspaceId: string }) {
           >
             Leer del repositorio
           </Boton>
-          <Boton tamano="sm" variante="primario" icono={<Plus size={13} />} onClick={() => setCreando(true)}>
+          {/* CEDE EL ACENTO MIENTRAS EL LIENZO ESTÁ VACÍO. Con cero nodos, el
+              estado vacío pinta su propio «Añadir el primero» en acento, y es
+              LA MISMA ACCIÓN que este botón: dos veces la acción principal en
+              pantalla, y entonces ninguna de las dos lo es. El del medio se
+              queda el acento porque es el que lleva la explicación al lado;
+              este se vuelve fantasma y se integra en la barra, junto a «Leer
+              del repositorio», que ya lo era. */}
+          <Boton
+            tamano="sm"
+            variante={nodos.length === 0 ? "fantasma" : "primario"}
+            icono={<Plus size={13} />}
+            onClick={() => setCreando(true)}
+          >
             Añadir nodo
           </Boton>
         </div>
