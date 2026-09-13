@@ -114,6 +114,17 @@ jobs:
         # REALES del tablero, no contra ejemplos inventados.
         run: npm run test:ramas
 
+      - name: Las carpetas de la biblioteca
+        # La que justifica el fichero es el ciclo. Sin el disparador de la 0053
+        # basta con mover A dentro de B y luego B dentro de A —dos gestos
+        # normales por separado— para que la biblioteca tenga un anillo, y
+        # entonces cualquier recorrido hacia la raiz NO falla: se cuelga. Una
+        # peticion colgada es mas cara de diagnosticar que una que revienta,
+        # porque no deja ni un error que buscar. Mas que borrar una carpeta no
+        # se lleve sus archivos: reorganizar no puede perder lo que alguien
+        # subio.
+        run: npm run test:carpetas --workspace apps/api
+
       - name: Las ramas de trabajo
         # «Por repartir» tiene que ser lo que NO tiene a nadie, no lo que no
         # esta hecho: si colara lo que ya tiene dueno, el gerente veria una

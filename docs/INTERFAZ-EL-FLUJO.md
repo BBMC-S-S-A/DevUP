@@ -296,3 +296,84 @@ GET /workspaces/:id/panel?widgets=resumen,mis_tareas,atascadas&dias=7
   El catálogo de qué widgets existen y cómo se pintan sigue viviendo en el
   cliente (decisión de 0019): añadir uno que no necesite servidor no pide
   migración ni tocar la API.
+
+
+---
+
+# 9. Lo pedido el 13 de septiembre, y qué falta de cada cosa
+
+Revisión de pantallas. **Cinco de las siete no necesitan nada de la API**: los
+datos ya están y lo que falta es el gesto. Se dice cuáles para que no se pida
+otra vez lo que ya se sirve.
+
+## 9.1 · La tarjeta de una tarea enseña cinco campos de los diez que tiene
+
+El modal pinta título, detalle, responsable, fecha, etiquetas, adjuntos e
+historial. **Faltan cuatro que existen desde la 0045** y son justo los que
+contestan «cómo se hizo»:
+
+```
+tipo        funcionalidad · arreglo · mejora · deuda · investigacion ·
+            documentacion · diseno · infraestructura
+prioridad   0 baja · 1 normal · 2 alta · 3 urgente
+contexto    por qué se hace, hasta 4000
+criterio    cuándo está hecha, hasta 4000
+evidencia   [{ tipo: pr|commit|enlace|nota, url, titulo, nota, autor, creadaEn }]
+ramas       [{ nombre, estado, repo }]
+```
+
+Todo eso viene ya en `GET /tasks/:id` y se escribe con `PATCH /tasks/:id`. La
+evidencia tiene sus rutas (`POST /tasks/:id/evidencia`, `DELETE /evidencia/:id`)
+y hay un cierre con prueba en el mismo gesto: `POST /tasks/:id/hecha`.
+
+**Y mover de rama también se puede ya**: `PATCH /tasks/:id` acepta `categoryId`.
+Nulo explícito la deja sin clasificar.
+
+## 9.2 · El comportamiento de una rama, a la derecha
+
+Hecho, §6.1. `GET /categories/:id/rama?dias=30` trae `porRepartir` y
+`quienHaTrabajado` con desglose por verbo y última vez.
+
+**Lo que NO se puede servir, dicho claro:** «cuánto tiempo han usado». El
+registro anota cuándo pasó cada cosa, no cuánto duró — no hay cronómetro y no lo
+hay a propósito (ver `herramientas/pasado.ts`: qué se hizo, no a qué hora trabaja
+cada quien). Lo más cercano y honesto es **cuántos días tardó en cerrarse**, que
+ya se calcula por persona con mediana (`cierresPorPersona`). Si hace falta al
+lado de una rama, se pide y se añade; lo que no voy a hacer es enseñar un número
+de horas que nadie midió.
+
+## 9.3 · La biblioteca: carpetas hechas, preview no
+
+**Carpetas (0053)**, con la misma división que en el tablero para que el producto
+se explique con una regla: **la carpeta es dónde vive el archivo (una); la
+etiqueta es lo que cruza (todas las que hagan falta)**.
+
+```
+GET    /workspaces/:id/carpetas   → [{ id, nombre, padreId, archivos, subcarpetas }]
+POST   /workspaces/:id/carpetas   → { nombre, padreId? }
+PATCH  /carpetas/:id              → { nombre?, padreId? }   (padreId: null = a la raíz)
+DELETE /carpetas/:id              → 204
+PATCH  /files/:id                 → { carpetaId? }          (null = a la raíz)
+```
+
+El árbol se arma en el cliente desde `padreId`: devolverlo anidado obligaría a
+recorrerlo aquí para que la pantalla lo desarmara y lo volviera a armar.
+
+**Dos cosas que conviene saber al pintarlo.** Borrar una carpeta **no borra sus
+archivos** — suben a la raíz; sí se lleva sus subcarpetas. Y los ciclos los
+impide la base, así que arrastrar una carpeta dentro de su propia hija devuelve
+un `23514` con mensaje legible en vez de colgar la pantalla.
+
+**El preview de la imagen es vuestro** y ya tenéis todo: `GET
+/files/:id/download-url` firma una URL, y `mimeType` dice cuáles son imágenes.
+
+## 9.4 · Lo que es enteramente de interfaz
+
+- **Los canales de voz y texto dentro de DevCall**, fuera del menú lateral. Ya
+  estaba en §1; la captura confirma que siguen en las dos alturas.
+- **Las neuronas (el grafo) en el menú.** Rutas en §5, y desde hoy teje solo
+  tarea↔mensaje: citar una tarea por su identificador en un canal la enlaza.
+- **Que la tuerca lleve al panel técnico** (§4).
+- **Editar y crear ramas desde la pantalla**: `POST/PATCH/DELETE
+  /workspaces/:id/categories` existen, y los gerentes se ponen con
+  `set_category_owner`.

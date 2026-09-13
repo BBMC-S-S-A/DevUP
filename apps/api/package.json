@@ -31,6 +31,7 @@
     "test:panorama": "tsx src/routes/panorama.test.ts",
     "test:panel": "tsx src/routes/panel.test.ts",
     "test:ramas-api": "tsx src/routes/ramas.test.ts",
+    "test:carpetas": "tsx src/routes/carpetas.test.ts",
     "test:widgets": "tsx src/routes/widgets.test.ts",
     "test:grafo": "tsx src/routes/grafo.test.ts"
   },

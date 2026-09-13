@@ -427,6 +427,113 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // --- Carpetas (0053) ------------------------------------------------------
+  //
+  // Una carpeta es DÓNDE vive un archivo; las etiquetas son lo que cruza. La
+  // misma división que ramas y etiquetas en el tablero, a propósito: el
+  // producto se explica mejor con una regla que con dos parecidas.
+
+  app.get("/workspaces/:workspaceId/carpetas", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `select f.id, f.name as nombre, f.parent_id as "padreId",
+                (select count(*) from files a
+                  where a.folder_id = f.id and a.status = 'ready' and a.deleted_at is null
+                )::int as archivos,
+                (select count(*) from file_folders h where h.parent_id = f.id)::int as subcarpetas
+           from file_folders f
+          where f.workspace_id = $1
+          order by f.name`,
+        [workspaceId],
+      );
+      // El árbol se arma en el cliente a partir de `padreId`. Devolverlo ya
+      // anidado obligaría a recorrerlo aquí para que la pantalla lo desarmara y
+      // lo volviera a armar a su manera.
+      return { carpetas: rows };
+    });
+  });
+
+  app.post("/workspaces/:workspaceId/carpetas", async (request, reply) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        nombre: z.string().trim().min(1).max(60),
+        padreId: uuid.nullish(),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `insert into file_folders (workspace_id, parent_id, name, created_by)
+         values ($1,$2,$3,$4)
+         returning id, name as nombre, parent_id as "padreId"`,
+        [workspaceId, body.padreId ?? null, body.nombre, userId],
+      );
+      return reply.status(201).send({ carpeta: rows[0] });
+    });
+  });
+
+  /**
+   * Renombrar o mover una carpeta.
+   *
+   * Mover es cambiarle el padre, y ahí es donde puede aparecer un anillo: A
+   * dentro de B y B dentro de A son dos gestos normales por separado. Lo impide
+   * el disparador de la 0053, no un `if` de aquí — porque también se puede
+   * escribir la tabla por otras puertas, y una regla que solo vive en una ruta
+   * es una regla que se salta por cualquier otra.
+   */
+  app.patch("/carpetas/:carpetaId", async (request) => {
+    const userId = requireUser(request);
+    const { carpetaId } = parseParams(z.object({ carpetaId: uuid }), request.params);
+    const body = parseBody(
+      z.object({
+        nombre: z.string().trim().min(1).max(60).optional(),
+        padreId: uuid.nullish(),
+      }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query(
+        `update file_folders
+            set name = coalesce($2, name),
+                parent_id = case when $3::boolean then $4::uuid else parent_id end
+          where id = $1
+          returning id, name as nombre, parent_id as "padreId"`,
+        [
+          carpetaId,
+          body.nombre ?? null,
+          // `padreId` presente y nulo significa «llévala a la raíz», que no es
+          // lo mismo que «no lo toques». Sin este booleano las dos cosas se
+          // escriben igual y mover algo a la raíz sería imposible.
+          "padreId" in body,
+          body.padreId ?? null,
+        ],
+      );
+      if (!rows[0]) throw notFound("esa carpeta no existe o no está a tu alcance");
+      return { carpeta: rows[0] };
+    });
+  });
+
+  app.delete("/carpetas/:carpetaId", async (request, reply) => {
+    const userId = requireUser(request);
+    const { carpetaId } = parseParams(z.object({ carpetaId: uuid }), request.params);
+
+    await withUser(userId, async (db) => {
+      // Los archivos NO se van con ella (0053, `on delete set null`): suben a la
+      // raíz. Las subcarpetas sí. Reorganizar no puede borrar lo que alguien
+      // subió.
+      const { rowCount } = await db.query("delete from file_folders where id = $1", [carpetaId]);
+      if (rowCount === 0) throw notFound("esa carpeta no existe o no está a tu alcance");
+    });
+    return reply.status(204).send();
+  });
+
   // --- Descarga -------------------------------------------------------------
   app.get("/files/:fileId/download-url", async (request) => {
     const userId = requireUser(request);
@@ -463,6 +570,8 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
         name: z.string().trim().min(1).max(255).optional(),
         description: z.string().trim().max(2000).optional(),
         tagIds: z.array(uuid).max(20).optional(),
+        /** Nulo explícito = a la raíz. Ausente = no se toca. */
+        carpetaId: uuid.nullish(),
       }),
       request.body,
     );
@@ -473,6 +582,14 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
           `update files set name = coalesce($2, name), description = coalesce($3, description)
             where id = $1`,
           [fileId, body.name ?? null, body.description ?? null],
+        );
+        if (rowCount === 0) throw notFound("archivo no encontrado");
+      }
+
+      if ("carpetaId" in body) {
+        const { rowCount } = await db.query(
+          "update files set folder_id = $2 where id = $1",
+          [fileId, body.carpetaId ?? null],
         );
         if (rowCount === 0) throw notFound("archivo no encontrado");
       }
