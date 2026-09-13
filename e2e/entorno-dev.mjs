@@ -1,8 +1,8 @@
 // Prueba manual de la Fase 0 del entorno de desarrollo embebido.
-// Uso: node e2e/entorno-dev.mjs <email> <contraseña> <orgId> /ruta/para/capturas
+// Uso: node e2e/entorno-dev.mjs <email> <contraseña> <workspaceId> /ruta/para/capturas
 import { chromium } from "playwright";
 
-const [, , email, password, orgId, capturasDir] = process.argv;
+const [, , email, password, workspaceId, capturasDir] = process.argv;
 const consoleErrors = [];
 
 const browser = await chromium.launch({ headless: true });
@@ -35,7 +35,7 @@ console.log("✓ sesión iniciada");
 // desde /app, que en Next.js es una navegación del lado del cliente sin
 // recargar el documento: si las cabeceras COOP/COEP no están también en la
 // página de origen, el navegador nunca queda cross-origin-aislado.
-await page.click(`a[href="/app/o/${orgId}/dev"]`);
+await page.click(`a[href="/app/w/${workspaceId}/dev"]`);
 await page.waitForSelector("text=Entorno de desarrollo", { timeout: 15000 });
 console.log("✓ pestaña /dev cargó (navegación por clic, no goto directo)");
 

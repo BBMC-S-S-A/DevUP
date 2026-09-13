@@ -30,9 +30,10 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000",
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000",
   },
-  // El entorno de desarrollo embebido (editor + terminal, apps/web/src/app/app/o/[orgId]/dev)
-  // arranca un WebContainer, que exige SharedArrayBuffer y por tanto que el
-  // documento esté cross-origin-aislado.
+  // El entorno de desarrollo embebido (editor + terminal,
+  // apps/web/src/app/(privado)/app/w/[workspaceId]/dev) arranca un
+  // WebContainer, que exige SharedArrayBuffer y por tanto que el documento
+  // esté cross-origin-aislado.
   //
   // SOLO en /dev, y por un motivo caro de aprender: aisladas en todo el sitio
   // rompen la reproducción de Spotify. Comprobado en el navegador del usuario —
@@ -59,8 +60,8 @@ const nextConfig: NextConfig = {
       { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
     ];
     return [
-      { source: "/app/o/:orgId/dev", headers: aislamiento },
-      { source: "/app/o/:orgId/dev/:ruta*", headers: aislamiento },
+      { source: "/app/w/:workspaceId/dev", headers: aislamiento },
+      { source: "/app/w/:workspaceId/dev/:ruta*", headers: aislamiento },
     ];
   },
 };
