@@ -321,10 +321,52 @@ si se fusionan.
 
 ---
 
-## 6. Pedido a funcionalidades (escribir aquí)
+## 6. Lo que la web necesita de la API y no construye por su cuenta
 
-*(vacío — la sesión de interfaz apunta aquí lo que necesite de la API, con la
-pregunta que hay que poder contestar)*
+Esta sección existe por la lección del registro de actividad: **construirlo yo
+es literalmente cómo acabamos con dos**. Así que lo que falte se escribe aquí
+como pregunta que hay que poder contestar, no como esquema propuesto.
+
+### 6.1 · «¿Quién ha trabajado en esta rama?» — pendiente
+
+**La pregunta:** abierta una categoría (o área), quiénes han tocado sus tareas
+últimamente y cuándo fue la última vez.
+
+**Por qué no se puede hoy.** El recuento por persona
+(`GET /organizations/:id/activity/summary`) agrupa por actor, verbo y
+procedencia, y recorta por organización, espacio y días. **No hay por dónde
+entrar la categoría**, y cruzarlo en la pantalla exigiría traerse el tablero
+entero y volver a unir a mano lo que la base ya sabe unir. Eso es exactamente
+la clase de trabajo que acaba convertido en una segunda fuente de verdad.
+
+**Lo que NO hace falta:** un número por persona. El desglose ya está resuelto
+donde tiene sentido, y una cifra única al lado de una rama tendría el mismo
+problema que tendría al lado de una cara.
+
+**Estado en la web:** la ficha de la persona ya enseña su rastro
+(`/organizations/:id/actividad/:persona`). Lo de la rama espera a esto.
+
+### 6.2 · ~~Las dos categorías~~ — DECIDIDO (0050)
+
+Tu advertencia era correcta y se tomó la decisión que faltaba. Resumen para que
+no haya que leer la migración:
+
+**Una categoría es una rama de trabajo** —frontend, backend, DevVerse— y una
+tarea vive en **una sola**. Si viviera en dos, «cómo va DevVerse» contaría la
+misma tarea dos veces.
+
+**Quien la lleva es su gerente: responde y REPARTE.** No hereda las tareas — de
+hecho su trabajo es delegarlas, así que heredarlas era exactamente lo contrario
+de lo que hace falta. Y pueden ser **varios** (`task_category_owners`), porque
+con uno solo unas vacaciones dejan la rama sin nadie.
+
+**`tags.owner_id` se retira.** Las etiquetas vuelven a cruzar («urgente»,
+«deuda»). Lo que hubiera puesto ahí se migró a la rama del mismo nombre.
+
+**Lo que sí hay que enseñar**, y sustituye a lo que temías: archivar en una rama
+**no asigna a nadie**. Lo que cae sin delegado va a una lista de **«por
+repartir»** de esa rama, que es lo que el gerente abre. El gesto pasa de
+implícito a explícito — que era justo lo que pedías al negarte a disimularlo.
 
 ---
 
