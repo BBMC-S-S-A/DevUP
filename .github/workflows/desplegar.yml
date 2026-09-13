@@ -19,6 +19,49 @@
 # verde. Desplegar sin esa comprobación significaría que un fallo de
 # aislamiento entre organizaciones podría llegar a producción con el mismo
 # commit que lo introduce.
+#
+# --- LAS MIGRACIONES SE APLICAN SOLAS DESDE AQUÍ, Y ES UN CAMBIO DE FONDO ------
+#
+# Hasta el 13 de septiembre de 2026, cuando un commit traía una migración este
+# workflow SE NEGABA a desplegar: había que abrir un túnel a mano contra
+# Railway, aplicarla desde un portátil con las credenciales, y solo entonces
+# relanzar esto con «Run workflow». Funcionaba, pero dejaba el despliegue
+# entero esperando a UNA persona con acceso a Railway — y mientras nadie lo
+# hacía, cinco despliegues seguidos fallaron en ese mismo paso y nada de lo que
+# el equipo fusionaba llegaba a producción.
+#
+# Eso es justo lo que el equipo pidió dejar de necesitar: poder fusionar y que
+# despliegue sin que nadie tenga que estar pendiente de aplicar nada a mano.
+#
+# CÓMO SE HACE SIN REPARTIR CREDENCIALES A NADIE. El job `migrar` de abajo abre
+# el mismo túnel que ya usa `respaldo.yml`, con el MISMO secreto que el
+# despliegue ya tenía (`RAILWAY_API_TOKEN`) — no hace falta uno nuevo, y nadie
+# del equipo necesita su propio acceso a Railway ni a Postgres. Las dos
+# contraseñas que hacían falta a mano (`POSTGRES_PASSWORD` del superusuario y
+# `APP_DB_PASSWORD` de `devup_app`) se leen en el momento con
+# `railway variables`, usando ese mismo token; no se guardan en ningún sitio y
+# no aparecen en los registros (van enmascaradas con `::add-mask::` en cuanto
+# se leen).
+#
+# POR QUÉ ES SEGURO AUTOMATIZAR ESTO Y NO LO ERA ANTES DE HOY. La razón
+# original para pararse era «una migración sin aplicar puede romper
+# producción», no «una migración es peligrosa de por sí». El criterio de
+# `test:migraciones` en CI —que ya corrió en verde antes de que este workflow
+# se dispare— exige que toda migración sea ADITIVA e IDEMPOTENTE: no hay
+# `drop table`, no hay `alter column` destructivo, y aplicarla dos veces no
+# hace nada la segunda vez. Bajo esa disciplina, aplicar automáticamente lo que
+# ya se aprobó en la revisión de código dice lo mismo que aplicarlo a mano: la
+# única diferencia es quién teclea el comando.
+#
+# Y por si algo fallara de todas formas: se toma un volcado de la base justo
+# ANTES de tocarla (ver el job `migrar`), independiente del respaldo diario.
+#
+# QUÉ SIGUE IGUAL. `workflow_dispatch` («Run workflow») sigue existiendo, para
+# forzar un despliegue sin esperar a CI —por ejemplo al cambiar solo una
+# variable de entorno—. Y si el propio job `migrar` no consigue las
+# credenciales (el token no resuelve el proyecto, el túnel no abre), el
+# despliegue se para exactamente como antes: el peor caso de automatizar esto
+# es quedarse en el mismo sitio en el que ya se estaba, nunca uno peor.
 name: Desplegar
 
 on:
@@ -26,8 +69,8 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: ["claude/sales-control-workspace-platform-i99syv"]
-  # Para desplegar a mano: después de correr una migración, o al cambiar las
-  # direcciones de la API (que se incrustan al compilar la web).
+  # Para desplegar a mano: al cambiar solo una variable de entorno, o para
+  # forzar un intento sin esperar a que CI dispare el workflow_run.
   workflow_dispatch:
 
 concurrency:
@@ -35,17 +78,28 @@ concurrency:
   group: desplegar-produccion
   cancel-in-progress: false
 
+env:
+  IMAGEN_PG: postgres:18-alpine
+
 jobs:
-  desplegar:
+  # =============================================================================
+  # Aplicar contra producción las migraciones que falten, si las hay.
+  #
+  # Vive en un job aparte y no en un paso más de `desplegar` porque necesita su
+  # propio `permissions: actions: read` para preguntar cuál fue el último
+  # despliegue correcto, y porque si esto falla, `desplegar` no debe ni
+  # intentar arrancar: `needs: migrar` lo garantiza solo, sin un `if` a mano.
+  # =============================================================================
+  migrar:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     # `actions: read` es lo que deja preguntar por la última ejecución correcta
     # de este mismo workflow, que es contra lo que se compara para saber si hay
     # migraciones sin desplegar. Sin ese permiso la consulta falla en silencio y
-    # el guardián se cae a comparar con el commit anterior — que es justo el
-    # agujero que esto viene a tapar.
+    # esto se caería a comparar con el commit anterior — el agujero que ya se
+    # tapó una vez (ver el aviso más abajo) y que no puede volver a abrirse.
     permissions:
       contents: read
       actions: read
@@ -58,21 +112,9 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           # La historia entera, y no dos commits, porque la comparación ya no
           # es contra el commit anterior sino contra el último que se desplegó
-          # de verdad — que puede estar veinte commits atrás. Ver el paso
-          # siguiente.
+          # de verdad — que puede estar veinte commits atrás.
           fetch-depth: 0
 
-      # LA MIGRACIÓN NO SE APLICA SOLA, Y ESE ES EL PELIGRO.
-      #
-      # Aplicarla desde aquí no es trivial: la base vive en la red privada de
-      # Railway y desde fuera hace falta un túnel. Pero desplegar código nuevo
-      # que llama a una función que la migración todavía no creó rompe
-      # producción — pasó el 3 de septiembre con la 0027.
-      #
-      # Así que si el commit trae una migración, este workflow PARA. Se corre
-      # la migración a mano (ver docs/PLAN-DE-PRODUCCION.md) y luego se lanza
-      # esto con «Run workflow». Preferimos un despliegue que no ocurre a uno
-      # que ocurre en el orden equivocado.
       # CONTRA EL ÚLTIMO DESPLEGADO, NO CONTRA `HEAD~1`.
       #
       # EL HUECO QUE TENÍA, y que no era teórico: comparando con el commit
@@ -82,13 +124,11 @@ jobs:
       # PR #40 llegó a producción antes que su migración.
       #
       # El último commit desplegado de verdad lo sabe GitHub: es el `head_sha`
-      # de la última ejecución correcta de este mismo workflow. No hace falta
-      # inventar un marcador ni una etiqueta que alguien tendría que mantener.
-      # Y cuenta la ejecución lanzada a mano, que es justo la que se usa
-      # después de aplicar una migración: aplicarla y desplegar es lo que
-      # mueve la referencia hacia delante.
-      - name: Parar si hay migraciones sin aplicar
-        if: github.event_name != 'workflow_dispatch'
+      # de la última ejecución correcta de ESTE MISMO workflow —el job
+      # `desplegar`, que es el que de verdad publica—. No hace falta inventar
+      # un marcador ni una etiqueta que alguien tendría que mantener.
+      - name: Detectar migraciones sin desplegar
+        id: pendientes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -109,12 +149,172 @@ jobs:
 
           nuevas=$(git diff --name-only "$ultimo" HEAD -- db/migrations/)
           if [ -n "$nuevas" ]; then
-            echo "::error::Hay migraciones sin desplegar desde el último despliegue:"
+            echo "Migraciones sin desplegar desde $ultimo:"
             echo "$nuevas"
-            echo "::error::Aplícalas a mano contra Railway (docs/PLAN-DE-PRODUCCION.md) y luego lanza este workflow con 'Run workflow'. Desplegar antes de migrar rompe producción."
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "Sin migraciones pendientes desde $ultimo."
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comprobar que hay con qué entrar a Railway
+        if: steps.pendientes.outputs.hay == 'si'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::error::Hay migraciones sin desplegar y no hay RAILWAY_API_TOKEN." \
+                 "Sin él no se puede abrir el túnel ni leer las contraseñas: aplícalas" \
+                 "a mano (docs/PLAN-DE-PRODUCCION.md) y relanza este workflow."
             exit 1
           fi
-          echo "Sin migraciones pendientes desde $ultimo: se puede desplegar."
+
+      # El túnel, igual que en `respaldo.yml`: es la única manera de llegar a la
+      # red privada de Railway sin exponer la base a internet. Se levanta en
+      # segundo plano y se espera a que el puerto conteste.
+      - name: Abrir el túnel a Railway
+        if: steps.pendientes.outputs.hay == 'si'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+        run: |
+          npm install -g @railway/cli
+          railway connect Postgres --tunnel-only --port 55432 &
+          for i in $(seq 1 30); do
+            if timeout 1 bash -c ">/dev/tcp/127.0.0.1/55432" 2>/dev/null; then
+              echo "túnel abierto"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El túnel a Railway no abrió en 60 segundos."
+          exit 1
+
+      # LAS DOS CONTRASEÑAS QUE ANTES HABÍA QUE PASAR A MANO, leídas con el
+      # mismo token del paso anterior. Ninguna se guarda: viven en memoria de
+      # este job y se enmascaran en cuanto se leen, así que aunque algo las
+      # imprima por error no aparecen en los registros.
+      #
+      # `POSTGRES_PASSWORD` es la del superusuario — hace falta para migrar
+      # porque el rol de la aplicación tiene RLS y no puede alterar el esquema.
+      # `APP_DB_PASSWORD` es la de `devup_app`, y viene de la `DATABASE_URL` del
+      # servicio `api`: es la que YA usa ese entorno, y `migrate.ts` la
+      # necesita para no rotarla por accidente (ver la guarda que trae el
+      # propio runner, contada en `docs/PLAN-DE-PRODUCCION.md`).
+      - name: Leer las contraseñas de Railway
+        if: steps.pendientes.outputs.hay == 'si'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN || secrets.RAILWAY_TOKEN }}
+        run: |
+          pg=$(railway variables --service Postgres --json \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).POSTGRES_PASSWORD||''))")
+          if [ -n "$pg" ]; then echo "::add-mask::$pg"; fi
+
+          app=$(railway variables --service api --json \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(decodeURIComponent(new URL(JSON.parse(s).DATABASE_URL).password))}catch{process.stdout.write('')}})")
+          if [ -n "$app" ]; then echo "::add-mask::$app"; fi
+
+          if [ -z "$pg" ] || [ -z "$app" ]; then
+            echo "::error::No pude leer una de las dos contraseñas desde Railway." \
+                 "El token no resuelve el servicio, o cambió de nombre. Aplica la" \
+                 "migración a mano (docs/PLAN-DE-PRODUCCION.md) y relanza esto."
+            exit 1
+          fi
+
+          echo "POSTGRES_PASSWORD=$pg" >> "$GITHUB_ENV"
+          echo "APP_DB_PASSWORD_RAILWAY=$app" >> "$GITHUB_ENV"
+
+      # UN RESPALDO PROPIO, ADEMÁS DEL DIARIO. El de `respaldo.yml` corre una
+      # vez al día; esto corre justo antes de tocar el esquema, así que es el
+      # punto de vuelta atrás más reciente que puede haber. Vive 14 días y no
+      # 90: es una red de seguridad de esta operación concreta, no el respaldo
+      # de verdad — para restaurar de una vez para siempre sigue siendo el
+      # diario, que además se comprueba a sí mismo restaurándose.
+      - name: Volcar la base antes de tocarla
+        if: steps.pendientes.outputs.hay == 'si'
+        run: |
+          sello=$(date -u +%Y%m%d-%H%M%SZ)
+          echo "SELLO=$sello" >> "$GITHUB_ENV"
+          docker run --rm --network host \
+            -e PGPASSWORD="$POSTGRES_PASSWORD" \
+            -e PGCONNECT_TIMEOUT=30 \
+            -v "$PWD:/salida" \
+            "$IMAGEN_PG" \
+            pg_dump --format=custom --compress=9 --no-owner --no-acl \
+                    -h 127.0.0.1 -p 55432 -U postgres -d railway \
+                    --file="/salida/antes-de-migrar-$sello.dump"
+          tamano=$(wc -c < "antes-de-migrar-$sello.dump")
+          echo "volcado previo: $tamano bytes"
+          if [ "$tamano" -lt 1000 ]; then
+            echo "::error::El volcado previo pesa $tamano bytes, eso no puede estar bien. Paro sin tocar el esquema."
+            exit 1
+          fi
+
+      - name: Guardar el volcado previo
+        if: steps.pendientes.outputs.hay == 'si'
+        uses: actions/upload-artifact@v4
+        with:
+          name: antes-de-migrar-${{ env.SELLO }}
+          path: antes-de-migrar-${{ env.SELLO }}.dump
+          retention-days: 14
+          if-no-files-found: error
+
+      - uses: actions/setup-node@v4
+        if: steps.pendientes.outputs.hay == 'si'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar dependencias
+        if: steps.pendientes.outputs.hay == 'si'
+        run: npm ci
+
+      # EL RUNNER DE SIEMPRE, sin ningún atajo. `DATABASE_ADMIN_URL` apunta al
+      # túnel; `APP_DB_PASSWORD` viene EXPLÍCITA del paso de arriba, así que la
+      # guarda de `migrate.ts` —«¿esto vino del entorno de verdad, o lo puso un
+      # `.env`?»— la deja pasar: no hay ningún `.env` en este runner, y la
+      # variable llegó por `env:`, no por un archivo. Cada migración sigue
+      # aplicándose una sola vez, dentro de su propia transacción; volver a
+      # correr esto no repite nada.
+      - name: Aplicar las migraciones pendientes
+        if: steps.pendientes.outputs.hay == 'si'
+        env:
+          DATABASE_ADMIN_URL: postgres://postgres:${{ env.POSTGRES_PASSWORD }}@127.0.0.1:55432/railway
+          APP_DB_PASSWORD: ${{ env.APP_DB_PASSWORD_RAILWAY }}
+        run: npm run db:migrate
+
+      # Que el paso anterior saliera en verde no es que de verdad se aplicaran:
+      # se cuenta cuántas hay en el repositorio y cuántas quedaron anotadas en
+      # `schema_migrations`, y tienen que coincidir.
+      - name: Verificar que quedaron todas aplicadas
+        if: steps.pendientes.outputs.hay == 'si'
+        run: |
+          esperadas=$(ls db/migrations/*.sql | wc -l)
+          aplicadas=$(docker run --rm --network host -e PGPASSWORD="$POSTGRES_PASSWORD" "$IMAGEN_PG" \
+            psql -h 127.0.0.1 -p 55432 -U postgres -d railway -tAc \
+            "select count(*) from public.schema_migrations")
+          echo "en el repositorio: $esperadas · en producción: $aplicadas"
+          if [ "$esperadas" != "$aplicadas" ]; then
+            echo "::error::No coinciden. Algo se quedó a medias — mira el paso anterior antes de reintentar."
+            exit 1
+          fi
+
+  # ===========================================================================
+  # El despliegue de verdad: API, tiempo real y web.
+  #
+  # `needs: migrar` sin ningún `if` adicional: si `migrar` no corrió (el evento
+  # no calificaba) o falló (no se pudo migrar), este job se salta solo — es el
+  # comportamiento por defecto de `needs`, y es exactamente lo que hace falta:
+  # nunca desplegar código nuevo sobre una base que se quedó atrás.
+  # ===========================================================================
+  desplegar:
+    needs: migrar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Ver qué credenciales hay
         id: creds

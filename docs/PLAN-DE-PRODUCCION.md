@@ -78,6 +78,19 @@ tambien responda: dos puertas para lo mismo es como se acaban reportando
 fallos que nadie reproduce.
 
 ### Base de datos
+
+**Desde el 13 de septiembre de 2026, esto ya no hace falta hacerlo a mano.**
+El job `migrar` de `desplegar.yml` detecta las migraciones pendientes contra el
+último despliegue correcto, abre el mismo túnel que se describe abajo con
+`RAILWAY_API_TOKEN` —el secreto que el despliegue ya tenía, ninguno nuevo—, lee
+las dos contraseñas con `railway variables` y las aplica solo. Antes de tocar
+el esquema toma su propio volcado (aparte del respaldo diario) y, si algo no
+cuadra, el despliegue se para exactamente como antes: nunca se publica código
+sobre una base que se quedó atrás.
+
+Lo de abajo sigue siendo válido para dos casos: aplicar algo a mano si el job
+falla y hay prisa, o probar una migración contra producción antes de fusionar.
+
 La base está en la red privada de Railway, así que desde fuera hace falta un
 túnel:
 ```bash
