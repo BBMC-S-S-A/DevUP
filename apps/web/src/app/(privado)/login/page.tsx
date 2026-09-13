@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertCircle, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
+import { AlertCircle, ArrowLeft, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { API_URL, ApiError, type SignupPolicy, type User, api } from "@/lib/api";
@@ -8,6 +9,7 @@ import { Boton } from "@/components/ui/Boton";
 
 import { Field } from "@/components/ui/Field";
 import { LogoAnimado } from "@/components/marca/LogoAnimado";
+import { OficinaViva } from "@/components/marca/OficinaViva";
 import { Logo } from "@/components/ui/Logo";
 import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
@@ -270,13 +272,30 @@ function LoginForm() {
       >
 
         <div className="filo-luz relative pb-6 devup-entrada" style={retraso(0)}>
-          <div className="flex items-center gap-3">
+          {/* LA MARCA LLEVA A LA LANDING, que es de donde se viene. Antes no
+              había ninguna vuelta: se entraba a `/login` y la única salida era
+              el botón de atrás del navegador. Y no es un botón suelto más — un
+              logotipo que vuelve al inicio es lo que hace todo el mundo, así
+              que se descubre sin explicarlo. */}
+          <Link
+            href="/"
+            title="Volver al inicio"
+            className="group/marca inline-flex items-center gap-3 rounded-xl outline-none
+              focus-visible:shadow-[0_0_0_3px_var(--anillo-foco)]"
+          >
             <Logo size={38} animated />
             <div>
               <p className="font-display text-base font-semibold tracking-tight">DevUP</p>
               <Rotulo>Centro de mando</Rotulo>
             </div>
-          </div>
+            <ArrowLeft
+              size={13}
+              aria-hidden
+              className="ml-1 text-faint opacity-0 transition-opacity duration-[var(--dur-hover)]
+                group-hover/marca:opacity-100 group-focus-visible/marca:opacity-100
+                motion-reduce:transition-none"
+            />
+          </Link>
         </div>
 
         <div className="relative max-w-md">
@@ -311,6 +330,15 @@ function LoginForm() {
             <span className="absolute inset-y-2 left-0 w-px bg-gradient-to-b from-transparent via-accent to-transparent" />
             <MaquinaDeEscribir />
           </div>
+        </div>
+
+        {/* LA OFICINA, EN EL HUECO QUE HABÍA EN MEDIO. Con `justify-between`
+            el titular queda arriba y las fichas abajo, y entre los dos sobraba
+            media columna sin decir nada. Va aquí y no arriba a propósito: lo
+            primero que hay que leer es qué es esto, y solo después se enseña.
+            Son los muñecos de verdad del mundo — ver `OficinaViva`. */}
+        <div className="devup-entrada relative my-6" style={retraso(200)}>
+          <OficinaViva className="rounded-xl border border-line/70" />
         </div>
 
         <div className="relative max-w-md">
