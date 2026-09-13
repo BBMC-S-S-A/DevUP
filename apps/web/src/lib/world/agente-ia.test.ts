@@ -14,7 +14,12 @@
  *
  *   npm run test:agente-ia
  */
-import { esSalaDelAgente, peerDelAgente, zonaDelAgente } from "./agente-ia.js";
+import {
+  USER_ID_AGENTE,
+  esSalaDelAgente,
+  peerDelAgente,
+  zonaDelAgente,
+} from "./agente-ia.js";
 import type { LiveData, Zone } from "./types.js";
 
 let total = 0;
@@ -84,10 +89,21 @@ const muñeco = peerDelAgente(zonas, vivo(null), 0)!;
 check("existe", muñeco !== null);
 check("se llama Agente IA", muñeco.displayName === "Agente IA");
 check("dice que es un asistente", muñeco.title === "asistente");
-// Las dos que evitan las trampas documentadas: un `userId` que nadie tiene
-// hace que el renderizador caiga en el avatar gris de reserva, y quieto es lo
-// único coherente con que no lo mueva nadie.
-check("su userId no es de nadie", muñeco.userId === "agente-ia");
+// El `userId` es un contrato con el renderizador, no un detalle: es por lo que
+// `renderer.ts` decide dibujar el aparato en vez de una persona. Se compara
+// contra la constante exportada justamente para que no puedan descuadrar — si
+// alguien cambia el valor, el renderizador lo sigue; si alguien escribe el
+// literal a mano en el renderizador, esto no lo caza, y por eso allí también se
+// importa.
+check("lleva el userId del agente", muñeco.userId === USER_ID_AGENTE);
+// Y que no pueda chocar con el de una persona: los `userId` de verdad son
+// uuid, así que un nombre a secas no colisiona nunca. Si algún día dejaran de
+// ser uuid, esto se pone rojo antes de que dos identidades se confundan.
+check(
+  "y no puede chocar con el de una persona",
+  !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(USER_ID_AGENTE),
+);
+// Quieto es lo único coherente con que no lo mueva nadie.
 check("está quieto", muñeco.moving === false && muñeco.sitting === false);
 check("está dentro de la sala", muñeco.zoneId === zonas[0]!.id);
 check(

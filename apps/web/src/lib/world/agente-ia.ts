@@ -59,7 +59,7 @@ function normalizar(nombre: string): string {
  * cae en `FALLBACK_AVATAR` —el gris que ya se lee como «nadie»— sin ningún
  * caso especial, y ninguna comparación con `selfUserId` puede acertar.
  */
-const USER_ID = "agente-ia";
+export const USER_ID_AGENTE = "agente-ia";
 
 /** Cada cuánto cambia la frase de reposo. */
 const ROTACION_MS = 9_000;
@@ -140,7 +140,7 @@ export function peerDelAgente(zones: Zone[], live: LiveData | null, ahora: numbe
 
   return {
     peerId: "agente-ia",
-    userId: USER_ID,
+    userId: USER_ID_AGENTE,
     displayName: "Agente IA",
     title: "asistente",
     x,

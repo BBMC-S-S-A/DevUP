@@ -16,6 +16,7 @@
     "test:trazado": "tsx src/components/arquitectura/Enlaces.test.ts",
     "test:invitacion": "tsx --tsconfig tsconfig.json src/lib/invitacion.test.ts",
     "test:agente-ia": "tsx --tsconfig tsconfig.json src/lib/world/agente-ia.test.ts",
+    "test:tablero-teclado": "tsx --tsconfig tsconfig.json src/lib/tablero-teclado.test.ts",
     "test:riel": "tsx --tsconfig tsconfig.json src/lib/riel.test.ts",
     "test:quien-entro": "tsx --tsconfig tsconfig.json src/lib/quien-entro.test.ts",
     "test:actividad": "tsx --tsconfig tsconfig.json src/lib/actividad.test.ts",

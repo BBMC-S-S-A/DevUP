@@ -565,6 +565,151 @@ const COLOR_ESTADO: Record<string, string> = {
  * con el nombre por el ancho, y con nombres largos el cartel acabaría siendo
  * más ancho que la sala.
  */
+/**
+ * El agente, que no es una persona y tiene que no parecerlo.
+ *
+ * POR QUÉ UN DIBUJO PROPIO Y NO UN AVATAR GRIS. El muñeco de la sala «Agente
+ * IA» usaba el avatar de reserva: una persona gris. Y un muñeco idéntico a un
+ * compañero invita a tratarlo como tal — a saludarlo, a esperar respuesta, a
+ * contar con él en la reunión. En una herramienta de equipo esa confusión es
+ * peor que en un juego, porque las consecuencias son de trabajo.
+ *
+ * LO QUE HACE EL TRABAJO ES LA SILUETA, NO EL COLOR. Un compañero vestido de
+ * gris sigue leyéndose como un compañero: la forma —cabeza, hombros, dos
+ * piernas— es lo que el ojo reconoce antes de llegar al color. Así que aquí no
+ * hay piernas ni pies ni hombros, y el cuerpo se afila hacia abajo en vez de
+ * apoyarse. A dos casillas de distancia, y sin leer el cartel, ya no es una
+ * persona.
+ *
+ * FLOTA, Y LA SOMBRA ES LA QUE LO CUENTA. El cuerpo sube y baja un píxel y
+ * medio, y la sombra se encoge cuando sube. Sin esa sombra que responde, subir
+ * y bajar se lee como un temblor; con ella, se lee como altura — es el mismo
+ * truco por el que el avatar de una persona lleva su sombra pegada al suelo.
+ *
+ * DETERMINISTA, como todo el mundo (ver la cabecera de `rooms.ts`): el vaivén
+ * sale del reloj que ya recibe, no de un azar. Dos personas mirando la sala al
+ * mismo tiempo ven el muñeco a la misma altura.
+ */
+export function drawAgente(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  facing: "n" | "s" | "e" | "o",
+  time: number,
+): void {
+  // Cuatro segundos por vuelta: a la velocidad de una respiración, no de un
+  // parpadeo. Más rápido parecería nervioso, y lo que tiene que parecer es que
+  // está esperando.
+  const vaiven = Math.sin(time / 640);
+  const alto = vaiven * 1.5;
+
+  const cuerpo = "#8b6fe8";
+  const pantalla = "#0e1424";
+  const brillo = "#5fd8ea";
+
+  // La sombra, primero y sin desplazar: se queda en la casilla mientras el
+  // cuerpo se mueve. Encogerla cuando sube es lo que convierte el vaivén en
+  // altura.
+  const sombra = 1 - vaiven * 0.18;
+  ctx.fillStyle = `rgba(0,0,0,${0.3 - vaiven * 0.06})`;
+  ctx.beginPath();
+  ctx.ellipse(x, y - 1, 6.5 * sombra, 2.6 * sombra, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const base = y - 7 - alto; // la punta del cuerpo, que no llega al suelo
+  const centro = base - 13;
+  const cabezaY = base - 26;
+
+  // El cuerpo: una gota. Se dibuja por franjas que se estrechan hacia abajo,
+  // porque el estilo del resto del mundo son rectángulos sin antialias y una
+  // curva de verdad aquí cantaría.
+  const franjas: [number, number][] = [
+    [8, 5],
+    [7.5, 4],
+    [6.5, 3],
+    [5, 3],
+    [3.5, 2],
+    [2, 2],
+  ];
+  let cursor = centro - 6;
+  for (const [ancho, altura] of franjas) {
+    ctx.fillStyle = shade(cuerpo, cursor > centro ? 0.78 : 1);
+    ctx.fillRect(x - ancho, cursor, ancho * 2, altura);
+    cursor += altura;
+  }
+
+  // Un anillo fino sobre el cuerpo. Es lo único decorativo, y está por una
+  // razón: da un eje horizontal que ninguna persona tiene, así que refuerza la
+  // lectura de «aparato» incluso de espaldas.
+  //
+  // MÁS ESTRECHO QUE LA CABEZA Y POR DEBAJO DE ELLA, no a su altura. Al
+  // principio medía dieciocho —más que los dieciséis de la cabeza— y caía justo
+  // en su borde inferior: se leía como una bandeja puesta debajo, no como una
+  // banda del cuerpo. Se vio al pintarlo, no leyéndolo.
+  ctx.fillStyle = brillo;
+  ctx.fillRect(x - 7, centro + 3, 14, 1.2);
+  ctx.fillStyle = shade(brillo, 0.55);
+  ctx.fillRect(x - 7, centro + 4.2, 14, 0.8);
+
+  // La antena: dos píxeles de tallo y un punto. Remata la silueta por arriba
+  // con algo que no es pelo.
+  ctx.fillStyle = shade(cuerpo, 0.8);
+  ctx.fillRect(x - 0.6, cabezaY - 4, 1.2, 4);
+  ctx.fillStyle = brillo;
+  ctx.fillRect(x - 1.5, cabezaY - 6, 3, 2.5);
+
+  // La cabeza es una pantalla, no una cara: marco del color del cuerpo y un
+  // hueco oscuro dentro.
+  //
+  // DE PERFIL LA CAJA SE ESTRECHA Y SE CORRE, igual que hace la cara de una
+  // persona en `drawAvatar` —«de perfil el cuerpo se estrecha y la cara cambia
+  // de sitio»—. Sin eso, mirar de lado y mirar de frente daban exactamente la
+  // misma silueta y solo se distinguían por dos píxeles de ojo: se veía
+  // pintándolo, no leyéndolo.
+  const perfil = facing === "e" || facing === "o";
+  const dir = facing === "e" ? 1 : facing === "o" ? -1 : 0;
+  const anchoCabeza = perfil ? 11 : 16;
+  const izq = x - anchoCabeza / 2 + dir * 2;
+
+  ctx.fillStyle = cuerpo;
+  ctx.fillRect(izq, cabezaY, anchoCabeza, 13);
+  // Las esquinas se recortan a mano, igual que en `drawAvatar`, para redondear
+  // sin antialias.
+  ctx.clearRect(izq, cabezaY, 1.5, 1.5);
+  ctx.clearRect(izq + anchoCabeza - 1.5, cabezaY, 1.5, 1.5);
+  ctx.clearRect(izq, cabezaY + 11.5, 1.5, 1.5);
+  ctx.clearRect(izq + anchoCabeza - 1.5, cabezaY + 11.5, 1.5, 1.5);
+
+  // De espaldas no hay pantalla, igual que una persona de espaldas no tiene
+  // ojos: esa ausencia es lo que hace legible hacia dónde mira.
+  if (facing === "n") {
+    ctx.fillStyle = shade(cuerpo, 0.72);
+    ctx.fillRect(x - 6.5, cabezaY + 2, 13, 9);
+    return;
+  }
+
+  ctx.fillStyle = pantalla;
+  ctx.fillRect(izq + 1.5, cabezaY + 1.5, anchoCabeza - 3, 10);
+
+  // Los ojos: barras, no puntos. Una barra no mira a nadie en particular, y eso
+  // es lo correcto — este muñeco no sigue a la gente con la vista.
+  ctx.fillStyle = brillo;
+  if (!perfil) {
+    ctx.fillRect(x - 4.5, cabezaY + 5, 3.5, 2);
+    ctx.fillRect(x + 1, cabezaY + 5, 3.5, 2);
+  } else {
+    // De lado se ve un ojo, y ocupa casi todo el cristal: es lo que hace que
+    // el perfil se lea como un perfil y no como una pantalla más pequeña.
+    ctx.fillRect(izq + 2.5, cabezaY + 5, anchoCabeza - 5, 2);
+  }
+
+  // Un brillo en la esquina del cristal. Corto a propósito: cuando cruzaba la
+  // pantalla entera se leía como una ceja —un rasgo de cara, justo lo que este
+  // muñeco no debe tener— en vez de como un reflejo.
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(izq + 2, cabezaY + 2.5, 3, 1.2);
+}
+
 export function drawNameplate(
   ctx: CanvasRenderingContext2D,
   x: number,

@@ -18,6 +18,7 @@
  */
 import {
   TILE,
+  drawAgente,
   drawAvatar,
   drawDoorway,
   drawFloor,
@@ -32,6 +33,7 @@ import {
 import { drawProp } from "./furniture";
 import type { Prop } from "./props";
 import type { Scene } from "./scene";
+import { USER_ID_AGENTE } from "./agente-ia";
 import type { Avatar, Facing, Peer } from "./types";
 
 export type Camera = { x: number; y: number; scale: number };
@@ -232,7 +234,12 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
 
     // Sentado se dibuja un pelín más abajo en el orden por Y para quedar por
     // delante del asiento: si no, la silla tapa a quien está sentado en ella.
-    drawAvatar(ctx, px, py, avatar, peer.facing, peer.moving, time, peer.sitting);
+    // El agente se dibuja aparte porque NO es una persona, y la silueta es lo
+    // que lo dice. Ver `drawAgente` en atlas.ts. El identificador viene de
+    // `agente-ia.ts` y no escrito a mano aquí: dos copias del mismo nombre son
+    // una copia que puede descuadrar sin que nada se queje.
+    if (peer.userId === USER_ID_AGENTE) drawAgente(ctx, px, py, peer.facing, time);
+    else drawAvatar(ctx, px, py, avatar, peer.facing, peer.moving, time, peer.sitting);
     ctx.globalAlpha = 1;
     drawNameplate(
       ctx,

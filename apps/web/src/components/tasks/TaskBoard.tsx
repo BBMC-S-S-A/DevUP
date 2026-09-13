@@ -20,10 +20,12 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as EventoDeTecla,
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
 import { fechaCorta, hoyLocal, iniciales } from "@/lib/fechas";
+import { trasQuienInsertar } from "@/lib/tablero-teclado";
 import {
   ApiError,
   type AreaDeTablero,
@@ -149,6 +151,9 @@ export function TaskBoard({
   /** Columna donde se está creando una tarea, si es que se está creando. */
   const [creandoEn, setCreandoEn] = useState<{ id: string; nombre: string } | null>(null);
   const dragging = useRef<{ taskId: string; fromColumn: string } | null>(null);
+  /** Cuál fue la última tarjeta movida con el teclado, para devolverle el foco
+   *  cuando `drop` ya ha limpiado `dragging`. */
+  const ultimaMovida = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // Estado puramente visual del arrastre: qué tarjeta está en el aire y detrás
   // de cuál caería si se soltara ahora. No interviene en el movimiento — eso lo
@@ -335,8 +340,131 @@ export function TaskBoard({
 
   const carga = visibles.reduce((maximo, columna) => Math.max(maximo, columna.tasks.length), 0);
 
+  /**
+   * Lo último que hizo el teclado, para contarlo.
+   *
+   * NO ES UN ADORNO DE ACCESIBILIDAD. Arrastrar con el ratón se explica solo:
+   * la tarjeta va detrás del cursor y aterriza donde la sueltas. Moverla con el
+   * teclado no: salta a otra columna que puede estar fuera de la pantalla, y
+   * sin decirlo el efecto es que la tarjeta desaparece. Va en un
+   * `role="status"`, así que lo lee un lector de pantalla y además se ve.
+   */
+  const [avisoTeclado, setAvisoTeclado] = useState<string | null>(null);
+
+  /**
+   * Mover una tarjeta con el teclado.
+   *
+   * POR QUÉ EXISTE. Hasta ahora una tarjeta solo se movía arrastrando, así que
+   * para quien no usa ratón —o no puede— mover una tarjeta no existía. Es la
+   * acción principal de un tablero: dejarla detrás del ratón deja gente fuera
+   * de la herramienta, no de un adorno.
+   *
+   * POR QUÉ `Ctrl` Y NO LAS FLECHAS SOLAS. Las flechas tienen que seguir
+   * desplazando el tablero y llevando el foco de una tarjeta a otra; si además
+   * movieran la tarjeta, no habría forma de recorrerlo sin desordenarlo. Y no
+   * `Alt`, que en el navegador es atrás y adelante.
+   *
+   * REUTILIZA `drop` ENTERO en vez de mover la tarjeta por su cuenta, y eso es
+   * lo que importa aquí: ahí ya viven el movimiento optimista, el aviso de
+   * fallo y la vuelta atrás recargando el tablero. Una segunda copia de eso
+   * divergiría el día que alguien arregle solo una de las dos.
+   */
+  function moverConTeclado(
+    evento: EventoDeTecla<HTMLButtonElement>,
+    taskId: string,
+    columnaId: string,
+  ): void {
+    if (!evento.ctrlKey && !evento.metaKey) return;
+    const paso: -1 | 1 | undefined = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 }[
+      evento.key
+    ] as -1 | 1 | undefined;
+    if (paso === undefined) return;
+    evento.preventDefault();
+
+    const iColumna = visibles.findIndex((c) => c.id === columnaId);
+    const columna = visibles[iColumna];
+    if (!columna) return;
+    const iTarea = columna.tasks.findIndex((t) => t.id === taskId);
+    if (iTarea < 0) return;
+    const titulo = columna.tasks[iTarea]!.title;
+
+    // `drop` toma la tarjeta de `dragging`, igual que al arrastrar — y lo
+    // limpia en su primera línea, así que el foco se recuerda aparte.
+    dragging.current = { taskId, fromColumn: columnaId };
+    ultimaMovida.current = taskId;
+    const nada = () => {
+      dragging.current = null;
+    };
+
+    if (evento.key === "ArrowUp" || evento.key === "ArrowDown") {
+      // `undefined` es «no hay a dónde ir», y es distinto de `null`, que sí es
+      // un movimiento: arriba del todo. Ver `trasQuienInsertar`.
+      const tras = trasQuienInsertar(
+        columna.tasks.map((t) => t.id),
+        iTarea,
+        paso,
+      );
+      if (tras === undefined) {
+        nada();
+        setAvisoTeclado(
+          paso === -1 ? "Ya es la primera de su columna" : "Ya es la última de su columna",
+        );
+        return;
+      }
+      void drop(columnaId, tras);
+      setAvisoTeclado(`«${titulo}» ahora es la ${iTarea + paso + 1}.ª de ${columna.name}`);
+      return;
+    }
+
+    const otra = visibles[iColumna + paso];
+    if (!otra) {
+      nada();
+      // Decirlo en vez de callarse: sin esto, pulsar en la última columna no
+      // hace nada y no se sabe si la tecla no funciona o si no hay a dónde ir.
+      setAvisoTeclado(paso === 1 ? "Ya está en la última columna" : "Ya está en la primera columna");
+      return;
+    }
+    // Al cambiar de columna entra arriba, SIEMPRE. Es una promesa que se puede
+    // decir en una frase, y «donde estaba» no significa nada entre dos columnas
+    // de distinta longitud.
+    void drop(otra.id, null);
+    setAvisoTeclado(`«${titulo}» movida a ${otra.name}, arriba`);
+  }
+
+  /**
+   * Devolver el foco a la tarjeta después de moverla.
+   *
+   * Al moverse, React vuelve a pintar la columna y el botón que tenía el foco
+   * deja de existir: el foco se caería al `body` y la siguiente pulsación no
+   * iría a ninguna parte. Sin esto, mover una tarjeta dos columnas seguidas
+   * sería imposible — y mover de una en una es justo lo que se hace.
+   */
+  useEffect(() => {
+    if (!avisoTeclado) return;
+    const id = ultimaMovida.current;
+    if (!id) return;
+    // Se limpia al devolver el foco, y no después. Sin esto el efecto también
+    // corre con cada recarga del tablero —`columns` está en las dependencias
+    // porque hay que esperar a que el botón nuevo exista— y le robaría el foco
+    // a quien estuviera en otra parte de la pantalla medio minuto más tarde.
+    ultimaMovida.current = null;
+    document.querySelector<HTMLButtonElement>(`[data-tarea="${id}"]`)?.focus();
+  }, [avisoTeclado, columns]);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Lo que acaba de pasar al mover con el teclado. `role="status"` y no un
+          aviso flotante: esto tiene que llegar a un lector de pantalla, y a la
+          vez quedarse quieto en un sitio donde se pueda volver a leer. Se ve
+          solo cuando hay algo que decir, así que no gasta un renglón en vacío. */}
+      {avisoTeclado && (
+        <p
+          role="status"
+          className="shrink-0 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-[11px] text-muted"
+        >
+          {avisoTeclado}
+        </p>
+      )}
       {error && (
         <p className="flex shrink-0 items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
           <AlertTriangle size={13} className="shrink-0" />
@@ -392,7 +520,18 @@ export function TaskBoard({
           accion={<NewColumn workspaceId={workspaceId} onCreated={load} compacto />}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto pb-2">
+        /* `snap-x snap-mandatory`: al desplazar a lo ancho se aterriza en el
+           canto de una columna, no a mitad de dos. En pantalla ancha no cambia
+           nada —caben todas y no hay desplazamiento—; en una estrecha es la
+           diferencia entre pasar de columna y quedarse leyendo dos mitades.
+
+           NO SE TOCA EL ANCHO de la columna, y lo comprobé antes de dejarlo:
+           19rem sobre una ventana de 375 px deja la columna entera más 55 px de
+           la siguiente asomando, que es justo lo que hace falta —una columna
+           legible y la señal de que hay más—. Y por debajo de 768 px la barra
+           lateral ya se vuelve cajón, así que el tablero recibe la pantalla
+           completa. */
+        <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
           {visibles.map((column, indice) => {
             const sobrevolada = dropTarget === column.id;
 
@@ -420,7 +559,7 @@ export function TaskBoard({
                   event.preventDefault();
                   void drop(column.id, null);
                 }}
-                className="devup-entrada relative flex h-full w-[19rem] shrink-0 flex-col overflow-hidden"
+                className="devup-entrada relative flex h-full w-[19rem] shrink-0 snap-start flex-col overflow-hidden"
                 style={{ "--retraso": `${Math.min(indice, 8) * 50}ms` } as CSSProperties}
               >
                 {/* El lavado de acento sobre toda la columna al sobrevolarla:
@@ -593,11 +732,18 @@ export function TaskBoard({
                         <button
                           type="button"
                           onClick={() => setOpen(task)}
+                          // Para devolverle el foco después de moverla: al
+                          // repintarse, este botón es otro nodo.
+                          data-tarea={task.id}
+                          onKeyDown={(evento) => moverConTeclado(evento, task.id, column.id)}
                           // Las dos cosas que se pueden hacer con una tarjeta
                           // solo se descubrían probando: el cursor `grab` pide
                           // arrastrar pero no dice a dónde, y que abra un
                           // diálogo con responsable y fecha no lo anuncia nada.
-                          title="Abrir para editar · arrastrar para cambiarla de columna"
+                          // Las teclas se dicen aquí porque un atajo que no se
+                          // anuncia en ninguna parte no existe: quien no lo
+                          // sabe sigue creyendo que hace falta el ratón.
+                          title="Abrir para editar · arrastrar, o Ctrl con las flechas, para moverla"
                           // Sin `presionable`: su hundido del 3 % se dispara
                           // mientras se arrastra (el botón sigue :active) y
                           // pelearía con el levantado, que es la señal que
