@@ -95,6 +95,21 @@ export function useOrgIdOpcional(): string | null {
   return params.orgId ?? workspace?.organizationId ?? null;
 }
 
+/**
+ * El workspace entero —nombre incluido—, o `null` fuera de uno.
+ *
+ * Los otros ganchos devuelven identificadores, que sirven para construir una
+ * dirección pero no para escribir una frase. Una vuelta que dice «Volver a
+ * Producto» es la que deja claro a dónde lleva; «Volver al espacio» todavía
+ * obliga a acordarse de en cuál estabas.
+ *
+ * Lo trae el layout, que ya lo pidió para pintar su barra: nadie vuelve a
+ * preguntarlo.
+ */
+export function useWorkspaceActual(): Workspace | null {
+  return useContext(WorkspaceContext);
+}
+
 export function useWorkspaceId(): string {
   const params = useParams<{ workspaceId?: string }>();
   const workspace = useContext(WorkspaceContext);
