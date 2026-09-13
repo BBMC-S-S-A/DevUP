@@ -529,9 +529,23 @@ export type Recording = {
 
 export type Connection = {
   id: string;
-  provider: "github" | "spotify" | "anthropic" | "gemini" | "railway" | "aws";
+  provider: "github" | "spotify" | "anthropic" | "gemini" | "railway" | "aws" | "postgres";
   displayName: string;
   createdAt: string;
+};
+
+export type ColumnaTabla = { nombre: string; tipo: string; nulable: boolean };
+export type TablaDB = {
+  esquema: string;
+  nombre: string;
+  filasEstimadas: number;
+  columnas: ColumnaTabla[];
+};
+export type ResultadoSQL = {
+  columnas: string[];
+  filas: Record<string, unknown>[];
+  filasAfectadas: number;
+  comando: string;
 };
 
 export type GithubStats = {

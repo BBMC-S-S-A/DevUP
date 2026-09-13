@@ -22,6 +22,7 @@ import { puntosRoutes } from "./routes/puntos.js";
 import { grafoRoutes } from "./routes/grafo.js";
 import { auditoriaRoutes } from "./routes/auditoria.js";
 import { authRoutes } from "./routes/auth.js";
+import { basedatosRoutes } from "./routes/basedatos.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { fileRoutes } from "./routes/files.js";
 import { githubRoutes, refreshRepo } from "./routes/github.js";
@@ -179,6 +180,7 @@ await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(reunionesRoutes);
+await app.register(basedatosRoutes);
 await app.register(notificationRoutes);
 await app.register(oauthRoutes);
 

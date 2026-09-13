@@ -17,7 +17,9 @@ const uuid = z.string().uuid();
 // para mejorar sus productos, y eso lo dice la pantalla, no solo aqui.
 // `railway` y `aws` (0063) son proveedores de despliegue: el mismo baúl de
 // secretos, para un token que la app usa para actuar en vez de solo leer.
-const PROVIDERS = ["github", "spotify", "anthropic", "gemini", "railway", "aws"] as const;
+// `postgres` (0065) es la base de datos propia de un workspace, para el
+// administrador — el secreto es la cadena de conexión completa.
+const PROVIDERS = ["github", "spotify", "anthropic", "gemini", "railway", "aws", "postgres"] as const;
 
 const CONNECTION_COLUMNS = `
   id, provider, display_name as "displayName", created_at as "createdAt"`;
