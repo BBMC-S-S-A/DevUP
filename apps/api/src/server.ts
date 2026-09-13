@@ -18,6 +18,7 @@ import { asistenteRoutes } from "./routes/asistente.js";
 import { actividadRoutes } from "./routes/actividad.js";
 import { inicioRoutes } from "./routes/inicio.js";
 import { panoramaRoutes } from "./routes/panorama.js";
+import { puntosRoutes } from "./routes/puntos.js";
 import { grafoRoutes } from "./routes/grafo.js";
 import { auditoriaRoutes } from "./routes/auditoria.js";
 import { authRoutes } from "./routes/auth.js";
@@ -168,6 +169,7 @@ await app.register(arquitecturaRoutes);
 // el servidor — compilar y pasar las pruebas no lo toca. Ahora hay un paso de
 // CI que sí lo hace (`npm run arranca --workspace apps/api`).
 await app.register(actividadRoutes);
+await app.register(puntosRoutes);
 await app.register(auditoriaRoutes);
 await app.register(inicioRoutes);
 await app.register(panoramaRoutes);
