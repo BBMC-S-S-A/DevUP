@@ -9,6 +9,11 @@
  * `api.hytrex.co` — un 403 al abrir el túnel, con token o sin él. No falta una
  * credencial: falta red. Esto se ejecuta donde sí la hay.
  *
+ * LA REGLA DE REPARTO, dicha por quien manda y en sus palabras:
+ *   · interfaz, flujo, cómo se mueve el trabajo  →  **Workflow** (Juan Medina)
+ *   · profundidad de funcionalidades             →  **Funcionalidades** (Juan Bonilla)
+ *   · modelos, mundo, personajes                 →  **DevVerse** (Carlos)
+ *
  * QUÉ HACE, en este orden:
  *
  *   1. Crea las tres ramas si no están: **Workflow** (Juan Medina),
@@ -48,6 +53,9 @@
  *     npx tsx scripts/reordenar-ramas.ts --ver            # propuesta, sin tocar
  *     npx tsx scripts/reordenar-ramas.ts                  # aplica
  *     npx tsx scripts/reordenar-ramas.ts "Gestek"         # un espacio concreto
+ *     npx tsx scripts/reordenar-ramas.ts --repartir       # además, las que no
+ *                                                         # tienen dueño pasan
+ *                                                         # al gerente de su rama
  */
 import { ClienteDevUP } from "../apps/mcp/src/api.js";
 import { resolverEspacio } from "../apps/mcp/src/espacios.js";
@@ -101,7 +109,13 @@ const RAMAS = [
  */
 const A_RETIRAR = "Agente";
 
-type Tarea = { id: string; title: string; categoryId: string | null; columnId: string };
+type Tarea = {
+  id: string;
+  title: string;
+  categoryId: string | null;
+  columnId: string;
+  assigneeId: string | null;
+};
 type Columna = { id: string; name: string; isTerminal?: boolean; tasks: Tarea[] };
 type Categoria = { id: string; name: string; ownerId?: string | null };
 
@@ -131,6 +145,7 @@ function ramaDe(titulo: string): (typeof RAMAS)[number] | null {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const soloVer = args.includes("--ver");
+  const repartir = args.includes("--repartir");
   const nombreEspacio = args.find((a) => !a.startsWith("--"));
 
   const cliente = new ClienteDevUP();
@@ -191,7 +206,9 @@ async function main(): Promise<void> {
 
   const vieja = porNombre(A_RETIRAR);
   const sinClasificar: string[] = [];
+  const sinDueno: string[] = [];
   let movidas = 0;
+  let asignadas = 0;
 
   console.log("\nReparto");
 
@@ -213,6 +230,26 @@ async function main(): Promise<void> {
       await cliente.patch(`/tasks/${tarea.id}`, { categoryId: destino.id });
     }
     movidas += 1;
+
+    /**
+     * Y solo si se pidió: las que no tienen NADIE pasan al gerente de su rama.
+     *
+     * Va detrás de una opción y no por defecto porque es lo único aquí que
+     * cambia a quién señala una tarea. Una tarea sin dueño es un hecho —nadie
+     * la ha cogido— y convertirlo en «la lleva el gerente» sin decirlo le
+     * llenaría la bandeja a alguien que no dijo que sí. Con `--repartir` es
+     * una decisión; sin ella, es una sorpresa.
+     */
+    if (!tarea.assigneeId) {
+      sinDueno.push(`${tarea.title}  → ${rama.gerente}`);
+      if (repartir && !soloVer) {
+        const gerente = await buscarPersona(rama.gerente);
+        if (gerente) {
+          await cliente.patch(`/tasks/${tarea.id}`, { assigneeId: gerente });
+          asignadas += 1;
+        }
+      }
+    }
   }
 
   // --- 3. La rama que se retira --------------------------------------------
@@ -240,13 +277,22 @@ async function main(): Promise<void> {
   }
 
   // --- Lo que hay que mirar a mano -----------------------------------------
+  if (sinDueno.length > 0) {
+    console.log(
+      `\nSin dueño (${sinDueno.length})${repartir ? " — pasan a su gerente:" : " — se quedan sin dueño; con `--repartir` irían a:"}`,
+    );
+    for (const t of sinDueno) console.log(`  · ${t}`);
+  }
+
   if (sinClasificar.length > 0) {
     console.log(`\nSin clasificar (${sinClasificar.length}) — se quedan donde están:`);
     for (const t of sinClasificar) console.log(`  · ${t}`);
   }
 
   console.log(
-    `\n${movidas} tarea(s) ${soloVer ? "se moverían" : "movidas"}, ${sinClasificar.length} sin clasificar.`,
+    `\n${movidas} tarea(s) ${soloVer ? "se moverían" : "movidas"}` +
+      `${asignadas > 0 ? `, ${asignadas} asignada(s)` : ""}` +
+      `, ${sinClasificar.length} sin clasificar.`,
   );
   if (soloVer) console.log("Nada se ha escrito. Quita `--ver` para aplicarlo.");
 }
