@@ -200,15 +200,25 @@ export type PendingInvitation = {
   /**
    * Si tiene código corto vivo.
    *
-   * OPCIONAL A PROPÓSITO: la ruta que lista invitaciones todavía no lo
-   * devuelve. Marcarlo obligatorio mentiría al tipo —sería `undefined` en
-   * tiempo de ejecución y TypeScript no diría nada—, que es justo cómo un
-   * `boolean` acaba pintando siempre la misma mitad de un rótulo.
+   * YA NO ES OPCIONAL. Estuvo marcado así porque la ruta que lista invitaciones
+   * no lo devolvía —y por eso el botón decía siempre «Dar código», también
+   * sobre las que ya tenían uno—. Ahora lo devuelve, así que hacerlo
+   * obligatorio es lo honesto: un `boolean | undefined` acaba pintando siempre
+   * la misma mitad de un rótulo sin que nada falle.
    *
    * El código en sí no viaja ni viajará: en la base solo está su hash (0041),
    * así que ni la API puede volver a leerlo.
    */
-  hasCode?: boolean;
+  hasCode: boolean;
+  /**
+   * Cuándo caduca el CÓDIGO, que no es cuándo caduca la invitación.
+   *
+   * Un día contra siete. Usar `expiresAt` para hablar del código diría que
+   * sigue valiendo seis días después de haber dejado de valer — y quien lo
+   * dicte por teléfono se encontrará con que no entra, sin nada que explique
+   * por qué.
+   */
+  codeExpiresAt: string | null;
 };
 
 export type Notification = {
