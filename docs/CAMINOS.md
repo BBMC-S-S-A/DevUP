@@ -743,3 +743,108 @@ Todo lo demás es paralelo. La única dependencia real:
 
 Por eso las rutas de enlaces van primero en la lista de funcionalidades: es lo
 único que tiene a alguien esperando detrás.
+
+---
+
+## 10. Lo que queda, a 13 de septiembre
+
+_Escrito después de fusionar el PR #67. Sustituye al §9 en lo que se solape:
+**el §9.1 entero está terminado**, así que lo de abajo es lo que de verdad
+queda. Comprobado contra el código y contra el tablero, no contra la memoria._
+
+### 10.1 Lo que se cerró y por qué no hay que volver a mirarlo
+
+| Qué | Dónde |
+|---|---|
+| Las rutas de enlaces del grafo, y tejerlos solos | 0043, `lib/grafo.ts` |
+| El diario, el contexto de una tarea, `que_ha_pasado` con alcance | `lib/actividad.ts`, MCP |
+| Ramas con gerentes **en plural**, «por repartir», «quién ha trabajado» | 0050, 0051, `lib/ramas.ts` |
+| Carpetas en la biblioteca, con el ciclo impedido en la base | 0053 |
+| Lo cerrado sin justificar, visible en vez de obligatorio | `lib/widgets.ts` |
+| Mirar un enlace de recuperación sin gastarlo | 0054 |
+| **Los puntos**: se ganan al cerrar, en la base, y se ven | 0055, `lib/puntos.ts`, MCP `puntos` |
+| El oficio y el rol por organización, que estaban sin puerta | 0048, 0052 + `/organizations/:id/me` |
+
+### 10.2 Base, API y MCP — lo que queda
+
+Poco, y ninguna es urgente. La capa de abajo va por delante de la de arriba, y
+eso es lo que hay que aprovechar ahora: **lo que más valor suelta hoy es pintar
+lo que ya existe** (§10.3), no añadir más base.
+
+1. **Gastar los puntos.** Ganarlos ya funciona; no hay dónde gastarlos. Esto es
+   la ropa y el edificio del equipo del DevVerse, y **antes de la tabla hace
+   falta una decisión de producto**: qué cuesta qué. Escribirla sin eso es
+   inventarse una economía, y una economía mal calibrada no se corrige — se
+   abandona.
+2. **Reuniones con hora en DevCall.** No hay tabla de eventos ni de asistentes.
+   Está en el tablero a nombre de Juan Bonilla.
+3. **Terminar el código corto**: faltan las dos funciones que lo canjean.
+   También de Juan Bonilla.
+
+### 10.3 Interfaz — y aquí está casi todo lo que queda
+
+Cada una tiene su contrato ya escrito y probado. Ninguna necesita preguntar
+nada antes de empezar.
+
+1. **`/categorias` está mirando la tabla equivocada** (§5). Trabaja sobre `tags`
+   cuando las ramas de verdad son `task_categories`, y su «Jefe de rama»
+   escribe en una columna que la 0050 marcó como obsoleta: elegir un jefe ahí
+   hoy no hace nada. **La más importante de esta lista**, porque no se ve desde
+   la pantalla.
+2. **Los puntos, en algún sitio** (§5). Con `aSolas` en la misma línea que el
+   total — esa es la regla que no se puede romper — y los asientos al lado.
+3. **«Quién ha trabajado» y la red con las aristas que faltan.** `RedDeTrabajo`
+   dibuja tres aristas y su propio comentario dice que le faltaba el registro:
+   ya no le falta, y el grafo tiene diez tipos de nodo con `area` y `persona`
+   dentro.
+4. **El tutorial por rol, y elegir oficio y rol.** `GET`/`PATCH
+   /organizations/:orgId/me` devuelve los tres campos que hacen falta. La lista
+   de roles es cerrada, de trece.
+5. **La biblioteca por carpetas, y la vista previa de una imagen.** Hoy es una
+   rejilla plana donde doce archivos se llaman `image.png`. La base ya tiene
+   `file_folders`.
+6. **Las neuronas en el menú.** El grafo tiene rutas desde el §5.
+7. **DevCall se queda los canales**, y lo que hoy cuelga suelto del menú entra
+   ahí.
+8. **Que «ajustes técnicos» lleve a ajustes técnicos.**
+9. **Los dos hallazgos del mapa de flujos que siguen abiertos**: el #9 (la
+   asimetría entre los dos armazones) y el #3 en `/verificar` y `/invitacion` —
+   el patrón ya está resuelto en `/recuperar`, pero ahí el reenvío exige sesión
+   y quien llega a un enlace caducado no la tiene. **Eso es una decisión antes
+   que un botón.**
+
+### 10.4 Personas: lo que no se puede hacer desde una sesión
+
+**Y lo primero bloquea al resto.**
+
+1. **Aplicar las migraciones 0047–0055 contra Railway, y desplegar.** El
+   guardián de despliegue se para solo mientras haya migraciones sin aplicar —
+   está haciendo su trabajo—, así que **nada de lo de arriba está vivo en
+   producción todavía**. Incluye desplegar el MCP: pasa a 21 herramientas y
+   deja de poner la etiqueta «agente» a la fuerza.
+2. **Los 75 commits con autor «Claude» en el tronco.** Reescribirlos cambia
+   todos los SHA del repositorio: rompe el `git pull` de todo el mundo y deja
+   la rama de la otra sesión colgando de una historia que ya no existe. Hay que
+   avisar antes. Y ojo con un detalle que no se ve: los 75 llevan «Claude»
+   también como *committer*, así que no queda rastro de qué sesión los encargó
+   — ponerles un nombre a todos le atribuye a una persona trabajo que pudo
+   salir de la sesión de otra.
+3. **Variables de entorno e infraestructura**, que no se hacen a medias:
+   custodia de `VAULT_MASTER_KEY`, TURN o Metered, correo de verdad, respaldos
+   fuera de la máquina con restauración probada, S3 de producción.
+
+### 10.5 Decisiones, que no son código
+
+Media hora de conversación cada una, y mientras no se tomen, el tablero miente
+sobre cuánto queda.
+
+- **Qué cuesta qué en el DevVerse.** Bloquea el 10.2.1.
+- **Qué pantalla es la portada** para quien entra por primera vez.
+- **El tamaño del sprite y cuántos cuerpos base.**
+- **El reenvío sin sesión**: ¿se abre, con límite de peticiones, o se manda a
+  iniciar sesión primero? Bloquea el 10.3.9.
+
+_La que estaba marcada como «la más urgente de las tres» en el §9.3 —si el área
+es una etiqueta o una pertenencia— **ya está decidida**: la 0050 la resolvió.
+La rama es la categoría, el gerente responde y reparte, el delegado la hace, y
+archivar en una rama no asigna a nadie._
