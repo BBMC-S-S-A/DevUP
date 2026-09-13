@@ -266,15 +266,32 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
          * pantallas tendrían que inventarse un texto de relleno.
          */
         displayName: z.string().trim().min(1).max(80).optional(),
+        /**
+         * El huso, en nombre IANA («America/Bogota»). Cadena vacía lo borra y
+         * vuelve a UTC, igual que `title`.
+         *
+         * Va aquí y no en `/organizations/:id/me` porque una persona está donde
+         * está: no cambia de huso al cambiar de proyecto. Lo que sí cambia de
+         * una organización a otra es el oficio, y eso vive allí.
+         */
+        timezone: z.string().trim().max(60).optional(),
       }),
       request.body,
     );
 
     return withUser(userId, async (db) => {
+      // Por su función y no con un UPDATE aquí: la validación contra la lista
+      // de husos de Postgres vive dentro (0056), y meterla también aquí sería
+      // una segunda copia de la misma regla, que es como acaban discrepando.
+      if (body.timezone !== undefined) {
+        await db.query("select public.set_my_timezone($1)", [body.timezone]);
+      }
+
       const { rows } = await db.query<{
         presence: string;
         title: string | null;
         displayName: string;
+        timezone: string | null;
       }>(
         `update profiles
             set presence = coalesce($2::presence_state, presence),
@@ -285,7 +302,7 @@ export async function preferenceRoutes(app: FastifyInstance): Promise<void> {
                            end,
                 display_name = coalesce(nullif(btrim($4), ''), display_name)
           where id = $1
-      returning presence, title, display_name as "displayName"`,
+      returning presence, title, display_name as "displayName", timezone`,
         [userId, body.presence ?? null, body.title ?? null, body.displayName ?? null],
       );
       return rows[0]!;

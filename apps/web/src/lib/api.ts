@@ -127,6 +127,11 @@ export type User = {
   presence: Presencia;
   /** A qué se dedica. Sale en la cartelera de DevVerse. */
   title: string | null;
+  /**
+   * Su huso horario, en nombre IANA. Nulo = no lo ha dicho, y el servidor usa
+   * UTC — que para media Colombia corre los domingos a la semana siguiente.
+   */
+  timezone: string | null;
 };
 
 export type SignupPolicy = {

@@ -58,6 +58,15 @@ export type Me = {
    *  vive en la barra y está en pantalla siempre. */
   presence: "available" | "busy_open" | "do_not_disturb";
   title: string | null;
+  /**
+   * El huso de esta persona (0056). Nulo = no lo ha dicho, y entonces manda
+   * UTC.
+   *
+   * Va en la sesión y no en una ruta aparte porque lo necesita cualquier
+   * pantalla que pinte una fecha, y pedirlo por su cuenta obligaría a cada una
+   * a esperar una petición más para saber en qué día vive quien mira.
+   */
+  timezone: string | null;
 };
 
 async function loadMe(db: Db, userId: string): Promise<Me> {
@@ -65,7 +74,7 @@ async function loadMe(db: Db, userId: string): Promise<Me> {
     `select u.id, u.email::text as "email",
             p.display_name as "displayName",
             p.avatar_url   as "avatarUrl",
-            p.presence, p.title,
+            p.presence, p.title, p.timezone,
             (u.email_verified_at is not null) as "emailVerified"
        from users u
        join profiles p on p.id = u.id

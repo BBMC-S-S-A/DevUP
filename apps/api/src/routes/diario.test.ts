@@ -206,6 +206,62 @@ async function main(): Promise<void> {
       new Date(`${enUtc}T00:00:00Z`).getTime() - new Date(`${enBogota}T00:00:00Z`).getTime() ===
         7 * 86_400_000,
     );
+    console.log("\nEl huso guardado (0056)");
+
+    /** Lo mismo que hace PATCH /me/profile con `timezone`. */
+    const ponerHuso = (quien: string, tz: string) =>
+      withUser(quien, (db) => db.query("select public.set_my_timezone($1)", [tz]));
+
+    const husoDe = async (quien: string): Promise<string> =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ huso_de: string }>("select public.huso_de($1)", [quien]);
+        return rows[0]!.huso_de;
+      });
+
+    // ESTA ES LA QUE IMPORTA. Antes de la 0056, «no lo dije» y «quiero UTC» se
+    // escribian igual, asi que media Colombia leia sus semanas corridas un dia
+    // sin que nada fallara. El valor por defecto sigue siendo UTC, pero ahora
+    // es el ULTIMO recurso y no el unico.
+    check("sin decir nada, UTC", (await husoDe(ana)) === "UTC");
+
+    await ponerHuso(ana, "America/Bogota");
+    check("una vez dicho, se usa el suyo", (await husoDe(ana)) === "America/Bogota");
+
+    // Vacio no es lo mismo que no llamar: es «vuelve a UTC».
+    await ponerHuso(ana, "   ");
+    check("y se puede volver a UTC dejandolo en blanco", (await husoDe(ana)) === "UTC");
+
+    const codigoDe = async (accion: () => Promise<unknown>): Promise<string> => {
+      try {
+        await accion();
+        return "colo";
+      } catch (fallo) {
+        return (fallo as { code?: string }).code ?? "?";
+      }
+    };
+
+    // Se valida contra la lista de Postgres, que es la que hace las cuentas.
+    // Un huso inventado que entrara se descubriria al leer el diario, no al
+    // guardarlo — y entonces la pantalla rota seria otra.
+    check(
+      "un huso inventado no entra",
+      (await codigoDe(() => ponerHuso(ana, "America/Bogotá"))) === "22023",
+    );
+    check("y el suyo sigue siendo el de antes", (await husoDe(ana)) === "UTC");
+
+    // Nadie puede escribir el de otro: la funcion no admite un `_user`, asi que
+    // esto no es una comprobacion de permisos — es que no hay forma de pedirlo.
+    const otro = (
+      await admin.query<{ id: string }>("select public.register_user($1,$2,$3) as id", [
+        `otro-diario-${sufijo}@devup.test`,
+        "no-se-usa",
+        "Otro",
+      ])
+    ).rows[0]!.id;
+    await ponerHuso(otro, "Europe/Madrid");
+    await ponerHuso(ana, "America/Bogota");
+    check("cada quien escribe solo el suyo", (await husoDe(otro)) === "Europe/Madrid");
+
   } finally {
     await admin.query("delete from public.organizations where slug like $1", [
       `%-diario-${sufijo}`,

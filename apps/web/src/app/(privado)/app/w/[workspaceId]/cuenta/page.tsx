@@ -291,10 +291,118 @@ const FICHA: Record<
  * los sitios que dibujan esa chapa daría una foto que solo se ve aquí, que es
  * peor que no tenerla.
  */
+/**
+ * El huso horario.
+ *
+ * POR QUÉ IMPORTA, QUE NO ES OBVIO. Sin él, todo lo que el servidor cuenta por
+ * días o por semanas va en UTC — y en UTC, lo que se cerró un domingo por la
+ * tarde en Bogotá cuenta en la semana SIGUIENTE. El hito no se pierde: aparece
+ * en la casilla equivocada, y la pantalla se ve perfectamente normal. Eso ya
+ * pasó una vez con el embudo y el panel.
+ *
+ * Hasta ahora lo tapaba el navegador, que manda el suyo en cada petición. Pero
+ * eso solo funciona cuando hay un navegador delante: ni el asistente, ni un
+ * correo, ni un aviso que el servidor mande por su cuenta tienen a quién
+ * preguntárselo.
+ *
+ * LA LISTA LA PONE EL NAVEGADOR y no nosotros: `Intl.supportedValuesOf` conoce
+ * la de verdad y se actualiza con él. Una lista escrita a mano envejece, y el
+ * día que un país cambie sus reglas tendríamos una copia vieja diciendo que un
+ * huso que existe no existe.
+ *
+ * Y SE OFRECE EL DEL NAVEGADOR DE UN CLIC, porque es el acierto en el 99 % de
+ * los casos: quien abre esto está donde está. Buscar «America/Bogota» entre
+ * cuatrocientos nombres para acabar eligiendo el que ya se sabía es trabajo
+ * inventado.
+ */
+function SelectorDeHuso({
+  valor,
+  onCambiar,
+}: {
+  valor: string;
+  onCambiar: (v: string) => void;
+}) {
+  // En estado y no calculado al vuelo: `Intl` solo existe en el navegador, y
+  // leerlo al renderizar daría una pantalla en el servidor y otra al hidratar.
+  const [husos, setHusos] = useState<string[]>([]);
+  const [delNavegador, setDelNavegador] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setDelNavegador(Intl.DateTimeFormat().resolvedOptions().timeZone || null);
+      // `supportedValuesOf` no existe en todos los navegadores. Si no está, se
+      // queda la lista vacía y abajo se cae a un campo de texto, que sigue
+      // funcionando — el servidor valida contra la lista de Postgres de todos
+      // modos.
+      const conLista = Intl as unknown as { supportedValuesOf?: (k: string) => string[] };
+      setHusos(conLista.supportedValuesOf?.("timeZone") ?? []);
+    } catch {
+      // Un navegador que no sabe dónde está no es motivo para romper la página.
+    }
+  }, []);
+
+  const ahora = valor
+    ? new Date().toLocaleTimeString("es-ES", {
+        timeZone: valor,
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div>
+      <Rotulo className="mb-1.5 block">Huso horario</Rotulo>
+
+      {husos.length > 0 ? (
+        <select
+          value={valor}
+          aria-label="Huso horario"
+          onChange={(e) => onCambiar(e.target.value)}
+          className="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink"
+        >
+          <option value="">Sin decir — se usa UTC</option>
+          {husos.map((h) => (
+            <option key={h} value={h}>
+              {h}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <Field
+          label=""
+          value={valor}
+          onChange={onCambiar}
+          maxLength={60}
+          placeholder="America/Bogota"
+        />
+      )}
+
+      <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+        {ahora ? `Ahí son las ${ahora}. ` : ""}
+        Sin esto, el diario y los recuentos por semana van en UTC — y en UTC lo
+        que cierras un domingo por la tarde cuenta en la semana siguiente.
+        {delNavegador && delNavegador !== valor && (
+          <>
+            {" "}
+            <button
+              type="button"
+              onClick={() => onCambiar(delNavegador)}
+              className="presionable text-accent-bright underline underline-offset-2"
+            >
+              Usar el de este navegador ({delNavegador})
+            </button>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
 function Perfil() {
   const { user, refresh } = useSession();
   const [nombre, setNombre] = useState("");
   const [cargo, setCargo] = useState("");
+  const [huso, setHuso] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [reenviando, setReenviando] = useState(false);
 
@@ -304,10 +412,15 @@ function Perfil() {
     if (!user) return;
     setNombre(user.displayName ?? "");
     setCargo(user.title ?? "");
+    setHuso(user.timezone ?? "");
   }, [user]);
 
   const limpio = nombre.trim();
-  const cambiado = Boolean(user) && (limpio !== (user?.displayName ?? "") || cargo.trim() !== (user?.title ?? ""));
+  const cambiado =
+    Boolean(user) &&
+    (limpio !== (user?.displayName ?? "") ||
+      cargo.trim() !== (user?.title ?? "") ||
+      huso !== (user?.timezone ?? ""));
 
   const reenviar = async () => {
     setReenviando(true);
@@ -332,7 +445,11 @@ function Perfil() {
     }
     setGuardando(true);
     try {
-      await api.patch("/me/profile", { displayName: limpio, title: cargo.trim() });
+      await api.patch("/me/profile", {
+        displayName: limpio,
+        title: cargo.trim(),
+        timezone: huso,
+      });
       // Se recarga la sesión y no solo el estado local: el nombre se pinta en
       // la barra lateral, en las menciones y en cada tarjeta que hayas tocado.
       // Sin esto, cambiarlo aquí dejaría el resto de la pantalla diciendo el
@@ -379,6 +496,8 @@ function Perfil() {
             maxLength={40}
             placeholder="Backend, diseño, ventas…"
           />
+
+          <SelectorDeHuso valor={huso} onCambiar={setHuso} />
 
           <p className="text-[11px] text-faint">
             El correo ({user?.email}) no se cambia desde aquí: es con lo que entras.

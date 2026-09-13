@@ -244,24 +244,45 @@ export async function actividadRoutes(app: FastifyInstance): Promise<void> {
          * Un nombre IANA («America/Bogota»). No se valida contra una lista
          * nuestra: Postgres conoce la suya, que es la que de verdad manda, y
          * mantener una copia aquí solo garantiza que algún día discrepen.
+         *
+         * SIN VALOR POR DEFECTO DESDE LA 0056. Antes caía a `UTC`, y eso
+         * convertía «no me lo dijeron» en «cuenta los domingos en la semana
+         * siguiente» para media Colombia — con la lista viéndose perfectamente
+         * normal. Ahora, cuando no viene, se usa el huso que la persona tenga
+         * guardado, y solo si tampoco lo ha dicho se cae a UTC.
          */
-        tz: z.string().trim().max(60).default("UTC"),
+        tz: z.string().trim().max(60).optional(),
       }),
       request.query,
     );
 
     return withUser(userId, async (db) => {
+      // El huso, por orden: el que pida quien llama, el que tenga guardado, y
+      // UTC como último recurso. `huso_de` (0056) resuelve los dos últimos, y
+      // el «o UTC» está escrito ahí una sola vez a propósito.
+      const usado =
+        tz ??
+        (
+          await db.query<{ huso_de: string }>("select public.huso_de($1)", [userId])
+        ).rows[0]!.huso_de;
+
       try {
         // La consulta vive en `lib/actividad.ts`: ver allí por qué, que no es
         // solo por poder probarla sin servidor.
-        const semanasDelDiario = await diarioPorSemanas(db, { workspaceId, semanas, tz });
-        return { semanas: semanasDelDiario, tz };
+        const semanasDelDiario = await diarioPorSemanas(db, {
+          workspaceId,
+          semanas,
+          tz: usado,
+        });
+        // Se devuelve el que se USÓ y no el que se pidió: quien no mandó
+        // ninguno necesita saber en cuál están las cuentas que está leyendo.
+        return { semanas: semanasDelDiario, tz: usado };
       } catch (fallo) {
         // 22023 es lo que contesta Postgres ante un huso que no conoce. Se
         // traduce porque «invalid value for parameter TimeZone» no le dice a
         // nadie que lo que hay que corregir es la letra de «America/Bogota».
         if ((fallo as { code?: string }).code === "22023") {
-          throw badRequest(`no conozco el huso horario «${tz}»`);
+          throw badRequest(`no conozco el huso horario «${usado}»`);
         }
         throw fallo;
       }
