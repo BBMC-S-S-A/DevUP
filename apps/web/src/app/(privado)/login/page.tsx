@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertCircle, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
+import { AlertCircle, ArrowLeft, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { API_URL, ApiError, type SignupPolicy, type User, api } from "@/lib/api";
@@ -8,6 +9,7 @@ import { Boton } from "@/components/ui/Boton";
 
 import { Field } from "@/components/ui/Field";
 import { LogoAnimado } from "@/components/marca/LogoAnimado";
+import { OficinaViva } from "@/components/marca/OficinaViva";
 import { Logo } from "@/components/ui/Logo";
 import { Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useSession } from "@/lib/session";
@@ -252,7 +254,7 @@ function LoginForm() {
 
   return (
     <main
-      className={`grid min-h-[100svh] ${vuelve ? "place-items-center px-6 py-12" : "lg:grid-cols-2"}`}
+      className={`relative grid min-h-[100svh] ${vuelve ? "place-items-center px-6 py-12" : "lg:grid-cols-2"}`}
     >
       {/* Panel de marca. Oculto en móvil: en una pantalla pequeña es la
           mitad del sitio gastada en algo que no ayuda a entrar.
@@ -264,19 +266,67 @@ function LoginForm() {
       {/* La explicación de qué es DevUP, solo para quien llega. Ver `vuelve`
           arriba: a quien entra cada mañana esto le ocupa media pantalla para
           contarle algo que ya sabe. */}
+      {/* LA OFICINA, EN EL HUECO DEL MEDIO DE LA PANTALLA.
+
+          Va suelta y colocada sobre el `main` —no dentro de ninguna de las dos
+          columnas— porque el hueco que llena no es de ninguna: es lo que queda
+          ENTRE el texto de la izquierda y el cuadro de acceso de la derecha, y
+          es el mayor vacío de la pantalla. Dentro de la columna izquierda
+          cabía, pero quedaba del tamaño de una de las fichas de abajo, que era
+          justo lo que no se quería.
+
+          El 48 % y no el 50 %: el centro del HUECO no es el centro de la
+          pantalla. A la izquierda el texto llega hasta su `max-w-md`, y a la
+          derecha el cuadro está centrado en su mitad, así que el aire libre
+          queda un poco escorado. Medido en el navegador a 1280 y a 1500.
+
+          `pointer-events-none` porque no se toca, y `-z-0` para que el cuadro
+          de acceso siga por encima si alguna vez se rozan.
+
+          Solo desde `lg`, que es donde existen las dos columnas: por debajo el
+          formulario ocupa la pantalla entera y aquí no hay hueco que llenar. Y
+          nunca cuando se vuelve de un correo (`vuelve`), porque entonces la
+          pantalla es solo el mensaje. */}
+      {!vuelve && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-[49.5%] top-1/2 z-0 hidden -translate-x-1/2
+            -translate-y-1/2 lg:block"
+        >
+          <OficinaViva className="devup-entrada rounded-2xl" />
+        </div>
+      )}
+
       <aside
         hidden={vuelve}
         className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12"
       >
 
         <div className="filo-luz relative pb-6 devup-entrada" style={retraso(0)}>
-          <div className="flex items-center gap-3">
+          {/* LA MARCA LLEVA A LA LANDING, que es de donde se viene. Antes no
+              había ninguna vuelta: se entraba a `/login` y la única salida era
+              el botón de atrás del navegador. Y no es un botón suelto más — un
+              logotipo que vuelve al inicio es lo que hace todo el mundo, así
+              que se descubre sin explicarlo. */}
+          <Link
+            href="/"
+            title="Volver al inicio"
+            className="group/marca inline-flex items-center gap-3 rounded-xl outline-none
+              focus-visible:shadow-[0_0_0_3px_var(--anillo-foco)]"
+          >
             <Logo size={38} animated />
             <div>
               <p className="font-display text-base font-semibold tracking-tight">DevUP</p>
               <Rotulo>Centro de mando</Rotulo>
             </div>
-          </div>
+            <ArrowLeft
+              size={13}
+              aria-hidden
+              className="ml-1 text-faint opacity-0 transition-opacity duration-[var(--dur-hover)]
+                group-hover/marca:opacity-100 group-focus-visible/marca:opacity-100
+                motion-reduce:transition-none"
+            />
+          </Link>
         </div>
 
         <div className="relative max-w-md">
