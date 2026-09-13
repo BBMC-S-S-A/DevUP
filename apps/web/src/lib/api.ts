@@ -318,6 +318,53 @@ export type Evidencia = {
   creadaEn: string;
 };
 
+/**
+ * Una rama de trabajo, tal como la devuelve `GET /workspaces/:id/ramas`.
+ *
+ * NO ES LO MISMO QUE `Tag`, y confundirlas es el error que esta pantalla vino a
+ * arreglar. La RAMA es de dónde cuelga el trabajo —una, y solo una, en
+ * `task_categories`—; la ETIQUETA es lo que cruza, todas las que hagan falta.
+ * Si una tarea pudiera estar en dos ramas, «lo que hay en Frontend» dejaría de
+ * ser una lista y pasaría a ser una opinión.
+ *
+ * `gerentes` va en PLURAL desde la 0050, y no es un adorno: con uno solo, unas
+ * vacaciones dejan la rama sin nadie que responda.
+ */
+export type Rama = {
+  id: string;
+  nombre: string;
+  color: number;
+  /** Quién RESPONDE de la rama y reparte su trabajo. Puede no tener ni una tarea suya. */
+  gerentes: { id: string; nombre: string | null }[];
+  pendientes: number;
+  cerradasReciente: number;
+  /**
+   * Lo que cayó aquí y no tiene delegado.
+   *
+   * Archivar una tarea en una rama NO asigna a nadie (0050), así que esto no es
+   * «lo que no está hecho»: es lo que está esperando a que alguien lo reparta.
+   */
+  porRepartir: number;
+};
+
+/** Lo que se abre al entrar en una rama: `GET /categories/:id/rama`. */
+export type DetalleDeRama = {
+  porRepartir: { id: string; titulo: string; prioridad: number | null; columna: string }[];
+  /**
+   * Quién ha andado por aquí, contando las tareas que HOY están en la rama.
+   *
+   * Mudar una tarea se lleva su historia con ella. Vale para «¿quién sabe de
+   * esto?» y NO vale para «¿cuánto se trabajó aquí en septiembre?» — no lo
+   * pintes como una gráfica de esfuerzo por mes.
+   */
+  quienHaTrabajado: {
+    id: string;
+    nombre: string | null;
+    porVerbo: Record<string, number>;
+    ultimaVez: string;
+  }[];
+};
+
 /** Las áreas del tablero (0039): el otro eje, el de «de qué trata y de quién es». */
 export type AreaDeTablero = {
   id: string;
