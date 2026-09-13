@@ -183,11 +183,13 @@ jobs:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           npm install -g @railway/cli
-          # `--tunnel-only` implica `--ssh` por defecto, y ese camino necesita
-          # una llave SSH local — el runner no tiene ninguna y el segundo
-          # intento real murió aquí («No SSH keys found»). `--no-ssh` fuerza
-          # el otro camino, el proxy TCP público, que no necesita llave.
-          railway connect Postgres --tunnel-only --no-ssh --port 55432 \
+          # `--tunnel-only` implica `--ssh`, y el CLI rechaza mezclarlo con
+          # `--no-ssh` («cannot be used with»): tercer intento real, tercer
+          # fallo distinto. La única combinación que el propio CLI acepta es
+          # dejar `--ssh` y darle una llave — efímera, de este job, que nadie
+          # más usa ni necesita guardarse.
+          ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -q
+          railway connect Postgres --tunnel-only --port 55432 \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
             --environment production &
           for i in $(seq 1 30); do
