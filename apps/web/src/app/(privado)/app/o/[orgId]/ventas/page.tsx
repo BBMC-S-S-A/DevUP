@@ -306,7 +306,7 @@ export default function SalesPage() {
             <Rotulo>Objetivos</Rotulo>
           </div>
 
-          <div className="flex gap-3 overflow-x-auto pb-1">
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
             {goals.map((goal, index) => {
               // Se acota al 100 % para pintar, pero el número de arriba no: pasar
               // del objetivo es una noticia y esconderla sería raro.
@@ -315,7 +315,7 @@ export default function SalesPage() {
               return (
                 <Tarjeta
                   key={goal.id}
-                  className="devup-entrada w-72 shrink-0 p-4"
+                  className="devup-entrada w-72 shrink-0 snap-start p-4"
                   style={retraso(index, 45)}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -366,7 +366,9 @@ export default function SalesPage() {
         </section>
       )}
 
-      <div className="flex gap-3 overflow-x-auto px-6 pb-10 pt-5">
+      {/* Mismo criterio que el tablero: las etapas de un embudo son columnas y
+          al desplazarse hay que aterrizar en una, no entre dos. */}
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-10 pt-5">
         {STAGES.map((stage, index) => {
           const total = totals.get(stage.id)!;
           const activa = sobreEtapa === stage.id;
@@ -395,7 +397,7 @@ export default function SalesPage() {
               style={retraso(index, 50)}
               // `capa-flotante` y no `panel`: esta pantalla se escribió (ad20a86,
               // 2 de septiembre) antes de que existieran los tokens de Sala.
-              className={`capa-flotante devup-entrada relative flex w-64 shrink-0 flex-col overflow-hidden rounded-2xl
+              className={`capa-flotante devup-entrada relative flex w-64 shrink-0 snap-start flex-col overflow-hidden rounded-2xl
                 transition-[box-shadow,border-color] duration-200 ${activa ? "panel-vivo" : ""}`}
             >
               {/* El filo de la etapa. Es lo que identifica la columna de un
