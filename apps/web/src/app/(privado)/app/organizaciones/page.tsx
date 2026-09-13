@@ -31,6 +31,7 @@ import {
   type Workspace,
   api,
 } from "@/lib/api";
+import { cargarEspaciosPorOrganizacion } from "@/lib/espacios-por-organizacion";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { Boton } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
@@ -68,37 +69,60 @@ export default function OrganizationsPage() {
   const { user, signOut } = useSession();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [workspaces, setWorkspaces] = useState<Record<string, Workspace[]>>({});
+  // Las organizaciones cuya lista de espacios no llegó. Es distinto de no
+  // tener espacios, y hay que poder distinguirlo al pintar.
+  const [fallaron, setFallaron] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Carga la lista y, por cada organización, sus espacios.
+   *
+   * CADA ORGANIZACIÓN AGUANTA SOLA, Y ESA ES LA GRACIA. Antes las peticiones
+   * iban en un `Promise.all` sin red: una sola que fallara —un 403 de una
+   * membresía que ya no está, un 500, un corte de un segundo— rechazaba el
+   * conjunto, `setWorkspaces` no llegaba a ejecutarse y TODAS las
+   * organizaciones se pintaban con cero espacios. No es que se viera un error:
+   * es que se veía una pantalla perfectamente normal diciendo que el equipo no
+   * tiene nada — y encima con el botón de crear el primero, invitando a
+   * duplicar lo que sí existe.
+   *
+   * Fatal sigue siendo solo una cosa: que no llegue la lista de
+   * organizaciones. Sin ella no hay nada que pintar.
+   */
   const load = useCallback(async () => {
+    let organizations: Organization[];
     try {
-      const { organizations } = await api.get<{ organizations: Organization[] }>("/organizations");
+      ({ organizations } = await api.get<{ organizations: Organization[] }>("/organizations"));
+      setError(null);
       setOrganizations(organizations);
-
-      // Una llamada por organización. Con las tres o cuatro que tiene un
-      // equipo es irrelevante; si algún día son cientos, esto pide un endpoint
-      // que las devuelva juntas.
-      const entries = await Promise.all(
-        organizations.map(async (org) => {
-          const { workspaces } = await api.get<{ workspaces: Workspace[] }>(
-            `/organizations/${org.id}/workspaces`,
-          );
-          return [org.id, workspaces] as const;
-        }),
-      );
-      setWorkspaces(Object.fromEntries(entries));
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "no se pudo cargar");
-    } finally {
       setLoading(false);
+      return;
     }
+
+    // Una llamada por organización, a la vez. Con las tres o cuatro que tiene
+    // un equipo es irrelevante; si algún día son cientos, esto pide un endpoint
+    // que las devuelva juntas.
+    const { espacios, fallaron } = await cargarEspaciosPorOrganizacion(
+      organizations,
+      async (orgId) =>
+        (await api.get<{ workspaces: Workspace[] }>(`/organizations/${orgId}/workspaces`))
+          .workspaces,
+      (caught) => (caught instanceof ApiError ? caught.message : null),
+    );
+    setWorkspaces(espacios);
+    setFallaron(fallaron);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Solo cuenta lo que sí llegó: sumar como cero una organización que no
+  // respondió convierte la cifra de cabecera en otra mentira tranquila.
   const totalWorkspaces = Object.values(workspaces).reduce((suma, lista) => suma + lista.length, 0);
 
   return (
@@ -156,6 +180,7 @@ export default function OrganizationsPage() {
         <div className="space-y-4">
           {organizations.map((org, index) => {
             const lista = workspaces[org.id] ?? [];
+            const fallo = fallaron[org.id];
             return (
               <Tarjeta
                 key={org.id}
@@ -216,12 +241,39 @@ export default function OrganizationsPage() {
                   <div className="mb-2 flex items-center gap-2 px-1">
                     <Rotulo>Workspaces</Rotulo>
                     <span className="font-mono text-[10px] tabular-nums text-faint">
-                      {lista.length}
+                      {fallo ? "—" : lista.length}
                     </span>
                     <span className="h-px flex-1 bg-line/70" aria-hidden />
                   </div>
 
                   <div className="space-y-1.5">
+                    {/* Esta organización no contestó. Se dice, y no se ofrece
+                        crear nada: el botón de «nuevo workspace» encima de una
+                        lista que no llegó es como se acaban creando dos veces
+                        los mismos espacios. */}
+                    {fallo && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger">
+                        <AlertTriangle size={15} className="shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          No se pudieron cargar sus espacios. Los de las demás organizaciones
+                          sí están.
+                          {/* El motivo del servidor va aparte y en bruto:
+                              incrustarlo en la frase la deja mal escrita en
+                              cuanto el texto no encaja con la gramática. */}
+                          <span className="mt-0.5 block font-mono text-[10px] text-danger/70">
+                            {fallo}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void load()}
+                          className="presionable rounded-lg border border-danger/30 px-2.5 py-1 text-xs font-medium hover:bg-danger/15"
+                        >
+                          Reintentar
+                        </button>
+                      </div>
+                    )}
+
                     {lista.map((workspace) => (
                       <Link
                         key={workspace.id}
@@ -244,7 +296,7 @@ export default function OrganizationsPage() {
                       </Link>
                     ))}
 
-                    <NewWorkspace organizationId={org.id} onCreated={load} />
+                    {!fallo && <NewWorkspace organizationId={org.id} onCreated={load} />}
                   </div>
                 </div>
 
