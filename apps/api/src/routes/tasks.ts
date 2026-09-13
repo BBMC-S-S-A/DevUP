@@ -2,8 +2,9 @@ import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
-import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
 import { olvidarNodo, retejerTarea, vecinosDe } from "../lib/grafo.js";
+import { detalleDeRama, ramasDe } from "../lib/ramas.js";
 import { type Procedencia, anotar, recorta } from "../lib/actividad.js";
 import { announceBoardChange } from "../realtime/signaling.js";
 import { notificar } from "./notifications.js";
@@ -293,8 +294,23 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
         `select c.id, c.name, c.color, c.position,
-                c.owner_id as "ownerId", p.display_name as "ownerName",
-                (select count(*) from tasks t where t.category_id = c.id)::int as tareas
+                (select count(*) from tasks t where t.category_id = c.id)::int as tareas,
+                -- GERENTES EN PLURAL desde la 0050. El ownerId de abajo se
+                -- queda solo por no romper a quien todavía lo lea: con uno
+                -- solo, unas vacaciones dejan la rama sin nadie que responda, y
+                -- devolver esa columna a secas enseñaría un dueño que ya no es
+                -- el que manda — un dato viejo con cara de dato bueno.
+                -- (Sin comillas invertidas ahí: esto vive dentro de una
+                -- plantilla de JavaScript y una sola cerraría la cadena.)
+                coalesce(
+                  (select json_agg(json_build_object('id', p2.id, 'nombre', p2.display_name)
+                                   order by p2.display_name)
+                     from task_category_owners o
+                     join profiles p2 on p2.id = o.user_id
+                    where o.category_id = c.id),
+                  '[]'::json
+                ) as gerentes,
+                c.owner_id as "ownerId", p.display_name as "ownerName"
            from task_categories c
            left join profiles p on p.id = c.owner_id
           where c.workspace_id = $1
@@ -303,6 +319,47 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
       );
       return { categories: rows };
     });
+  });
+
+  /**
+   * Las ramas de un espacio: quién responde de cada una y qué espera dentro.
+   *
+   * No sustituye a `/categories`, que es la lista para el filtro del tablero.
+   * Esta contesta otra pregunta —«¿cómo va cada rama y dónde hay trabajo sin
+   * repartir?»— y por eso trae recuentos que a un filtro le sobrarían.
+   */
+  app.get("/workspaces/:workspaceId/ramas", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    const { dias } = parseQuery(
+      z.object({ dias: z.coerce.number().int().min(1).max(90).default(7) }),
+      request.query,
+    );
+    return withUser(userId, async (db) => ({
+      dias,
+      ramas: await ramasDe(db, { workspaceId, dias }),
+    }));
+  });
+
+  /**
+   * Lo que se abre al entrar en una rama.
+   *
+   * `porRepartir` es la promesa de la 0050: archivar en una rama NO asigna a
+   * nadie, y lo que cae sin delegado espera aquí. `quienHaTrabajado` es el §6.1
+   * que pidió la sesión de interfaz — con el matiz de qué significa exactamente,
+   * que está en `lib/ramas.ts` y no es lo mismo que la frase corta.
+   */
+  app.get("/categories/:categoryId/rama", async (request) => {
+    const userId = requireUser(request);
+    const { categoryId } = parseParams(z.object({ categoryId: uuid }), request.params);
+    const { dias } = parseQuery(
+      z.object({ dias: z.coerce.number().int().min(1).max(365).default(30) }),
+      request.query,
+    );
+    return withUser(userId, async (db) => ({
+      dias,
+      ...(await detalleDeRama(db, { categoryId, dias })),
+    }));
   });
 
   app.post("/workspaces/:workspaceId/categories", async (request, reply) => {

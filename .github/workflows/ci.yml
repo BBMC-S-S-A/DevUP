@@ -114,6 +114,15 @@ jobs:
         # REALES del tablero, no contra ejemplos inventados.
         run: npm run test:ramas
 
+      - name: Las ramas de trabajo
+        # «Por repartir» tiene que ser lo que NO tiene a nadie, no lo que no
+        # esta hecho: si colara lo que ya tiene dueno, el gerente veria una
+        # bandeja llena de trabajo que no le toca repartir y dejaria de mirarla,
+        # que es lo mismo que no tenerla. Y se fija a proposito el matiz que la
+        # frase corta esconde: «quien ha trabajado» cuenta las tareas que HOY
+        # estan en la rama, asi que mudar una se lleva su historia.
+        run: npm run test:ramas-api --workspace apps/api
+
       - name: Los datos de los widgets
         # Un panel es la primera pantalla de un espacio y esta hecho de trozos
         # independientes, asi que todo lo que se rompe aqui sale en pantalla

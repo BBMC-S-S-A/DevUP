@@ -327,7 +327,7 @@ Esta sección existe por la lección del registro de actividad: **construirlo yo
 es literalmente cómo acabamos con dos**. Así que lo que falte se escribe aquí
 como pregunta que hay que poder contestar, no como esquema propuesto.
 
-### 6.1 · «¿Quién ha trabajado en esta rama?» — pendiente
+### 6.1 · ~~«¿Quién ha trabajado en esta rama?»~~ — HECHO
 
 **La pregunta:** abierta una categoría (o área), quiénes han tocado sus tareas
 últimamente y cuándo fue la última vez.
@@ -343,8 +343,33 @@ la clase de trabajo que acaba convertido en una segunda fuente de verdad.
 donde tiene sentido, y una cifra única al lado de una rama tendría el mismo
 problema que tendría al lado de una cara.
 
-**Estado en la web:** la ficha de la persona ya enseña su rastro
-(`/organizations/:id/actividad/:persona`). Lo de la rama espera a esto.
+**Ya no espera.** Dos rutas:
+
+```
+GET /workspaces/:id/ramas?dias=7
+  → { ramas: [{ id, nombre, color, gerentes: [{id,nombre}],
+                pendientes, cerradasReciente, porRepartir }] }
+
+GET /categories/:id/rama?dias=30
+  → { porRepartir: [{ id, titulo, prioridad, columna }],
+      quienHaTrabajado: [{ id, nombre, porVerbo: {...}, ultimaVez }] }
+```
+
+Tres cosas al pintarlo:
+
+**`gerentes` es una lista.** Desde la 0050 una rama puede tener varios — con uno
+solo, unas vacaciones la dejan sin nadie que responda. `ownerId` sigue en
+`/categories` pero está obsoleto: enseña un dueño que ya no es el que manda.
+
+**`porRepartir` va también en la lista, no solo en el detalle.** Es lo único de
+ahí que pide una acción, y esconderlo tras un clic por rama obliga a abrir cinco
+para descubrir que hay trabajo esperando en la tercera.
+
+**Y el matiz de `quienHaTrabajado`, que la frase corta esconde:** es quién ha
+tocado las tareas que **hoy** están en esa rama. Si una tarea se muda, su
+historia se va con ella. Correcto para «¿quién sabe de esto?», incorrecto para
+«¿cuánto se trabajó aquí en septiembre?» — y esta ruta solo contesta la primera.
+No la etiquetes como la segunda.
 
 ### 6.2 · ~~Las dos categorías~~ — DECIDIDO (0050)
 
