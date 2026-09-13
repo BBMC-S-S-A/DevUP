@@ -183,7 +183,11 @@ jobs:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           npm install -g @railway/cli
-          railway connect Postgres --tunnel-only --port 55432 \
+          # `--tunnel-only` implica `--ssh` por defecto, y ese camino necesita
+          # una llave SSH local — el runner no tiene ninguna y el segundo
+          # intento real murió aquí («No SSH keys found»). `--no-ssh` fuerza
+          # el otro camino, el proxy TCP público, que no necesita llave.
+          railway connect Postgres --tunnel-only --no-ssh --port 55432 \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
             --environment production &
           for i in $(seq 1 30); do
