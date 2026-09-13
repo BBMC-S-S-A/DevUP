@@ -138,6 +138,8 @@ export type User = {
    * decide por lo que RECIBE y no por una regla que tenga que recordar.
    */
   usaPersonaje: boolean;
+  /** Si ya vio el recorrido de bienvenida (0059). */
+  recorridoVisto: boolean;
 };
 
 /**

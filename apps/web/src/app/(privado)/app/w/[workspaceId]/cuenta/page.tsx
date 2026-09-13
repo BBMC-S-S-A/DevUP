@@ -134,6 +134,7 @@ type MiFicha = {
 
 function EnEstaOrganizacion() {
   const orgId = useOrgId();
+  const { refresh: refrescarSesion } = useSession();
   const ficha = useRecurso<MiFicha>(`/organizations/${orgId}/me`);
   const [oficio, setOficio] = useState("");
   const [sembrado, setSembrado] = useState(false);
@@ -146,6 +147,20 @@ function EnEstaOrganizacion() {
     setOficio(ficha.datos.title ?? "");
     setSembrado(true);
   }, [ficha.datos, sembrado]);
+
+  const volverAVerRecorrido = async () => {
+    try {
+      await api.put("/me/recorrido", { visto: false });
+      // La SESIÓN y no `ficha`: la marca de «ya lo vio» viaja en `/auth/me`, no
+      // en la ficha de la organización. Recargar la ficha no la tocaría, y el
+      // mensaje de abajo estaría prometiendo algo que no pasa hasta recargar la
+      // página a mano.
+      await refrescarSesion();
+      toast.success("te la enseñamos al volver al espacio");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "no se pudo");
+    }
+  };
 
   const guardar = async (cambio: { title?: string; rol?: string | null }) => {
     setGuardando(true);
@@ -230,6 +245,20 @@ function EnEstaOrganizacion() {
             No cambia lo que puedes hacer, y no lo ve nadie más. Puedes dejarlo
             sin elegir.
           </p>
+
+          {/* CERRAR EL RECORRIDO CUENTA COMO VERLO, así que tiene que haber una
+              forma de pedirlo otra vez o la decisión sería irreversible. Y va
+              aquí, pegado al rol, porque es el único sitio donde alguien que
+              quiere «el de mi puesto» va a mirar. */}
+          <Boton
+            variante="fantasma"
+            tamano="sm"
+            className="mt-2"
+            icono={<Sparkles size={13} />}
+            onClick={() => void volverAVerRecorrido()}
+          >
+            Volver a ver la bienvenida
+          </Boton>
         </div>
       </div>
     </Tarjeta>
