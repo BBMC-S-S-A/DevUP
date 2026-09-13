@@ -5,11 +5,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   ApiError,
+  type BoardColumn,
   type DetalleDeRama,
   type OrganizationMember,
   type Rama,
   api,
 } from "@/lib/api";
+import { RedDeTrabajo } from "@/components/categorias/RedDeTrabajo";
 import { Boton } from "@/components/ui/Boton";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
@@ -63,6 +65,8 @@ export default function CategoriasPage() {
   const miembros = useRecurso<{ members: OrganizationMember[] }>(
     `/organizations/${orgId}/members`,
   );
+  // El tablero, solo para la red: es de donde salen las personas y las tareas.
+  const tablero = useRecurso<{ columns: BoardColumn[] }>(`/workspaces/${workspaceId}/board`);
 
   const lista = ramas.datos?.ramas ?? [];
 
@@ -113,6 +117,23 @@ export default function CategoriasPage() {
            siendo lo segundo que se lee, no algo que desaparece. */
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="space-y-2.5">
+            {/* LA RED PRIMERO. Contesta «cómo está repartido esto» de un
+                vistazo; la lista de abajo es para cambiar una rama concreta.
+                Poner la lista arriba haría que el mapa solo lo viera quien se
+                desplaza. Se señala la rama abierta, que es lo que ata las dos
+                mitades de la pantalla: al elegir una en la lista, se ve en el
+                dibujo de quién cuelga. */}
+            {!tablero.cargando && (tablero.datos?.columns.length ?? 0) > 0 && (
+              <Tarjeta className="p-4">
+                <Rotulo className="mb-3 block">Red de trabajo</Rotulo>
+                <RedDeTrabajo
+                  columnas={tablero.datos?.columns ?? []}
+                  ramas={lista}
+                  elegidas={elegida ? [elegida.id] : []}
+                />
+              </Tarjeta>
+            )}
+
             {creando && (
               <NuevaRama
                 workspaceId={workspaceId}
