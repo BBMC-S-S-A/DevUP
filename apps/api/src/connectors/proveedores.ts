@@ -58,7 +58,7 @@ const RAILWAY_GRAPHQL = "https://backboard.railway.com/graphql/v2";
  * oficial de Railway (docs.railway.com/integrations/api/manage-deployments)
  * antes de escribir esto — no son un supuesto.
  */
-async function railwayGraphql<T>(
+export async function railwayGraphql<T>(
   token: string,
   query: string,
   variables: Record<string, unknown>,

@@ -3,9 +3,9 @@ import {
   Database,
   Github,
   KeyRound,
-  Lightbulb,
   Megaphone,
   Network,
+  Plug,
   ScanSearch,
   Server,
   Settings,
@@ -95,7 +95,7 @@ export function NavegacionOrganizacion({
         { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
         { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
         { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
-        { href: `${base}/integraciones`, icono: <Lightbulb size={14} />, texto: "Integraciones" },
+        { href: `${base}/integraciones`, icono: <Plug size={14} />, texto: "Integraciones" },
         // Va la última porque es la portada de las dos de arriba, no una
         // quinta pantalla: reúne lo que Base de datos e Integraciones ya
         // analizan por su cuenta. Quien busca «auditar mi proyecto» no abre

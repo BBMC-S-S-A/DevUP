@@ -534,6 +534,8 @@ export type Connection = {
   createdAt: string;
 };
 
+export type SaludConexion = { ok: boolean; detalle: string };
+
 export type ColumnaTabla = { nombre: string; tipo: string; nulable: boolean };
 export type TablaDB = {
   esquema: string;

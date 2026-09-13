@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { canjear, comenzar, githubOauthConfigurado, type TransitoGithub } from "../auth/github.js";
+import { verificarConexion } from "../connectors/salud.js";
 import { type Db, withUser } from "../db/pool.js";
 import { env } from "../env.js";
 import { notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
@@ -52,6 +53,37 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         [workspaceId],
       );
       return { connections: rows };
+    });
+  });
+
+  /**
+   * ¿Sigue respondiendo cada conexión de este workspace? No se pide sola: cada
+   * comprobación es una llamada de verdad al proveedor (GitHub, Railway,
+   * Postgres), y hacerla en cada visita a la pantalla gastaría cupo por
+   * nada. Quien la llama decide cuándo vale la pena preguntar.
+   */
+  app.get("/workspaces/:workspaceId/connections/health", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string; provider: string }>(
+        `select id, provider from connections where workspace_id = $1`,
+        [workspaceId],
+      );
+      const resultados = await Promise.all(
+        rows.map(async (c) => {
+          try {
+            const secret = await getDecryptedSecret(db, c.id);
+            return [c.id, await verificarConexion(c.provider, secret)] as const;
+          } catch (error) {
+            return [
+              c.id,
+              { ok: false, detalle: error instanceof Error ? error.message : "no se pudo comprobar" },
+            ] as const;
+          }
+        }),
+      );
+      return { health: Object.fromEntries(resultados) };
     });
   });
 
