@@ -5,6 +5,7 @@ import { api } from "../api";
 import { buildWsUrl, requestTicket } from "../ws";
 import { type RecordingHandle, createRecorder } from "./recorder";
 import { ignorar } from "@/lib/fallo";
+import { elegirDe, guardarDispositivo, restriccionPara } from "@/lib/dispositivos";
 
 /**
  * Sala de voz y vídeo en malla, sin servidor de medios.
@@ -535,17 +536,44 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
       ice.current = config.iceServers;
       setTurnConfigured(config.turnConfigured);
 
-      const media = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      /**
+       * EL MICRÓFONO QUE SE ELIGIÓ EN AJUSTES, no el que decida el sistema.
+       *
+       * Antes se pedía audio a secas, así que la elección hecha en la llamada
+       * anterior se perdía al colgar y había que rehacerla cada vez — delante
+       * de gente. Y va en dos pasos porque la lista de dispositivos no trae
+       * nombres hasta que hay permiso: primero se abre el que haya, y con el
+       * permiso ya dado se mira si el recordado está entre los que hay.
+       */
+      const primero = await navigator.mediaDevices.getUserMedia({
+        audio: restriccionPara("microfono", null),
       });
+
+      const entradas = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (d) => d.kind === "audioinput",
+      );
+      setDevices(entradas);
+
+      const preferido = elegirDe("microfono", entradas);
+      const enUso = primero.getAudioTracks()[0]?.getSettings().deviceId;
+
+      let media = primero;
+      if (preferido && preferido.deviceId !== enUso) {
+        try {
+          media = await navigator.mediaDevices.getUserMedia({
+            audio: restriccionPara("microfono", preferido),
+          });
+          for (const pista of primero.getTracks()) pista.stop();
+        } catch {
+          // Si el preferido falla entre comprobarlo y pedirlo —se desenchufó—
+          // se sigue con el que ya estaba abierto. Quedarse fuera de la llamada
+          // por no poder usar el micrófono favorito sería absurdo.
+          media = primero;
+        }
+      }
+
       stream.current = media;
       setLocalAudioStream(media);
-
-      // La lista de micrófonos solo trae etiquetas después de conceder
-      // permiso; pedirla antes devuelve entradas sin nombre.
-      setDevices(
-        (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput"),
-      );
 
       const ticket = await requestTicket();
       if (leaving.current) {
@@ -894,6 +922,15 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
     });
     const track = replacement.getAudioTracks()[0];
     if (!track) return;
+
+    // Y SE RECUERDA. Cambiarlo en mitad de una llamada es la señal más clara
+    // que existe de cuál se quiere: perderla al colgar obliga a repetir el
+    // mismo descubrimiento en la siguiente, otra vez delante de gente.
+    const ajustes = track.getSettings();
+    guardarDispositivo("microfono", {
+      deviceId: ajustes.deviceId ?? deviceId,
+      label: track.label,
+    });
 
     for (const pc of peers.current.values()) {
       const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
