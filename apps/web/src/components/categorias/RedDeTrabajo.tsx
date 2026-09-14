@@ -320,7 +320,9 @@ function GrafoFisico({
       const svgY = ((evento.clientY - rect.top) / rect.height) * ALTO;
       const v = vistaRef.current;
       const factor = evento.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const k = Math.min(3, Math.max(0.3, v.k * factor));
+      // Hasta 12x: con nombres largos y varias tareas, 3x se quedaba corto
+      // para leer un nodo concreto de cerca sin que el resto lo tape.
+      const k = Math.min(12, Math.max(0.2, v.k * factor));
       // El punto del mundo bajo el cursor se queda bajo el cursor: sin esto,
       // la rueda hace que el dibujo se escape en vez de acercarse a lo que
       // se mira.

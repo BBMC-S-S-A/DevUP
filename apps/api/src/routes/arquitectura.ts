@@ -499,7 +499,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     // decisiones.
     const recortados = Math.max(0, componentes.length - TOPE_COMPONENTES);
 
-    const { fusion, reemplazados } = await withUser(userId, async (db) => {
+    const { fusion, reemplazados, actualizados } = await withUser(userId, async (db) => {
       /**
        * Cambiar de repositorio conectado REEMPLAZA su diagrama, no lo apila
        * encima del anterior (0064). Solo se borra lo que trajo una
@@ -522,6 +522,35 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
         reemplazados = rowCount ?? 0;
       }
 
+      /**
+       * Y VOLVER A LEER EL MISMO REPOSITORIO TAMBIÉN SINCRONIZA, no solo
+       * apila. Lo que ya no está en el repo —un servicio que se quitó del
+       * `docker-compose`, un recurso borrado del Terraform— se quita también
+       * del diagrama, en vez de dejar una caja fantasma que nadie pidió que
+       * se quedara. Lo que SÍ sigue en el repo conserva su nodo tal cual
+       * —`fusionarArquitectura` lo empareja por nombre y no lo recoloca—, y
+       * un nodo puesto a mano (`imported_from` nulo) no entra en esta cuenta
+       * bajo ningún concepto.
+       */
+      const nombresDeAhora = new Set(
+        componentes.map((c) => c.nombre.slice(0, 60).trim().toLowerCase()),
+      );
+      const { rows: delMismoRepo } = await db.query<{ id: string; name: string }>(
+        `select id, name from architecture_nodes
+          where workspace_id = $1 and imported_from = $2`,
+        [workspaceId, fullName],
+      );
+      const idsDesactualizados = delMismoRepo
+        .filter((n) => !nombresDeAhora.has(n.name.trim().toLowerCase()))
+        .map((n) => n.id);
+      let actualizados = 0;
+      if (idsDesactualizados.length > 0) {
+        const { rowCount } = await db.query(`delete from architecture_nodes where id = any($1::uuid[])`, [
+          idsDesactualizados,
+        ]);
+        actualizados = rowCount ?? 0;
+      }
+
       const fusion = await fusionarArquitectura(
         db,
         workspaceId,
@@ -540,7 +569,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
         },
         fullName,
       );
-      return { fusion, reemplazados };
+      return { fusion, reemplazados, actualizados };
     });
 
     return {
@@ -551,6 +580,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
       ilegibles,
       recortados,
       reemplazados,
+      actualizados,
       ...fusion,
     };
   });

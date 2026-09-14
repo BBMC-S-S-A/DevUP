@@ -43,6 +43,8 @@ type Resultado = {
   recortados: number;
   /** Cajas de un repositorio DISTINTO que se quitaron al leer este (0064). */
   reemplazados: number;
+  /** Cajas de ESTE MISMO repositorio que ya no están en él y se quitaron. */
+  actualizados: number;
   creados: string[];
   reutilizados: string[];
   enlazados: string[];
@@ -185,9 +187,9 @@ function DeDondeLoSaca() {
           producción —un balanceador, una CDN— no está en el repositorio.
         </li>
         <li>
-          Nada puesto a mano se borra ni se recoloca. Lo único que se quita es lo que trajo una
-          lectura anterior <strong>de otro repositorio</strong>: leer uno nuevo reemplaza su
-          diagrama, no lo apila encima.
+          Nada puesto a mano se borra ni se recoloca. Lo que sí se quita: las cajas de{" "}
+          <strong>otro repositorio</strong> leído antes, y las de <strong>este mismo</strong> que ya
+          no están en él — volver a leer sincroniza, no apila encima de lo de la última vez.
         </li>
       </ul>
     </div>
@@ -204,6 +206,7 @@ function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onC
     ilegibles,
     recortados,
     reemplazados,
+    actualizados,
     sinResolver,
     fuentes,
   } = resultado;
@@ -216,6 +219,12 @@ function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onC
         <p className="rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-[11px] leading-relaxed text-accent">
           Se quitaron <strong>{reemplazados}</strong> caja(s) que venían de otro repositorio
           conectado antes — este diagrama ahora es solo de {resultado.fullName}.
+        </p>
+      )}
+      {actualizados > 0 && (
+        <p className="rounded-lg border border-line bg-canvas/40 px-3 py-2 text-[11px] leading-relaxed text-muted">
+          Se quitaron <strong>{actualizados}</strong> caja(s) que ya no están en el repositorio —
+          esta lectura sincroniza con lo que hay ahora, no con lo que había la última vez.
         </p>
       )}
       {fuentes.length === 0 ? (

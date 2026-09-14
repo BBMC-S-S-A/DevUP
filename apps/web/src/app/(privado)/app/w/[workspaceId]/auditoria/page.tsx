@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, FileCode, Lightbulb, ScanSearch, TriangleAlert } from "lucide-react";
+import { CircleAlert, FileCode, GitCommitHorizontal, Lightbulb, ScanSearch, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { AuditoriaDelEquipo } from "@/components/auditoria/Equipo";
@@ -260,6 +260,8 @@ export default function AuditoriaPage() {
         <>
           <Alcance workspaceId={workspaceId} />
 
+          {elegido && <ColaboradoresGitHub repoId={elegido} />}
+
           {migraciones.error && (
             <Fallo className="mb-3" onReintentar={() => void migraciones.recargar()}>
               Las migraciones no se pudieron leer: {migraciones.error}
@@ -400,6 +402,114 @@ function FilaAuditoria({
             </ul>
           )}
         </div>
+      </div>
+    </Tarjeta>
+  );
+}
+
+type UltimoCommit = { sha: string; mensaje: string; fecha: string };
+type Colaborador = {
+  login: string;
+  avatarUrl: string;
+  commits: number;
+  adiciones: number;
+  borrados: number;
+  ultimosCommits: UltimoCommit[];
+};
+
+/**
+ * Quién ha escrito el código, no solo qué dice hoy — la mitad que faltaba de
+ * «todo lo que hay que mirar en este repositorio, junto».
+ *
+ * VIVE AQUÍ Y NO EN EL REGISTRO. El registro (0038) cuenta hechos del
+ * tablero: crear, mover, cerrar una tarjeta. Esto cuenta commits, y es
+ * exactamente lo que se pregunta al mirar «El repositorio» — junto a las
+ * migraciones y las integraciones, no aparte.
+ */
+function ColaboradoresGitHub({ repoId }: { repoId: string }) {
+  const datos = useRecurso<{ listo: boolean; colaboradores: Colaborador[] }>(
+    `/github/repos/${repoId}/colaboradores`,
+    { frescura: 3_600_000 },
+  );
+
+  return (
+    <div className="mb-5">
+      <Rotulo className="mb-2 block">Quién ha escrito el código</Rotulo>
+
+      {datos.error ? (
+        <Fallo onReintentar={() => void datos.recargar()}>{datos.error}</Fallo>
+      ) : datos.cargando ? (
+        <Cargando etiqueta="Leyendo colaboradores de GitHub" />
+      ) : datos.datos && !datos.datos.listo ? (
+        // GitHub calcula estas estadísticas la primera vez que se piden, y
+        // puede tardar hasta un minuto — decirlo en vez de enseñar un vacío.
+        <EstadoVacio
+          icono={<GitCommitHorizontal size={20} />}
+          titulo="GitHub está calculando estas estadísticas"
+          pista="Pasa solo la primera vez que se piden para un repositorio. Vuelve a intentarlo en un minuto."
+        />
+      ) : (datos.datos?.colaboradores.length ?? 0) === 0 ? (
+        <EstadoVacio
+          icono={<GitCommitHorizontal size={20} />}
+          titulo="No encontré commits en este repositorio"
+          pista=""
+        />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {(datos.datos?.colaboradores ?? []).slice(0, 8).map((c) => (
+            <TarjetaColaborador key={c.login} colaborador={c} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** «hace 3 días», que es como se lee la fecha de un commit reciente. */
+function haceCommit(iso: string): string {
+  const dias = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  if (dias <= 0) return "hoy";
+  if (dias === 1) return "ayer";
+  return `hace ${dias} días`;
+}
+
+function TarjetaColaborador({ colaborador: c }: { colaborador: Colaborador }) {
+  return (
+    <Tarjeta className="flex flex-col p-4">
+      <div className="flex items-center gap-2.5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- avatar de GitHub, no de nuestro storage */}
+        <img src={c.avatarUrl} alt="" className="size-8 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{c.login}</p>
+          <p className="text-[11px] text-faint">
+            <span className="font-mono tabular-nums text-muted">{c.commits}</span> commits
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-2.5 flex gap-3 text-[11px]">
+        <span className="text-live">+{c.adiciones.toLocaleString("es")}</span>
+        <span className="text-danger">−{c.borrados.toLocaleString("es")}</span>
+      </div>
+
+      <div className="mt-3 border-t border-line pt-2.5">
+        <Rotulo className="mb-1.5 block">Últimos commits</Rotulo>
+        {c.ultimosCommits.length === 0 ? (
+          <p className="text-[11px] text-faint">Sin commits leídos.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {c.ultimosCommits.map((commit) => (
+              <li key={commit.sha} className="min-w-0">
+                <p className="truncate text-[11px] text-muted" title={commit.mensaje}>
+                  {commit.mensaje}
+                </p>
+                <p className="text-[10px] text-faint">
+                  <code className="font-mono">{commit.sha}</code> — {haceCommit(commit.fecha)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Tarjeta>
   );
