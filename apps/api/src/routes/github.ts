@@ -58,7 +58,7 @@ export async function refreshRepo(
  * GitHub necesitaban exactamente esto, y repetir la comprobación de nulo en
  * cada una es donde se olvida en la séptima.
  */
-async function repoConCredencial(
+export async function repoConCredencial(
   db: Db,
   repoId: string,
 ): Promise<{ token: string | null; fullName: string }> {

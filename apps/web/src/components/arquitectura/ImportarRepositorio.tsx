@@ -175,8 +175,10 @@ function DeDondeLoSaca() {
           nube y no se toca ningún estado remoto.
         </li>
         <li>
-          Se lee <strong>con el enlace y nada más</strong>, sin usar ningún token de GitHub. De un
-          repositorio privado no se puede leer, y se abren hasta <strong>12 archivos</strong>.
+          Si el repositorio tiene una cuenta de GitHub conectada, se lee con esa credencial —la
+          misma que ya usan Migraciones e Integraciones para este mismo repositorio— y se abren
+          hasta <strong>40 archivos</strong>. Sin conexión, se lee como cualquiera con el enlace:
+          hasta <strong>12 archivos</strong>, y uno privado no se puede leer.
         </li>
         <li>
           <strong>No lee el código.</strong> Que dos servicios se llamen entre ellos no se sabe si

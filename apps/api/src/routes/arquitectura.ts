@@ -7,7 +7,7 @@ import { archivosQueImportan, leerRepositorio } from "../connectors/repositorio.
 import { leerTerraform, terraformDelArbol } from "../connectors/terraform.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
-import { repoSinCredencial } from "./github.js";
+import { repoConCredencial, repoSinCredencial } from "./github.js";
 
 /**
  * El diagrama de arquitectura: nodos y enlaces.
@@ -401,12 +401,15 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
    * pantalla lo repite, porque un mapa que se cree completo engaña más que no
    * tenerlo.
    *
-   * Y SE LEE CON EL ENLACE, SIN TOKEN. Aunque la organización tenga una
-   * credencial de GitHub guardada, esta ruta no la toca: dibujar un diagrama
-   * no es motivo para descifrar el secreto de nadie ni para mandarlo a un
-   * tercero. La consecuencia se acepta y se dice en pantalla — de un
-   * repositorio privado no se puede importar— y es preferible a que una
-   * función de dibujo tenga acceso a lo privado «por si acaso».
+   * SÍ USA EL TOKEN DE LA CONEXIÓN, SI EL REPOSITORIO TIENE UNA. No es un
+   * acceso nuevo: es el MISMO token que ya usan para este mismo repositorio
+   * `/migraciones` y `/integraciones` (`repoConCredencial`) — negárselo solo
+   * a esta ruta no protegía nada, porque el repositorio ya estaba conectado
+   * con esa credencial de todos modos. Lo que sí protegía era en falso: dejaba
+   * sin arquitectura a cualquier repositorio privado, que es exactamente el
+   * caso normal de una empresa. Sin token —repositorio sin conexión, pegado
+   * por su enlace— se sigue leyendo como cualquiera con el enlace, y uno
+   * privado sigue sin poder importarse: eso no cambió.
    *
    * NO BORRA NI RECOLOCA. Importar dos veces deja el mismo diagrama, y lo que
    * alguien hubiera movido a mano sigue donde lo dejó: ver
@@ -417,18 +420,13 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const { repoId } = parseBody(z.object({ repoId: uuid }), request.body);
 
-    const { fullName, workspaceId: suEspacio } = await withUser(userId, (db) =>
-      repoSinCredencial(db, repoId),
-    );
+    const { workspaceId: suEspacio } = await withUser(userId, (db) => repoSinCredencial(db, repoId));
     // Quien pertenece a dos proyectos ve los repositorios de los dos, así que
     // RLS no puede impedir esto: lo impide el código. Traerse el repositorio de
     // un proyecto al diagrama de otro es la mezcla que 0035 vino a evitar.
     if (suEspacio !== workspaceId) throw notFound("repositorio no encontrado");
 
-    /** Sin credencial y sin excepciones: se lee como lo leería cualquiera con
-     *  el enlace. Un repositorio privado responde 404 y el conector ya traduce
-     *  ese 404 a «o no existe o es privado», que es lo que hay que decir. */
-    const token = null;
+    const { token, fullName } = await withUser(userId, (db) => repoConCredencial(db, repoId));
 
     const arbol = await fetchGithubTree(token, fullName).catch((error: unknown) => {
       throw badGateway(error instanceof Error ? error.message : "no se pudo leer el repositorio");
@@ -436,15 +434,16 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     const rutas = arbol.map((e) => e.path);
 
     /**
-     * Cuántos archivos se leen en total, y por qué son doce.
+     * Cuántos archivos se leen en total.
      *
-     * Al leer sin credencial, el cupo de GitHub son 60 peticiones por hora Y
-     * POR IP: no por organización, sino compartidas por todo DevUP. Una sola
-     * importación más golosa dejaría sin lecturas a las demás organizaciones
-     * durante una hora, y ellas verían un fallo que no causaron y no pueden
-     * arreglar. Lo que no entre se dice en pantalla.
+     * Sin credencial, el cupo de GitHub son 60 peticiones por hora Y POR IP —
+     * no por organización, sino compartidas por todo DevUP—, y doce es lo que
+     * deja ver algo sin dejar sin lecturas a las demás organizaciones durante
+     * una hora. Con la credencial del repositorio el cupo es de 5.000 por
+     * hora y no hace falta encogerse tanto. Lo que no entre se dice en
+     * pantalla.
      */
-    const TOPE = 12;
+    const TOPE = token ? 40 : 12;
 
     /**
      * El Terraform va primero cuando lo hay, pero no se lo queda todo.
