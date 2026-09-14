@@ -35,6 +35,22 @@ const enVuelo = new Map<string, Promise<unknown>>();
 /** Quién está mirando cada clave, para avisarles cuando cambie. */
 const oyentes = new Map<string, Set<() => void>>();
 
+/**
+ * El último fallo de cada clave, para no repetirlo sin descanso.
+ *
+ * UN FALLO NUNCA SE GUARDABA EN `cache`, Y ESE ERA EL BUG. Sin nada guardado,
+ * `fresco` da siempre falso para esa clave — así que cualquier cosa que
+ * dispare una revalidación (volver a la pestaña, que otra parte de la
+ * pantalla monte de nuevo el mismo recurso, un `invalidar` de un prefijo que
+ * ni siquiera venía a por esta clave) volvía a preguntar sin ningún límite.
+ * Un recurso que de verdad no está disponible —«este workspace no tiene base
+ * de datos conectada»— machacaba la API en cada una de esas ocasiones. Diez
+ * segundos de enfriamiento alcanza para no repetirlo en bucle y sigue siendo
+ * poco para quien de verdad acaba de arreglarlo y pulsa «reintentar».
+ */
+const ULTIMO_FALLO_MS = 10_000;
+const ultimoFallo = new Map<string, { mensaje: string; cuando: number }>();
+
 function avisar(clave: string) {
   for (const oyente of oyentes.get(clave) ?? []) oyente();
 }
@@ -108,6 +124,16 @@ export function useRecurso<T>(
       const fresco = guardado && Date.now() - guardado.cuando < frescura;
       if (fresco && !forzar) return;
 
+      // El mismo enfriamiento para un fallo reciente: sin él, cualquier
+      // revalidación —volver a la pestaña, otro componente montando el mismo
+      // recurso— repetía una petición que ya se sabía que iba a fallar otra
+      // vez, sin límite ninguno.
+      const fallo = ultimoFallo.get(clave);
+      if (fallo && Date.now() - fallo.cuando < ULTIMO_FALLO_MS && !forzar) {
+        setError(fallo.mensaje);
+        return;
+      }
+
       // Si ya hay una petición viva para esta clave, se espera a esa. Dos
       // componentes que montan a la vez pidiendo lo mismo hacían dos viajes.
       let promesa = enVuelo.get(clave) as Promise<T> | undefined;
@@ -120,10 +146,13 @@ export function useRecurso<T>(
       try {
         const datos = await promesa;
         cache.set(clave, { datos, cuando: Date.now() });
+        ultimoFallo.delete(clave);
         setError(null);
         avisar(clave);
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : "No se pudo cargar.");
+        const mensaje = caught instanceof ApiError ? caught.message : "No se pudo cargar.";
+        ultimoFallo.set(clave, { mensaje, cuando: Date.now() });
+        setError(mensaje);
       } finally {
         if (enVuelo.get(clave) === promesa) enVuelo.delete(clave);
         setRevalidando(false);
