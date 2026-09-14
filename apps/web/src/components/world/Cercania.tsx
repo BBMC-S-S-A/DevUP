@@ -139,10 +139,22 @@ export function PanelLlamada({
   // El audio va en su propio elemento y no dentro del vídeo: si la otra parte
   // no ha encendido la cámara no hay elemento de vídeo que reproducir, y la voz
   // se perdería con él.
+  //
+  // `conVideo` ESTÁ EN LAS DEPENDENCIAS Y ES TODO EL ARREGLO DE LA CÁMARA. El
+  // `<video>` de abajo solo se monta cuando `conVideo` es cierto, y eso ocurre
+  // al llegar la pista de vídeo — después de que este efecto haya corrido por
+  // última vez. Y no volvía a correr, porque `remoto` NO CAMBIA: quien enciende
+  // la cámara añade la pista al mismo `MediaStream` que ya viajaba con el
+  // audio, así que `ontrack` entrega el mismo objeto, `setRemoto` recibe la
+  // misma referencia y React no repite el efecto.
+  //
+  // Resultado: el elemento existía, la pista llegaba, y nadie le asignaba nunca
+  // el stream. Caja en blanco — «la cámara no sirve», sin un error en ninguna
+  // parte que lo explicara.
   useEffect(() => {
     if (audio.current) audio.current.srcObject = remoto;
     if (video.current) video.current.srcObject = remoto;
-  }, [remoto]);
+  }, [remoto, conVideo]);
 
   if (estado.fase === "libre" || estado.fase === "entrante") return null;
 
