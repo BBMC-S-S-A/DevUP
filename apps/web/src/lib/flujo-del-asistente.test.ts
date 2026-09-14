@@ -74,8 +74,18 @@ check(
 
 check("cadena vacía no da nada", partirSucesos("").sucesos.length === 0);
 check("líneas que no son data se ignoran", partirSucesos(": latido\n\n").sucesos.length === 0);
-// Un `\r\n` de un proxy que reescribe saltos no debe partir un suceso en dos.
 check("sin separador, todo es resto", partirSucesos("data: {}").sucesos.length === 0);
+
+console.log("\nCon saltos de línea de estilo Windows");
+
+// El protocolo admite CRLF y hay intermediarios que reescriben los saltos.
+// Partiendo solo por `\n\n` esto daba CERO sucesos y se quedaba esperando un
+// separador que ya había pasado: la pantalla pensando para siempre, sin un
+// error que lo explicara. La prueba de al lado decía cubrirlo y no lo hacía.
+const conCrlf = partirSucesos('data: {"tipo":"fin","respuesta":"ok"}\r\n\r\n');
+check("un suceso con CRLF también sale", conCrlf.sucesos.length === 1);
+check("con su contenido", (conCrlf.sucesos[0] as { respuesta: string }).respuesta === "ok");
+check("y no queda resto colgado", conCrlf.resto === "");
 
 console.log("\nLas frases de cada herramienta");
 

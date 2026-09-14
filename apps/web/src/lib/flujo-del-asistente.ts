@@ -74,7 +74,15 @@ export function fraseDe(herramienta: string): string {
 export function partirSucesos(acumulado: string): { sucesos: Suceso[]; resto: string } {
   // Los sucesos van separados por una línea en blanco. El último trozo puede
   // estar a medias, así que se guarda para la vuelta siguiente.
-  const partes = acumulado.split("\n\n");
+  //
+  // `\r?\n` Y NO `\n` A SECAS: el protocolo admite terminar las líneas con
+  // CRLF, y hay intermediarios que reescriben los saltos. Partiendo solo por
+  // `\n\n`, un flujo con `\r\n\r\n` no casa NUNCA: no sale ni un suceso, todo
+  // se queda en el resto esperando un separador que ya pasó, y la pantalla se
+  // queda pensando para siempre sin un error que lo explique. Cuesta un
+  // carácter y quita un modo de fallo que no se puede diagnosticar desde
+  // fuera.
+  const partes = acumulado.split(/\r?\n\r?\n/);
   const resto = partes.pop() ?? "";
   const sucesos: Suceso[] = [];
   for (const parte of partes) {
