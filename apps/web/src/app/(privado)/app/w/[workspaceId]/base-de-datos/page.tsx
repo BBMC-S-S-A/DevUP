@@ -279,7 +279,7 @@ function ConectarBaseDeDatos({
   );
 
   return (
-    <div className="max-w-lg space-y-2 rounded-xl border border-line bg-canvas/40 p-3">
+    <div className="mx-auto max-w-lg space-y-2 rounded-xl border border-line bg-canvas/40 p-3">
       <Entrada
         value={nombre}
         onChange={(e) => setNombre(e.target.value)}
