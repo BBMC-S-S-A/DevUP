@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AuditoriaDelEquipo } from "@/components/auditoria/Equipo";
 import { AuditoriaDelRegistro } from "@/components/auditoria/Registro";
+import { Boton } from "@/components/ui/Boton";
 import { Desplegable } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
@@ -443,10 +444,22 @@ function ColaboradoresGitHub({ repoId }: { repoId: string }) {
       ) : datos.datos && !datos.datos.listo ? (
         // GitHub calcula estas estadísticas la primera vez que se piden, y
         // puede tardar hasta un minuto — decirlo en vez de enseñar un vacío.
+        //
+        // EL BOTÓN HACE FALTA, Y NO ES UN ADORNO. La respuesta «todavía
+        // calculando» se guarda con la misma hora de frescura que la buena
+        // (`frescura: 3_600_000`) porque es la misma URL — sin un «reintentar»
+        // que fuerce a preguntar de nuevo, quien vuelve a esta pantalla se
+        // queda viendo «calculando» durante una hora entera aunque GitHub ya
+        // hubiera terminado a los pocos segundos.
         <EstadoVacio
           icono={<GitCommitHorizontal size={20} />}
           titulo="GitHub está calculando estas estadísticas"
-          pista="Pasa solo la primera vez que se piden para un repositorio. Vuelve a intentarlo en un minuto."
+          pista="Pasa solo la primera vez que se piden para un repositorio. Suele tardar menos de un minuto."
+          accion={
+            <Boton tamano="sm" variante="secundario" onClick={() => void datos.recargar()}>
+              Comprobar de nuevo
+            </Boton>
+          }
         />
       ) : (datos.datos?.colaboradores.length ?? 0) === 0 ? (
         <EstadoVacio
