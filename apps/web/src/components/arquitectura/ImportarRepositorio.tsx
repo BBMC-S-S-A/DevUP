@@ -41,7 +41,7 @@ type Resultado = {
   omitidos: number;
   ilegibles: string[];
   recortados: number;
-  /** Cuántas cajas había en el lienzo antes de leer y dibujar, y se borraron. */
+  /** Cajas de una lectura anterior que se quitaron: de otro repo, o de este y ya no están. */
   reemplazados: number;
   creados: string[];
   reutilizados: string[];
@@ -62,12 +62,6 @@ export function ImportarRepositorio({
   const repos = useRecurso<{ repos: GithubRepo[] }>(`/workspaces/${workspaceId}/github/repos`);
   const [elegido, setElegido] = useState<string | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  // Confirmación DENTRO de este mismo diálogo, y no un segundo modal
-  // superpuesto: un modal de confirmación anidado en otro modal rompe su
-  // propio `position: fixed` en cuanto el de fuera anima con un `transform`
-  // —el ancestro con transform se convierte en el contenedor del posicionado
-  // fijo, y el aviso queda invisible, atrapado dentro del primero—.
-  const [confirmando, setConfirmando] = useState(false);
 
   const importar = useMutacion(
     (repoId: string) =>
@@ -94,29 +88,6 @@ export function ImportarRepositorio({
     >
       {resultado ? (
         <ResumenImportacion resultado={resultado} onCerrar={onCerrar} />
-      ) : confirmando ? (
-        <div className="space-y-3">
-          <div className="rounded-xl border border-danger/30 bg-danger/5 p-3">
-            <p className="text-sm font-semibold text-ink">¿Reemplazar el lienzo entero?</p>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted">
-              Se borra todo lo que hay dibujado ahora mismo —a mano, por un agente, o de una lectura
-              anterior— y se dibuja solo lo que este repositorio declara. No se puede deshacer.
-            </p>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Boton type="button" variante="fantasma" onClick={() => setConfirmando(false)}>
-              Cancelar
-            </Boton>
-            <Boton
-              variante="peligro"
-              icono={<Workflow size={14} />}
-              cargando={importar.enviando}
-              onClick={() => elegido && void importar.ejecutar(elegido)}
-            >
-              Leer y reemplazar
-            </Boton>
-          </div>
-        </div>
       ) : repos.cargando ? (
         <Cargando etiqueta="Buscando repositorios" />
       ) : lista.length === 0 ? (
@@ -151,8 +122,9 @@ export function ImportarRepositorio({
             <Boton
               variante="primario"
               icono={<Workflow size={14} />}
+              cargando={importar.enviando}
               disabled={!elegido}
-              onClick={() => setConfirmando(true)}
+              onClick={() => elegido && void importar.ejecutar(elegido)}
             >
               Leer y dibujar
             </Boton>
@@ -215,10 +187,10 @@ function DeDondeLoSaca() {
           producción —un balanceador, una CDN— no está en el repositorio.
         </li>
         <li>
-          <strong>Esto reemplaza el lienzo entero.</strong> Se borra todo lo que hay dibujado ahora
-          —a mano, por un agente, o de una lectura anterior, de este repositorio o de otro— y se
-          dibuja solo lo que este repositorio declara. No es apilar encima: es empezar de cero con
-          lo que se acaba de leer.
+          <strong>Solo manda sobre lo que trajo el repositorio.</strong> Se sincroniza con lo que
+          declara hoy —se quitan las cajas de otro repositorio leído antes, y las de este que ya no
+          están en él—, y <strong>no se toca</strong> lo que dibujó un agente por el MCP ni lo que
+          pusiste tú a mano.
         </li>
       </ul>
     </div>
@@ -245,8 +217,8 @@ function ResumenImportacion({ resultado, onCerrar }: { resultado: Resultado; onC
     <div className="space-y-3">
       {reemplazados > 0 && (
         <p className="rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-[11px] leading-relaxed text-accent">
-          Se borraron <strong>{reemplazados}</strong> caja(s) que había antes — este diagrama es
-          ahora solo lo que {resultado.fullName} declara.
+          Se quitaron <strong>{reemplazados}</strong> caja(s) que había traído una lectura anterior
+          y ya no están en {resultado.fullName}. Lo dibujado por un agente o a mano sigue intacto.
         </p>
       )}
       {fuentes.length === 0 ? (

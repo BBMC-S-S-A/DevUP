@@ -80,6 +80,19 @@ const TOPE_CONEXIONES = 600;
 export const ENTRADA_FUSION = z.object({
   componentes: z.array(COMPONENTE).max(TOPE_COMPONENTES),
   conexiones: z.array(CONEXION).max(TOPE_CONEXIONES).default([]),
+  /**
+   * Vaciar el lienzo antes de dibujar, en vez de añadir a lo que hay.
+   *
+   * EL ÚNICO CAMINO QUE BORRA DE VERDAD, y está aquí a propósito. «Leer del
+   * repositorio» solo manda sobre las cajas que él mismo trajo, y a mano se
+   * borra de una en una; cuando lo que hace falta es «tira esto y pon esto
+   * otro» —rehacer un diagrama que quedó mal, cambiar de sistema entero— lo
+   * pide una persona a un agente, que es quien tiene delante el diagrama
+   * nuevo completo. Por eso viaja en la misma llamada que los componentes:
+   * no existe un «borra» suelto que pueda dejar el lienzo vacío si lo que
+   * venía detrás falla.
+   */
+  reemplazar: z.boolean().default(false),
 });
 
 export type Fusion = {
@@ -87,6 +100,8 @@ export type Fusion = {
   reutilizados: string[];
   enlazados: string[];
   sinResolver: string[];
+  /** Cuántas cajas se tiraron por `reemplazar`. */
+  reemplazados: number;
 };
 
 type NodoFila = { id: string; name: string; posX: number; posY: number };
@@ -102,9 +117,12 @@ type NodoFila = { id: string; name: string; posX: number; posY: number };
  * - **Lo que ya estaba colocado no se mueve.** La disposición es trabajo de
  *   alguien: recolocar el diagrama entero en cada importación convertiría una
  *   función útil en una que da miedo usar.
- * - **Nada se borra.** Un recurso que desaparece del Terraform deja su caja,
- *   que alguien quita si quiere. Equivocarse creando deja trabajo que revisar;
- *   equivocarse borrando deja trabajo perdido.
+ * - **Nada se borra, salvo que lo pidan con `reemplazar`.** Un recurso que
+ *   desaparece del Terraform deja su caja, que alguien quita si quiere:
+ *   equivocarse creando deja trabajo que revisar, equivocarse borrando deja
+ *   trabajo perdido. La excepción es explícita y va en la misma llamada —
+ *   «tira lo que hay y pon esto» — para que vaciar el lienzo sin poner nada
+ *   detrás no sea ni un accidente ni una operación a medias.
  *
  * Las conexiones cuyos dos extremos no se encuentran no son un error: se
  * devuelven en `sinResolver` para poder decirlo. Un agente que se inventa un
@@ -124,6 +142,14 @@ export async function fusionarArquitectura(
    */
   origen: string | null = null,
 ): Promise<Fusion> {
+  let reemplazados = 0;
+  if (entrada.reemplazar) {
+    const { rowCount } = await db.query(`delete from architecture_nodes where workspace_id = $1`, [
+      workspaceId,
+    ]);
+    reemplazados = rowCount ?? 0;
+  }
+
   const { rows: existentes } = await db.query<NodoFila>(
     `select ${NODE_COLUMNS} from architecture_nodes where workspace_id = $1`,
     [workspaceId],
@@ -227,7 +253,7 @@ export async function fusionarArquitectura(
     enlazados.push(`${origen.name} → ${destino.name}`);
   }
 
-  return { creados, reutilizados, enlazados, sinResolver };
+  return { creados, reutilizados, enlazados, sinResolver, reemplazados };
 }
 
 export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
@@ -411,17 +437,12 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
    * por su enlace— se sigue leyendo como cualquiera con el enlace, y uno
    * privado sigue sin poder importarse: eso no cambió.
    *
-   * REEMPLAZA EL LIENZO ENTERO, A PROPÓSITO. Se probó primero con una versión
-   * que solo tocaba lo que una importación anterior había dejado —la regla de
-   * `fusionarArquitectura`, «nada se borra»— y no servía: un diagrama dibujado
-   * a mano o por un agente (`imported_from` nulo) se quedaba intacto para
-   * siempre, y leer el repositorio solo apilaba sus cajas encima. Se pidió
-   * explícitamente que leer y dibujar deje el lienzo IGUAL a lo que el
-   * repositorio declara, y eso es lo que hace esta ruta: borra todo lo que
-   * hay en el workspace antes de dibujar. Es un botón («Leer y dibujar») que
-   * alguien pulsa a propósito, con su aviso en pantalla — no un barrido
-   * silencioso. `fusionarArquitectura` en sí sigue sin borrar nada por su
-   * cuenta: lo que borra aquí, lo borra esta ruta, antes de llamarla.
+   * MANDA SOBRE LO QUE TRAJO, Y SOLO SOBRE ESO. Las cajas que vinieron de
+   * leer un repositorio se sincronizan con lo que el repositorio dice hoy —se
+   * quitan las de otro repo y las que ya no están en este—, y las que no
+   * vinieron de ahí (`imported_from` nulo: las del MCP o las puestas a mano)
+   * no se tocan. El porqué, con el detalle de las dos vueltas que dio esta
+   * decisión, está dentro de la ruta.
    */
   app.post("/workspaces/:workspaceId/architecture/importar/repositorio", async (request) => {
     const userId = requireUser(request);
@@ -508,19 +529,57 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
 
     const { fusion, reemplazados } = await withUser(userId, async (db) => {
       /**
-       * «LEER Y DIBUJAR» REEMPLAZA EL LIENZO ENTERO, y no es un descuido: se
-       * pidió así explícitamente, tres veces, después de que la versión
-       * anterior —que solo tocaba lo que una importación previa había traído
-       * de un repositorio— dejara intacto un diagrama dibujado a mano o por
-       * un agente (`imported_from` nulo) y se limitara a apilar las cajas del
-       * repositorio encima. Esta acción es un botón que alguien pulsa a
-       * propósito («Leer y dibujar»), con su propia confirmación en la
-       * pantalla — no un barrido silencioso de fondo.
+       * ESTE BOTÓN SOLO MANDA SOBRE LO QUE ÉL MISMO TRAJO.
+       *
+       * Hubo una versión que borraba el lienzo entero, y se quitó a petición:
+       * lo que dibuja un agente por el MCP —Railway, Cloudflare, un dominio:
+       * cosas que existen de verdad y que NINGÚN archivo del repositorio
+       * declara— desaparecía en cuanto alguien volvía a leer el repositorio.
+       * La regla ahora es de quién es cada caja: las que vinieron de leer un
+       * repositorio (`imported_from` con valor) las gobierna esta ruta y se
+       * sincronizan; las que no (`imported_from` nulo: MCP o a mano) no se
+       * tocan nunca desde aquí. Borrarlas es cosa del MCP o de una persona.
+       *
+       * Lo que sí se quita, por tanto, son dos cosas, las dos «suyas»:
+       *  1. Lo que trajo una lectura de OTRO repositorio — cambiar de repo
+       *     reemplaza su diagrama en vez de apilarlo encima (0064).
+       *  2. Lo que trajo una lectura de ESTE MISMO repositorio y ya no está
+       *     en él — un servicio quitado del `docker-compose` no deja una caja
+       *     fantasma.
        */
-      const { rowCount } = await db.query(`delete from architecture_nodes where workspace_id = $1`, [
-        workspaceId,
-      ]);
-      const reemplazados = rowCount ?? 0;
+      const { rows: previos } = await db.query<{ importedFrom: string }>(
+        `select distinct imported_from as "importedFrom" from architecture_nodes
+          where workspace_id = $1 and imported_from is not null and imported_from <> $2`,
+        [workspaceId, fullName],
+      );
+      let reemplazados = 0;
+      if (previos.length > 0) {
+        const { rowCount } = await db.query(
+          `delete from architecture_nodes
+            where workspace_id = $1 and imported_from = any($2::text[])`,
+          [workspaceId, previos.map((p) => p.importedFrom)],
+        );
+        reemplazados = rowCount ?? 0;
+      }
+
+      const nombresDeAhora = new Set(
+        componentes.map((c) => c.nombre.slice(0, 60).trim().toLowerCase()),
+      );
+      const { rows: delMismoRepo } = await db.query<{ id: string; name: string }>(
+        `select id, name from architecture_nodes
+          where workspace_id = $1 and imported_from = $2`,
+        [workspaceId, fullName],
+      );
+      const idsDesactualizados = delMismoRepo
+        .filter((n) => !nombresDeAhora.has(n.name.trim().toLowerCase()))
+        .map((n) => n.id);
+      if (idsDesactualizados.length > 0) {
+        const { rowCount } = await db.query(
+          `delete from architecture_nodes where id = any($1::uuid[])`,
+          [idsDesactualizados],
+        );
+        reemplazados += rowCount ?? 0;
+      }
 
       const fusion = await fusionarArquitectura(
         db,
@@ -537,6 +596,10 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
             a: c.a.slice(0, 60),
             etiqueta: c.etiqueta,
           })),
+          // Esta ruta ya hizo su propia limpieza —solo sobre lo que trajo el
+          // repositorio— antes de llamar aquí. Vaciar el lienzo entero es
+          // cosa del MCP, no de leer un repositorio.
+          reemplazar: false,
         },
         fullName,
       );
@@ -550,8 +613,10 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
       omitidos,
       ilegibles,
       recortados,
-      reemplazados,
       ...fusion,
+      // Después del `...fusion` a propósito: el que cuenta aquí es el de la
+      // sincronización de esta ruta, no el de `reemplazar` (que va en cero).
+      reemplazados,
     };
   });
 }

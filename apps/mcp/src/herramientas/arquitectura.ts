@@ -23,9 +23,14 @@ import { resolverEspacio } from "../espacios.js";
  * nombre se reutiliza en vez de duplicarse, para que llamar dos veces a esto
  * no deje el lienzo con todo por partida doble.
  *
- * NO HAY HERRAMIENTA DE BORRAR, igual que en el tablero y por lo mismo:
- * equivocarse creando deja trabajo que revisar, equivocarse borrando deja
- * trabajo perdido.
+ * NO HAY UN «BORRAR» SUELTO, y sí un `reemplazar` que viaja pegado al
+ * diagrama nuevo. La diferencia importa: un borrado aparte puede dejar el
+ * lienzo vacío si lo que venía detrás nunca llega, mientras que así el
+ * vaciado y el dibujo son la misma transacción. Es además el ÚNICO camino
+ * que borra lo que no vino de un repositorio — «Leer del repositorio», desde
+ * la pantalla, solo manda sobre sus propias cajas y jamás sobre estas—, y por
+ * eso vive aquí: quien pide rehacer un diagrama se lo pide a un agente, que
+ * es quien tiene el diagrama nuevo entero delante.
  */
 
 const TIPOS = ["servicio", "base_datos", "cola", "cache", "almacenamiento", "api_externa", "otro"] as const;
@@ -144,6 +149,16 @@ export const esquemaDibujarArquitectura = {
     )
     .max(120)
     .optional(),
+  reemplazar: z
+    .boolean()
+    .optional()
+    .describe(
+      "Tira TODO lo que hay dibujado y deja solo lo que mandes en esta llamada. " +
+        "Por defecto no: lo normal es añadir a lo que ya está. Úsalo solo si te lo " +
+        "piden con esas palabras —«rehaz el diagrama», «borra eso y pon esto»— y " +
+        "mandando el diagrama nuevo COMPLETO en la misma llamada, porque lo que no " +
+        "venga aquí se pierde. Lo que borres no se puede recuperar.",
+    ),
   espacio: z.string().optional().describe("Nombre del espacio de trabajo. Omitir si solo hay uno."),
   organizacion: z.string().optional().describe("Nombre de la organización. Omitir si solo hay una."),
 };
@@ -173,10 +188,15 @@ export const descripcionDibujarArquitectura = [
   "base de datos, la nube es lo que vive fuera—, así que acertarlo es lo que",
   "hace que el diagrama se lea de un vistazo.",
   "",
-  "Es acumulativa y no destructiva: lo que ya exista con el mismo nombre se",
-  "reutiliza en vez de duplicarse, lo que ya estuviera colocado a mano no se",
-  "mueve, y nada se borra. Para quitar algo, lo hace una persona desde la",
-  "pantalla de Infraestructura.",
+  "Por defecto es acumulativa: lo que ya exista con el mismo nombre se reutiliza",
+  "en vez de duplicarse, lo que ya estuviera colocado a mano no se mueve, y nada",
+  "se borra.",
+  "",
+  "SI TE PIDEN REHACER EL DIAGRAMA, usa `reemplazar`. Vacía el lienzo y deja solo",
+  "lo que mandes en esa misma llamada, así que manda el diagrama nuevo ENTERO —lo",
+  "que no venga se pierde y no se recupera—. Es el único camino que borra: leer",
+  "el repositorio desde la pantalla solo manda sobre las cajas que ese mismo",
+  "botón trajo, y nunca sobre lo que dibujaste tú aquí.",
   "",
   "Conviene llamar antes a `ver_arquitectura` para saber qué hay.",
 ].join("\n");
@@ -201,6 +221,7 @@ type Fusion = {
   reutilizados: string[];
   enlazados: string[];
   sinResolver: string[];
+  reemplazados: number;
 };
 
 export async function dibujarArquitectura(
@@ -208,6 +229,7 @@ export async function dibujarArquitectura(
   entrada: {
     componentes: Componente[];
     conexiones?: Conexion[];
+    reemplazar?: boolean;
     espacio?: string;
     organizacion?: string;
   },
@@ -216,14 +238,19 @@ export async function dibujarArquitectura(
 
   // Una sola llamada y no una por caja: así el diagrama entra entero o no
   // entra, y no se queda a medias con veinte cajas puestas y las flechas sin
-  // poner.
+  // poner. Con `reemplazar`, además, el vaciado va dentro de esa misma
+  // transacción: no hay ventana en la que el lienzo esté vacío.
   const fusion = await cliente.post<Fusion>(`/workspaces/${espacio.id}/architecture/fusionar`, {
     componentes: entrada.componentes,
     conexiones: entrada.conexiones ?? [],
+    reemplazar: entrada.reemplazar ?? false,
   });
 
-  const { creados, reutilizados, enlazados, sinResolver } = fusion;
+  const { creados, reutilizados, enlazados, sinResolver, reemplazados } = fusion;
   const lineas = [`Diagrama de «${espacio.name}» actualizado.`];
+  if (reemplazados > 0) {
+    lineas.push(`Se tiró lo que había (${reemplazados} caja(s)) antes de dibujar, como pediste.`);
+  }
   if (creados.length > 0) lineas.push(`Componentes nuevos (${creados.length}): ${creados.join(", ")}.`);
   if (reutilizados.length > 0) {
     lineas.push(`Ya estaban y no se duplicaron (${reutilizados.length}): ${reutilizados.join(", ")}.`);
