@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { webOrigins } from "../env.js";
 import { GoogleGenAI, ApiError as GeminiApiError, type Content, type Part } from "@google/genai";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -644,8 +645,13 @@ async function correrHerramienta(
   entrada: Record<string, unknown>,
   pasos: Paso[],
   adjuntos: Adjunto[],
+  /** Se llama al empezar la herramienta, para contarlo mientras pasa. */
+  avisar?: (herramienta: string) => void,
 ): Promise<{ texto: string; esError: boolean }> {
   pasos.push({ herramienta: nombre, entrada });
+  // ANTES de ejecutarla, no despues: lo que hay que contar es que EMPIEZA.
+  // Avisar al terminar llegaria justo cuando ya no hace falta.
+  avisar?.(nombre);
   const r = await withUser(userId, (db) => ejecutar(db, workspaceId, userId, nombre, entrada)).catch(
     (fallo: unknown) => ({
       texto: `La herramienta falló: ${fallo instanceof Error ? fallo.message : "error"}`,
@@ -671,6 +677,7 @@ async function correrAnthropic(
   pregunta: string,
   workspaceId: string,
   userId: string,
+  avisar?: (herramienta: string) => void,
 ): Promise<Resultado> {
   const anthropic = new Anthropic({ apiKey: clave });
   const herramientas: Anthropic.Tool[] = HERRAMIENTAS.map((h) => ({
@@ -726,6 +733,7 @@ async function correrAnthropic(
           (peticion.input ?? {}) as Record<string, unknown>,
           pasos,
           adjuntos,
+          avisar,
         );
         resultados.push({
           type: "tool_result",
@@ -786,6 +794,7 @@ async function correrGemini(
   pregunta: string,
   workspaceId: string,
   userId: string,
+  avisar?: (herramienta: string) => void,
 ): Promise<Resultado> {
   const ai = new GoogleGenAI({ apiKey: clave });
   const tools = [
@@ -840,6 +849,7 @@ async function correrGemini(
           (llamada.args ?? {}) as Record<string, unknown>,
           pasos,
           adjuntos,
+          avisar,
         );
         resultados.push({
           functionResponse: {
@@ -898,7 +908,7 @@ export async function asistenteRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.post("/workspaces/:workspaceId/asistente", async (request) => {
+  app.post("/workspaces/:workspaceId/asistente", async (request, reply) => {
     const userId = requireUser(request);
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const { pregunta, historial } = parseBody(
@@ -951,11 +961,98 @@ export async function asistenteRoutes(app: FastifyInstance): Promise<void> {
 
     const sistema = `${SISTEMA}\n\nEl espacio de trabajo se llama «${preparado.espacio.name}».`;
 
-    const resultado =
-      preparado.proveedor === "gemini"
-        ? await correrGemini(preparado.clave, sistema, historial, pregunta, workspaceId, userId)
-        : await correrAnthropic(preparado.clave, sistema, historial, pregunta, workspaceId, userId);
+    /**
+     * A partir de aqui la respuesta va POR PARTES.
+     *
+     * POR QUE. Antes esto devolvia un solo JSON al final, y antes de ese final
+     * puede haber hasta ocho vueltas del bucle de herramientas, cada una con su
+     * ida y vuelta al modelo. Quien preguntaba miraba un "mirando tu espacio de
+     * trabajo..." durante todo el proceso y no veia nada hasta que estaba todo
+     * hecho. Bajar el modelo ayudo, pero no cambia eso: la espera se sigue
+     * notando aunque cada vuelta sea mas rapida.
+     *
+     * SE EMITE LO QUE ESTA HACIENDO, NO EL TEXTO A MEDIDA. Es la parte que mas
+     * vale por lo que cuesta: "mirando el tablero", "buscando en el proyecto"
+     * convierte la espera en algo que se entiende. El texto caracter a caracter
+     * exigiria pasar los DOS proveedores a su API de flujo y rehacer el bucle de
+     * herramientas alrededor; eso es un cambio de otra talla y queda pendiente.
+     *
+     * SSE Y NO WEBSOCKET: es un flujo de ida, de una sola peticion, y no hace
+     * falta nada del otro lado. Ademas la API ya sirve REST, asi que esto no
+     * toca el reparto entre las dos instancias.
+     */
+    reply.hijack();
 
-    return resultado;
+    // EL CORS A MANO, Y NO ES OPCIONAL. `hijack()` se salta los ganchos de
+    // Fastify, incluido el de `@fastify/cors`, asi que sin esto el navegador
+    // rechaza la respuesta entera — y el fallo se ve como "no contesta", no
+    // como un problema de cabeceras. Se refleja el origen solo si esta
+    // permitido: devolver `*` romperia `credentials: include`, que es como
+    // viaja la sesion.
+    const origen = request.headers.origin;
+    const cabeceras: Record<string, string> = {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      // Sin esto, un proxy que almacene en bufer se queda el flujo entero y lo
+      // entrega al final — justo lo que esto viene a evitar.
+      "X-Accel-Buffering": "no",
+    };
+    if (origen && webOrigins.includes(origen)) {
+      cabeceras["Access-Control-Allow-Origin"] = origen;
+      cabeceras["Access-Control-Allow-Credentials"] = "true";
+      cabeceras.Vary = "Origin";
+    }
+    reply.raw.writeHead(200, cabeceras);
+
+    const emitir = (dato: unknown): void => {
+      reply.raw.write(`data: ${JSON.stringify(dato)}
+
+`);
+    };
+
+    // Si quien pregunta cierra la pestana a mitad no hay a quien contarle nada:
+    // se deja de escribir y lo que quede en curso muere con la peticion.
+    let vivo = true;
+    request.raw.on("close", () => {
+      vivo = false;
+    });
+
+    try {
+      const resultado =
+        preparado.proveedor === "gemini"
+          ? await correrGemini(
+              preparado.clave,
+              sistema,
+              historial,
+              pregunta,
+              workspaceId,
+              userId,
+              (herramienta) => {
+                if (vivo) emitir({ tipo: "herramienta", herramienta });
+              },
+            )
+          : await correrAnthropic(
+              preparado.clave,
+              sistema,
+              historial,
+              pregunta,
+              workspaceId,
+              userId,
+              (herramienta) => {
+                if (vivo) emitir({ tipo: "herramienta", herramienta });
+              },
+            );
+      if (vivo) emitir({ tipo: "fin", ...resultado });
+    } catch (fallo) {
+      // Un fallo a mitad tiene que poder contarse. Con una respuesta de golpe un
+      // error era un error; con un flujo, callarse dejaria media conversacion en
+      // pantalla como si fuera la respuesta.
+      request.log.error({ fallo }, "[asistente] se corto a mitad");
+      const mensaje = fallo instanceof Error ? fallo.message : "algo ha ido mal";
+      if (vivo) emitir({ tipo: "error", mensaje });
+    } finally {
+      if (vivo) reply.raw.end();
+    }
   });
 }

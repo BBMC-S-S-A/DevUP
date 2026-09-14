@@ -19,6 +19,7 @@
     "test:tablero-teclado": "tsx --tsconfig tsconfig.json src/lib/tablero-teclado.test.ts",
     "test:barras": "tsx --tsconfig tsconfig.json src/lib/barras-de-abajo.test.ts",
     "test:respuesta": "tsx --tsconfig tsconfig.json src/lib/respuesta-del-modelo.test.ts",
+    "test:flujo": "tsx --tsconfig tsconfig.json src/lib/flujo-del-asistente.test.ts",
     "test:riel": "tsx --tsconfig tsconfig.json src/lib/riel.test.ts",
     "test:quien-entro": "tsx --tsconfig tsconfig.json src/lib/quien-entro.test.ts",
     "test:actividad": "tsx --tsconfig tsconfig.json src/lib/actividad.test.ts",

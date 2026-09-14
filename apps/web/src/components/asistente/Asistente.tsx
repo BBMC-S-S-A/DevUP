@@ -7,6 +7,7 @@ import { Boton } from "@/components/ui/Boton";
 import { AreaTexto } from "@/components/ui/Field";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ApiError, api } from "@/lib/api";
+import { fraseDe, preguntarEnFlujo } from "@/lib/flujo-del-asistente";
 import { bloquesDe, type Trozo } from "@/lib/respuesta-del-modelo";
 
 /**
@@ -40,6 +41,8 @@ export function Asistente({ workspaceId }: { workspaceId: string }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [pregunta, setPregunta] = useState("");
   const [pensando, setPensando] = useState(false);
+  /** Lo ultimo que dijo el servidor que estaba haciendo. Nulo entre medias. */
+  const [haciendo, setHaciendo] = useState<string | null>(null);
   const [configurado, setConfigurado] = useState<boolean | null>(null);
   const [proveedor, setProveedor] = useState<"gemini" | "anthropic" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,20 +75,37 @@ export function Asistente({ workspaceId }: { workspaceId: string }) {
     setPensando(true);
     setError(null);
 
+    setHaciendo(null);
+
     try {
-      const r = await api.post<{
-        respuesta: string;
-        pasos: { herramienta: string; entrada: unknown }[];
-        adjuntos: { fileId: string; nombre: string; tarea: string }[];
-      }>(`/workspaces/${workspaceId}/asistente`, { pregunta: texto, historial });
-      setTurnos((actual) => [
-        ...actual,
-        { rol: "asistente", texto: r.respuesta, pasos: r.pasos, adjuntos: r.adjuntos },
-      ]);
+      await preguntarEnFlujo(workspaceId, texto, historial, (suceso) => {
+        // Lo que esta haciendo, mientras lo hace. Es la mitad que de verdad
+        // quita la sensacion de espera: una herramienta detras de otra cuenta
+        // que hay trabajo en curso, y cual.
+        if (suceso.tipo === "herramienta") {
+          setHaciendo(fraseDe(suceso.herramienta));
+          return;
+        }
+        if (suceso.tipo === "error") {
+          setError(suceso.mensaje);
+          return;
+        }
+        setTurnos((actual) => [
+          ...actual,
+          {
+            rol: "asistente",
+            texto: suceso.respuesta,
+            pasos: suceso.pasos,
+            adjuntos: suceso.adjuntos,
+          },
+        ]);
+      });
     } catch (fallo) {
+      // Aqui solo caen los fallos de red: los del servidor llegan como suceso.
       setError(fallo instanceof ApiError ? fallo.message : "no pude preguntarle");
     } finally {
       setPensando(false);
+      setHaciendo(null);
     }
   }, [pregunta, pensando, turnos, workspaceId]);
 
@@ -115,7 +135,11 @@ export function Asistente({ workspaceId }: { workspaceId: string }) {
         {pensando && (
           <div className="flex items-center gap-2 px-1 text-xs text-faint">
             <Loader2 size={13} className="animate-spin" />
-            mirando tu espacio de trabajo…
+            {/* Lo que esta haciendo AHORA, si lo ha dicho. La frase generica
+                solo mientras todavia no ha empezado nada: decir "mirando tu
+                espacio de trabajo" cuando ya sabemos que esta mirando el
+                tablero es tapar una verdad con una vaguedad. */}
+            {haciendo ?? "pensando…"}
           </div>
         )}
 
