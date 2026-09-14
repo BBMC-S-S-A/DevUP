@@ -101,25 +101,15 @@ export default function CategoriasPage() {
         <Fallo onReintentar={() => void ramas.recargar()}>{ramas.error}</Fallo>
       ) : ramas.cargando ? (
         <Cargando etiqueta="Cargando ramas" />
-      ) : lista.length === 0 && !creando ? (
-        <EstadoVacio
-          icono={<Network size={20} />}
-          titulo="Todavía no hay ninguna rama"
-          pista="Una rama es de dónde cuelga el trabajo: «Frontend», «Infraestructura», «DevVerse». Cada tarea vive en una sola, y quien la gerencia responde de que avance."
-          accion={
-            <Boton variante="primario" tamano="sm" icono={<Plus size={14} />} onClick={() => setCreando(true)}>
-              Crear la primera
-            </Boton>
-          }
-        />
       ) : (
         <div className="space-y-4">
-          {/* LA RED PRIMERO, A TODO EL ANCHO. Contesta «cómo está repartido
-              esto» de un vistazo, y necesita sitio para que los nombres no
-              se corten — metida en una columna estrecha junto a la lista era
-              justo lo contrario. Se señala la rama abierta, que es lo que ata
-              esta mitad con la de abajo: al elegir una en la lista, se ve en
-              el dibujo de quién cuelga. */}
+          {/* LA RED VA SIEMPRE, HAYA O NO RAMAS TODAVÍA. Un «todavía no hay
+              ninguna rama» que tapa la pantalla entera es justo lo que se
+              pidió quitar: lo primero que se ve al entrar es el nodo, no un
+              aviso que hay que despachar antes de llegar a él. Sin ramas,
+              cada tarea cuelga de «sin rama» — que es un nodo real y no un
+              hueco—, así que la red tiene algo que enseñar desde el minuto
+              cero. */}
           {!tablero.cargando && (tablero.datos?.columns.length ?? 0) > 0 && (
             <Tarjeta className="p-4">
               <Rotulo className="mb-3 block">Red de trabajo</Rotulo>
@@ -145,16 +135,34 @@ export default function CategoriasPage() {
                   onCancelar={() => setCreando(false)}
                 />
               )}
-              {lista.map((rama) => (
-                <FichaDeRama
-                  key={rama.id}
-                  rama={rama}
-                  abierta={elegida?.id === rama.id}
-                  miembros={miembros.datos?.members ?? []}
-                  onAbrir={() => setAbierta(rama.id)}
-                  onCambiada={() => void ramas.recargar()}
+              {lista.length === 0 && !creando ? (
+                <EstadoVacio
+                  icono={<Network size={20} />}
+                  titulo="Todavía no hay ninguna rama"
+                  pista="Una rama es de dónde cuelga el trabajo: «Frontend», «Infraestructura», «DevVerse». Cada tarea vive en una sola, y quien la gerencia responde de que avance."
+                  accion={
+                    <Boton
+                      variante="primario"
+                      tamano="sm"
+                      icono={<Plus size={14} />}
+                      onClick={() => setCreando(true)}
+                    >
+                      Crear la primera
+                    </Boton>
+                  }
                 />
-              ))}
+              ) : (
+                lista.map((rama) => (
+                  <FichaDeRama
+                    key={rama.id}
+                    rama={rama}
+                    abierta={elegida?.id === rama.id}
+                    miembros={miembros.datos?.members ?? []}
+                    onAbrir={() => setAbierta(rama.id)}
+                    onCambiada={() => void ramas.recargar()}
+                  />
+                ))
+              )}
             </div>
 
             {elegida && <PanelDeRama rama={elegida} />}
