@@ -245,8 +245,69 @@ function Administrador({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="space-y-5">
+      <BandaAlojada workspaceId={workspaceId} />
       <Tablas workspaceId={workspaceId} />
       <ConsolaSQL workspaceId={workspaceId} />
+    </div>
+  );
+}
+
+/**
+ * Si esta base la aloja DevUP, decirlo — y dejar desalojarla.
+ *
+ * SIN ESTO LA RUTA DE DESALOJAR NO TENÍA PUERTA. Se podía crear una base desde
+ * la pantalla y no había forma de deshacerlo sin entrar a la API a mano, que
+ * es la manera de que el disco del servidor se llene de bases que nadie
+ * recuerda haber pedido.
+ *
+ * Y SE DICE DE QUIÉN ES LA BASE, que no es un adorno: en esta misma pantalla
+ * puede haber una Postgres ajena —pegada a mano, o encontrada en Railway— y
+ * ahí «desalojar» no significa nada. El botón solo aparece cuando la base es
+ * de DevUP, porque solo entonces DevUP puede borrarla.
+ */
+function BandaAlojada({ workspaceId }: { workspaceId: string }) {
+  const confirmar = useConfirmar();
+  const clave = `/workspaces/${workspaceId}/database/alojada`;
+  const alojada = useRecurso<{ alojada: { dbName: string; creadaEn: string } | null }>(clave);
+
+  const desalojar = useMutacion(() => api.delete(`/workspaces/${workspaceId}/database/alojada`), {
+    invalida: [`/workspaces/${workspaceId}/database`],
+    exito: "Base desalojada",
+    fallo: "No se pudo desalojar.",
+  });
+
+  const base = alojada.datos?.alojada;
+  if (!base) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-accent/25 bg-accent-soft/25 px-3 py-2">
+      <Database size={14} className="shrink-0 text-accent" />
+      <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-muted">
+        Esta base la aloja DevUP —{" "}
+        <code className="font-mono text-accent">{base.dbName}</code>. La cadena de conexión se
+        enseñó una sola vez, al crearla.
+      </p>
+      <Boton
+        type="button"
+        tamano="sm"
+        variante="peligro"
+        cargando={desalojar.enviando}
+        onClick={async () => {
+          if (
+            !(await confirmar({
+              titulo: "¿Desalojar esta base?",
+              descripcion:
+                `Se borra ${base.dbName} entera, con sus tablas y todo lo que tengan dentro. No hay copia.`,
+              accion: "Desalojar",
+              peligro: true,
+            }))
+          )
+            return;
+          await desalojar.ejecutar();
+        }}
+      >
+        Desalojar
+      </Boton>
     </div>
   );
 }
