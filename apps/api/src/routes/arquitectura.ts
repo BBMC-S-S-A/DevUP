@@ -411,9 +411,17 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
    * por su enlace— se sigue leyendo como cualquiera con el enlace, y uno
    * privado sigue sin poder importarse: eso no cambió.
    *
-   * NO BORRA NI RECOLOCA. Importar dos veces deja el mismo diagrama, y lo que
-   * alguien hubiera movido a mano sigue donde lo dejó: ver
-   * `fusionarArquitectura`.
+   * REEMPLAZA EL LIENZO ENTERO, A PROPÓSITO. Se probó primero con una versión
+   * que solo tocaba lo que una importación anterior había dejado —la regla de
+   * `fusionarArquitectura`, «nada se borra»— y no servía: un diagrama dibujado
+   * a mano o por un agente (`imported_from` nulo) se quedaba intacto para
+   * siempre, y leer el repositorio solo apilaba sus cajas encima. Se pidió
+   * explícitamente que leer y dibujar deje el lienzo IGUAL a lo que el
+   * repositorio declara, y eso es lo que hace esta ruta: borra todo lo que
+   * hay en el workspace antes de dibujar. Es un botón («Leer y dibujar») que
+   * alguien pulsa a propósito, con su aviso en pantalla — no un barrido
+   * silencioso. `fusionarArquitectura` en sí sigue sin borrar nada por su
+   * cuenta: lo que borra aquí, lo borra esta ruta, antes de llamarla.
    */
   app.post("/workspaces/:workspaceId/architecture/importar/repositorio", async (request) => {
     const userId = requireUser(request);
@@ -498,57 +506,21 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
     // decisiones.
     const recortados = Math.max(0, componentes.length - TOPE_COMPONENTES);
 
-    const { fusion, reemplazados, actualizados } = await withUser(userId, async (db) => {
+    const { fusion, reemplazados } = await withUser(userId, async (db) => {
       /**
-       * Cambiar de repositorio conectado REEMPLAZA su diagrama, no lo apila
-       * encima del anterior (0064). Solo se borra lo que trajo una
-       * importación previa de OTRO repositorio — `imported_from` distinto al
-       * de ahora. Un nodo puesto a mano, o traído por `dibujar_arquitectura`
-       * (`imported_from` nulo), no se toca nunca por esta vía.
+       * «LEER Y DIBUJAR» REEMPLAZA EL LIENZO ENTERO, y no es un descuido: se
+       * pidió así explícitamente, tres veces, después de que la versión
+       * anterior —que solo tocaba lo que una importación previa había traído
+       * de un repositorio— dejara intacto un diagrama dibujado a mano o por
+       * un agente (`imported_from` nulo) y se limitara a apilar las cajas del
+       * repositorio encima. Esta acción es un botón que alguien pulsa a
+       * propósito («Leer y dibujar»), con su propia confirmación en la
+       * pantalla — no un barrido silencioso de fondo.
        */
-      const { rows: previos } = await db.query<{ importedFrom: string }>(
-        `select distinct imported_from as "importedFrom" from architecture_nodes
-          where workspace_id = $1 and imported_from is not null and imported_from <> $2`,
-        [workspaceId, fullName],
-      );
-      let reemplazados = 0;
-      if (previos.length > 0) {
-        const { rowCount } = await db.query(
-          `delete from architecture_nodes
-            where workspace_id = $1 and imported_from = any($2::text[])`,
-          [workspaceId, previos.map((p) => p.importedFrom)],
-        );
-        reemplazados = rowCount ?? 0;
-      }
-
-      /**
-       * Y VOLVER A LEER EL MISMO REPOSITORIO TAMBIÉN SINCRONIZA, no solo
-       * apila. Lo que ya no está en el repo —un servicio que se quitó del
-       * `docker-compose`, un recurso borrado del Terraform— se quita también
-       * del diagrama, en vez de dejar una caja fantasma que nadie pidió que
-       * se quedara. Lo que SÍ sigue en el repo conserva su nodo tal cual
-       * —`fusionarArquitectura` lo empareja por nombre y no lo recoloca—, y
-       * un nodo puesto a mano (`imported_from` nulo) no entra en esta cuenta
-       * bajo ningún concepto.
-       */
-      const nombresDeAhora = new Set(
-        componentes.map((c) => c.nombre.slice(0, 60).trim().toLowerCase()),
-      );
-      const { rows: delMismoRepo } = await db.query<{ id: string; name: string }>(
-        `select id, name from architecture_nodes
-          where workspace_id = $1 and imported_from = $2`,
-        [workspaceId, fullName],
-      );
-      const idsDesactualizados = delMismoRepo
-        .filter((n) => !nombresDeAhora.has(n.name.trim().toLowerCase()))
-        .map((n) => n.id);
-      let actualizados = 0;
-      if (idsDesactualizados.length > 0) {
-        const { rowCount } = await db.query(`delete from architecture_nodes where id = any($1::uuid[])`, [
-          idsDesactualizados,
-        ]);
-        actualizados = rowCount ?? 0;
-      }
+      const { rowCount } = await db.query(`delete from architecture_nodes where workspace_id = $1`, [
+        workspaceId,
+      ]);
+      const reemplazados = rowCount ?? 0;
 
       const fusion = await fusionarArquitectura(
         db,
@@ -568,7 +540,7 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
         },
         fullName,
       );
-      return { fusion, reemplazados, actualizados };
+      return { fusion, reemplazados };
     });
 
     return {
@@ -579,7 +551,6 @@ export async function arquitecturaRoutes(app: FastifyInstance): Promise<void> {
       ilegibles,
       recortados,
       reemplazados,
-      actualizados,
       ...fusion,
     };
   });
