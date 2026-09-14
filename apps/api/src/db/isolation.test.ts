@@ -3041,6 +3041,110 @@ async function main(): Promise<void> {
       ).rowCount === 1,
     );
 
+    console.log("\nAlojar una base de datos pide mando, no solo pertenecer");
+
+    // POR QUE ESTA TABLA NO SE PRUEBA COMO LAS DEMAS. Casi todo lo que cuelga
+    // de un espacio lo puede crear cualquiera que llegue a el: una tarea, una
+    // reunion, un canal. Alojar una base NO: consume disco del servidor de
+    // todos, y desalojarla borra datos que no vuelven. Por eso sus politicas
+    // piden `can_manage_workspace` —creador del espacio o administrador de la
+    // organizacion— en vez del `can_access_workspace` habitual, y por eso lo
+    // que hay que comprobar aqui es justo la diferencia entre las dos.
+    const alojadaDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into hosted_databases
+           (workspace_id, organization_id, db_name, role_name, created_by)
+         values ($1,(select organization_id from workspaces where id = $1),$2,$3,$4)
+         returning id`,
+        [acme.ws, "ws_0000000000a1", "ws_0000000000a1", ana],
+      );
+      return rows[0]!.id;
+    });
+    check("Ana, que manda en el espacio, puede alojar", typeof alojadaDeAcme === "string");
+
+    check(
+      "Carla, del mismo espacio, ve que hay una base alojada",
+      (
+        await withUser(carla, (db) =>
+          db.query("select id from hosted_databases where id = $1", [alojadaDeAcme]),
+        )
+      ).rowCount === 1,
+    );
+
+    check(
+      "Bruno, de otra organizacion, no la ve",
+      (
+        await withUser(bruno, (db) =>
+          db.query("select id from hosted_databases where id = $1", [alojadaDeAcme]),
+        )
+      ).rowCount === 0,
+    );
+
+    // LA COMPROBACION QUE DE VERDAD IMPORTA. Carla pertenece a Acme y ve el
+    // espacio entero, pero no manda en el: sin esto, cualquier miembro podria
+    // llenar el disco del servidor alojando bases.
+    const carlaAloja = await withUser(carla, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          `insert into hosted_databases
+             (workspace_id, organization_id, db_name, role_name, created_by)
+           values ($1,(select organization_id from workspaces where id = $1),$2,$3,$4)`,
+          [acme.ws, "ws_0000000000a2", "ws_0000000000a2", carla],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("Carla, que no manda, no puede alojar", carlaAloja !== 1);
+
+    // Y la otra mitad: desalojar borra datos que no se recuperan.
+    const carlaDesaloja = await withUser(carla, (db) =>
+      db.query("delete from hosted_databases where id = $1", [alojadaDeAcme]),
+    );
+    check("ni desalojar (0 filas, no error)", carlaDesaloja.rowCount === 0);
+    check(
+      "la base alojada sigue ahi",
+      (
+        await withUser(ana, (db) =>
+          db.query("select 1 from hosted_databases where id = $1", [alojadaDeAcme]),
+        )
+      ).rowCount === 1,
+    );
+
+    const brunoAloja = await withUser(bruno, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          `insert into hosted_databases
+             (workspace_id, organization_id, db_name, role_name, created_by)
+           values ($1,$2,$3,$4,$5)`,
+          [acme.ws, acme.org, "ws_0000000000a3", "ws_0000000000a3", bruno],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("Bruno, de fuera, tampoco aloja en el espacio de Acme", brunoAloja !== 1);
+
+    // UNA POR ESPACIO, y esto lo sostiene la base y no el codigo de la ruta:
+    // dos filas para el mismo espacio dejarian una conexion que la pantalla no
+    // sabe cual es.
+    const dosVeces = await withUser(ana, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          `insert into hosted_databases
+             (workspace_id, organization_id, db_name, role_name, created_by)
+           values ($1,(select organization_id from workspaces where id = $1),$2,$3,$4)`,
+          [acme.ws, "ws_0000000000a4", "ws_0000000000a4", ana],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("y no se puede alojar dos veces en el mismo espacio", dosVeces === "rechazado");
+
     console.log("\nNadie se invita solo a una organizacion ajena");
 
     // ESTO ES UNA REGRESION, NO UNA COMPROBACION DE RUTINA. Hasta la 0041,
