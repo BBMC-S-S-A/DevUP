@@ -90,3 +90,55 @@ end $$;
 -- quien pregunte. Sin política = deniega a todo el mundo, que es lo correcto:
 -- solo la toca el runner, y ese entra como propietario.
 alter table if exists public.schema_migrations enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Alojar bases de datos de verdad (0066)
+--
+-- POR QUÉ EL ROL DE LA APLICACIÓN NECESITA ESTO. Alojar una base es crearla:
+-- `create database` y `create role`. Ninguna de las dos se puede meter en una
+-- función `security definer` —no corren dentro de una transacción, y el cuerpo
+-- de una función siempre lo está—, así que no hay forma de prestarle el
+-- privilegio al rol de la aplicación solo durante esa llamada. O lo tiene, o
+-- la función no existe.
+--
+-- POR QUÉ SE ACEPTA EN POSTGRES 16 EN ADELANTE Y NO ANTES. `createrole` era un
+-- privilegio casi total: quien lo tenía podía tocar CUALQUIER rol, incluido
+-- uno con más permisos que él. Desde la 16 solo puede administrar los roles
+-- que él mismo creó, y no puede conceder superusuario por ninguna vía. Eso
+-- convierte el peor caso —una inyección en la API— en «puede crear bases y
+-- roles limitados», que es molesto y acotado, en vez de «se lleva el clúster».
+--
+-- LO QUE NO SE HACE, Y ES A PROPÓSITO: darle a la API una URL de
+-- superusuario. Sería más cómodo y estrictamente peor — un escape de esa
+-- credencial entrega el servidor entero, no un rincón.
+--
+-- PENDIENTE DE ENDURECER: un rol aparte solo para provisionar, con su propia
+-- URL, para que el rol del día a día siga sin poder crear nada. Cuesta una
+-- variable de entorno más y no se ha hecho todavía.
+alter role devup_app createdb createrole;
+
+-- Y AHORA LA MITAD QUE DE VERDAD PROTEGE. Cada base alojada trae su propio rol
+-- con contraseña, y esa contraseña se la queda quien la pidió: puede abrir
+-- `psql` contra el servidor. Por defecto Postgres deja que CUALQUIER rol se
+-- conecte a CUALQUIER base del clúster —`connect` viene concedido a `public`—,
+-- así que sin esto el rol de un inquilino podría abrir una conexión contra la
+-- base de DevUP, donde están los datos de todos los demás.
+--
+-- No podría leer nada: los `grant` de arriba son solo para `devup_app` y las
+-- políticas RLS niegan por defecto. Pero podría leer el catálogo —qué tablas
+-- hay, qué columnas, qué roles existen— y eso ya es un plano del sistema que
+-- no tiene por qué tener. Se cierra la puerta en vez de confiar en que dentro
+-- no haya nada que coger.
+--
+-- EL ORDEN IMPORTA Y NO ES ESTÉTICO: primero conceder, después revocar. Si el
+-- script se cortara justo en medio, lo peor que queda es un permiso de más. Al
+-- revés quedaría la aplicación sin poder conectarse a su propia base, que es
+-- una caída total del producto.
+--
+-- `current_database()` y no el nombre escrito: en desarrollo la base se llama
+-- `devup` y en Railway `railway`.
+do $$
+begin
+  execute format('grant connect on database %I to devup_app', current_database());
+  execute format('revoke connect on database %I from public', current_database());
+end $$;

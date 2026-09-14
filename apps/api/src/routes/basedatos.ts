@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
+import { alojarBase, desalojarBase } from "../connectors/alojar.js";
 import { ejecutarSQL, listarTablas } from "../connectors/basedatos.js";
 import { esConfigRailway, variablesDeRailway } from "../connectors/proveedores.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, badRequest, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { encryptSecret } from "../security/vault.js";
 import { getDecryptedSecret } from "./connections.js";
 
 const uuid = z.string().uuid();
@@ -128,5 +130,118 @@ export async function basedatosRoutes(app: FastifyInstance): Promise<void> {
         throw badGateway(error instanceof Error ? error.message : "la consulta falló");
       }
     });
+  });
+
+  /** Si este espacio tiene una base alojada por DevUP, y cuál. */
+  app.get("/workspaces/:workspaceId/database/alojada", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ dbName: string; creadaEn: string }>(
+        `select db_name as "dbName", created_at as "creadaEn"
+           from hosted_databases where workspace_id = $1`,
+        [workspaceId],
+      );
+      return { alojada: rows[0] ?? null };
+    });
+  });
+
+  /**
+   * Alojar una base de datos de verdad para este espacio (0066).
+   *
+   * EL ORDEN ES A PROPÓSITO: primero se crea en Postgres y después se anota.
+   * Al revés —anotar y luego crear— dejaría una fila diciendo que existe una
+   * base que no existe, y la pantalla mandaría a la gente a una conexión
+   * muerta. Así el peor caso es el contrario: una base creada y sin anotar,
+   * que se arregla sola porque `alojarBase` reutiliza lo que ya está y vuelve
+   * a dar una contraseña que funciona.
+   *
+   * QUIÉN PUEDE es cosa de la política de `hosted_databases`, que pide mando
+   * sobre el espacio: el `insert` de abajo falla solo si no lo tiene. No se
+   * comprueba aquí además, porque dos comprobaciones del mismo permiso en dos
+   * sitios distintos acaban discrepando.
+   */
+  app.post("/workspaces/:workspaceId/database/alojar", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    const yaHay = await withUser(userId, async (db) => {
+      const { rows } = await db.query("select 1 from hosted_databases where workspace_id = $1", [
+        workspaceId,
+      ]);
+      return rows.length > 0;
+    });
+    if (yaHay) throw badRequest("este espacio ya tiene una base alojada");
+
+    let alojamiento;
+    try {
+      alojamiento = await alojarBase(workspaceId);
+    } catch (error) {
+      throw badGateway(
+        error instanceof Error ? `no se pudo alojar: ${error.message}` : "no se pudo alojar",
+      );
+    }
+
+    return withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into connections (provider, workspace_id, display_name, created_by)
+         values ('postgres', $1, 'Base alojada en DevUP', $2) returning id`,
+        [workspaceId, userId],
+      );
+      const connectionId = rows[0]!.id;
+      await db.query(
+        "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
+        [connectionId, encryptSecret(alojamiento.connectionString)],
+      );
+      await db.query(
+        `insert into hosted_databases
+           (workspace_id, organization_id, db_name, role_name, connection_id, created_by)
+         values ($1,(select organization_id from workspaces where id = $1),$2,$3,$4,$5)`,
+        [workspaceId, alojamiento.dbName, alojamiento.roleName, connectionId, userId],
+      );
+      // La cadena se devuelve UNA vez, al crearla, y no se vuelve a servir
+      // nunca: a partir de aquí vive cifrada en la bóveda como cualquier otra
+      // credencial, y ninguna ruta la devuelve.
+      return { dbName: alojamiento.dbName, connectionString: alojamiento.connectionString };
+    });
+  });
+
+  /**
+   * Desalojar: borra la base y su rol, de verdad y sin vuelta atrás.
+   *
+   * SE BORRA LA FILA PRIMERO, DENTRO DE LA TRANSACCIÓN, y solo si esa parte
+   * sale bien se tira la base. Así quien no tiene mando sobre el espacio choca
+   * con la política de RLS ANTES de que nada se haya destruido — la política
+   * es la única autorización, y tiene que correr antes del destrozo, no
+   * después.
+   */
+  app.delete("/workspaces/:workspaceId/database/alojada", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    const borrada = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ connectionId: string | null }>(
+        `delete from hosted_databases where workspace_id = $1
+          returning connection_id as "connectionId"`,
+        [workspaceId],
+      );
+      const fila = rows[0];
+      if (!fila) return false;
+      if (fila.connectionId) {
+        await db.query("delete from connections where id = $1", [fila.connectionId]);
+      }
+      return true;
+    });
+
+    if (!borrada) throw badRequest("este espacio no tiene ninguna base alojada");
+
+    try {
+      await desalojarBase(workspaceId);
+    } catch (error) {
+      throw badGateway(
+        error instanceof Error ? `no se pudo desalojar: ${error.message}` : "no se pudo desalojar",
+      );
+    }
+    return { desalojada: true };
   });
 }

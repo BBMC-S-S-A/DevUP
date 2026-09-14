@@ -235,8 +235,9 @@ function Administrador({ workspaceId }: { workspaceId: string }) {
         <EstadoVacio
           icono={<Database size={20} />}
           titulo="Este workspace no tiene ninguna base de datos conectada"
-          pista="Si el workspace ya despliega en Railway, configúralo en un entorno de Infraestructura y esta pantalla encuentra sola su Postgres. Si no, pega aquí la cadena de conexión de la vuestra."
+          pista="Puedes alojar una aquí mismo y DevUP te la crea de verdad, con su cadena de conexión. O conectar una que ya tengas: si el workspace despliega en Railway, configúralo en un entorno de Infraestructura y esta pantalla la encuentra sola."
         />
+        <AlojarBaseDeDatos workspaceId={workspaceId} />
         <ConectarBaseDeDatos conexionesClave={conexionesClave} workspaceId={workspaceId} />
       </div>
     );
@@ -246,6 +247,64 @@ function Administrador({ workspaceId }: { workspaceId: string }) {
     <div className="space-y-5">
       <Tablas workspaceId={workspaceId} />
       <ConsolaSQL workspaceId={workspaceId} />
+    </div>
+  );
+}
+
+/**
+ * Alojar una base aquí mismo (0066).
+ *
+ * LA CADENA SE ENSEÑA UNA VEZ Y NO VUELVE. El servidor la devuelve al crearla
+ * y a partir de ahí vive cifrada en la bóveda; ninguna ruta la sirve otra vez.
+ * Por eso se queda en pantalla hasta que la persona la cierra, en vez de
+ * desaparecer sola con un aviso flotante que se pierde en tres segundos.
+ */
+function AlojarBaseDeDatos({ workspaceId }: { workspaceId: string }) {
+  const [cadena, setCadena] = useState<string | null>(null);
+
+  const alojar = useMutacion(
+    () =>
+      api.post<{ dbName: string; connectionString: string }>(
+        `/workspaces/${workspaceId}/database/alojar`,
+      ),
+    {
+      invalida: [`/workspaces/${workspaceId}/database`],
+      fallo: "No se pudo alojar la base.",
+      alTerminar: (r) => setCadena(r.connectionString),
+    },
+  );
+
+  if (cadena) {
+    return (
+      <div className="mx-auto max-w-lg space-y-2 rounded-xl border border-accent/30 bg-accent-soft/30 p-3">
+        <Rotulo className="block">Tu base está lista</Rotulo>
+        <p className="text-[11px] leading-relaxed text-muted">
+          Guarda esta cadena ahora: es la única vez que se enseña. A partir de aquí queda cifrada
+          en la bóveda, y DevUP la usa sin volver a mostrarla.
+        </p>
+        <code className="block overflow-x-auto rounded-lg border border-line bg-canvas/60 p-2 font-mono text-[11px] text-ink">
+          {cadena}
+        </code>
+        <div className="flex justify-end">
+          <Boton type="button" tamano="sm" variante="secundario" onClick={() => setCadena(null)}>
+            Ya la guardé
+          </Boton>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex max-w-lg justify-center">
+      <Boton
+        type="button"
+        variante="primario"
+        icono={<Database size={14} />}
+        cargando={alojar.enviando}
+        onClick={() => void alojar.ejecutar()}
+      >
+        Alojar una base aquí
+      </Boton>
     </div>
   );
 }
