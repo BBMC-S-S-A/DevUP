@@ -54,6 +54,49 @@ async function refreshSession(): Promise<boolean> {
   return refreshing;
 }
 
+/**
+ * Las únicas rutas donde un 401 NO se reintenta tras refrescar.
+ *
+ * ANTES ERA «TODO LO QUE EMPIECE POR /auth/», Y ESE ERA EL FALLO. Bajo ese
+ * prefijo conviven dos cosas distintas: las que comprueban credenciales —donde
+ * refrescar no puede ayudar, un 401 significa que la contraseña está mal— y
+ * las que YA PIDEN SESIÓN, que son peticiones normales y corrientes que da la
+ * casualidad de que cuelgan de ahí. Excluirlas todas rompía las segundas:
+ *
+ *   · `/auth/me` arranca la sesión al cargar la página. Como el token de
+ *     acceso dura quince minutos, volver a la pestaña al rato daba 401, no se
+ *     refrescaba, y `SessionProvider` concluía «sin sesión»: parecías
+ *     deslogueado teniendo un token de refresco válido de treinta días. Es el
+ *     «se deslogea solo» que se reportó, y en los registros de producción se ve
+ *     como `GET /auth/me -> 401` sin ningún `/auth/refresh` detrás.
+ *   · `/auth/ws-ticket` es el billete del WebSocket. Al caducar, reconectar
+ *     fallaba para siempre y los avisos en vivo se paraban sin decir nada.
+ *   · `/auth/sessions` y `/auth/agent-connections` enseñaban un error en vez
+ *     de la lista.
+ *
+ * `/auth/refresh` es el único que de verdad no puede reintentarse: sería
+ * llamarse a sí mismo.
+ */
+const SIN_REINTENTO = [
+  "/auth/refresh",
+  "/auth/login",
+  "/auth/register",
+  "/auth/logout",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/verify-email",
+  "/auth/signup-policy",
+];
+
+/**
+ * Se compara contra la ruta SIN parámetros: `/auth/me?x=1` es `/auth/me`. Y con
+ * igualdad, no con prefijo, que es lo que se acaba de arreglar.
+ */
+export function sinReintento(path: string): boolean {
+  const limpia = path.split(/[?#]/)[0] ?? path;
+  return SIN_REINTENTO.includes(limpia);
+}
+
 type Options = Omit<RequestInit, "body"> & { body?: unknown };
 
 async function request<T>(path: string, options: Options = {}, retry = true): Promise<T> {
@@ -80,7 +123,7 @@ async function request<T>(path: string, options: Options = {}, retry = true): Pr
         : {}),
   });
 
-  if (response.status === 401 && retry && !path.startsWith("/auth/")) {
+  if (response.status === 401 && retry && !sinReintento(path)) {
     if (await refreshSession()) return request<T>(path, options, false);
   }
 
