@@ -7,7 +7,7 @@ import { esConfigRailway, variablesDeRailway } from "../connectors/proveedores.j
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, badRequest, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { encryptSecret } from "../security/vault.js";
-import { getDecryptedSecret } from "./connections.js";
+import { conexionVigente, getDecryptedSecret } from "./connections.js";
 
 const uuid = z.string().uuid();
 
@@ -34,13 +34,10 @@ async function conexionDeBase(
   db: Db,
   workspaceId: string,
 ): Promise<{ connectionString: string }> {
-  const { rows } = await db.query<{ id: string }>(
-    `select id from connections
-      where workspace_id = $1 and provider = 'postgres'
-      order by created_at limit 1`,
-    [workspaceId],
-  );
-  const connectionId = rows[0]?.id;
+  // La VIGENTE, no la primera que hubo: si a alguien le rotan la contraseña de
+  // su Postgres y la vuelve a pegar, tiene que valer la nueva. Ver
+  // `conexionVigente`, que es donde está contado el fallo que esto arregla.
+  const connectionId = await conexionVigente(db, workspaceId, "postgres");
   if (connectionId) {
     return { connectionString: await getDecryptedSecret(db, connectionId) };
   }

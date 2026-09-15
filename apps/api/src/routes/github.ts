@@ -17,7 +17,7 @@ import {
 import { ARCHIVOS_DE_INTERES, diagnosticar } from "../connectors/integraciones.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, badRequest, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
-import { getDecryptedSecret } from "./connections.js";
+import { conexionVigente, getDecryptedSecret } from "./connections.js";
 
 const uuid = z.string().uuid();
 
@@ -134,13 +134,7 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
 
     const { token, yaConectados } = await withUser(userId, async (db) => {
-      const { rows: conexiones } = await db.query<{ id: string }>(
-        `select id from connections
-          where workspace_id = $1 and provider = 'github'
-          order by created_at limit 1`,
-        [workspaceId],
-      );
-      const connectionId = conexiones[0]?.id;
+      const connectionId = await conexionVigente(db, workspaceId, "github");
       if (!connectionId) return { token: null, yaConectados: new Set<string>() };
 
       const { rows } = await db.query<{ full_name: string }>(
@@ -192,13 +186,7 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { repoId, token } = await withUser(userId, async (db) => {
-      const { rows: conexiones } = await db.query<{ id: string }>(
-        `select id from connections
-          where workspace_id = $1 and provider = 'github'
-          order by created_at limit 1`,
-        [workspaceId],
-      );
-      const connectionId = conexiones[0]?.id ?? null;
+      const connectionId = await conexionVigente(db, workspaceId, "github");
 
       // `organization_id` se sigue rellenando aunque ya no mande: la columna
       // no se puede borrar (una migración solo añade) y dejarla a null haría

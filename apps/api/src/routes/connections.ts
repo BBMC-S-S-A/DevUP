@@ -111,14 +111,10 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         [id, encryptSecret(body.secret)],
       );
 
-      // Un token de GitHub adopta los repositorios que ya estaban sin él. Ver
-      // el porqué en la ruta equivalente de organización, más abajo.
+      // Un token de GitHub adopta los repositorios del espacio y jubila a la
+      // credencial anterior. Ver `reemplazarConexionGithub`.
       if (body.provider === "github") {
-        await db.query(
-          `update github_repos set connection_id = $1
-            where workspace_id = $2 and connection_id is null`,
-          [id, workspaceId],
-        );
+        await reemplazarConexionGithub(db, workspaceId, id);
       }
 
       const { rows: full } = await db.query(
@@ -207,13 +203,11 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
             "insert into connection_secrets (connection_id, encrypted_secret) values ($1,$2)",
             [id, encryptSecret(identidad.token)],
           );
-          // Mismo motivo que en el alta manual de más arriba: adoptar los
-          // repositorios públicos que ya estaban sin token en este workspace.
-          await db.query(
-            `update github_repos set connection_id = $1
-              where workspace_id = $2 and connection_id is null`,
-            [id, transito!.workspaceId],
-          );
+          // Mismo motivo que en el alta manual de más arriba, y el que hace
+          // que este botón sirva de algo cuando el token anterior ya no vale:
+          // los repositorios pasan a leerse con esta credencial y la vieja se
+          // va. Ver `reemplazarConexionGithub`.
+          await reemplazarConexionGithub(db, transito!.workspaceId, id);
         });
 
         return volver(reply, transito.workspaceId);
@@ -348,6 +342,76 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
     if (!rowCount) throw notFound("conexión no encontrada");
     return reply.status(204).send();
   });
+}
+
+/**
+ * La conexión VIGENTE de un proveedor en un espacio: la ÚLTIMA, no la primera.
+ *
+ * ESTE ORDEN ES EL ARREGLO DE UN FALLO REAL, no una preferencia. Tres consultas
+ * copiadas por el repositorio pedían `order by created_at limit 1` —la más
+ * VIEJA—, y como conectar inserta una fila nueva en vez de sustituir la que
+ * había, el resultado era que la primera credencial que un espacio tuvo en su
+ * vida se quedaba elegida para siempre. Cuando esa caducaba (un token de
+ * alcance fino de GitHub caduca a los 30 días por defecto) la integración se
+ * rompía, y volver a pulsar «Conectar» no arreglaba nada: creaba una fila más
+ * nueva que el código no iba a mirar jamás. En los registros de producción se
+ * ve como «el token no vale: caducado, revocado o mal pegado» repetido.
+ *
+ * Con la última gana, un despliegue basta para que quien ya reconectó alguna
+ * vez vuelva a funcionar sin tocar nada.
+ */
+export async function conexionVigente(
+  db: Db,
+  workspaceId: string,
+  provider: (typeof PROVIDERS)[number],
+): Promise<string | null> {
+  const { rows } = await db.query<{ id: string }>(
+    `select id from connections
+      where workspace_id = $1 and provider = $2
+      order by created_at desc, id desc
+      limit 1`,
+    [workspaceId, provider],
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Conectar GitHub REEMPLAZA la credencial del espacio, no la acumula.
+ *
+ * POR QUÉ BORRAR Y NO SOLO AÑADIR. El producto ya da por hecho que un espacio
+ * tiene un GitHub: hay UN botón de «Conectar» y la lista de repositorios
+ * disponibles se pide a UNA credencial. Lo que no hacía el modelo de datos era
+ * sostener ese supuesto, así que cada reconexión dejaba otra fila muerta con
+ * su secreto cifrado dentro, y el aviso de salud de Integraciones señalando
+ * una conexión que ya nadie quería.
+ *
+ * LOS REPOSITORIOS SE REAPUNTAN ANTES DE BORRAR, y ese orden es todo. La clave
+ * ajena de `github_repos` es `on delete set null` (0034), así que borrar la
+ * conexión vieja sin reapuntar convertiría cada repositorio privado en uno
+ * «público sin token»: dejarían de leerse con un 404 que no explica nada. Por
+ * eso primero apuntan a la nueva y después desaparece la vieja.
+ *
+ * LO QUE ESTO CUESTA. Un espacio que tuviera a propósito dos cuentas de GitHub
+ * distintas —una por repositorio— se queda con la última. Es un caso que la
+ * pantalla no ofrece ni sabe enseñar, y a cambio se arregla el que sí pasa:
+ * que reconectar no sirviera de nada.
+ */
+export async function reemplazarConexionGithub(
+  db: Db,
+  workspaceId: string,
+  nuevaId: string,
+): Promise<void> {
+  await db.query(
+    `update github_repos set connection_id = $1
+      where workspace_id = $2
+        and (connection_id is null or connection_id <> $1)`,
+    [nuevaId, workspaceId],
+  );
+  await db.query(
+    `delete from connections
+      where workspace_id = $1 and provider = 'github' and id <> $2`,
+    [workspaceId, nuevaId],
+  );
 }
 
 /**
