@@ -2428,6 +2428,89 @@ async function main(): Promise<void> {
     );
 
     // ---------------------------------------------------------------------
+    // Refrescar desde dos pestañas a la vez (0067)
+    //
+    // El token de refresco es de un solo uso. Con dos pestañas abiertas y el
+    // token de acceso caducado, las dos refrescan con la MISMA cookie: una
+    // gana y la otra, al no encontrar nada que canjear, hacia que la ruta
+    // BORRARA las cookies — las mismas del navegador, las que la ganadora
+    // acababa de dejar. Las dos pestañas fuera, con un token de refresco de
+    // treinta dias vivo. Eso es el «se deslogea solo» que se reporto.
+    //
+    // La ventana de gracia lo arregla; lo que NO puede hacer es resucitar una
+    // sesion cerrada a mano, y esa es la comprobacion que de verdad importa.
+    // ---------------------------------------------------------------------
+    console.log("\nRefrescar desde dos pestanas no echa de ninguna");
+
+    const abrirSesion = (quien: string, hash: string) =>
+      withUser(null, (db) =>
+        db.query("select public.session_open($1,$2,$3,$4)", [
+          quien,
+          hash,
+          new Date(Date.now() + 86_400_000).toISOString(),
+          "prueba",
+        ]),
+      );
+
+    const canjear = (hash: string) =>
+      withUser(null, async (db) => {
+        const { rows } = await db.query("select user_id from public.session_consume($1)", [hash]);
+        return rows.length;
+      });
+
+    const hashCarrera = `hash-carrera-${suffix}`;
+    await abrirSesion(ana, hashCarrera);
+    check("el canje normal devuelve la sesion", (await canjear(hashCarrera)) === 1);
+    check(
+      "y el mismo token, otra vez y enseguida, no deja a nadie fuera",
+      (await canjear(hashCarrera)) === 1,
+    );
+
+    // LA DE VERDAD: las dos a la vez, sin que ninguna haya terminado cuando
+    // empieza la otra. La primera version de 0067 metia las dos ramas en un
+    // solo `select` con CTEs y esta fallaba — la rama de gracia leia la
+    // instantanea de antes del commit de la otra y no veia la marca.
+    const hashSimultaneo = `hash-simultaneo-${suffix}`;
+    await abrirSesion(ana, hashSimultaneo);
+    const [unaA, unaB] = await Promise.all([canjear(hashSimultaneo), canjear(hashSimultaneo)]);
+    check("dos canjes simultaneos: las dos pestanas siguen dentro", unaA === 1 && unaB === 1);
+
+    // Y cerrar sesion sigue cerrando: `session_revoke` no marca `rotated_at`,
+    // asi que la gracia no la alcanza. Sin esta separacion, cerrar sesion en
+    // un ordenador prestado y dar «atras» dentro de diez segundos volveria a
+    // entrar.
+    const hashCerrada = `hash-cerrada-${suffix}`;
+    await abrirSesion(ana, hashCerrada);
+    await withUser(null, (db) =>
+      db.query("select public.session_revoke($1)", [hashCerrada]),
+    );
+    check("cerrar sesion no se resucita por la ventana de gracia", (await canjear(hashCerrada)) === 0);
+
+    const hashCaducado = `hash-caducado-${suffix}`;
+    await abrirSesion(ana, hashCaducado);
+    await canjear(hashCaducado);
+    // Con el cliente admin, no con `withUser(null)`: las politicas de RLS de
+    // `sessions` no dejan pasar ese update, asi que no tocaria nada y la
+    // comprobacion de abajo pasaria sin comprobar lo que dice. Se descubrio
+    // porque fallo — la sesion seguia sin caducar.
+    await admin.query(
+      "update public.sessions set expires_at = now() - interval '1 minute' where refresh_token_hash = $1",
+      [hashCaducado],
+    );
+    check("una sesion caducada tampoco entra por la gracia", (await canjear(hashCaducado)) === 0);
+
+    const hashViejo = `hash-viejo-${suffix}`;
+    await abrirSesion(ana, hashViejo);
+    await canjear(hashViejo);
+    await admin.query(
+      "update public.sessions set rotated_at = now() - interval '11 seconds' where refresh_token_hash = $1",
+      [hashViejo],
+    );
+    check("pasada la ventana, el token gastado ya no vale", (await canjear(hashViejo)) === 0);
+
+    check("un token inventado no abre nada", (await canjear(`no-existe-${suffix}`)) === 0);
+
+    // ---------------------------------------------------------------------
     // OAuth remoto del MCP (0032)
     //
     // oauth_clients es de lectura abierta a proposito (catalogo publico de
