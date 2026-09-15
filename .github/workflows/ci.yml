@@ -88,6 +88,17 @@ jobs:
         # siempre parece verdad.
         run: npm run test:actividad --workspace apps/api
 
+      - name: La credencial vigente de un espacio
+        # Que gane la ÚLTIMA conexión y no la primera, y que reconectar
+        # reemplace en vez de apilar. Esto se rompió en producción sin fallar
+        # nada: la integración de GitHub dejaba de leer los repositorios
+        # privados y volver a pulsar «Conectar» no arreglaba nada, porque
+        # insertaba una fila más nueva que el código no miraba. Lo delicado es
+        # el orden del reemplazo —la clave ajena es `on delete set null`, así
+        # que retirar la vieja antes de reapuntar dejaría cada repositorio
+        # privado sin token, en la lista y sin leerse.
+        run: npm run test:conexiones
+
       - name: El código corto de invitación
         # Dos mitades: que normalizar perdone lo que se teclea al dictado
         # (minúsculas, guiones, la O por el cero) sin volver iguales dos
