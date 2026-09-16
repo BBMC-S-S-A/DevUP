@@ -3228,6 +3228,185 @@ async function main(): Promise<void> {
     });
     check("y no se puede alojar dos veces en el mismo espacio", dosVeces === "rechazado");
 
+    // ---------------------------------------------------------------------
+    // Repositorios alojados (0068)
+    //
+    // Mismo reparto que las bases alojadas, y por lo mismo: un repositorio
+    // ocupa disco del servidor de todos y borrarlo se lleva el historial
+    // entero. Ver el espejo de esto en el codigo: `routes/git.ts` NO comprueba
+    // la pertenencia por su cuenta, se pone la identidad de quien trae la
+    // contraseña y deja que contesten estas politicas. O sea que lo que se
+    // prueba aqui es, literalmente, quien puede clonar y empujar.
+    // ---------------------------------------------------------------------
+    console.log("\nLos repositorios alojados: ver pide pertenecer, crear pide mandar");
+
+    const repoDeAcme = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into hosted_repos (workspace_id, organization_id, slug, created_by)
+         values ($1,(select organization_id from workspaces where id = $1),$2,$3)
+         returning id`,
+        [acme.ws, "el-producto", ana],
+      );
+      return rows[0]!.id;
+    });
+    check("Ana, que manda en el espacio, crea el repositorio", typeof repoDeAcme === "string");
+
+    check(
+      "Carla, del mismo espacio, lo ve — o sea que puede clonarlo",
+      (
+        await withUser(carla, (db) =>
+          db.query("select id from hosted_repos where id = $1", [repoDeAcme]),
+        )
+      ).rowCount === 1,
+    );
+
+    // LA QUE MAS IMPORTA. Si esto fallara, la contraseña de git de alguien de
+    // otra organizacion clonaria el codigo de Acme: RLS es la unica puerta que
+    // hay en `routes/git.ts`.
+    check(
+      "Bruno, de otra organizacion, NO lo ve — no puede clonarlo",
+      (
+        await withUser(bruno, (db) =>
+          db.query("select id from hosted_repos where id = $1", [repoDeAcme]),
+        )
+      ).rowCount === 0,
+    );
+
+    const carlaCrea = await withUser(carla, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          `insert into hosted_repos (workspace_id, organization_id, slug, created_by)
+           values ($1,(select organization_id from workspaces where id = $1),$2,$3)`,
+          [acme.ws, "el-de-carla", carla],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("Carla, que no manda, no crea repositorios", carlaCrea !== 1);
+
+    const carlaBorra = await withUser(carla, (db) =>
+      db.query("delete from hosted_repos where id = $1", [repoDeAcme]),
+    );
+    check("ni los borra (0 filas, no error)", carlaBorra.rowCount === 0);
+
+    // PERO SI PUEDE EMPUJAR, y esa es la diferencia deliberada: al recibir un
+    // push el servidor anota el tamaño y la fecha, asi que la politica de
+    // `update` pide pertenecer y no mandar. Si pidiera mandar, empujar solo
+    // funcionaria para el dueño del espacio.
+    const carlaEmpuja = await withUser(carla, (db) =>
+      db.query("update hosted_repos set size_bytes = 1234, pushed_at = now() where id = $1", [
+        repoDeAcme,
+      ]),
+    );
+    check("pero si puede empujar: anotar el push le sale", carlaEmpuja.rowCount === 1);
+
+    const brunoEmpuja = await withUser(bruno, (db) =>
+      db.query("update hosted_repos set size_bytes = 9999 where id = $1", [repoDeAcme]),
+    );
+    check("Bruno no empuja al repositorio de Acme", brunoEmpuja.rowCount === 0);
+
+    const mismoNombre = await withUser(ana, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          `insert into hosted_repos (workspace_id, organization_id, slug, created_by)
+           values ($1,(select organization_id from workspaces where id = $1),$2,$3)`,
+          [acme.ws, "el-producto", ana],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("y no hay dos repositorios con el mismo nombre en un espacio", mismoNombre === "rechazado");
+
+    // El `check` del nombre, en la BASE y no solo en el codigo: si alguna vez
+    // se inserta una fila por otro camino, el nombre sigue sin poder ser una
+    // travesia de directorios. Ver la cabecera de `git/almacen.ts`.
+    const nombreMalo = await withUser(ana, async (db) => {
+      try {
+        await db.query(
+          `insert into hosted_repos (workspace_id, organization_id, slug, created_by)
+           values ($1,(select organization_id from workspaces where id = $1),$2,$3)`,
+          [acme.ws, "../../etc", ana],
+        );
+        return "aceptado";
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("la base rechaza un nombre que sea una travesia de directorios", nombreMalo === "rechazado");
+
+    console.log("\nLas contraseñas de git son de cada quien");
+
+    const tokenDeAna = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "insert into git_tokens (user_id, name, token_hash) values ($1,$2,$3) returning id",
+        [ana, "portatil", `hash-git-ana-${suffix}`],
+      );
+      return rows[0]!.id;
+    });
+    check("Ana crea la suya", typeof tokenDeAna === "string");
+
+    check(
+      "Carla, de la MISMA organizacion, no la ve",
+      (await withUser(carla, (db) => db.query("select id from git_tokens where id = $1", [tokenDeAna])))
+        .rowCount === 0,
+    );
+
+    const carlaRevoca = await withUser(carla, (db) =>
+      db.query("update git_tokens set revoked_at = now() where id = $1", [tokenDeAna]),
+    );
+    check("ni la revoca", carlaRevoca.rowCount === 0);
+
+    const aNombreDeOtro = await withUser(carla, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          "insert into git_tokens (user_id, name, token_hash) values ($1,$2,$3)",
+          [ana, "la que yo te pongo", `hash-git-suplantado-${suffix}`],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("y nadie crea una contraseña a nombre de otra persona", aNombreDeOtro !== 1);
+
+    // `git_token_owner` corre SIN identidad —es lo primero que pasa cuando
+    // llega un `git push`— asi que salta RLS por definicion. Lo que hay que
+    // comprobar es que solo traduce, y que una contraseña revocada ya no
+    // traduce nada.
+    const dueno = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ git_token_owner: string | null }>(
+        "select public.git_token_owner($1)",
+        [`hash-git-ana-${suffix}`],
+      );
+      return rows[0]?.git_token_owner ?? null;
+    });
+    check("sin sesion, la contraseña dice de quien es", dueno === ana);
+
+    await withUser(ana, (db) =>
+      db.query("update git_tokens set revoked_at = now() where id = $1", [tokenDeAna]),
+    );
+    const duenoRevocado = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ git_token_owner: string | null }>(
+        "select public.git_token_owner($1)",
+        [`hash-git-ana-${suffix}`],
+      );
+      return rows[0]?.git_token_owner ?? null;
+    });
+    check("revocada, ya no dice nada", duenoRevocado === null);
+
+    const inventada = await withUser(null, async (db) => {
+      const { rows } = await db.query<{ git_token_owner: string | null }>(
+        "select public.git_token_owner($1)",
+        [`hash-que-nadie-tiene-${suffix}`],
+      );
+      return rows[0]?.git_token_owner ?? null;
+    });
+    check("y una inventada tampoco", inventada === null);
+
     console.log("\nNadie se invita solo a una organizacion ajena");
 
     // ESTO ES UNA REGRESION, NO UNA COMPROBACION DE RUTINA. Hasta la 0041,

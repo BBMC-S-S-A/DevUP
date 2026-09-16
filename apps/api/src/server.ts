@@ -22,6 +22,9 @@ import { puntosRoutes } from "./routes/puntos.js";
 import { grafoRoutes } from "./routes/grafo.js";
 import { auditoriaRoutes } from "./routes/auditoria.js";
 import { authRoutes } from "./routes/auth.js";
+import { prepararAlmacen } from "./git/almacen.js";
+import { gitRoutes } from "./routes/git.js";
+import { reposRoutes } from "./routes/repos.js";
 import { basedatosRoutes } from "./routes/basedatos.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { fileRoutes } from "./routes/files.js";
@@ -181,6 +184,16 @@ await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(reunionesRoutes);
 await app.register(basedatosRoutes);
+// Los repositorios alojados, solo donde se enciendan — y vienen apagados. Su
+// contenido vive en disco, así que encenderlos donde `GIT_ROOT` no sea un
+// volumen haría que cada despliegue se llevara el código de la gente sin que
+// nada lo dijera. Ver el porqué entero en `env.ts`.
+if (env.REPOS_ALOJADOS) {
+  await app.register(reposRoutes);
+  // El protocolo de git va aparte y SIN sesión: quien llama es el programa
+  // git, que solo sabe mandar usuario y contraseña por Basic. Ver routes/git.ts.
+  await app.register(gitRoutes);
+}
 await app.register(notificationRoutes);
 await app.register(oauthRoutes);
 
@@ -282,6 +295,13 @@ async function refreshGithubRepos(): Promise<void> {
 }
 
 await ensureBucket();
+
+// Que la carpeta de los repositorios exista ANTES de aceptar peticiones. Si el
+// volumen no está montado, se sabe aquí y el arranque falla — que es mucho
+// mejor que enterarse en el primer `git push` de alguien, cuando el error llega
+// disfrazado de «no existe ese repositorio».
+await prepararAlmacen();
+
 const sweeper = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
 void sweep();
 const githubSweeper = setInterval(() => void refreshGithubRepos(), GITHUB_REFRESH_INTERVAL_MS);

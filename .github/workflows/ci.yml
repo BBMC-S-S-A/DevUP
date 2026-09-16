@@ -88,6 +88,16 @@ jobs:
         # siempre parece verdad.
         run: npm run test:actividad --workspace apps/api
 
+      - name: El almacén de repositorios alojados
+        # Un nombre de repositorio acaba siendo una CARPETA en el disco del
+        # servidor. Si la validación se despista, alguien escribe fuera del
+        # almacén y nada protesta: el repositorio se crea, la pantalla lo
+        # enseña, y el fallo se descubre el día que se descubre. Por eso la
+        # mitad de esta prueba son nombres raros. Lleva también el formato
+        # pkt-line, que si se rompe hace que git diga «invalid server response»
+        # sin más pistas.
+        run: npm run test:git
+
       - name: La credencial vigente de un espacio
         # Que gane la ÚLTIMA conexión y no la primera, y que reconectar
         # reemplace en vez de apilar. Esto se rompió en producción sin fallar

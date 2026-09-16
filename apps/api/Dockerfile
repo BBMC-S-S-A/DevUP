@@ -36,6 +36,11 @@ ENV NODE_ENV=production
 # ejecución remota pasa de «acceso a la aplicación» a «acceso a la máquina».
 RUN addgroup -S devup && adduser -S devup -G devup
 
+# git de verdad, porque los repositorios alojados (0068) no son un simulacro:
+# el servidor sirve el protocolo lanzando `git upload-pack` y `git receive-pack`,
+# que son los programas que vienen con git. Sin esto, clonar contesta 500.
+RUN apk add --no-cache git
+
 COPY --from=deps  --chown=devup:devup /app/node_modules ./node_modules
 COPY --from=deps  --chown=devup:devup /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build --chown=devup:devup /app/apps/api/dist ./apps/api/dist

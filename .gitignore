@@ -60,3 +60,6 @@ tests/.auth/
 playwright-report/
 test-results/
 blob-report/
+
+# Repositorios alojados en desarrollo (0068). En produccion esto es un volumen.
+.datos/

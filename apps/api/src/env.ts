@@ -188,6 +188,36 @@ const schema = z.object({
   S3_ENDPOINT: z.string().url(),
   S3_ENDPOINT_INTERNO: z.string().url().optional(),
   S3_REGION: z.string().default("us-east-1"),
+  /**
+   * Dónde viven los repositorios alojados (0068).
+   *
+   * EN DISCO Y NO EN EL ALMACÉN DE OBJETOS, y esa fue la decisión. Un
+   * repositorio git es un sistema de archivos: `git upload-pack` abre y lee
+   * ficheros sueltos cientos de veces por clon. Ponerlo en S3 obligaría a
+   * inventar un sistema de archivos por encima, que es justo el simulacro que
+   * se quería evitar. En producción esto apunta a un volumen montado; el valor
+   * por defecto es para desarrollo, donde vale una carpeta del repositorio.
+   *
+   * Está en `.gitignore`: lo último que hace falta es que los repositorios de
+   * las pruebas acaben dentro del repositorio.
+   */
+  GIT_ROOT: z.string().min(1).default("./.datos/git"),
+
+  /**
+   * ¿Sirve esta instancia repositorios alojados? Apagado por defecto, Y ESE
+   * DEFECTO ES LO IMPORTANTE.
+   *
+   * Un repositorio git vive en disco. Si esto se enciende donde `GIT_ROOT` no
+   * apunta a un VOLUMEN —en Railway, el disco del contenedor es efímero— todo
+   * parece funcionar: se crea el repositorio, se clona, se empuja... y el
+   * siguiente despliegue se lo lleva. Nadie se entera hasta que alguien va a
+   * buscar su código y no está.
+   *
+   * Un interruptor apagado por defecto convierte ese desastre silencioso en un
+   * botón que todavía no aparece, que es la forma correcta de que falte algo.
+   * Se enciende a mano, después de montar el volumen y comprobarlo.
+   */
+  REPOS_ALOJADOS: bool("false"),
   S3_BUCKET: z.string().min(1),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),

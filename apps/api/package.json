@@ -39,7 +39,8 @@
     "test:espacios": "tsx src/routes/espacios.test.ts",
     "test:datos-visibles": "tsx src/routes/datos-visibles.test.ts",
     "test:avisos": "tsx src/routes/avisos.test.ts",
-    "test:conexiones": "tsx src/routes/conexiones.test.ts"
+    "test:conexiones": "tsx src/routes/conexiones.test.ts",
+    "test:git": "tsx src/git/almacen.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
