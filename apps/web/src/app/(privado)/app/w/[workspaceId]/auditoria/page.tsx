@@ -445,7 +445,7 @@ function ColaboradoresGitHub({ repoId }: { repoId: string }) {
     listo: boolean;
     colaboradores: Colaborador[];
     /** `calculando` = GitHub está en ello. `vacio` = no las va a dar nunca. */
-    motivo?: "calculando" | "vacio";
+    motivo?: "calculando" | "vacio" | "parcial";
   }>(`/github/repos/${repoId}/colaboradores`, { frescura: 3_600_000 });
 
   return (
@@ -499,11 +499,32 @@ function ColaboradoresGitHub({ repoId }: { repoId: string }) {
           }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(datos.datos?.colaboradores ?? []).slice(0, 8).map((c) => (
-            <TarjetaColaborador key={c.login} colaborador={c} />
-          ))}
-        </div>
+        <>
+          {/* LO QUE SE ENSEÑA Y LO QUE NO, dicho. GitHub se queda calculando las
+              líneas de este repositorio indefinidamente —medido: 202 una y otra
+              vez, también autenticado— así que esto viene de la lista llana de
+              contribuyentes, que sí contesta. Trae quién y cuántos commits; las
+              líneas no, y enseñar dos ceros sin avisar sería peor que no
+              enseñarlas. */}
+          {datos.datos?.motivo === "parcial" && (
+            <p className="mb-2 text-[11px] leading-relaxed text-faint">
+              GitHub sigue calculando las líneas de este repositorio, así que de momento van los
+              commits.{" "}
+              <button
+                type="button"
+                onClick={() => void datos.recargar()}
+                className="presionable underline underline-offset-2 hover:text-muted"
+              >
+                Volver a intentarlo
+              </button>
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(datos.datos?.colaboradores ?? []).slice(0, 8).map((c) => (
+              <TarjetaColaborador key={c.login} colaborador={c} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

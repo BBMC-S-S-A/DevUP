@@ -344,13 +344,57 @@ export type Colaborador = {
 export async function fetchContributorStats(
   token: string | null,
   fullName: string,
-): Promise<{ listo: boolean; colaboradores: Colaborador[]; motivo?: "calculando" | "vacio" }> {
+): Promise<{
+  listo: boolean;
+  colaboradores: Colaborador[];
+  motivo?: "calculando" | "vacio" | "parcial";
+}> {
   const response = await pedir(`${API}/repos/${fullName}/stats/contributors`, {
     headers: headers(token),
   });
 
-  // 202: GitHub ha empezado a calcularlo y hay que volver a preguntar.
-  if (response.status === 202) return { listo: false, colaboradores: [], motivo: "calculando" };
+  /**
+   * 202: GitHub dice que lo está calculando. Y a veces lo dice PARA SIEMPRE.
+   *
+   * MEDIDO CONTRA EL PROPIO REPOSITORIO DE DEVUP, autenticado y con tres
+   * intentos separados: 202, 202 y 202. No es un caso raro ni cosa del token
+   * —pasa igual anónimo— y con historias largas puede no terminar nunca.
+   * Mientras tanto la pantalla enseñaba «calculando» y un botón que insistía
+   * contra algo que no iba a llegar.
+   *
+   * ASÍ QUE SE PREGUNTA POR OTRO SITIO. `/contributors` —la lista llana— contesta
+   * 200 al instante y trae lo que de verdad se viene a ver: quién ha escrito el
+   * código y cuánto. Lo que no trae son las líneas añadidas y borradas, así que
+   * se devuelven en cero y se marca `parcial` para que la pantalla lo diga en
+   * vez de enseñar dos ceros como si fueran un dato.
+   */
+  if (response.status === 202) {
+    const llano = await pedir(`${API}/repos/${fullName}/contributors?per_page=20`, {
+      headers: headers(token),
+    });
+    if (!llano.ok) return { listo: false, colaboradores: [], motivo: "calculando" };
+
+    const gente = (await llano.json()) as {
+      login: string;
+      avatar_url: string;
+      contributions: number;
+    }[];
+
+    return {
+      listo: true,
+      motivo: "parcial",
+      colaboradores: gente
+        .map((c) => ({
+          login: c.login,
+          avatarUrl: c.avatar_url,
+          commits: c.contributions,
+          adiciones: 0,
+          borrados: 0,
+          ultimosCommits: [],
+        }))
+        .sort((a, b) => b.commits - a.commits),
+    };
+  }
 
   /**
    * 204 ES OTRA COSA Y SE CONFUNDÍA CON LA ANTERIOR. GitHub contesta «sin
