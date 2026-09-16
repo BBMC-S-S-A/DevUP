@@ -150,24 +150,68 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
    * exactamente lo que hace falta para que se oigan entre sí en vez de
    * pisarse.
    */
+  /**
+   * La malla de voz, para dos clases de sala.
+   *
+   * UN CANAL, como siempre: tiene historial de llamadas, consentimiento de
+   * grabación y su propia puerta (`can_access_channel`).
+   *
+   * O UN CORRILLO, que es la novedad: una sala EFÍMERA sin canal detrás, para
+   * la gente que se junta a hablar en el pasillo de DevVerse. Existe mientras
+   * haya alguien dentro y no deja rastro en ninguna tabla.
+   *
+   * POR QUÉ AQUÍ Y NO UNA MALLA NUEVA. La llamada por cercanía era de dos
+   * personas porque tenía su propia conexión, a mano, en el cliente. Escribir
+   * ahí una malla para varios sería la segunda de este proyecto, y la segunda
+   * hereda todos los fallos que la primera ya arregló —la renegociación, los
+   * candidatos que llegan antes de tiempo, el zombi que no se limpia—. Esta ya
+   * funciona con tres personas en una sala de voz; lo único que le faltaba era
+   * poder existir sin canal.
+   *
+   * LA PUERTA CAMBIA CON LA SALA, y es lo único delicado: un corrillo no tiene
+   * canal que consultar, así que lo que se comprueba es el ESPACIO. Es la
+   * frontera correcta —quien puede estar en la oficina puede oír a quien se
+   * cruza en el pasillo— y es exactamente la que ya usa el socket del mundo
+   * para dejarte entrar a esa oficina.
+   */
   app.get("/ws/voice", { websocket: true }, async (socket, request) => {
     const params = z
-      .object({ channelId: z.string().uuid() })
+      .union([
+        z.object({ channelId: z.string().uuid() }),
+        z.object({ corrillo: z.string().uuid(), workspaceId: z.string().uuid() }),
+      ])
       .safeParse(request.query);
 
     if (!params.success) {
-      send(socket, { type: "error", message: "falta channelId" });
-      socket.close(1008, "canal invalido");
+      send(socket, { type: "error", message: "falta channelId o corrillo" });
+      socket.close(1008, "sala invalida");
       return;
     }
 
-    const channelId = params.data.channelId;
-    const identity = await authorize(request, { channelId });
+    const corrillo = "corrillo" in params.data ? params.data.corrillo : null;
+    const channelId = "channelId" in params.data ? params.data.channelId : null;
+
+    const identity = await authorize(
+      request,
+      corrillo ? { workspaceId: (params.data as { workspaceId: string }).workspaceId } : { channelId: channelId! },
+    );
     if (!identity) {
-      send(socket, { type: "error", message: "sin acceso al canal" });
+      send(socket, { type: "error", message: "sin acceso" });
       socket.close(1008, "sin acceso");
       return;
     }
+
+    /**
+     * La clave de la sala en el hub.
+     *
+     * LLEVA EL ESPACIO DENTRO, y no es decorativo: sin él, dos oficinas
+     * distintas que generaran el mismo identificador acabarían en la misma
+     * sala. El identificador lo propone el cliente, así que no se puede
+     * confiar en que sea único por sí solo.
+     */
+    const sala = corrillo
+      ? `corrillo:${(params.data as { workspaceId: string }).workspaceId}:${corrillo}`
+      : channelId!;
 
     const peerId = randomUUID();
     const me: Member = {
@@ -184,9 +228,13 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     // El historial se abre antes de anunciar la presencia: si join_call
     // fallara, no queremos a nadie intentando conectar con un par que no
     // llegó a entrar.
+    //
+    // UN CORRILLO NO ABRE HISTORIAL, y eso es lo que significa efímero: no hay
+    // canal al que colgar la sesión, así que no hay nada que grabar ni que
+    // contar después. Quien quiera que quede constancia, se mete en una sala.
     let callSessionId: string | null = null;
     let startedAt: string | null = null;
-    try {
+    if (!corrillo) try {
       const opened = await withUser(identity.userId, async (db) => {
         const { rows } = await db.query<{ join_call: string }>(
           "select public.join_call($1, $2)",
@@ -211,29 +259,35 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
 
-    const existing = voiceHub.members(channelId).map(publicMember);
-    voiceHub.join(channelId, me);
+    const existing = voiceHub.members(sala).map(publicMember);
+    voiceHub.join(sala, me);
 
     send(socket, { type: "welcome", peerId, peers: existing, startedAt });
-    voiceHub.broadcast(channelId, { type: "peer-joined", peer: publicMember(me) }, peerId);
+    voiceHub.broadcast(sala, { type: "peer-joined", peer: publicMember(me) }, peerId);
 
     // Y que lo vea el espacio entero, que es de lo que va poder mirar una sala
     // sin entrar. El identificador del espacio se pregunta aquí porque el
     // socket solo trae el del canal; con la identidad puesta, así que si no se
     // pudiera ver el canal no habríamos llegado hasta aquí.
-    const workspaceId = await withUser(identity.userId, async (db) => {
-      const { rows } = await db.query<{ workspace_id: string }>(
-        "select workspace_id from channels where id = $1",
-        [channelId],
-      );
-      return rows[0]?.workspace_id ?? null;
-    }).catch(() => null);
+    //
+    // UN CORRILLO NO SE ANUNCIA: la barra enseña las salas del espacio, y un
+    // corrillo no es una sala a la que nadie pueda ir. Contarlo sería llenar la
+    // barra de sitios que no existen.
+    const workspaceId = corrillo
+      ? null
+      : await withUser(identity.userId, async (db) => {
+          const { rows } = await db.query<{ workspace_id: string }>(
+            "select workspace_id from channels where id = $1",
+            [channelId],
+          );
+          return rows[0]?.workspace_id ?? null;
+        }).catch(() => null);
     if (workspaceId) announceVoz(workspaceId);
 
     // Quien entra a una llamada que ya se está grabando tiene que enterarse
     // antes de decir nada, y aceptarlo como los demás. Su cliente muestra un
     // aviso que bloquea hasta que responda.
-    const ongoing = recordings.get(channelId);
+    const ongoing = recordings.get(sala);
     if (ongoing?.state === "recording") {
       ongoing.pending.add(peerId);
       send(socket, {
@@ -256,7 +310,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     }, HEARTBEAT_MS);
 
     const requestRecording = async (): Promise<void> => {
-      if (recordings.has(channelId)) {
+      if (recordings.has(sala)) {
         send(socket, { type: "error", message: "ya hay una grabación en curso" });
         return;
       }
@@ -277,7 +331,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
         return;
       }
 
-      const others = voiceHub.members(channelId).filter((m) => m.peerId !== peerId);
+      const others = voiceHub.members(sala).filter((m) => m.peerId !== peerId);
       const recording: RoomRecording = {
         id: recordingId,
         requesterPeerId: peerId,
@@ -286,14 +340,14 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
         pending: new Set(others.map((m) => m.peerId)),
         state: "pending",
       };
-      recordings.set(channelId, recording);
+      recordings.set(sala, recording);
 
       // Quien pide grabar consiente por el hecho de pedirlo.
       await saveConsent(identity.userId, recordingId, me, true).catch(() => {});
 
       if (recording.pending.size === 0) {
         recording.state = "recording";
-        voiceHub.broadcast(channelId, {
+        voiceHub.broadcast(sala, {
           type: "recording-started",
           recordingId,
           startedBy: identity.displayName,
@@ -311,7 +365,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     };
 
     const answerRecording = async (recordingId: string, granted: boolean): Promise<void> => {
-      const recording = recordings.get(channelId);
+      const recording = recordings.get(sala);
       if (!recording || recording.id !== recordingId) return;
       if (!recording.pending.has(peerId)) return;
 
@@ -321,9 +375,9 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
         // Un solo «no» cancela para todos. No existe la grabación parcial: en
         // una malla, quien graba recibe el audio de todos los demás, así que
         // «grabo solo a los que dijeron que sí» no se puede cumplir.
-        recordings.delete(channelId);
+        recordings.delete(sala);
         await closeRecording(recording.requesterUserId, recordingId).catch(() => {});
-        voiceHub.broadcast(channelId, {
+        voiceHub.broadcast(sala, {
           type: "recording-denied",
           recordingId,
           by: identity.displayName,
@@ -334,7 +388,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
       recording.pending.delete(peerId);
       if (recording.pending.size === 0 && recording.state === "pending") {
         recording.state = "recording";
-        voiceHub.broadcast(channelId, {
+        voiceHub.broadcast(sala, {
           type: "recording-started",
           recordingId,
           startedBy: recording.requesterName,
@@ -343,14 +397,14 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     };
 
     const stopRecording = async (reason: string): Promise<void> => {
-      const recording = recordings.get(channelId);
+      const recording = recordings.get(sala);
       // Solo la detiene quien la empezó: es su navegador el que tiene el
       // archivo a medias.
       if (!recording || recording.requesterPeerId !== peerId) return;
 
-      recordings.delete(channelId);
+      recordings.delete(sala);
       await closeRecording(recording.requesterUserId, recording.id).catch(() => {});
-      voiceHub.broadcast(channelId, {
+      voiceHub.broadcast(sala, {
         type: "recording-stopped",
         recordingId: recording.id,
         reason,
@@ -369,7 +423,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
         case "signal": {
           // El emisor lo pone el servidor. Si viniera del cliente, cualquiera
           // podría mandar una SDP haciéndose pasar por otro par de la sala.
-          voiceHub.sendTo(channelId, message.to, {
+          voiceHub.sendTo(sala, message.to, {
             type: "signal",
             from: peerId,
             data: message.data,
@@ -383,7 +437,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
           if (message.cameraStreamId !== undefined) me.cameraStreamId = message.cameraStreamId;
           if (message.screenStreamId !== undefined) me.screenStreamId = message.screenStreamId;
           voiceHub.broadcast(
-            channelId,
+            sala,
             {
               type: "peer-state",
               peerId,
@@ -422,14 +476,14 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     socket.on("close", () => {
       clearInterval(heartbeat);
 
-      const recording = recordings.get(channelId);
+      const recording = recordings.get(sala);
       if (recording?.requesterPeerId === peerId) {
         // Se fue quien grababa. El archivo se queda en su navegador a medias y
         // aquí no hay nada que salvar, pero el resto tiene que dejar de ver el
         // indicador rojo inmediatamente.
-        recordings.delete(channelId);
+        recordings.delete(sala);
         void closeRecording(recording.requesterUserId, recording.id).catch(() => {});
-        voiceHub.broadcast(channelId, {
+        voiceHub.broadcast(sala, {
           type: "recording-stopped",
           recordingId: recording.id,
           reason: "quien grababa salió de la llamada",
@@ -439,7 +493,7 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
         // bloquea: ya no está en la sala, así que no se le va a grabar.
         if (recording.pending.size === 0 && recording.state === "pending") {
           recording.state = "recording";
-          voiceHub.broadcast(channelId, {
+          voiceHub.broadcast(sala, {
             type: "recording-started",
             recordingId: recording.id,
             startedBy: recording.requesterName,
@@ -447,8 +501,8 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      voiceHub.leave(channelId, peerId);
-      voiceHub.broadcast(channelId, { type: "peer-left", peerId });
+      voiceHub.leave(sala, peerId);
+      voiceHub.broadcast(sala, { type: "peer-left", peerId });
       // Salir también cambia la ocupación: sin esto, la barra se quedaría
       // enseñando gente en una sala vacía, que es peor que no enseñar nada.
       if (workspaceId) announceVoz(workspaceId);

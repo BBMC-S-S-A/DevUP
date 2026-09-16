@@ -72,6 +72,15 @@ jobs:
       - name: Aislamiento entre organizaciones
         run: npm run test:rls
 
+      - name: El corrillo, la sala de voz sin canal
+        # Tres personas en la misma malla, que es lo que la llamada por
+        # cercanía no podía hacer con una sola conexión. Y las dos cosas que
+        # este cambio podría romper sin ruido: que un corrillo no abra historial
+        # —no tiene canal al que colgarlo— y que la puerta sea el ESPACIO, ya
+        # que no hay canal que preguntar. Oír no se prueba aquí: eso necesita
+        # micrófonos.
+        run: npm run test:corrillo
+
       - name: Sala del mundo
         # Cuenta los mensajes que salen del reparto por tick —que funcione y
         # que mande uno por movimiento se parecen demasiado desde fuera— y

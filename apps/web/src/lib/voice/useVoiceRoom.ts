@@ -102,7 +102,20 @@ const IDLE_RECORDING: RecordingState = {
   saving: false,
 };
 
-export function useVoiceRoom(channelId: string, workspaceId: string) {
+/**
+ * La malla de voz, para un canal o para un CORRILLO.
+ *
+ * Un corrillo es una sala efímera sin canal detrás: la gente que se junta a
+ * hablar en el pasillo del DevVerse. Todo lo demás —los pares, el micrófono,
+ * la cámara, compartir pantalla— es idéntico, porque es la misma malla; lo
+ * único que cambia es por dónde entra y que no deja historial.
+ *
+ * SE AÑADE UN PARÁMETRO EN VEZ DE UN HOOK NUEVO a propósito: una segunda
+ * copia de esto es una segunda copia de la renegociación, de los candidatos
+ * que llegan antes de tiempo y del zombi que no se limpia. Ya pasó una vez con
+ * la llamada por cercanía, y es justo lo que este cambio viene a deshacer.
+ */
+export function useVoiceRoom(channelId: string, workspaceId: string, corrillo?: string) {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -581,7 +594,15 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
         return;
       }
 
-      const ws = new WebSocket(buildWsUrl("/ws/voice", { channelId, ticket }));
+      // Un corrillo se identifica solo, y lleva el espacio: es lo que el
+      // servidor usa para no juntar dos oficinas que propongan el mismo
+      // identificador. Ver `signaling.ts`.
+      const ws = new WebSocket(
+        buildWsUrl(
+          "/ws/voice",
+          corrillo ? { corrillo, workspaceId, ticket } : { channelId, ticket },
+        ),
+      );
       socket.current = ws;
 
       ws.onmessage = (event) => {
@@ -760,6 +781,8 @@ export function useVoiceRoom(channelId: string, workspaceId: string) {
   }, [
     status,
     channelId,
+    corrillo,
+    workspaceId,
     peerFor,
     handleSignal,
     upsert,
