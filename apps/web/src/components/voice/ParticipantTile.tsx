@@ -35,20 +35,51 @@ const HALO_HABLANDO: CSSProperties = { boxShadow: "var(--halo-live)" };
 // Exportado para que `SalaEspacial` reproduzca el audio igual: el elemento
 // <audio> tiene que existir en el árbol o no se oye a nadie, y duplicarlo en
 // dos sitios es tener dos formas de que deje de oírse.
-export function HiddenAudio({ stream }: { stream: MediaStream | null }) {
+/**
+ * `alRegistrar` existe para el audio por cercanía de DevVerse.
+ *
+ * Allí no todo el mundo suena igual: se oye más fuerte a quien tienes al lado.
+ * Antes DevVerse se creaba SUS PROPIOS elementos, y desde que el audio de la
+ * llamada vive en el proveedor eso eran dos elementos por persona — se oía a
+ * cada uno dos veces, y la copia del proveedor sonaba a tope pase lo que pase,
+ * así que alejarse ya no bajaba a nadie. Ahora el elemento lo pinta un solo
+ * sitio y quien quiera el gradiente le toca el volumen a ESTE.
+ */
+export function HiddenAudio({
+  stream,
+  alRegistrar,
+}: {
+  stream: MediaStream | null;
+  alRegistrar?: (elemento: HTMLVideoElement | null) => void;
+}) {
   const media = useRef<HTMLVideoElement>(null);
+
+  // EN UN REF, Y NO EN LAS DEPENDENCIAS DEL EFECTO. Quien la pasa la escribe
+  // en línea, así que cambia en cada renderizado; como dependencia haría que
+  // el efecto se rehiciera constantemente, y su limpieza devuelve el volumen a
+  // 1. O sea: el gradiente de cercanía bajaría el volumen y esto se lo subiría
+  // otra vez, varias veces por segundo. Es la misma clase de fallo que colgaba
+  // el DevVerse en bucle, y aquí sonaría a «el volumen no me hace caso».
+  const registrar = useRef(alRegistrar);
+  registrar.current = alRegistrar;
 
   useEffect(() => {
     const element = media.current;
     if (!element || !stream) return;
     element.srcObject = stream;
+    registrar.current?.(element);
     // Normalmente funciona: para llegar aquí ya has pulsado «entrar a la
     // llamada», que es el gesto que la política de reproducción automática
     // pide. Si aun así falla, no oyes a alguien — y «no oigo a Ana» es de las
     // quejas más difíciles de rastrear si no queda nada escrito.
     void element.play().catch(ignorar("no se pudo reproducir el audio de un participante"));
     return () => {
+      registrar.current?.(null);
       element.srcObject = null;
+      // Se devuelve a volumen normal por si DevVerse lo dejó bajado: heredar
+      // un 0,1 de la última vez que alguien estuvo lejos en el mundo sería
+      // «no oigo a nadie» en la siguiente llamada corriente.
+      element.volume = 1;
     };
   }, [stream]);
 

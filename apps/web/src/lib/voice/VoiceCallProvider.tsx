@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { HiddenAudio } from "@/components/voice/ParticipantTile";
 import { useVoiceRoom } from "./useVoiceRoom";
@@ -43,6 +44,21 @@ type VoiceCallContextValue = {
   /** El corrillo en el que estoy, si estoy en uno. */
   activeCorrillo: string | null;
   leaveChannel: () => void;
+  /**
+   * Los elementos que están sonando, por participante.
+   *
+   * ESTÁ AQUÍ PARA QUE EL AUDIO POR CERCANÍA NO SE CREE LOS SUYOS. En el
+   * DevVerse no todo el mundo suena igual: se oye más fuerte a quien tienes al
+   * lado. Ese gradiente necesita tocar el volumen de un elemento concreto, y
+   * la forma obvia —que el mundo pinte sus propios `<audio>`— es la que dio el
+   * fallo: desde que la llamada vive aquí para sobrevivir a navegar, eran DOS
+   * elementos por persona. Se oía a cada uno dos veces y, peor, la copia de
+   * aquí sonaba a volumen fijo, así que alejarse ya no bajaba a nadie.
+   *
+   * Un ref y no estado: esto cambia al ritmo de los fotogramas, y meterlo en
+   * el valor del contexto re-renderizaría media aplicación por nada.
+   */
+  elementosDeAudio: RefObject<Map<string, HTMLMediaElement>>;
 };
 
 const VoiceCallContext = createContext<VoiceCallContextValue | null>(null);
@@ -94,6 +110,9 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
    */
   const ultimo = useRef({ target, room });
   ultimo.current = { target, room };
+
+  /** Ver `elementosDeAudio` en el tipo del contexto. */
+  const elementosDeAudio = useRef(new Map<string, HTMLMediaElement>());
 
   const joinCorrillo = useCallback((corrillo: string, workspaceId: string, nombre: string) => {
     const { target: actual, room: sala } = ultimo.current;
@@ -158,6 +177,7 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
     joinChannel,
     joinCorrillo,
     leaveChannel,
+    elementosDeAudio,
   };
 
   return (
@@ -180,7 +200,17 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
           Y por eso las pantallas ya NO lo pintan: dos elementos con el mismo
           stream es oír a cada uno dos veces. */}
       {room.participants.map((participante) => (
-        <HiddenAudio key={participante.peerId} stream={participante.audioStream} />
+        <HiddenAudio
+          key={participante.peerId}
+          stream={participante.audioStream}
+          // Se apunta quién es quién para que el audio por cercanía del
+          // DevVerse pueda subirle y bajarle el volumen A ESTE elemento en vez
+          // de crearse otro. Ver `elementosDeAudio` en el tipo del contexto.
+          alRegistrar={(elemento) => {
+            if (elemento) elementosDeAudio.current.set(participante.peerId, elemento);
+            else elementosDeAudio.current.delete(participante.peerId);
+          }}
+        />
       ))}
     </VoiceCallContext.Provider>
   );

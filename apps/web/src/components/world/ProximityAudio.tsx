@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import type { Participant } from "@/lib/voice/useVoiceRoom";
+import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import type { WorldState } from "@/lib/world/useWorld";
 
 /**
@@ -21,9 +22,26 @@ import type { WorldState } from "@/lib/world/useWorld";
  * estés parado, que es lo que hace que una sala grande siga siendo habitable.
  *
  * EL VOLUMEN SE MUEVE FUERA DE REACT. Cambiarlo por estado dispararía un
- * renderizado por fotograma y por participante. Aquí los elementos se crean
- * una vez —eso sí es React— y el volumen lo ajusta un bucle de animación
- * escribiendo directamente sobre el elemento.
+ * renderizado por fotograma y por participante. Aquí un bucle de animación
+ * escribe directamente sobre el elemento.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ESTE COMPONENTE NO PINTA NINGÚN ELEMENTO, Y ESO ES UN ARREGLO
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * Antes se creaba los suyos, uno por participante. Tenía sentido mientras el
+ * audio de una llamada lo pintaba la pantalla que la enseñaba. Dejó de tenerlo
+ * cuando el audio se mudó a `VoiceCallProvider` para que la llamada siguiera
+ * sonando al cambiar de pantalla: desde entonces eran DOS elementos por
+ * persona con el mismo stream.
+ *
+ * Y lo grave no era oír doble. Era que la copia del proveedor suena a volumen
+ * fijo, así que el gradiente de aquí ya no servía de nada: alejarse de alguien
+ * no lo bajaba, porque el otro elemento seguía a tope. El audio por cercanía
+ * —que es la razón de ser de la oficina— quedaba anulado sin que nada fallara.
+ *
+ * Ahora el elemento lo pone un solo sitio y aquí solo se le mueve el volumen.
+ * Quien manda en la lista es `elementosDeAudio` del contexto de la llamada.
  */
 
 /** Dentro de este radio se oye al máximo. Fuera, baja hasta callarse. */
@@ -46,12 +64,15 @@ export function ProximityAudio({
   stateRef: RefObject<WorldState>;
   radius: number;
 }) {
-  const elements = useRef(new Map<string, HTMLAudioElement>());
+  // Los elementos NO son de aquí: los pinta `VoiceCallProvider`, que es quien
+  // sobrevive a navegar. Ver la cabecera.
+  const { elementosDeAudio } = useVoiceCall();
   const volumes = useRef(new Map<string, number>());
 
   useEffect(() => {
     let frame = 0;
     let last = performance.now();
+    const elements = elementosDeAudio;
 
     const loop = (now: number) => {
       const dt = Math.min(64, now - last);
@@ -95,53 +116,19 @@ export function ProximityAudio({
     };
 
     frame = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frame);
-  }, [participants, stateRef, radius]);
-
-  return (
-    <>
-      {participants
-        .filter((p) => p.audioStream !== null)
-        .map((participant) => (
-          <PeerAudio
-            key={participant.peerId}
-            participant={participant}
-            register={(element) => {
-              if (element) elements.current.set(participant.peerId, element);
-              else {
-                elements.current.delete(participant.peerId);
-                volumes.current.delete(participant.peerId);
-              }
-            }}
-          />
-        ))}
-    </>
-  );
-}
-
-function PeerAudio({
-  participant,
-  register,
-}: {
-  participant: Participant;
-  register: (element: HTMLAudioElement | null) => void;
-}) {
-  const ref = useRef<HTMLAudioElement>(null);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element || !participant.audioStream) return;
-    element.srcObject = participant.audioStream;
-    // Arranca en silencio: el bucle lo sube según la distancia real. Al revés,
-    // el primer fotograma sonaría a todo volumen aunque estés al otro lado.
-    element.volume = 0;
-    void element.play().catch(() => {});
-    register(element);
     return () => {
-      register(null);
-      element.srcObject = null;
+      cancelAnimationFrame(frame);
+      // SE DEVUELVE TODO A VOLUMEN NORMAL AL SALIR DEL MUNDO, y esto no es
+      // limpieza de cortesía: estos elementos NO son de este componente, viven
+      // en el proveedor y siguen sonando después. Sin esto, salir del DevVerse
+      // estando lejos de alguien te lo dejaría a volumen 0,1 en el canal de
+      // voz normal — «no oigo a Ana» sin nada que lo explique.
+      for (const element of elements.current.values()) element.volume = 1;
+      volumes.current.clear();
     };
-  }, [participant.audioStream, register]);
+  }, [participants, stateRef, radius, elementosDeAudio]);
 
-  return <audio ref={ref} autoPlay className="hidden" />;
+  // NO PINTA NADA, Y ESE ES EL ARREGLO. Los elementos de audio los pone
+  // `VoiceCallProvider`; aquí solo se les mueve el volumen. Ver la cabecera.
+  return null;
 }
