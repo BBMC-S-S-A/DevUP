@@ -25,6 +25,10 @@ import { useWorkspaceId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { Avatar } from "@/components/perfil/Avatar";
+import { useAvisosDelEspacio } from "@/lib/workspace-feed";
+
+/** Alguien dentro de una sala, tal y como lo cuenta `/voz`. */
+type Ocupante = { userId: string; displayName: string; muted: boolean };
 
 /**
  * DevCall: las salas del espacio, y entrar a una sin buscarla.
@@ -40,14 +44,12 @@ import { Avatar } from "@/components/perfil/Avatar";
  * no se corta y la barra viene contigo. Eso ya funcionaba y casi nadie lo
  * sabía, porque no había ningún sitio que lo dijera.
  *
- * LO QUE FALTA, Y NO SE FINGE:
- *
- *  - **Quién está dentro de una sala sin entrar.** Esa presencia vive en la
- *    memoria del servidor de tiempo real y ninguna ruta la expone. Es lo que
- *    hace que Discord se lea de un vistazo, y está delegado.
- *
- * Mientras tanto esta pantalla no dibuja huecos con «próximamente»: enseña lo
- * que hay y dice en una línea lo que todavía no.
+ * QUIÉN ESTÁ DENTRO, SIN ENTRAR — que era lo único grande que faltaba. Esa
+ * presencia vive en la memoria del servidor de tiempo real, y lo que faltaba no
+ * era guardarla sino servirla: `GET /workspaces/:id/voz` la lee con RLS puesta
+ * —una sala privada no cuenta su gente a quien no está dentro— y el socket del
+ * espacio avisa cuando cambia, para que la lista se encienda sola en vez de
+ * esperar a que alguien refresque.
  */
 export default function DevCallPage() {
   const workspaceId = useWorkspaceId();
@@ -57,6 +59,16 @@ export default function DevCallPage() {
 
   const canales = useRecurso<{ channels: Channel[] }>(`/workspaces/${workspaceId}/channels`);
   const salas = (canales.datos?.channels ?? []).filter((c) => c.kind === "voice");
+
+  // Frescura corta: quién hay dentro cambia cada pocos segundos, y aquí es EL
+  // dato de la pantalla. El empujón del socket lo refresca al instante; esto es
+  // solo la red por debajo, para cuando la conexión se cae y vuelve.
+  const voz = useRecurso<{ salas: Record<string, Ocupante[]> }>(
+    `/workspaces/${workspaceId}/voz`,
+    { frescura: 5_000 },
+  );
+  const dentroDe = voz.datos?.salas ?? {};
+  useAvisosDelEspacio(workspaceId, "voz-change", () => void voz.recargar());
   const enLlamada = Boolean(activeChannelId) && room.status !== "idle";
 
   const reuniones = useRecurso<{ events: MeetingEvent[] }>(`/workspaces/${workspaceId}/events`);
@@ -165,8 +177,49 @@ export default function DevCallPage() {
                           {sala.isPrivate ? "Privada" : "Abierta a todo el espacio"}
                         </span>
                       </span>
+
+                      {/* Quién hay dentro. Con nombre y no solo la cara: aquí
+                          hay sitio, y lo que se decide mirando esto es si
+                          entrar — «está Ana» y «hay tres personas» no llevan a
+                          la misma decisión. */}
+                      {(dentroDe[sala.id]?.length ?? 0) > 0 && (
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="flex shrink-0 items-center">
+                            {(dentroDe[sala.id] ?? []).slice(0, 4).map((persona, indice) => (
+                              <span
+                                key={persona.userId}
+                                title={persona.displayName}
+                                className={`rounded-full border border-surface ${indice > 0 ? "-ml-2" : ""}`}
+                              >
+                                <Avatar
+                                  userId={persona.userId}
+                                  nombre={persona.displayName}
+                                  tamano={22}
+                                />
+                              </span>
+                            ))}
+                          </span>
+                          <span className="min-w-0 truncate text-[11px] text-muted">
+                            {(dentroDe[sala.id] ?? []).length === 1
+                              ? `${dentroDe[sala.id]![0]!.displayName} está dentro`
+                              : `${(dentroDe[sala.id] ?? []).length} personas dentro`}
+                          </span>
+                        </span>
+                      )}
                       {aqui ? (
                         <Chip tono="live">estás aquí</Chip>
+                      ) : (dentroDe[sala.id]?.length ?? 0) === 0 ? (
+                        // Vacía se dice, no se calla: entrar a una sala vacía a
+                        // ver si hay alguien es justo el paso que esta pantalla
+                        // viene a quitar.
+                        <Boton
+                          tamano="sm"
+                          variante="secundario"
+                          onClick={() => joinChannel(sala.id, workspaceId, sala.name)}
+                        >
+                          <Video size={13} />
+                          Vacía · entrar
+                        </Boton>
                       ) : (
                         <Boton
                           tamano="sm"
@@ -229,10 +282,6 @@ export default function DevCallPage() {
             />
           </div>
 
-          <p className="px-1 text-[11px] leading-relaxed text-faint">
-            Todavía no se ve quién hay dentro de una sala sin entrar: esa presencia vive en el
-            servidor de tiempo real y ninguna ruta la expone todavía.
-          </p>
         </div>
       )}
     </Pagina>

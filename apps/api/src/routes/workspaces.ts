@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { withUser } from "../db/pool.js";
+import { voiceHub } from "../realtime/hub.js";
 import { env } from "../env.js";
 import { badRequest, forbidden, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
 import {
@@ -720,6 +721,58 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
       );
       return { channels: rows };
     });
+  });
+
+  /**
+   * Quién hay AHORA MISMO en cada sala de voz, sin tener que entrar.
+   *
+   * ES LO ÚNICO GRANDE QUE LE FALTABA A DEVCALL: la barra pintaba las salas sin
+   * saber si había alguien dentro, así que averiguarlo era entrar — y entrar en
+   * una sala vacía por si acaso es justo el paso que sobra.
+   *
+   * LA PRESENCIA VIVE EN MEMORIA, Y ESO ESTÁ BIEN. El hub se limpia solo cuando
+   * un socket se cae (pestaña cerrada, red caída, portátil dormido); una tabla
+   * se quedaría con gente de pie en una sala vacía. Lo que faltaba no era
+   * guardarla, era servirla.
+   *
+   * EL AISLAMIENTO LO PONE LA CONSULTA, NO EL HUB. Primero se preguntan los
+   * canales a la base con la identidad puesta —así que un canal privado no sale
+   * para quien no está dentro— y solo después se mira la memoria. Al revés
+   * —recorrer el hub y filtrar luego— bastaría un descuido para contar quién
+   * está en la sala de dirección.
+   *
+   * SE AGRUPA POR PERSONA Y NO POR CONEXIÓN: quien tiene dos pestañas abiertas
+   * es una persona, y en la barra saldría dos veces.
+   */
+  app.get("/workspaces/:workspaceId/voz", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    const canales = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "select id from channels where workspace_id = $1 and kind = 'voice'",
+        [workspaceId],
+      );
+      return rows.map((r) => r.id);
+    });
+
+    const salas: Record<string, { userId: string; displayName: string; muted: boolean }[]> = {};
+    for (const channelId of canales) {
+      const dentro = new Map<string, { userId: string; displayName: string; muted: boolean }>();
+      for (const miembro of voiceHub.members(channelId)) {
+        const ya = dentro.get(miembro.userId);
+        // Con dos pestañas, basta con que UNA tenga el micrófono abierto para
+        // que la persona esté hablando.
+        dentro.set(miembro.userId, {
+          userId: miembro.userId,
+          displayName: miembro.displayName,
+          muted: (ya?.muted ?? true) && miembro.muted,
+        });
+      }
+      if (dentro.size > 0) salas[channelId] = [...dentro.values()];
+    }
+
+    return { salas };
   });
 
   app.post("/workspaces/:workspaceId/channels", async (request, reply) => {

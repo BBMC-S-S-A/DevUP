@@ -217,6 +217,19 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
     send(socket, { type: "welcome", peerId, peers: existing, startedAt });
     voiceHub.broadcast(channelId, { type: "peer-joined", peer: publicMember(me) }, peerId);
 
+    // Y que lo vea el espacio entero, que es de lo que va poder mirar una sala
+    // sin entrar. El identificador del espacio se pregunta aquí porque el
+    // socket solo trae el del canal; con la identidad puesta, así que si no se
+    // pudiera ver el canal no habríamos llegado hasta aquí.
+    const workspaceId = await withUser(identity.userId, async (db) => {
+      const { rows } = await db.query<{ workspace_id: string }>(
+        "select workspace_id from channels where id = $1",
+        [channelId],
+      );
+      return rows[0]?.workspace_id ?? null;
+    }).catch(() => null);
+    if (workspaceId) announceVoz(workspaceId);
+
     // Quien entra a una llamada que ya se está grabando tiene que enterarse
     // antes de decir nada, y aceptarlo como los demás. Su cliente muestra un
     // aviso que bloquea hasta que responda.
@@ -436,6 +449,9 @@ export async function signalingRoutes(app: FastifyInstance): Promise<void> {
 
       voiceHub.leave(channelId, peerId);
       voiceHub.broadcast(channelId, { type: "peer-left", peerId });
+      // Salir también cambia la ocupación: sin esto, la barra se quedaría
+      // enseñando gente en una sala vacía, que es peor que no enseñar nada.
+      if (workspaceId) announceVoz(workspaceId);
 
       // Cierre del historial en mejor-esfuerzo. `reap_call_peer` sirve tanto
       // para la salida limpia como para la brusca, así que no hace falta
@@ -573,6 +589,22 @@ export function announceMessage(
 }
 
 /** Avisa al workspace de que su biblioteca ha cambiado. */
+/**
+ * Avisa al espacio de que la ocupación de sus salas de voz ha cambiado.
+ *
+ * VA SIN DECIR DE QUÉ SALA, y no es pereza: el socket del espacio lo escucha
+ * todo el que está en el espacio, y entre sus salas puede haber una privada.
+ * Mandar el identificador del canal sería contarle a todos que ese canal
+ * existe. Sin él, quien recibe el aviso vuelve a pedir `/voz`, que le contesta
+ * con RLS puesta — y cada uno se entera solo de sus salas.
+ *
+ * Es además el mismo trato que ya tienen la biblioteca y el tablero: el aviso
+ * dice «vuelve a preguntar», no lo que cambió.
+ */
+export function announceVoz(workspaceId: string): void {
+  fileHub.broadcast(workspaceId, { type: "voz-change" });
+}
+
 export function announceFileChange(
   workspaceId: string,
   action: "created" | "updated" | "deleted",

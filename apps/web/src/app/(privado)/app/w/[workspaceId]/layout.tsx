@@ -40,6 +40,11 @@ import { Recorrido } from "@/components/recorrido/Recorrido";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
+import { Avatar } from "@/components/perfil/Avatar";
+import { useAvisosDelEspacio } from "@/lib/workspace-feed";
+
+/** Alguien dentro de una sala de voz, tal y como lo cuenta `/voz`. */
+type Ocupante = { userId: string; displayName: string; muted: boolean };
 import { retraso } from "@/lib/animacion";
 import { useSession } from "@/lib/session";
 import { useViewMode } from "@/lib/view-mode";
@@ -69,6 +74,8 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  /** Quién hay en cada sala de voz ahora mismo. Vacío = nadie. */
+  const [ocupacion, setOcupacion] = useState<Record<string, Ocupante[]>>({});
   const [rolOrganizacion, setRolOrganizacion] = useState<Organization["role"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,6 +147,31 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     const timer = setInterval(() => void loadUnread(), 30_000);
     return () => clearInterval(timer);
   }, [loadUnread, pathname]);
+
+  /**
+   * La ocupación de las salas de voz.
+   *
+   * ESTA SÍ SE EMPUJA, al revés que los no leídos de aquí arriba — y la
+   * diferencia no es capricho. Un no leído es tuyo y solo tú lo cambias; quién
+   * está en una sala lo cambia OTRO, y de eso te tienes que enterar sin
+   * refrescar: la gracia de ver una sala ocupada es unirte mientras siguen
+   * dentro. Un sondeo de treinta segundos llega tarde a media conversación.
+   *
+   * El aviso no dice de qué sala —podría ser una privada— así que lo que llega
+   * es «vuelve a preguntar». Ver `announceVoz` en la API.
+   */
+  const loadVoz = useCallback(async () => {
+    const { salas } = await api
+      .get<{ salas: Record<string, Ocupante[]> }>(`/workspaces/${workspaceId}/voz`)
+      .catch(() => ({ salas: {} }));
+    setOcupacion(salas);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    void loadVoz();
+  }, [loadVoz]);
+
+  useAvisosDelEspacio(workspaceId, "voz-change", loadVoz);
 
   const officeHref = `/app/w/${workspaceId}/devverse`;
   const inOffice = pathname === officeHref;
@@ -467,6 +499,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             workspaceId={workspaceId}
             pathname={pathname}
             unread={unread}
+            ocupacion={ocupacion}
             onCreated={load}
           />
           <ChannelGroup
@@ -604,6 +637,44 @@ function GrupoRotulo({
  * canales de voz no ensenaba la seccion, asi que tampoco ensenaba por donde se
  * crea el primero.
  */
+/**
+ * Los avatares apilados de quien está en una sala.
+ *
+ * ES LO QUE HACE QUE UNA BARRA DE CANALES SE LEA DE UN VISTAZO: sin esto hay
+ * que entrar en la sala para saber si hay alguien, y entrar en una vacía por si
+ * acaso es el paso que sobra.
+ *
+ * SOLAPADOS Y CON TOPE EN TRES. Tres caras y un «+2» caben en la barra sin
+ * empujar el nombre del canal; cinco lo parten. El número de más va en mono
+ * porque su ancho no debe bailar al pasar de 9 a 10.
+ */
+function Ocupantes({ gente }: { gente: Ocupante[] }) {
+  if (gente.length === 0) return null;
+  const visibles = gente.slice(0, 3);
+  const resto = gente.length - visibles.length;
+
+  return (
+    <span
+      className="flex shrink-0 items-center"
+      title={`${gente.map((p) => p.displayName).join(", ")} ${gente.length === 1 ? "está" : "están"} dentro`}
+    >
+      {visibles.map((persona, indice) => (
+        <span
+          key={persona.userId}
+          // El borde del color del fondo es lo que separa una cara de la
+          // siguiente cuando se solapan; sin él se leen como una mancha.
+          className={`rounded-full border border-surface ${indice > 0 ? "-ml-1.5" : ""}`}
+        >
+          <Avatar userId={persona.userId} nombre={persona.displayName} tamano={16} />
+        </span>
+      ))}
+      {resto > 0 && (
+        <span className="ml-1 font-mono text-[10px] tabular-nums text-faint">+{resto}</span>
+      )}
+    </span>
+  );
+}
+
 function ChannelGroup({
   title,
   kind,
@@ -611,6 +682,7 @@ function ChannelGroup({
   workspaceId,
   pathname,
   unread,
+  ocupacion = {},
   onCreated,
 }: {
   title: string;
@@ -619,6 +691,8 @@ function ChannelGroup({
   workspaceId: string;
   pathname: string;
   unread: Record<string, number>;
+  /** Quién hay dentro de cada sala. Solo lo usan las de voz. */
+  ocupacion?: Record<string, Ocupante[]>;
   onCreated: () => Promise<void>;
 }) {
   const [creando, setCreando] = useState(false);
@@ -675,6 +749,10 @@ function ChannelGroup({
                   indice={indice}
                   sufijo={
                     <>
+                      {/* Quién hay dentro, sin entrar. Va ANTES del candado y
+                          del contador porque es lo que se mira: una sala con
+                          gente es una invitación, y el resto son datos. */}
+                      <Ocupantes gente={ocupacion[channel.id] ?? []} />
                       {channel.isPrivate && (
                         <Lock size={11} className="shrink-0 text-faint" aria-label="Canal privado" />
                       )}
