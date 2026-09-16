@@ -1067,3 +1067,39 @@ h3 {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* ===========================================================================
+   EL ACENTO: DÓNDE SÍ Y DÓNDE NO
+   ===========================================================================
+
+   Medido antes de tocar nada: el morado aparecía 267 veces (text-accent 81,
+   border-accent 77, bg-accent-soft 58, text-accent-bright 26, bg-accent 25)
+   frente a 605 usos de los grises de texto. Cuando el color que significa
+   «esto» está en todo, deja de significar nada — y lo que se pierde no es la
+   decoración, es la capacidad de dirigir la mirada.
+
+   Arriba ya está la regla del gradiente: una acción principal por pantalla.
+   Esta es la del resto de la familia del acento.
+
+   LLEVA ACENTO, Y NADA MÁS:
+
+     1. DÓNDE ESTÁS. La entrada activa de la barra, el filtro puesto, la
+        pestaña abierta, la columna sobre la que vas a soltar. Es información
+        que cambia y que hay que encontrar sin buscarla.
+     2. LA ACCIÓN PRINCIPAL de la pantalla, con el gradiente de arriba.
+     3. EL HOVER. Puede teñir de acento porque no compite con nada: solo
+        existe donde está el puntero, y a la vez nunca hay dos.
+
+   NO LLEVA ACENTO, aunque quede bonito:
+
+     · Las insignias y los adornos que salen SIEMPRE —la chapa de cada
+       organización, el punto de cada área, la barra de carga de cada
+       columna—. Lo que se repite en todas las filas no distingue ninguna.
+     · Las etiquetas de estado que no son una acción: un rol, un contador.
+       Para eso están los grises, y el peligro y el vivo cuando de verdad
+       pasa algo.
+
+   LA PRUEBA, y es la única que hace falta: mirar una pantalla y contar los
+   morados. Si hay más de dos, uno de ellos no era ninguna de las tres cosas
+   de arriba.
+   =========================================================================== */

@@ -204,7 +204,10 @@ export default function OrganizationsPage() {
                     <h2 className="mt-0.5 truncate text-base font-semibold">{org.name}</h2>
                   </div>
                   <span className="font-mono text-[11px] text-faint">/{org.slug}</span>
-                  <Chip tono={org.role === "member" ? "neutro" : "accent"}>{ROLES[org.role]}</Chip>
+                  {/* El rol, en gris también cuando eres dueño: es una
+                      etiqueta de estado, no una acción ni dónde estás, y salía
+                      morada en la cabecera de cada organización. */}
+                  <Chip>{ROLES[org.role]}</Chip>
                 </header>
 
                 <div className="grid gap-2 border-b border-line/60 p-3 sm:grid-cols-3">
@@ -352,7 +355,10 @@ function InsigniaOrganizacion({ organization }: { organization: Organization }) 
   }, [organization.id, organization.logoKey]);
 
   return (
-    <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-line-strong bg-canvas/60 text-accent">
+    // La inicial en gris: esta chapa sale en TODAS las organizaciones, así
+    // que teñirla de acento no distinguía ninguna. Ver la regla al final de
+    // globals.css.
+    <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-line-strong bg-canvas/60 text-muted">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt="" className="size-full object-cover" />

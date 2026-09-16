@@ -675,10 +675,16 @@ export function TaskBoard({
 
                 {/* Medidor de carga. Se escala en lugar de cambiar de ancho:
                     animar `width` obliga al navegador a recalcular la columna
-                    entera en cada fotograma. */}
+                    entera en cada fotograma.
+
+                    EN GRIS Y NO EN ACENTO, que es lo que era. Esta barra sale
+                    en TODAS las columnas: un degradado morado repetido cuatro
+                    veces no dirige la mirada a ninguna parte, solo gasta el
+                    color que debería marcar dónde estás. Ver la regla del
+                    acento al final de globals.css. */}
                 <div className="relative h-0.5 w-full shrink-0 bg-line/60">
                   <div
-                    className="h-full origin-left bg-gradient-to-r from-accent to-cyan transition-transform duration-[var(--dur-panel)] ease-[var(--ease-out)] motion-reduce:transition-none"
+                    className="h-full origin-left bg-line-strong transition-transform duration-[var(--dur-panel)] ease-[var(--ease-out)] motion-reduce:transition-none"
                     style={{ transform: `scaleX(${carga ? column.tasks.length / carga : 0})` }}
                   />
                 </div>
@@ -811,8 +817,11 @@ export function TaskBoard({
                                 </span>
                               )}
                               {areaDe && (
+                                // El punto, gris: iba en acento y aparece en
+                                // cada tarjeta que tenga área, que en un
+                                // tablero usado son todas. Ver globals.css.
                                 <span className="inline-flex items-center gap-1 text-[10px] text-muted">
-                                  <span className="size-1.5 rounded-full bg-accent/70" />
+                                  <span className="size-1.5 rounded-full bg-line-strong" />
                                   {areaDe.name}
                                 </span>
                               )}
