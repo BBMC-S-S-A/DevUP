@@ -401,8 +401,22 @@ h3 {
    se queda sin poder tocarse. Va en una clase que se pide donde tiene
    sentido: los botones de icono, que son los pequeños de verdad.
 */
-.toque-comodo {
-  position: relative;
+/* EN `@layer components` Y NO SUELTO, y esto es la trampa de siempre mordiendo
+   otra vez. Sin capa, esta regla gana a las utilidades de Tailwind —que viven
+   en `utilities`, y lo no estratificado siempre gana a lo estratificado—, así
+   que cualquier botón de icono al que quien lo usa le ponga `absolute` se
+   quedaba en `relative` sin decir nada.
+
+   No es teórico: la equis de limpiar la búsqueda de la biblioteca se caía
+   FUERA del campo, abajo a la izquierda, y el mismo botón de cerrar del armazón
+   (`Armazon.tsx`) tenía el fallo esperando. Dentro de la capa, el `relative`
+   sigue siendo el de por defecto y `absolute` vuelve a poder ganárselo, que es
+   justo lo que hace falta: esto solo necesita que el elemento sea un bloque
+   contenedor, y uno posicionado en absoluto ya lo es. */
+@layer components {
+  .toque-comodo {
+    position: relative;
+  }
 }
 @media (pointer: coarse) {
   .toque-comodo::after {
