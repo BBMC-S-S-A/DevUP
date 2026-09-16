@@ -6,6 +6,7 @@ import {
   KeyRound,
   Megaphone,
   Network,
+  Orbit,
   Plug,
   ScanSearch,
   Server,
@@ -125,6 +126,10 @@ export function NavegacionOrganizacion({
         // queda en cada una. Va aquí y no en la organización porque lo que
         // enseña son las tareas de ESTE tablero.
         { href: `${base}/categorias`, icono: <Network size={14} />, texto: "Ramas de trabajo" },
+        // La red: qué está enlazado con qué. Entró en el menú la última porque
+        // hasta ahora no se llegaba a ella desde ninguna parte — el grafo
+        // existía entero desde la 0043 y su API contestaba a nadie.
+        { href: `${base}/red`, icono: <Orbit size={14} />, texto: "Red del proyecto" },
       ]
     : [];
 
