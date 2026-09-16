@@ -109,19 +109,44 @@ async function request<T>(path: string, options: Options = {}, retry = true): Pr
   // cuerpo ignoran sin enterarse.
   const llevaCuerpo = ["POST", "PUT", "PATCH"].includes((rest.method ?? "GET").toUpperCase());
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...rest,
-    credentials: "include",
-    headers: {
-      ...(body !== undefined || llevaCuerpo ? { "content-type": "application/json" } : {}),
-      ...headers,
-    },
-    ...(body !== undefined
-      ? { body: JSON.stringify(body) }
-      : llevaCuerpo
-        ? { body: "{}" }
-        : {}),
-  });
+  /**
+   * CUANDO NO HAY RESPUESTA, DECIRLO. `fetch` no lanza un `ApiError`: lanza un
+   * `TypeError` seco —«Failed to fetch»— y quien lo recoge arriba acaba
+   * enseñando «No se pudo cargar», que es lo único que no explica nada.
+   *
+   * Y ESE ES EL CASO QUE MÁS CUESTA RASTREAR, porque la consola del navegador lo
+   * cuenta como un problema de CORS: si la respuesta muere antes de salir de la
+   * API —el proxy la corta por tardar, el contenedor se reinicia a mitad— nunca
+   * llega a llevar las cabeceras de CORS, y el navegador se queja de lo único
+   * que ve. Se persigue la configuración de CORS durante una tarde y la
+   * configuración está bien.
+   *
+   * Un `ApiError` con estado 0 no arregla la causa, pero hace que la pantalla
+   * diga lo que de verdad pasó y que el siguiente no empiece por el sitio
+   * equivocado.
+   */
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...rest,
+      credentials: "include",
+      headers: {
+        ...(body !== undefined || llevaCuerpo ? { "content-type": "application/json" } : {}),
+        ...headers,
+      },
+      ...(body !== undefined
+        ? { body: JSON.stringify(body) }
+        : llevaCuerpo
+          ? { body: "{}" }
+          : {}),
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "el servidor no contestó, o cortó la respuesta a medias. Vuelve a intentarlo.",
+      "sin-respuesta",
+    );
+  }
 
   if (response.status === 401 && retry && !sinReintento(path)) {
     if (await refreshSession()) return request<T>(path, options, false);

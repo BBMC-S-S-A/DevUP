@@ -98,6 +98,48 @@ export type GithubTreeEntry = {
  * - **403 casi siempre es el cupo**, no un permiso. Sin credencial son 60
  *   peticiones por hora Y POR IP, compartidas por todo DevUP.
  */
+/**
+ * CUÁNTO SE ESPERA A GITHUB ANTES DE RENDIRSE.
+ *
+ * ESTE ARCHIVO ERA EL ÚNICO CONECTOR SIN PLAZO. `proveedores` aborta a los 15
+ * segundos, `salud` y `youtube` a los 10; aquí se esperaba indefinidamente, y
+ * eso no se manifiesta como una espera: se manifiesta como un error de CORS.
+ *
+ * POR QUÉ, que es lo que cuesta media tarde averiguar. Si la petición se queda
+ * colgada, quien acaba cortándola es el proxy de delante —no la API—, y una
+ * respuesta que no sale de Fastify no pasa por el gancho que pone las cabeceras
+ * de CORS. El navegador ve una respuesta sin `Access-Control-Allow-Origin` y
+ * dice exactamente eso, que es lo único que no está pasando: el origen está
+ * permitido y las rutas responden con sus cabeceras cuando responden.
+ *
+ * Con plazo, lo que antes era un cuelgue silencioso pasa a ser un error con
+ * frase, que la pantalla ya sabe enseñar y reintentar.
+ */
+const PLAZO_MS = 15_000;
+
+/** Un fallo de red o un plazo agotado, con nombre. */
+export class GithubSinRespuesta extends Error {}
+
+/**
+ * `fetch` con plazo y con el aborto traducido.
+ *
+ * Todas las llamadas a GitHub pasan por aquí: una que se olvide del plazo
+ * vuelve a traer el cuelgue, y el cuelgue vuelve a parecer otra cosa.
+ */
+async function pedir(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(PLAZO_MS) });
+  } catch (fallo) {
+    const nombre = fallo instanceof Error ? fallo.name : "";
+    if (nombre === "TimeoutError" || nombre === "AbortError") {
+      throw new GithubSinRespuesta(
+        `GitHub no contestó en ${PLAZO_MS / 1000} segundos. Suele ser suyo; vuelve a intentarlo.`,
+      );
+    }
+    throw new GithubSinRespuesta("no se pudo hablar con GitHub: la red falló por el camino.");
+  }
+}
+
 function traducirFallo(status: number, fullName: string, conToken: boolean): string {
   if (status === 404 && !conToken) {
     return `no encontré «${fullName}». Si existe, es privado: para esos sí hace falta un token.`;
@@ -205,7 +247,7 @@ async function get(url: string, token: string | null): Promise<unknown> {
   const cabeceras = headers(token);
   if (guardado?.etag) cabeceras["If-None-Match"] = guardado.etag;
 
-  const response = await fetch(url, { headers: cabeceras });
+  const response = await pedir(url, { headers: cabeceras });
 
   // 304: nada ha cambiado. Con credencial además no ha costado cupo; sin ella
   // sí —medido contra la API—, y por eso lo de arriba evita llegar hasta aquí.
@@ -303,7 +345,7 @@ export async function fetchContributorStats(
   token: string | null,
   fullName: string,
 ): Promise<{ listo: boolean; colaboradores: Colaborador[] }> {
-  const response = await fetch(`${API}/repos/${fullName}/stats/contributors`, {
+  const response = await pedir(`${API}/repos/${fullName}/stats/contributors`, {
     headers: headers(token),
   });
 
@@ -480,7 +522,7 @@ export async function dispararWorkflow(
   workflow: string,
   ref: string,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await pedir(
     `${API}/repos/${fullName}/actions/workflows/${encodeURIComponent(workflow)}/dispatches`,
     {
       method: "POST",
