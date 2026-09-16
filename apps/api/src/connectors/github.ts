@@ -344,12 +344,22 @@ export type Colaborador = {
 export async function fetchContributorStats(
   token: string | null,
   fullName: string,
-): Promise<{ listo: boolean; colaboradores: Colaborador[] }> {
+): Promise<{ listo: boolean; colaboradores: Colaborador[]; motivo?: "calculando" | "vacio" }> {
   const response = await pedir(`${API}/repos/${fullName}/stats/contributors`, {
     headers: headers(token),
   });
 
-  if (response.status === 202) return { listo: false, colaboradores: [] };
+  // 202: GitHub ha empezado a calcularlo y hay que volver a preguntar.
+  if (response.status === 202) return { listo: false, colaboradores: [], motivo: "calculando" };
+
+  /**
+   * 204 ES OTRA COSA Y SE CONFUNDÍA CON LA ANTERIOR. GitHub contesta «sin
+   * contenido» cuando no hay estadísticas que dar —un repositorio vacío, o uno
+   * demasiado grande para que las calcule—, y eso no se arregla esperando.
+   * Tratarlo como «calculando» dejaba el botón de «Comprobar de nuevo» girando
+   * para siempre contra algo que nunca iba a llegar.
+   */
+  if (response.status === 204) return { listo: true, colaboradores: [], motivo: "vacio" };
   if (!response.ok) throw new Error(traducirFallo(response.status, fullName, Boolean(token)));
 
   const body = (await response.json()) as {

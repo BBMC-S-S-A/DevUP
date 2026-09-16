@@ -441,10 +441,12 @@ type Colaborador = {
  * migraciones y las integraciones, no aparte.
  */
 function ColaboradoresGitHub({ repoId }: { repoId: string }) {
-  const datos = useRecurso<{ listo: boolean; colaboradores: Colaborador[] }>(
-    `/github/repos/${repoId}/colaboradores`,
-    { frescura: 3_600_000 },
-  );
+  const datos = useRecurso<{
+    listo: boolean;
+    colaboradores: Colaborador[];
+    /** `calculando` = GitHub está en ello. `vacio` = no las va a dar nunca. */
+    motivo?: "calculando" | "vacio";
+  }>(`/github/repos/${repoId}/colaboradores`, { frescura: 3_600_000 });
 
   return (
     <div className="mb-5">
@@ -467,7 +469,12 @@ function ColaboradoresGitHub({ repoId }: { repoId: string }) {
         <EstadoVacio
           icono={<GitCommitHorizontal size={20} />}
           titulo="GitHub está calculando estas estadísticas"
-          pista="Pasa solo la primera vez que se piden para un repositorio. Suele tardar menos de un minuto."
+          // LO QUE FALTABA DECIR, Y POR LO QUE EL BOTÓN PARECÍA NO SERVIR: si
+          // el repositorio no tiene conexión, esto se pide sin credencial, y
+          // sin credencial GitHub atiende mucho peor este cálculo — se puede
+          // quedar contestando «calculando» indefinidamente por mucho que se
+          // insista. Pulsar otra vez no estaba roto: no tenía a dónde llegar.
+          pista="Pasa la primera vez que se piden para un repositorio, y suele tardar menos de un minuto. Si no llega nunca, casi siempre es que el repositorio no tiene conexión de GitHub: sin credencial, este cálculo puede no completarse."
           accion={
             <Boton tamano="sm" variante="secundario" onClick={() => void datos.recargar()}>
               Comprobar de nuevo
@@ -477,8 +484,19 @@ function ColaboradoresGitHub({ repoId }: { repoId: string }) {
       ) : (datos.datos?.colaboradores.length ?? 0) === 0 ? (
         <EstadoVacio
           icono={<GitCommitHorizontal size={20} />}
-          titulo="No encontré commits en este repositorio"
-          pista=""
+          titulo={
+            datos.datos?.motivo === "vacio"
+              ? "GitHub no da estadísticas de este repositorio"
+              : "No encontré commits en este repositorio"
+          }
+          // `vacio` es la respuesta 204 de GitHub, y antes se confundía con
+          // «todavía calculando»: quedaba un botón girando contra algo que no
+          // iba a llegar. Esperar no lo arregla, así que se dice.
+          pista={
+            datos.datos?.motivo === "vacio"
+              ? "Suele ser un repositorio sin commits, o demasiado grande para que GitHub las calcule. Esperar no cambia nada."
+              : ""
+          }
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -304,14 +304,41 @@ export async function githubRoutes(app: FastifyInstance): Promise<void> {
    * por el tablero; esto lo cuenta por el código — dos cosas distintas que no
    * se suman entre sí, ver `Registro.tsx`).
    */
+  /**
+   * Quién ha escrito el código.
+   *
+   * ESTA RUTA NO DEJABA RASTRO, y esa era media queja: cuando fallaba en
+   * producción no había NADA que mirar —ni el repositorio, ni si iba con token,
+   * ni qué dijo GitHub—. Un conector que habla con un tercero y no escribe una
+   * línea convierte cualquier incidencia en adivinanza.
+   *
+   * Se registra lo que hace falta para entenderlo y nada más: sin token, sin
+   * cuerpos, sin datos de nadie.
+   */
   app.get("/github/repos/:repoId/colaboradores", async (request) => {
     const userId = requireUser(request);
     const { repoId } = parseParams(z.object({ repoId: uuid }), request.params);
     const { token, fullName } = await withUser(userId, (db) => repoConCredencial(db, repoId));
 
-    return fetchContributorStats(token, fullName).catch((error: unknown) => {
+    try {
+      const resultado = await fetchContributorStats(token, fullName);
+      if (!resultado.listo) {
+        // Que GitHub siga calculando es normal la primera vez. Que pase SIEMPRE
+        // para el mismo repositorio no lo es, y sin esta línea no había forma
+        // de distinguir una cosa de la otra.
+        request.log.info(
+          { fullName, conToken: Boolean(token) },
+          "[github] estadísticas todavía calculándose",
+        );
+      }
+      return resultado;
+    } catch (error) {
+      request.log.warn(
+        { err: error, fullName, conToken: Boolean(token) },
+        "[github] no se pudieron leer los colaboradores",
+      );
       throw badGateway(error instanceof Error ? error.message : "no se pudo leer GitHub");
-    });
+    }
   });
 
   /**
