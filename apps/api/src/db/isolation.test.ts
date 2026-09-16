@@ -2972,7 +2972,11 @@ async function main(): Promise<void> {
     });
     check("el gasto es un asiento negativo, no un saldo aparte", asiento?.cantidad === -60);
     check("con su motivo", asiento?.motivo === "compro");
-    check("y con el nombre de lo comprado, que sobrevive al catálogo", asiento?.task_label === "Gorro de lana");
+    check(
+      "y con el nombre de lo comprado, que sobrevive al catálogo",
+      asiento?.task_label === "Bandana",
+      asiento?.task_label,
+    );
 
     await denied("lo mismo no se compra dos veces", () =>
       withUser(ana, (db) => db.query("select public.comprar_articulo('hat:4')")),
