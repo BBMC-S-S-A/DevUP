@@ -181,6 +181,29 @@ export default function AuditoriaPage() {
     { frescura: 3_600_000 },
   );
 
+  /**
+   * ¿SIGUE VIVA LA CREDENCIAL DE GITHUB?
+   *
+   * SOLO SE PREGUNTA CUANDO ALGO FALLA, y por eso no cuesta nada el resto del
+   * tiempo: comprobar una credencial es una llamada saliente a GitHub, y
+   * hacerla en cada visita sería gastar cupo para contestar casi siempre que
+   * sí.
+   *
+   * POR QUÉ HACÍA FALTA. La API sabía responder esto desde hace tiempo
+   * —`/connections/health`— y no lo preguntaba nadie. Así que cuando el token
+   * dejaba de valer, esta pantalla enseñaba tres cuadros rojos iguales y había
+   * que ADIVINAR que lo que tocaba era reconectar GitHub. Pasó de verdad, el 16
+   * de septiembre: la salida fue volver a autenticarse a ciegas.
+   */
+  const algoFalla = Boolean(migraciones.error || integraciones.error);
+  const salud = useRecurso<{ health: Record<string, { ok: boolean; detalle?: string }> }>(
+    algoFalla && elegido ? `/workspaces/${workspaceId}/connections/health` : null,
+    { frescura: 60_000 },
+  );
+  const credencialRota =
+    algoFalla &&
+    Object.values(salud.datos?.health ?? {}).some((estado) => estado && !estado.ok);
+
   const filas = [
     ...filasDeMigraciones(migraciones.datos),
     ...filasDeIntegraciones(integraciones.datos),
@@ -259,6 +282,24 @@ export default function AuditoriaPage() {
         />
       ) : (
         <>
+          {/* UNA SOLA FRASE, ARRIBA, Y CON EL BOTÓN. Tres errores idénticos no
+              dicen qué hacer; esto sí, y lleva al único sitio donde se arregla. */}
+          {credencialRota && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn/10 px-3.5 py-3">
+              <TriangleAlert size={16} className="shrink-0 text-warn" />
+              <p className="min-w-0 flex-1 text-xs leading-relaxed text-warn">
+                La conexión con GitHub ya no vale. No caduca sola: la revoca GitHub o alguien desde
+                su cuenta. Hasta que se reconecte, esta pantalla no puede leer el repositorio.
+              </p>
+              <Link
+                href={`/app/w/${workspaceId}/github`}
+                className="presionable shrink-0 rounded-lg border border-warn/40 px-2.5 py-1 text-xs font-medium text-warn hover:bg-warn/15"
+              >
+                Reconectar GitHub
+              </Link>
+            </div>
+          )}
+
           <Alcance workspaceId={workspaceId} />
 
           {elegido && <ColaboradoresGitHub repoId={elegido} />}
