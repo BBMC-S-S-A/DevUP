@@ -300,7 +300,15 @@ await ensureBucket();
 // volumen no está montado, se sabe aquí y el arranque falla — que es mucho
 // mejor que enterarse en el primer `git push` de alguien, cuando el error llega
 // disfrazado de «no existe ese repositorio».
-await prepararAlmacen();
+//
+// SOLO DONDE ESTÉN ENCENDIDOS, y esto costó un despliegue. Sin el `if`, una
+// instalación con los repositorios APAGADOS hacía igualmente `mkdir` de
+// `GIT_ROOT` al arrancar; en la imagen de producción eso es `/app/.datos`, que
+// pertenece a root mientras el proceso corre como `devup`. La API moría antes
+// de escuchar, el healthcheck de Railway no encontró a nadie y el despliegue se
+// cayó — por una carpeta que nadie había pedido. Un interruptor apagado tiene
+// que significar «esto no existe» también al arrancar.
+if (env.REPOS_ALOJADOS) await prepararAlmacen();
 
 const sweeper = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
 void sweep();
