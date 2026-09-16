@@ -49,7 +49,8 @@
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "sembrar:caminos": "tsx scripts/sembrar-caminos.ts",
     "test:conexiones": "npm run test:conexiones --workspace apps/api",
-    "test:git": "npm run test:git --workspace apps/api"
+    "test:git": "npm run test:git --workspace apps/api",
+    "test:git:e2e": "npm run test:git:e2e --workspace apps/api"
   },
   "engines": {
     "node": ">=20.11"

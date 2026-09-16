@@ -98,6 +98,15 @@ jobs:
         # sin más pistas.
         run: npm run test:git
 
+      - name: Clonar y empujar de verdad
+        # La prueba que justifica la decisión de 0068: que no era un simulacro.
+        # Clona por HTTP con una contraseña de git, empuja un commit y vuelve a
+        # clonar desde cero para comprobar que está. Cuando el protocolo se
+        # rompe, git lo cuenta con mensajes que no dicen nada —«invalid server
+        # response», «early EOF»—, así que esto es lo único que avisa a tiempo.
+        # Necesita Postgres, como test:rls: la autorización la decide RLS.
+        run: npm run test:git:e2e
+
       - name: La credencial vigente de un espacio
         # Que gane la ÚLTIMA conexión y no la primera, y que reconectar
         # reemplace en vez de apilar. Esto se rompió en producción sin fallar
