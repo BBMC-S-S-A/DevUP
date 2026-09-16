@@ -17,6 +17,7 @@ import { useConfirmar } from "@/components/ui/Confirmar";
 import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { AvisoCredencialGithub } from "@/components/conexiones/AvisoCredencial";
 import { useWorkspaceId } from "@/lib/workspace-context";
 import type { GithubRepo, ResultadoSQL, TablaDB } from "@/lib/api";
 import { api, useMutacion, useRecurso } from "@/lib/datos";
@@ -158,7 +159,17 @@ export default function BaseDeDatosPage() {
               <Criterio />
 
               {analisis.error ? (
-                <Fallo onReintentar={() => void analisis.recargar()}>{analisis.error}</Fallo>
+                <>
+                  {/* Lo mismo que en Auditoría, con la misma pieza: si lo que
+                      falló es la credencial, decirlo aquí también — esta
+                      pantalla lee el repositorio exactamente igual. */}
+                  <AvisoCredencialGithub
+                    workspaceId={workspaceId}
+                    activo
+                    className="mb-3"
+                  />
+                  <Fallo onReintentar={() => void analisis.recargar()}>{analisis.error}</Fallo>
+                </>
               ) : analisis.cargando ? (
                 <Cargando etiqueta="Leyendo migraciones" />
               ) : migraciones.length === 0 ? (
