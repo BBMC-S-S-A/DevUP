@@ -1,11 +1,12 @@
 "use client";
 
-import { Hand, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
+import { Hand, Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
 import type { EstadoLlamada } from "@/lib/world/useLlamada";
 import { BotonPizarra, Pizarra } from "./Pizarra";
+import type { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 
 /**
  * Acercarse a alguien: el menú, la llamada entrante y el panel de llamada.
@@ -114,160 +115,106 @@ export function LlamadaEntrante({
  * Se queda en una esquina y no ocupa la pantalla: la gracia de llamar desde la
  * oficina es seguir viendo la oficina. La pizarra sí crece, porque para dibujar
  * hace falta sitio.
+ *
+ * LO QUE ENSEÑA SALE DE LA SALA, NO DE LA LLAMADA. Desde que la llamada por
+ * cercanía es un corrillo —una sala de voz efímera— aquí puede haber tres
+ * personas, así que se listan las que hay en vez de nombrar a «la otra». El
+ * audio de todas lo reproduce `VoiceCallProvider`, como en cualquier sala.
  */
 export function PanelLlamada({
   estado,
-  remoto,
-  conVideo,
-  camaraPropia,
-  fallaCamara,
+  room,
   onColgar,
-  onCamara,
-  onApagarCamara,
-  enviarPorCanal,
-  escucharCanal,
 }: {
   estado: EstadoLlamada;
-  remoto: MediaStream | null;
-  conVideo: boolean;
-  /** Mi propia cámara, cuando la he encendido. Ver el porqué más abajo. */
-  camaraPropia: MediaStream | null;
-  fallaCamara: string | null;
+  /** La sala efímera: quién hay, el micrófono, la cámara y el canal de datos. */
+  room: ReturnType<typeof useVoiceCall>["room"];
   onColgar: () => void;
-  onCamara: () => void;
-  onApagarCamara: () => void;
-  enviarPorCanal: (dato: unknown) => boolean;
-  escucharCanal: (fn: ((d: unknown) => void) | null) => void;
 }) {
-  const video = useRef<HTMLVideoElement>(null);
   const mio = useRef<HTMLVideoElement>(null);
-  const audio = useRef<HTMLAudioElement>(null);
   const [pizarra, setPizarra] = useState(false);
 
-  // El audio va en su propio elemento y no dentro del vídeo: si la otra parte
-  // no ha encendido la cámara no hay elemento de vídeo que reproducir, y la voz
-  // se perdería con él.
-  //
-  // `conVideo` ESTÁ EN LAS DEPENDENCIAS Y ES TODO EL ARREGLO DE LA CÁMARA. El
-  // `<video>` de abajo solo se monta cuando `conVideo` es cierto, y eso ocurre
-  // al llegar la pista de vídeo — después de que este efecto haya corrido por
-  // última vez. Y no volvía a correr, porque `remoto` NO CAMBIA: quien enciende
-  // la cámara añade la pista al mismo `MediaStream` que ya viajaba con el
-  // audio, así que `ontrack` entrega el mismo objeto, `setRemoto` recibe la
-  // misma referencia y React no repite el efecto.
-  //
-  // Resultado: el elemento existía, la pista llegaba, y nadie le asignaba nunca
-  // el stream. Caja en blanco — «la cámara no sirve», sin un error en ninguna
-  // parte que lo explicara.
+  // Verse a uno mismo al encender la cámara. Sin esto, le das al botón, se
+  // enciende la luz de la cámara y en pantalla no pasa nada: es lo que hacía
+  // creer que la cámara del DevVerse no servía.
   useEffect(() => {
-    if (audio.current) audio.current.srcObject = remoto;
-    if (video.current) video.current.srcObject = remoto;
-  }, [remoto, conVideo]);
-
-  /**
-   * VERSE A UNO MISMO, QUE ERA LA OTRA MITAD DE «LA CÁMARA NO SIRVE».
-   *
-   * Arreglado lo de arriba, seguía sin servir para el caso normal: encender la
-   * cámara cuando el otro no ha encendido la suya. Este panel solo pintaba el
-   * vídeo del OTRO extremo, así que le dabas al botón, se encendía la luz de la
-   * cámara, y en pantalla no pasaba nada. Sin error, sin cambio en el botón,
-   * sin imagen. Cualquiera concluye lo mismo: no sirve.
-   *
-   * Y no hacía falta un segundo navegador para verlo — que es lo que tenía
-   * parada la tarjeta.
-   */
-  useEffect(() => {
-    if (mio.current) mio.current.srcObject = camaraPropia;
-  }, [camaraPropia]);
+    if (mio.current) mio.current.srcObject = room.localCameraStream;
+  }, [room.localCameraStream]);
 
   if (estado.fase === "libre" || estado.fase === "entrante") return null;
 
   const hablando = estado.fase === "hablando";
+  const gente = room.participants;
 
   return (
     <>
-      <audio ref={audio} autoPlay />
-
       {pizarra && (
         <div className="pointer-events-auto fixed inset-6 z-50 md:inset-12">
           <Pizarra
             onCerrar={() => setPizarra(false)}
-            enviar={enviarPorCanal}
-            escuchar={escucharCanal}
+            enviar={room.enviarPorCanal}
+            escuchar={room.escucharCanal}
           />
         </div>
       )}
 
       <div className="pointer-events-auto fixed bottom-4 right-4 z-40 w-64">
         <div className="cristal-denso overflow-hidden rounded-2xl shadow-xl">
-          {/* El vídeo del otro manda cuando lo hay; el mío se queda de
-              recuadro en una esquina. Sin vídeo del otro, el mío ocupa el
-              marco: es lo único que hay que ver. */}
-          {(conVideo || camaraPropia) && (
-            <div className="relative">
-              {conVideo && (
-                <video ref={video} autoPlay playsInline className="aspect-video w-full bg-canvas" />
-              )}
-              {camaraPropia && (
-                <>
-                  <video
-                    ref={mio}
-                    autoPlay
-                    playsInline
-                    // MUDO SIEMPRE, y no es un detalle: el navegador no
-                    // reproduce un vídeo con sonido sin gesto previo, y si lo
-                    // reprodujera te oirías a ti mismo con retardo.
-                    muted
-                    className={
-                      conVideo
-                        ? "absolute bottom-2 right-2 w-20 -scale-x-100 rounded-lg border border-line-strong bg-canvas shadow-lg"
-                        : "aspect-video w-full -scale-x-100 bg-canvas"
-                    }
-                  />
-                  {/* Espejado como un espejo de verdad (`-scale-x-100`): verse
-                      al revés es lo que desconcierta a todo el mundo en las
-                      videollamadas que no lo hacen. */}
-                  {!conVideo && (
-                    <span className="absolute bottom-2 left-2 rounded-lg bg-canvas/80 px-1.5 py-0.5 font-display text-[10px] uppercase tracking-wider text-muted">
-                      Tú
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
+          {room.localCameraStream && (
+            <video
+              ref={mio}
+              autoPlay
+              playsInline
+              // MUDO SIEMPRE: el navegador no reproduce vídeo con sonido sin un
+              // gesto previo, y si lo hiciera te oirías a ti mismo con retardo.
+              muted
+              className="aspect-video w-full -scale-x-100 bg-canvas"
+            />
           )}
 
           <div className="p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <Rotulo>{hablando ? "En llamada" : "Conectando"}</Rotulo>
-                <p className="truncate text-xs font-semibold">{estado.nombre}</p>
+                <Rotulo>{hablando ? "En corrillo" : "Llamando"}</Rotulo>
+                {/* QUIÉN HAY, no «con quién hablas»: en un corrillo pueden ser
+                    tres, y nombrar solo a la primera persona haría creer que
+                    las demás no están oyendo. */}
+                <p className="truncate text-xs font-semibold">
+                  {hablando
+                    ? gente.length === 0
+                      ? "Esperando a que entren"
+                      : gente.map((p) => p.displayName).join(", ")
+                    : estado.nombre}
+                </p>
               </div>
-              {!hablando && (
-                <Chip tono="accent">
-                  {estado.fase === "llamando" ? "Llamando" : "Conectando"}
-                </Chip>
-              )}
+              {!hablando && <Chip tono="accent">Llamando</Chip>}
             </div>
 
-            {/* Lo que dijo el navegador cuando dijo que no. Cada motivo se
-                arregla de una forma distinta, así que se dice cuál fue. */}
-            {fallaCamara && (
-              <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-2 py-1.5 text-[11px] leading-relaxed text-danger">
-                {fallaCamara}
+            {/* Cualquiera del corrillo puede invitar a un cuarto acercándose y
+                llamándole: el grupo crece, no se parte. Se dice aquí porque en
+                una llamada de dos eso no se podía, y nadie lo va a suponer. */}
+            {hablando && gente.length > 0 && (
+              <p className="mb-2 text-[10px] leading-relaxed text-faint">
+                Acércate a alguien más y llámale: se suma a este mismo corrillo.
               </p>
             )}
 
             <div className="flex items-center gap-1.5">
-              {/* Un botón que se queda igual después de pulsarlo no dice si
-                  funcionó. Ahora cambia de icono y de etiqueta, y apaga. */}
               <BotonIcono
-                etiqueta={camaraPropia ? "Apagar la cámara" : "Encender la cámara"}
-                onClick={camaraPropia ? onApagarCamara : onCamara}
+                etiqueta={room.muted ? "Activar el micrófono" : "Silenciar el micrófono"}
+                onClick={() => room.toggleMute()}
                 disabled={!hablando}
-                className={camaraPropia ? "text-accent" : ""}
+                className={room.muted ? "text-danger" : ""}
               >
-                {camaraPropia ? <VideoOff size={14} /> : <Video size={14} />}
+                {room.muted ? <MicOff size={14} /> : <Mic size={14} />}
+              </BotonIcono>
+              <BotonIcono
+                etiqueta={room.cameraOn ? "Apagar la cámara" : "Encender la cámara"}
+                onClick={() => void room.toggleCamera()}
+                disabled={!hablando}
+                className={room.cameraOn ? "text-accent" : ""}
+              >
+                {room.cameraOn ? <VideoOff size={14} /> : <Video size={14} />}
               </BotonIcono>
               {hablando && <BotonPizarra onAbrir={() => setPizarra(true)} />}
               <div className="flex-1" />
@@ -275,6 +222,14 @@ export function PanelLlamada({
                 <PhoneOff size={14} />
               </BotonIcono>
             </div>
+
+            {/* Lo que dijo el navegador cuando dijo que no. Cada motivo se
+                arregla de una forma distinta, así que se dice cuál fue. */}
+            {room.error && (
+              <p className="mt-2 rounded-lg border border-danger/30 bg-danger/10 px-2 py-1.5 text-[11px] leading-relaxed text-danger">
+                {room.error}
+              </p>
+            )}
           </div>
         </div>
       </div>

@@ -56,7 +56,8 @@ const KEYS: Record<string, keyof Input> = {
 export function WorldView({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const { user } = useSession();
-  const { joinChannel, leaveChannel, activeChannelId, room } = useVoiceCall();
+  const { joinChannel, joinCorrillo, leaveChannel, activeChannelId, activeCorrillo, room } =
+    useVoiceCall();
 
   // Solo para el tablero embebido: `TaskBoard` lo necesita y nada más aquí lo
   // pedía hasta ahora. Cacheado por `useRecurso`, así que abrir y cerrar el
@@ -250,7 +251,17 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
     onDirecto: (mensaje) => recibirLlamadaRef.current?.(mensaje as never),
   });
 
-  const llamada = useLlamada(world.enviar);
+  /**
+   * La llamada por cercanía ya no tiene conexión propia: invita a un corrillo,
+   * que es una sala de voz efímera con la misma malla que las de verdad. Por
+   * eso necesita las tres cosas de la sala — entrar, salir y saber en cuál
+   * está— en vez de montar la suya. Ver `useLlamada`.
+   */
+  const llamada = useLlamada(world.enviar, workspaceId, {
+    joinCorrillo,
+    leaveChannel,
+    activeCorrillo,
+  });
   recibirLlamadaRef.current = llamada.recibir as never;
 
   // El teclado se monta una sola vez; el editor cambia en cada renderizado.
@@ -868,15 +879,8 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
 
       <PanelLlamada
         estado={llamada.estado}
-        remoto={llamada.remoto}
-        conVideo={llamada.conVideo}
-        camaraPropia={llamada.camaraPropia}
-        fallaCamara={llamada.fallaCamara}
+        room={room}
         onColgar={llamada.colgar}
-        onCamara={() => void llamada.encenderCamara()}
-        onApagarCamara={() => void llamada.apagarCamara()}
-        enviarPorCanal={llamada.enviarPorCanal}
-        escucharCanal={llamada.escucharCanal}
       />
 
       {tableroAbierto && (

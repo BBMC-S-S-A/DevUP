@@ -230,6 +230,8 @@ export function useVoiceRoom(channelId: string, workspaceId: string, corrillo?: 
   }, []);
 
   const dropPeer = useCallback((peerId: string) => {
+    datos.current.get(peerId)?.close();
+    datos.current.delete(peerId);
     peers.current.get(peerId)?.close();
     peers.current.delete(peerId);
     makingOffer.current.delete(peerId);
@@ -256,12 +258,75 @@ export function useVoiceRoom(channelId: string, workspaceId: string, corrillo?: 
    * aviso de que ese par existe, y sin esto se descartaría y la llamada no se
    * establecería nunca.
    */
+  /**
+   * Lo que llega por el canal de datos de cualquiera. Lo consume la pizarra.
+   *
+   * UNA SOLA FUNCIÓN PARA TODOS LOS PARES, y no una por par: quien dibuja no
+   * tiene por qué saber cuánta gente hay al otro lado. Es la misma forma que
+   * tenía la llamada de dos, para que la pizarra no se entere del cambio.
+   */
+  const alDato = useRef<((dato: unknown) => void) | null>(null);
+  const datos = useRef(new Map<string, RTCDataChannel>());
+
+  const engancharDatos = useCallback((remote: string, canal: RTCDataChannel) => {
+    datos.current.set(remote, canal);
+    canal.onmessage = (evento) => {
+      try {
+        alDato.current?.(JSON.parse(String(evento.data)));
+      } catch {
+        // Un mensaje ilegible de un par no tiene que tirar la sala.
+      }
+    };
+    canal.onclose = () => {
+      if (datos.current.get(remote) === canal) datos.current.delete(remote);
+    };
+  }, []);
+
+  /**
+   * Difunde a TODOS los pares, que es lo que convierte la pizarra de dos en
+   * una de varios. Devuelve si llegó a alguien: dibujar contra nadie y que la
+   * herramienta diga que sí es peor que decir que no.
+   */
+  const enviarPorCanal = useCallback((dato: unknown): boolean => {
+    const texto = JSON.stringify(dato);
+    let alguno = false;
+    for (const canal of datos.current.values()) {
+      if (canal.readyState !== "open") continue;
+      canal.send(texto);
+      alguno = true;
+    }
+    return alguno;
+  }, []);
+
+  const escucharCanal = useCallback((fn: ((dato: unknown) => void) | null) => {
+    alDato.current = fn;
+  }, []);
   const peerFor = useCallback(
     (remote: string): RTCPeerConnection => {
       const existing = peers.current.get(remote);
       if (existing) return existing;
 
       const pc = new RTCPeerConnection({ iceServers: ice.current });
+
+      /**
+       * El canal de datos, para lo que se dibuja.
+       *
+       * POR QUÉ VIVE AQUÍ Y NO EN EL SERVIDOR. La pizarra viajaba por el canal
+       * de datos de la llamada de dos, y eso no era casualidad: lo que se dibuja
+       * va por el mismo túnel cifrado que la voz, sin pasar por ningún sitio.
+       * Mandarla por el socket del mundo sería barato y rompería esa promesa.
+       *
+       * LO ABRE UNO SOLO DE LOS DOS, y el criterio es el mismo que ya decide
+       * quién es el cortés al negociar: el del identificador mayor. Si los dos
+       * lo abrieran, habría dos canales entre cada par y lo que se dibuje llega
+       * dos veces — que es como se ven las líneas dobles en una pizarra.
+       */
+      const mio = self.current;
+      if (mio && mio > remote) {
+        engancharDatos(remote, pc.createDataChannel("pizarra"));
+      } else {
+        pc.ondatachannel = (evento) => engancharDatos(remote, evento.channel);
+      }
 
       const local = stream.current;
       if (local) for (const track of local.getTracks()) pc.addTrack(track, local);
@@ -337,7 +402,7 @@ export function useVoiceRoom(channelId: string, workspaceId: string, corrillo?: 
       peers.current.set(remote, pc);
       return pc;
     },
-    [emit, upsert, resolveVideoRoles],
+    [emit, upsert, resolveVideoRoles, engancharDatos],
   );
 
   const handleSignal = useCallback(
@@ -981,6 +1046,10 @@ export function useVoiceRoom(channelId: string, workspaceId: string, corrillo?: 
     status,
     error,
     notice,
+    // Lo que la pizarra necesita, con la misma forma que tenía en la llamada
+    // de dos: quien dibuja no se entera de que ahora puede haber tres.
+    enviarPorCanal,
+    escucharCanal,
     dismissNotice: () => setNotice(null),
     localAudioStream,
     localCameraStream,

@@ -83,25 +83,33 @@ const inbound = z.discriminatedUnion("type", [
    * negociación y nada más: reparte sin entender ni conservar, el mismo
    * papel que ya tiene con las burbujas de texto.
    */
-  z.object({ type: z.literal("knock"), toPeerId: z.string().uuid() }),
+  // EL CORRILLO VIAJA EN LA LLAMADA, y es lo que la convierte en una de
+  // varios: quien llama propone la sala efímera a la que va a entrar, y quien
+  // acepta entra a ESA. Si quien llama ya estaba en un corrillo, propone el
+  // suyo — así el tercero que llega se une al grupo en vez de abrir otro
+  // aparte, que es justo lo que no podía hacer la conexión de dos.
+  z.object({
+    type: z.literal("knock"),
+    toPeerId: z.string().uuid(),
+    corrillo: z.string().uuid(),
+  }),
   z.object({
     type: z.literal("knock-reply"),
     toPeerId: z.string().uuid(),
     accept: z.boolean(),
   }),
   /**
-   * SDP e ICE de la llamada individual, y lo que se dibuje en la pizarra
-   * viaja por el canal de datos de esa misma conexión — no por aquí.
+   * (Retirado) SDP e ICE de la llamada individual.
+   *
+   * La llamada por cercanía ya no tiene conexión propia: invita a un corrillo,
+   * y la malla de voz negocia por `/ws/voice` como cualquier sala. Este relé se
+   * quedó sin remitente, y un relé que no usa nadie es una puerta abierta que
+   * nadie vigila. Lo que queda escrito es por qué estuvo aquí:
    *
    * `data` es opaco a propósito: en cuanto el servidor entienda lo que
    * reparte, empieza a poder guardarlo. Se valida el tamaño y el
    * destinatario, y nada más.
    */
-  z.object({
-    type: z.literal("rtc"),
-    toPeerId: z.string().uuid(),
-    data: z.unknown(),
-  }),
   z.object({ type: z.literal("pong") }),
 ]);
 
@@ -410,6 +418,7 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
             fromPeerId: peerId,
             displayName: me.displayName,
             title: me.title,
+            corrillo: message.data.corrillo,
           });
           return;
         }
@@ -419,15 +428,6 @@ export async function worldSocketRoutes(app: FastifyInstance): Promise<void> {
             type: "knock-answered",
             fromPeerId: peerId,
             accept: message.data.accept,
-          });
-          return;
-        }
-
-        case "rtc": {
-          enviarA(workspaceId, message.data.toPeerId, {
-            type: "rtc",
-            fromPeerId: peerId,
-            data: message.data.data,
           });
           return;
         }

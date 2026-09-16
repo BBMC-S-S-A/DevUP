@@ -4,7 +4,19 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { HiddenAudio } from "@/components/voice/ParticipantTile";
 import { useVoiceRoom } from "./useVoiceRoom";
 
-type Target = { channelId: string; workspaceId: string; channelName: string } | null;
+/**
+ * A dónde se quiere estar conectado.
+ *
+ * `corrillo` presente = sala efímera sin canal (el pasillo del DevVerse). Con
+ * canal, `channelId` manda; sin él, el canal va vacío y lo que identifica el
+ * destino es el corrillo. Ver `claveDe`.
+ */
+type Target = {
+  channelId: string;
+  workspaceId: string;
+  channelName: string;
+  corrillo?: string;
+} | null;
 
 type VoiceCallContextValue = {
   room: ReturnType<typeof useVoiceRoom>;
@@ -14,6 +26,14 @@ type VoiceCallContextValue = {
   activeChannelName: string | null;
   /** Entra en la sala de este canal. Si ya hay otra activa, sale de esa primero. */
   joinChannel: (channelId: string, workspaceId: string, channelName: string) => void;
+  /**
+   * Entra en un CORRILLO: una sala efímera sin canal, la de juntarse a hablar
+   * en el pasillo del DevVerse. Misma malla y mismo sitio que una sala de
+   * verdad —así la llamada también te sigue al tablero— pero sin historial.
+   */
+  joinCorrillo: (corrillo: string, workspaceId: string, nombre: string) => void;
+  /** El corrillo en el que estoy, si estoy en uno. */
+  activeCorrillo: string | null;
   leaveChannel: () => void;
 };
 
@@ -41,10 +61,23 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   const desired = useRef<Target>(null);
   const joinedFor = useRef<string | null>(null);
 
-  const room = useVoiceRoom(target?.channelId ?? "", target?.workspaceId ?? "");
+  const room = useVoiceRoom(target?.channelId ?? "", target?.workspaceId ?? "", target?.corrillo);
+
+  /** Qué identifica a un destino: el canal, o el corrillo si no hay canal. */
+  const claveDe = (t: Target): string | null => (t ? (t.corrillo ?? t.channelId) : null);
+
+  const joinCorrillo = (corrillo: string, workspaceId: string, nombre: string) => {
+    if (target?.corrillo === corrillo) return;
+    desired.current = { channelId: "", workspaceId, channelName: nombre, corrillo };
+    if (room.status === "idle") {
+      setTarget(desired.current);
+    } else {
+      room.leave();
+    }
+  };
 
   const joinChannel = (channelId: string, workspaceId: string, channelName: string) => {
-    if (target?.channelId === channelId) return;
+    if (target?.channelId === channelId && !target?.corrillo) return;
     desired.current = { channelId, workspaceId, channelName };
     if (room.status === "idle") {
       setTarget(desired.current);
@@ -65,7 +98,7 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   // Al quedar libre (recién llegado, o tras salir para cambiar de sala),
   // aplica el destino pendiente si todavía hay uno.
   useEffect(() => {
-    if (room.status === "idle" && desired.current && desired.current.channelId !== target?.channelId) {
+    if (room.status === "idle" && desired.current && claveDe(desired.current) !== claveDe(target)) {
       setTarget(desired.current);
     }
   }, [room.status, target]);
@@ -78,18 +111,21 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
       joinedFor.current = null;
       return;
     }
-    if (room.status === "idle" && joinedFor.current !== target.channelId) {
-      joinedFor.current = target.channelId;
+    const clave = claveDe(target);
+    if (room.status === "idle" && clave && joinedFor.current !== clave) {
+      joinedFor.current = clave;
       void room.join();
     }
   }, [target, room.status, room.join]);
 
   const value: VoiceCallContextValue = {
     room,
-    activeChannelId: target?.channelId ?? null,
+    activeChannelId: target?.corrillo ? null : (target?.channelId ?? null),
+    activeCorrillo: target?.corrillo ?? null,
     activeWorkspaceId: target?.workspaceId ?? null,
     activeChannelName: target?.channelName ?? null,
     joinChannel,
+    joinCorrillo,
     leaveChannel,
   };
 

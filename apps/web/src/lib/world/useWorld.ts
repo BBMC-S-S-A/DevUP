@@ -227,8 +227,7 @@ export function useWorld({
             }
 
             case "knocked":
-            case "knock-answered":
-            case "rtc": {
+            case "knock-answered": {
               // Sin interpretar: este hook es el buzón, no el destinatario.
               onDirectoRef.current?.(message as never);
               return;
