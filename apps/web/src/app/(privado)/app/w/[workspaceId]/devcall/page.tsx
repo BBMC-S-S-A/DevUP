@@ -3,6 +3,7 @@
 import {
   Calendar,
   Check,
+  Hash,
   Headphones,
   Loader2,
   Mic,
@@ -12,6 +13,7 @@ import {
   Video,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -59,6 +61,26 @@ export default function DevCallPage() {
 
   const canales = useRecurso<{ channels: Channel[] }>(`/workspaces/${workspaceId}/channels`);
   const salas = (canales.datos?.channels ?? []).filter((c) => c.kind === "voice");
+  /**
+   * LOS DE TEXTO TAMBIÉN, y esa es la mitad nueva de esta pantalla.
+   *
+   * Un canal ES donde se habla: tenerlos colgando del menú al lado de cosas que
+   * no son canales, y DevCall como otra entrada distinta, era mirar lo mismo
+   * dos veces. Ahora la lista vive aquí y el menú no la repite.
+   *
+   * SE LISTAN TODOS, TAMBIÉN LOS VACÍOS. Esconder el que no tiene a nadie
+   * dentro deja un canal que desaparece cuando se queda solo, y un canal que
+   * desaparece no se vuelve a encontrar.
+   */
+  const textos = (canales.datos?.channels ?? []).filter((c) => c.kind === "text");
+
+  // Los no leídos, que antes se veían en el menú: si la lista se muda aquí y
+  // el contador no la sigue, lo que se pierde es saber que alguien te escribió.
+  const noLeidos = useRecurso<{ unread: Record<string, number> }>(
+    `/workspaces/${workspaceId}/unread`,
+    { frescura: 15_000 },
+  );
+  const sinLeer = noLeidos.datos?.unread ?? {};
 
   // Frescura corta: quién hay dentro cambia cada pocos segundos, y aquí es EL
   // dato de la pantalla. El empujón del socket lo refresca al instante; esto es
@@ -237,6 +259,62 @@ export default function DevCallPage() {
           )}
 
           <NuevaSala workspaceId={workspaceId} onCreada={() => void canales.recargar()} />
+
+          <div className="pt-2">
+            <Rotulo className="mb-2 block px-1">Canales de texto</Rotulo>
+            {textos.length === 0 ? (
+              <p className="px-1 text-[11px] leading-relaxed text-faint">
+                Todavía no hay ninguno. Un canal de texto es lo que queda escrito cuando nadie está
+                delante.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {textos.map((canal) => {
+                  const pendientes = sinLeer[canal.id] ?? 0;
+                  return (
+                    <li key={canal.id}>
+                      <Link
+                        href={`/app/w/${workspaceId}/c/${canal.id}`}
+                        className="presionable block"
+                      >
+                        <Tarjeta className="flex flex-wrap items-center gap-3 p-3.5 hover:border-line-strong">
+                          <span
+                            aria-hidden
+                            className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong bg-raised text-faint"
+                          >
+                            <Hash size={15} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-ink">
+                              {canal.name}
+                            </span>
+                            <span className="block text-[11px] text-faint">
+                              {canal.isPrivate ? "Privado" : "Abierto a todo el espacio"}
+                            </span>
+                          </span>
+                          {pendientes > 0 && (
+                            <span
+                              title={`${pendientes} sin leer`}
+                              className="inline-flex h-[20px] min-w-[20px] shrink-0 items-center justify-center
+                                rounded-full border border-accent/30 bg-accent/15 px-1.5
+                                font-mono text-[10px] font-medium tabular-nums text-accent-bright"
+                            >
+                              {pendientes > 99 ? "99+" : pendientes}
+                            </span>
+                          )}
+                        </Tarjeta>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <NuevoCanalDeTexto
+            workspaceId={workspaceId}
+            onCreado={() => void canales.recargar()}
+          />
 
           <div className="pt-2">
             <Rotulo className="mb-2 block px-1">Agenda</Rotulo>
@@ -483,6 +561,87 @@ function NuevaReunion({
  * voz había que crear un canal y acordarse de marcar la casilla. Aquí lo que se
  * crea es una sala, y no hace falta elegir tipo porque la pantalla ya lo dice.
  */
+/**
+ * Crear un canal de texto, ahora que la lista vive aquí.
+ *
+ * Va aparte del de salas y no en un formulario con un desplegable de tipo, por
+ * lo mismo que ya decidió la barra en su día: el «+» de Voz crea una sala y el
+ * de Texto un canal, y no hay nada que elegir cuando ya has elegido al pulsar.
+ * Casi todas las salas de voz nacían de texto por ese desplegable.
+ */
+function NuevoCanalDeTexto({
+  workspaceId,
+  onCreado,
+}: {
+  workspaceId: string;
+  onCreado: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [creando, setCreando] = useState(false);
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="presionable flex w-full items-center gap-2.5 rounded-2xl border border-dashed
+          border-line px-4 py-3 text-sm text-faint hover:border-accent/40 hover:bg-accent-soft/20 hover:text-muted"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-dashed border-line">
+          <Plus size={15} />
+        </span>
+        Nuevo canal de texto
+      </button>
+    );
+  }
+
+  return (
+    <Tarjeta className="p-4">
+      <Rotulo>Nuevo canal de texto</Rotulo>
+      <p className="mb-3 mt-1 text-xs leading-relaxed text-muted">
+        Lo que queda escrito cuando nadie está delante.
+      </p>
+      <form
+        className="flex flex-wrap gap-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const limpio = nombre.trim();
+          if (!limpio) return;
+          setCreando(true);
+          try {
+            await api.post(`/workspaces/${workspaceId}/channels`, {
+              name: limpio,
+              kind: "text",
+              isPrivate: false,
+            });
+            setNombre("");
+            setAbierto(false);
+            onCreado();
+          } catch (caught) {
+            toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear el canal");
+          } finally {
+            setCreando(false);
+          }
+        }}
+      >
+        <div className="min-w-[12rem] flex-1">
+          <Field label="Nombre" value={nombre} onChange={setNombre} autoFocus maxLength={60} />
+        </div>
+        <div className="flex items-end gap-2">
+          <Boton type="submit" disabled={!nombre.trim() || creando}>
+            {creando ? <Loader2 size={14} className="animate-spin" /> : null}
+            Crear
+          </Boton>
+          <Boton type="button" variante="fantasma" onClick={() => setAbierto(false)}>
+            Cancelar
+          </Boton>
+        </div>
+      </form>
+    </Tarjeta>
+  );
+}
+
 function NuevaSala({ workspaceId, onCreada }: { workspaceId: string; onCreada: () => void }) {
   const [abierto, setAbierto] = useState(false);
   const [nombre, setNombre] = useState("");
