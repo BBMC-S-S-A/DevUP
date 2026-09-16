@@ -778,3 +778,15 @@ export type ConexionDeAgente = {
   label: string;
   expiresAt: string;
 };
+
+/**
+ * Una contraseña de git (0068). Del secreto solo llega `secreto`, y solo la
+ * vez que se crea: en la base queda su huella y no hay ruta que lo sirva otra
+ * vez, así que el tipo de la lista no lo lleva ni puede llevarlo.
+ */
+export type ContrasenaDeGit = {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};

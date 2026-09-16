@@ -357,10 +357,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(204).send();
   });
 
+  /**
+   * Quién soy, y qué sabe hacer ESTA instalación.
+   *
+   * `capacidades` viaja aquí y no en una ruta propia porque la pantalla ya pide
+   * esto al cargar: una petición más solo para preguntar si una entrada del
+   * menú se enseña se haría en todas las pantallas y no contestaría nada que no
+   * se pudiera contestar en la primera.
+   *
+   * De momento solo hay una, y es la que decide si «Repositorios» sale en la
+   * barra. Los repositorios alojados vienen apagados (ver `env.ts`): sin esto,
+   * donde están apagados el menú llevaría a una pantalla que contesta 404, que
+   * es justo la forma equivocada de que falte algo.
+   */
   app.get("/auth/me", { onRequest: requireSession }, async (request) => {
     const userId = requireUser(request);
     const me = await withUser(userId, (db) => loadMe(db, userId));
-    return { user: me };
+    return { user: me, capacidades: { reposAlojados: env.REPOS_ALOJADOS } };
   });
 
   /**

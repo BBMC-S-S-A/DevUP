@@ -4,6 +4,7 @@ import {
   Bot,
   Check,
   Copy,
+  GitBranch,
   ImagePlus,
   KeyRound,
   Loader2,
@@ -17,13 +18,14 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
-import { Field } from "@/components/ui/Field";
+import { Entrada, Field } from "@/components/ui/Field";
 import { useConfirmar } from "@/components/ui/Confirmar";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { Pagina } from "@/components/ui/Pagina";
 import {
   type AspectoDePersonaje,
   type ConexionDeAgente,
+  type ContrasenaDeGit,
   type Sesion,
   ApiError,
   api,
@@ -36,8 +38,8 @@ import { CaraDePersonaje } from "@/components/perfil/CaraDePersonaje";
 import { ignorar } from "@/lib/fallo";
 import { useSession } from "@/lib/session";
 import { useOrgId } from "@/lib/workspace-context";
-import { useRecurso } from "@/lib/datos";
-import { iniciales } from "@/lib/fechas";
+import { useMutacion, useRecurso } from "@/lib/datos";
+import { diaLocal, fechaCorta, iniciales } from "@/lib/fechas";
 
 /**
  * Mi cuenta: lo que es de la persona y no de la organización.
@@ -53,6 +55,8 @@ import { iniciales } from "@/lib/fechas";
  * necesita cualquiera.
  */
 export default function CuentaPage() {
+  const { capacidades } = useSession();
+
   return (
     <Pagina
       titulo="Mi cuenta"
@@ -76,6 +80,10 @@ export default function CuentaPage() {
         <DatosVisibles />
         <ClaveDeIA />
         <ConexionesDeAgente />
+        {/* Solo donde esta instalación aloje repositorios. Vienen apagados
+            —hace falta un volumen de verdad, ver `env.ts` en la API— y una
+            credencial para algo que no existe solo sirve para confundir. */}
+        {capacidades.reposAlojados && <ContrasenasDeGit />}
         <Navegadores />
       </div>
     </Pagina>
@@ -1269,6 +1277,175 @@ function Navegadores() {
                 onClick={() => void cerrar(sesion)}
               >
                 <Trash2 size={13} />
+              </BotonIcono>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Tarjeta>
+  );
+}
+
+/**
+ * Contraseñas de git.
+ *
+ * VIVEN AQUÍ Y NO EN LA PANTALLA DE REPOSITORIOS aunque sea allí donde se usan,
+ * por lo mismo que la conexión de agente de arriba: son de la PERSONA y valen
+ * en todos los espacios. En la pantalla de un proyecto parecerían de ese
+ * proyecto, y quien revocara una desde allí creyendo que apagaba un repositorio
+ * se quedaría sin empujar en todos.
+ *
+ * Y SON OTRA CREDENCIAL, no la sesión. `git push` lo hace un programa de
+ * consola sin cookies que no sabe renovar nada: la sesión de DevUP dura quince
+ * minutos, y el token de refresco —que sí dura— abre la aplicación entera, cosa
+ * que no puede acabar pegada en un fichero de CI. Esta solo habla con los
+ * repositorios. El porqué largo está en la migración 0068.
+ */
+function ContrasenasDeGit() {
+  const confirmar = useConfirmar();
+  const [nombre, setNombre] = useState("");
+  const [recien, setRecien] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
+
+  const lista = useRecurso<{ tokens: ContrasenaDeGit[] }>("/git-tokens");
+  const tokens = lista.datos?.tokens ?? [];
+
+  const crear = useMutacion(
+    () => api.post<{ token: { secreto: string } }>("/git-tokens", { name: nombre.trim() }),
+    {
+      invalida: ["/git-tokens"],
+      fallo: "No pude crear la contraseña.",
+      alTerminar: (r) => {
+        setRecien(r.token.secreto);
+        setNombre("");
+        setCopiado(false);
+      },
+    },
+  );
+
+  const revocar = useMutacion((id: string) => api.delete(`/git-tokens/${id}`), {
+    invalida: ["/git-tokens"],
+    exito: "Contraseña revocada",
+    fallo: "No pude revocarla.",
+  });
+
+  return (
+    <Tarjeta className="p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Rotulo>Contraseñas de git</Rotulo>
+        {tokens.length > 0 && (
+          <span className="font-mono text-[10px] tabular-nums text-faint">{tokens.length}</span>
+        )}
+      </div>
+
+      <p className="mb-4 max-w-prose text-xs leading-relaxed text-muted">
+        Para clonar y empujar contra los repositorios que aloja DevUP. Cuando git las pida, el
+        usuario da igual: lo que autentica es la contraseña. <b>Solo sirven para los
+        repositorios</b> — no abren el resto de DevUP, que es justo por lo que no vale la de entrar.
+      </p>
+
+      {recien && (
+        <div className="mb-4 rounded-xl border border-accent/40 bg-accent-soft/30 p-3">
+          <p className="mb-2 text-xs font-semibold text-ink">
+            Cópiala ahora: no se puede volver a ver.
+          </p>
+          <p className="mb-2.5 max-w-prose text-[11px] leading-relaxed text-muted">
+            En la base solo queda su huella. Si se pierde, revócala y crea otra.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg border border-line bg-canvas/70 px-2.5 py-2 font-mono text-[11px]">
+              {recien}
+            </code>
+            <Boton
+              tamano="sm"
+              variante={copiado ? "fantasma" : "primario"}
+              icono={copiado ? <Check size={13} /> : <Copy size={13} />}
+              onClick={async () => {
+                await navigator.clipboard.writeText(recien);
+                setCopiado(true);
+                toast.success("Contraseña copiada");
+              }}
+            >
+              {copiado ? "Copiada" : "Copiar"}
+            </Boton>
+            <Boton tamano="sm" variante="fantasma" onClick={() => setRecien(null)}>
+              Ya está
+            </Boton>
+          </div>
+        </div>
+      )}
+
+      <form
+        className="mb-4 flex items-end gap-2"
+        onSubmit={async (evento) => {
+          evento.preventDefault();
+          if (nombre.trim().length === 0) return;
+          await crear.ejecutar();
+        }}
+      >
+        <label className="min-w-0 flex-1">
+          <Rotulo className="mb-1.5 block">Para qué es</Rotulo>
+          {/* Con nombre desde el principio, y obligatorio: tres contraseñas sin
+              nombre son tres filas iguales, y entonces revocar la que sobra es
+              adivinar. */}
+          <Entrada
+            value={nombre}
+            onChange={(evento) => setNombre(evento.target.value)}
+            placeholder="el portátil, el CI…"
+          />
+        </label>
+        <Boton
+          type="submit"
+          cargando={crear.enviando}
+          disabled={nombre.trim().length === 0}
+          icono={<Plus size={15} />}
+        >
+          Crear
+        </Boton>
+      </form>
+
+      {lista.cargando ? (
+        <div className="grid h-16 place-items-center">
+          <Loader2 size={14} className="animate-spin text-faint" />
+        </div>
+      ) : tokens.length === 0 ? (
+        <EstadoVacio
+          icono={<GitBranch size={20} />}
+          titulo="Ninguna contraseña todavía"
+          pista="Crea una y pégala cuando git te la pida al clonar."
+        />
+      ) : (
+        <ul className="space-y-1.5">
+          {tokens.map((token) => (
+            <li
+              key={token.id}
+              className="flex items-center gap-3 rounded-xl border border-line bg-canvas/40 px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 truncate text-xs text-ink">{token.name}</span>
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
+                {/* `diaLocal` porque esto es un instante y no un vencimiento:
+                    sin él, el día que se enseña es el de UTC. Ver lib/fechas.ts. */}
+                {token.lastUsedAt ? `usada el ${fechaCorta(diaLocal(token.lastUsedAt))}` : "sin usar"}
+              </span>
+              <BotonIcono
+                etiqueta={`Revocar ${token.name}`}
+                disabled={revocar.enviando}
+                className="text-faint hover:text-danger"
+                onClick={async () => {
+                  if (
+                    !(await confirmar({
+                      titulo: `¿Revocar «${token.name}»?`,
+                      descripcion:
+                        "Quien la tenga guardada dejará de poder clonar y empujar. No se puede volver a activar: habría que crear otra.",
+                      accion: "Revocar",
+                      peligro: true,
+                    }))
+                  )
+                    return;
+                  await revocar.ejecutar(token.id);
+                }}
+              >
+                <Trash2 size={14} />
               </BotonIcono>
             </li>
           ))}

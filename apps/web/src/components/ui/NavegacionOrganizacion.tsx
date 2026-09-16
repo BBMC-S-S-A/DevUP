@@ -1,6 +1,7 @@
 import {
   Code2,
   Database,
+  GitBranch,
   Github,
   KeyRound,
   Megaphone,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { ItemNav } from "./ItemNav";
 import { retraso } from "@/lib/animacion";
+import { useSession } from "@/lib/session";
 
 /**
  * Las pantallas de la organización, en la barra lateral.
@@ -61,6 +63,12 @@ export function NavegacionOrganizacion({
 }) {
   const base = workspaceId ? `/app/w/${workspaceId}` : `/app/o/${orgId}`;
 
+  // Si esta instalación no sirve repositorios alojados, la entrada NO SE PINTA
+  // —no se pinta desactivada ni con un aviso—. Vienen apagados porque su
+  // contenido vive en disco y hace falta un volumen de verdad (ver `env.ts` en
+  // la API); donde faltan, lo honesto es que el menú no los prometa.
+  const { capacidades } = useSession();
+
   /**
    * GitHub, Infraestructura, Base de datos e Integraciones solo salen dentro
    * de un workspace (migración 0035).
@@ -93,6 +101,18 @@ export function NavegacionOrganizacion({
   const delProyecto = workspaceId
     ? [
         { href: `${base}/github`, icono: <Github size={14} />, texto: "GitHub" },
+        // Justo debajo de GitHub porque es su vecina y no su competencia: una
+        // enseña los repositorios de fuera, la otra los que aloja DevUP. Quien
+        // busca «mi código» abre cualquiera de las dos.
+        ...(capacidades.reposAlojados
+          ? [
+              {
+                href: `${base}/repositorios`,
+                icono: <GitBranch size={14} />,
+                texto: "Repositorios",
+              },
+            ]
+          : []),
         { href: `${base}/infraestructura`, icono: <Server size={14} />, texto: "Infraestructura" },
         { href: `${base}/base-de-datos`, icono: <Database size={14} />, texto: "Base de datos" },
         { href: `${base}/integraciones`, icono: <Plug size={14} />, texto: "Integraciones" },

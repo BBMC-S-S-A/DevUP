@@ -50,6 +50,28 @@ export function hoyLocal(): string {
 }
 
 /**
+ * En qué día de calendario cayó un INSTANTE, aquí donde se está mirando.
+ *
+ * EXISTE PORQUE `fechaCorta` NO SIRVE PARA UN INSTANTE, y confundirlos no da
+ * error: parte el texto ISO y se queda con el día tal cual. Para un vencimiento
+ * es lo correcto —«el 17» es el 17 se mire desde donde se mire— pero un
+ * `timestamptz` llega en UTC, y quien mira por la tarde en Bogotá vería el día
+ * de MAÑANA. Se vio con un push: el commit decía 15 y el empuje 16.
+ *
+ * Así que los instantes pasan por aquí primero y luego por `fechaCorta`, que
+ * sigue poniendo los meses y la regla del año de la casa.
+ */
+export function diaLocal(iso: string): string {
+  const cuando = new Date(iso);
+  // Un texto que no se entiende se devuelve tal cual, como hacen las de abajo:
+  // inventar una fecha es peor que enseñar lo que llegó.
+  if (Number.isNaN(cuando.getTime())) return iso;
+  const mes = String(cuando.getMonth() + 1).padStart(2, "0");
+  const dia = String(cuando.getDate()).padStart(2, "0");
+  return `${cuando.getFullYear()}-${mes}-${dia}`;
+}
+
+/**
  * «17 ago», y con el año detrás si no es el que corre.
  *
  * El año se calla cuando es el actual porque en una tarjeta lo que se lee es

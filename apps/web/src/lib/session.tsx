@@ -13,8 +13,23 @@ import {
 import { type User, api } from "./api";
 import { olvidarUltimoEspacio } from "./ultimo-espacio";
 
+/**
+ * Lo que sabe hacer ESTA instalación, tal y como lo cuenta `/auth/me`.
+ *
+ * No es un permiso de la persona: es si el servidor sirve esa parte. Los
+ * repositorios alojados vienen apagados —su contenido vive en disco y hace
+ * falta un volumen de verdad, ver `env.ts` en la API— y donde están apagados
+ * la entrada del menú no debe aparecer, porque llevaría a un 404.
+ */
+export type Capacidades = { reposAlojados: boolean };
+
+/** Apagado mientras no conste lo contrario: un menú que falta se nota y se
+ *  arregla; uno que aparece y no lleva a ninguna parte parece una avería. */
+const NINGUNA: Capacidades = { reposAlojados: false };
+
 type SessionState = {
   user: User | null;
+  capacidades: Capacidades;
   loading: boolean;
   /** Devuelve a quién encontró, para que quien acaba de entrar sepa si de
    *  verdad hay sesión antes de navegar — ver el comentario en login/page.tsx. */
@@ -34,18 +49,27 @@ const SessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [capacidades, setCapacidades] = useState<Capacidades>(NINGUNA);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const refresh = useCallback(async () => {
     try {
-      const { user } = await api.get<{ user: User }>("/auth/me");
+      const { user, capacidades } = await api.get<{
+        user: User;
+        capacidades?: Capacidades;
+      }>("/auth/me");
       setUser(user);
+      // Opcional a propósito: durante un despliegue conviven la API de antes y
+      // la web de ahora, y una respuesta sin `capacidades` no puede dejar la
+      // barra a medias.
+      setCapacidades(capacidades ?? NINGUNA);
       return user;
     } catch {
       // 401 aquí es lo normal cuando nadie ha entrado todavía: no es un error
       // que haya que enseñar, es el estado «sin sesión».
       setUser(null);
+      setCapacidades(NINGUNA);
       return null;
     } finally {
       setLoading(false);
@@ -66,6 +90,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // RLS— pero es la misma persona la que sobra en la ecuación.
     olvidarUltimoEspacio();
     setUser(null);
+    setCapacidades(NINGUNA);
     router.push(destino ?? "/login");
   }, [router]);
 
@@ -74,8 +99,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ user, loading, refresh, signOut }),
-    [user, loading, refresh, signOut],
+    () => ({ user, capacidades, loading, refresh, signOut }),
+    [user, capacidades, loading, refresh, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
