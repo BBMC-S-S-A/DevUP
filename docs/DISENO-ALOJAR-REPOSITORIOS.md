@@ -10,6 +10,48 @@ siendo otra empresa, y el documento anterior explica por qué.
 
 ---
 
+## 0. Lo que se construyó de verdad (15 de septiembre de 2026)
+
+Esta sección se añade **después** del diseño y a propósito no lo reescribe: lo
+que sigue debajo es lo que se pensó, y esto es en qué se diferencia lo que hay.
+
+**Funciona el paso 1 de la tabla de la sección 7, y la pantalla del paso 5**:
+`git clone` y `git push` contra DevUP con el git de cualquiera, las dos tablas
+con sus políticas y sus casos de aislamiento, y la pantalla para crear
+repositorios y contraseñas. Lo comprueban `npm run test:git`,
+`npm run test:git:e2e` —que clona, empuja y vuelve a clonar de verdad— y los
+casos nuevos de `npm run test:rls`.
+
+**PERO NO ES UN SERVICIO APARTE: vive dentro de la API** (`apps/api/src/git/`
+y `routes/git.ts`, migración 0068). Es la única diferencia con el diseño, y es
+grande, así que queda escrita con sus consecuencias en vez de escondida:
+
+- La imagen de la API ahora **trae el binario de git** y escribe archivos de
+  clientes en un volumen. Era el argumento 1 de «por qué un servicio aparte».
+- **El volumen ata la API a una instancia** mientras los repositorios estén
+  encendidos. Era el argumento 2, y sigue siendo verdad: hoy la API no se
+  replica si `REPOS_ALOJADOS` está encendido.
+- **Un clon grande ocupa un proceso que también atiende el chat.** Era el
+  argumento 3.
+
+A cambio, lo que se ganó: la autorización la decide RLS con la misma identidad
+que todo lo demás, sin una segunda puerta que mantener ni un secreto compartido
+entre dos servicios — que es lo que más se podía torcer.
+
+**El interruptor `REPOS_ALOJADOS` viene apagado** precisamente porque nada de
+lo de arriba está resuelto: encenderlo donde `GIT_ROOT` no sea un volumen se
+lleva el código de la gente en el siguiente despliegue. Separarlo a `apps/git`
+cuando haga falta sigue siendo posible —el protocolo está en dos archivos que no
+saben de sesiones— y es una decisión de Juan, no un descuido.
+
+Lo que sigue pendiente, tal cual la tabla de la sección 7: el gancho
+`post-receive` y `push_events` (2), `FuenteDeCodigo` con GitHub detrás (3), la
+fuente local y la auditoría en cada push (4), y los cupos y el respaldo (5) —
+que son, junto con el volumen, lo que hay que tener antes de encender esto para
+alguien de fuera.
+
+---
+
 ## 1. La decisión, primero
 
 > **Un servicio aparte, con su disco, sirviendo `git http-backend`, que no
