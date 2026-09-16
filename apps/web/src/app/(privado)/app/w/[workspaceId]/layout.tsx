@@ -222,7 +222,8 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   }
 
   const voice = channels.filter((c) => c.kind === "voice");
-  const text = channels.filter((c) => c.kind === "text");
+  /** Todo lo que está sin leer, ahora que los canales no salen uno a uno. */
+  const sinLeerTotal = Object.values(unread).reduce((suma, n) => suma + n, 0);
 
   // Dentro de DevVerse la barra lateral desaparece: media pantalla de lista
   // de canales al lado de un espacio que existe para recorrerse rompe justo
@@ -369,6 +370,24 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   icono={<PhoneCall size={15} />}
                   activo={pathname === `/app/w/${workspaceId}/devcall`}
                   indice={0}
+                  resaltado={sinLeerTotal > 0}
+                  sufijo={
+                    // EL CONTADOR SE MUDA AQUÍ CON LA LISTA. Iba en cada canal
+                    // de la barra; si la lista se va y el contador no la sigue,
+                    // lo que se pierde es enterarte de que alguien te escribió
+                    // — que no es un detalle de la mudanza, es lo que la barra
+                    // hacía por ti.
+                    sinLeerTotal > 0 ? (
+                      <span
+                        title={`${sinLeerTotal} sin leer en los canales`}
+                        className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center
+                          rounded-full border border-accent/30 bg-accent/15 px-1
+                          font-mono text-[10px] font-medium tabular-nums text-accent-bright"
+                      >
+                        {sinLeerTotal > 99 ? "99+" : sinLeerTotal}
+                      </span>
+                    ) : null
+                  }
                 >
                   DevCall
                 </ItemNav>
@@ -491,25 +510,25 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               miran de vez en cuando; un canal, cada rato.
 
               Y la voz antes que el texto: un canal de voz es gente esperando,
-              y un canal de texto espera a que llegues. */}
-          <ChannelGroup
-            title="Voz"
-            kind="voice"
-            channels={voice}
-            workspaceId={workspaceId}
-            pathname={pathname}
-            unread={unread}
+              y un canal de texto espera a que llegues.
+
+              LA BARRA YA NO REPITE LA LISTA, y esto es lo que queda de aquella.
+              Los canales colgaban aquí enteros —voz y texto— y DevCall era otra
+              entrada que enseñaba lo mismo: la misma cosa mirada dos veces.
+              Ahora la lista vive en DevCall, que los tiene todos con quién hay
+              dentro y con los sin leer.
+
+              Y AQUÍ SE QUEDA LO ÚNICO QUE DEVCALL NO PUEDE DAR: que veas sin
+              mirar que hay alguien esperando AHORA. Una sala vacía no es una
+              noticia y se busca cuando se necesita; una con gente dentro caduca
+              en diez minutos, y para enterarte de eso no puedes tener que abrir
+              una pantalla. Por eso salen solo las ocupadas, y la sección entera
+              desaparece cuando no hay nadie en ninguna. */}
+          <SalasConGente
+            salas={voice}
             ocupacion={ocupacion}
-            onCreated={load}
-          />
-          <ChannelGroup
-            title="Texto"
-            kind="text"
-            channels={text}
             workspaceId={workspaceId}
             pathname={pathname}
-            unread={unread}
-            onCreated={load}
           />
 
 
@@ -637,16 +656,16 @@ function GrupoRotulo({
  * canales de voz no ensenaba la seccion, asi que tampoco ensenaba por donde se
  * crea el primero.
  */
+
 /**
  * Los avatares apilados de quien está en una sala.
  *
- * ES LO QUE HACE QUE UNA BARRA DE CANALES SE LEA DE UN VISTAZO: sin esto hay
- * que entrar en la sala para saber si hay alguien, y entrar en una vacía por si
- * acaso es el paso que sobra.
+ * ES LO QUE HACE QUE LA BARRA SE LEA SIN MIRARLA: una fila con caras es alguien
+ * esperando, y eso caduca — por eso sigue aquí y no solo en DevCall.
  *
- * SOLAPADOS Y CON TOPE EN TRES. Tres caras y un «+2» caben en la barra sin
- * empujar el nombre del canal; cinco lo parten. El número de más va en mono
- * porque su ancho no debe bailar al pasar de 9 a 10.
+ * SOLAPADOS Y CON TOPE EN TRES. Tres caras y un «+2» caben sin empujar el
+ * nombre de la sala; cinco lo parten. El número va en mono porque su ancho no
+ * debe bailar al pasar de 9 a 10.
  */
 function Ocupantes({ gente }: { gente: Ocupante[] }) {
   if (gente.length === 0) return null;
@@ -675,292 +694,53 @@ function Ocupantes({ gente }: { gente: Ocupante[] }) {
   );
 }
 
-function ChannelGroup({
-  title,
-  kind,
-  channels,
+/**
+ * Las salas donde hay alguien ahora mismo.
+ *
+ * NO ES LA LISTA DE SALAS: es la lista de las que están ocupadas, y la
+ * diferencia es todo el sentido de que esto siga en la barra. La lista entera
+ * —con las vacías y con los canales de texto— vive en DevCall desde que dejó de
+ * estar repetida en los dos sitios.
+ *
+ * SIN NADIE DENTRO NO SE PINTA NADA, ni siquiera el rótulo: una sección vacía
+ * ocupa el mismo sitio que una llena y no dice nada, y lo que esto viene a
+ * decir es justamente que hay alguien.
+ */
+function SalasConGente({
+  salas,
+  ocupacion,
   workspaceId,
   pathname,
-  unread,
-  ocupacion = {},
-  onCreated,
 }: {
-  title: string;
-  kind: "text" | "voice";
-  channels: Channel[];
+  salas: Channel[];
+  ocupacion: Record<string, Ocupante[]>;
   workspaceId: string;
   pathname: string;
-  unread: Record<string, number>;
-  /** Quién hay dentro de cada sala. Solo lo usan las de voz. */
-  ocupacion?: Record<string, Ocupante[]>;
-  onCreated: () => Promise<void>;
 }) {
-  const [creando, setCreando] = useState(false);
-  const esVoz = kind === "voice";
+  const conGente = salas.filter((sala) => (ocupacion[sala.id]?.length ?? 0) > 0);
+  if (conGente.length === 0) return null;
 
   return (
     <div>
-      <GrupoRotulo
-        titulo={title}
-        contador={channels.length}
-        accion={
-          <BotonIcono
-            etiqueta={esVoz ? "Nueva sala de voz" : "Nuevo canal de texto"}
-            onClick={() => setCreando((a) => !a)}
-            aria-expanded={creando}
-          >
-            <Plus size={13} />
-          </BotonIcono>
-        }
-      />
-
-      {creando && (
-        <div className="mb-1.5">
-          <NewChannel
-            workspaceId={workspaceId}
-            kind={kind}
-            onCreated={onCreated}
-            onCerrar={() => setCreando(false)}
-          />
-        </div>
-      )}
-
-      {channels.length === 0 ? (
-        <p className="px-3 text-[11px] text-faint">
-          {esVoz ? "Ninguna sala todavia." : "Ninguno todavia."}
-        </p>
-      ) : (
-        <ul className="space-y-0.5">
-          {channels.map((channel, indice) => {
-            const href = `/app/w/${workspaceId}/c/${channel.id}`;
-            const active = pathname === href;
-            const pending = unread[channel.id] ?? 0;
-
-            return (
-              // `group/canal` con nombre: la barra ya tiene otros grupos
-              // anidados, y un `group` sin nombre se los pisa. `relative`
-              // porque el botón de borrar va encima del canto derecho.
-              <li key={channel.id} className="group/canal relative">
-                <ItemNav
-                  href={href}
-                  icono={channel.kind === "voice" ? <Volume2 size={15} /> : <Hash size={15} />}
-                  activo={active}
-                  resaltado={pending > 0}
-                  indice={indice}
-                  sufijo={
-                    <>
-                      {/* Quién hay dentro, sin entrar. Va ANTES del candado y
-                          del contador porque es lo que se mira: una sala con
-                          gente es una invitación, y el resto son datos. */}
-                      <Ocupantes gente={ocupacion[channel.id] ?? []} />
-                      {channel.isPrivate && (
-                        <Lock size={11} className="shrink-0 text-faint" aria-label="Canal privado" />
-                      )}
-                      {pending > 0 && !active && (
-                        // Cifra, no mancha: el contorno y el relleno al 15 % la
-                        // dejan legible de un vistazo sin que la barra entera
-                        // parezca una alarma. Mono y tabular porque el ancho no
-                        // debe bailar cuando pasa de 9 a 10.
-                        <span
-                          title={`${pending} sin leer`}
-                          className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center
-                            rounded-full border border-accent/30 bg-accent/15 px-1
-                            font-mono text-[10px] font-medium tabular-nums text-accent-bright"
-                        >
-                          {pending > 99 ? "99+" : pending}
-                        </span>
-                      )}
-                    </>
-                  }
-                >
-                  {channel.name}
-                </ItemNav>
-                <BorrarCanal
-                  canal={channel}
-                  enEl={active}
-                  workspaceId={workspaceId}
-                  onBorrado={onCreated}
-                />
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <GrupoRotulo titulo="Hay alguien" />
+      <ul className="space-y-0.5">
+        {conGente.map((sala, indice) => {
+          const href = `/app/w/${workspaceId}/c/${sala.id}`;
+          return (
+            <li key={sala.id}>
+              <ItemNav
+                href={href}
+                icono={<Volume2 size={15} />}
+                activo={pathname === href}
+                indice={indice}
+                sufijo={<Ocupantes gente={ocupacion[sala.id] ?? []} />}
+              >
+                {sala.name}
+              </ItemNav>
+            </li>
+          );
+        })}
+      </ul>
     </div>
-  );
-}
-
-/**
- * Borrar un canal.
- *
- * LA RUTA YA EXISTÍA Y NADIE LA LLAMABA. `DELETE /channels/:channelId` está en
- * la API desde el principio; lo que faltaba era la puerta. Es el cuarto caso de
- * la misma clase, y el barrido de rutas muertas ya dejó escrita la lección: una
- * ruta sin llamantes casi nunca es código de más, suele ser una función
- * terminada a la que le falta el botón.
- *
- * VA COMO HERMANO DEL ENLACE, NO DENTRO. `sufijo` de `ItemNav` se pinta dentro
- * del `<Link>`, y un `<button>` dentro de un `<a>` es HTML inválido —además de
- * que pulsarlo navegaría—. Así que va aparte, colocado sobre el canto derecho.
- *
- * SOLO APARECE AL PASAR POR ENCIMA O AL LLEGAR CON EL TECLADO
- * (`focus-within`). Una papelera visible en cada fila de una barra con
- * diecisiete destinos es un accidente esperando; y sin `focus-within` sería una
- * papelera que solo existe para quien usa ratón, que es el error que acabamos
- * de arreglar en el tablero.
- *
- * EL DIÁLOGO DICE LO QUE SE PIERDE. La base borra en cascada los mensajes, las
- * llamadas, las grabaciones y LA SALA DE DEVVERSE del canal. Eso último no lo
- * adivina nadie: quien borra un canal de texto no espera que desaparezca una
- * habitación. Los archivos sobreviven —`channel_id` pasa a nulo—, y también se
- * dice, porque callarlo haría dudar antes de borrar.
- */
-function BorrarCanal({
-  canal,
-  enEl,
-  workspaceId,
-  onBorrado,
-}: {
-  canal: Channel;
-  /** Si es el canal que se está viendo ahora mismo. */
-  enEl: boolean;
-  workspaceId: string;
-  onBorrado: () => Promise<void>;
-}) {
-  const confirmar = useConfirmar();
-  const router = useRouter();
-
-  return (
-    <span
-      className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity
-        duration-[var(--dur-hover)] group-hover/canal:opacity-100 group-focus-within/canal:opacity-100
-        motion-reduce:transition-none"
-    >
-      <BotonIcono
-        etiqueta={`Borrar ${canal.kind === "voice" ? "la sala" : "el canal"} ${canal.name}`}
-        onClick={async () => {
-          const seguro = await confirmar({
-            titulo: `¿Borrar ${canal.kind === "voice" ? "la sala" : "el canal"} «${canal.name}»?`,
-            descripcion:
-              "Se borran también sus mensajes, sus llamadas y grabaciones, y su sala de DevVerse. " +
-              "Los archivos que se compartieron ahí se quedan en la biblioteca. No se puede deshacer.",
-            accion: "Borrar",
-            peligro: true,
-          });
-          if (!seguro) return;
-          try {
-            await api.delete(`/channels/${canal.id}`);
-            // Salir ANTES de recargar la lista: quedarse en la pantalla de un
-            // canal que ya no existe da un error que no es del usuario.
-            if (enEl) router.push(`/app/w/${workspaceId}`);
-            await onBorrado();
-            toast.success(`«${canal.name}» borrado`);
-          } catch (caught) {
-            // El permiso lo decide la base, no esta pantalla. Si no se puede,
-            // hay que contarlo: un botón que no hace nada es peor que no tenerlo.
-            toast.error(caught instanceof ApiError ? caught.message : "no se pudo borrar");
-          }
-        }}
-      >
-        <Trash2 size={12} />
-      </BotonIcono>
-    </span>
-  );
-}
-
-/**
- * El formulario, ya sin selector de tipo: lo trae puesto quien lo abre.
- *
- * Sigue quedando la casilla de privado, que si es una decision —y una que no
- * se deduce de donde hayas pulsado—. Si falla la creacion se dice: antes el
- * `finally` apagaba el indicador y el canal simplemente no aparecia.
- */
-function NewChannel({
-  workspaceId,
-  kind,
-  onCreated,
-  onCerrar,
-}: {
-  workspaceId: string;
-  kind: "text" | "voice";
-  onCreated: () => Promise<void>;
-  onCerrar: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  return (
-    // Crece desde el borde de arriba, que es donde esta la cabecera que lo
-    // abrio: un panel que nace de su propio centro se despega de lo que lo
-    // invoco.
-    <Tarjeta className="devup-emerge origin-top p-2.5">
-      <Rotulo className="mb-2 block">
-        {kind === "voice" ? "Nueva sala de voz" : "Nuevo canal de texto"}
-      </Rotulo>
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setBusy(true);
-          try {
-            await api.post(`/workspaces/${workspaceId}/channels`, {
-              name,
-              kind,
-              isPrivate,
-            });
-            setName("");
-            setIsPrivate(false);
-            onCerrar();
-            await onCreated();
-          } catch (caught) {
-            toast.error(caught instanceof ApiError ? caught.message : "no se pudo crear el canal");
-          } finally {
-            setBusy(false);
-          }
-        }}
-        className="space-y-2.5"
-      >
-        {/* Mono porque el nombre de canal es un identificador, no una frase: se
-            escribe en minusculas y con guiones y asi se ve mientras se teclea. */}
-        <Entrada
-          autoFocus
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={kind === "voice" ? "sala-de-equipo" : "nombre-del-canal"}
-          className="font-mono"
-        />
-
-        <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted hover:text-ink">
-          <input
-            type="checkbox"
-            checked={isPrivate}
-            onChange={(event) => setIsPrivate(event.target.checked)}
-            className="size-3.5 accent-[var(--color-accent)]"
-          />
-          <Lock size={11} className="text-faint" />
-          Privado
-        </label>
-
-        <div className="flex items-center gap-1.5 pt-0.5">
-          {/* El ancho lo pone el envoltorio: Boton trae `shrink-0` de fabrica y
-              un `flex-1` encima seria una carrera de utilidades. */}
-          <div className="flex-1">
-            <Boton
-              type="submit"
-              variante="primario"
-              tamano="sm"
-              cargando={busy}
-              disabled={busy || name.trim().length === 0}
-              className="w-full"
-            >
-              Crear
-            </Boton>
-          </div>
-          <Boton type="button" variante="fantasma" tamano="sm" onClick={onCerrar}>
-            Cancelar
-          </Boton>
-        </div>
-      </form>
-    </Tarjeta>
   );
 }
