@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { HiddenAudio } from "@/components/voice/ParticipantTile";
 import { useVoiceRoom } from "./useVoiceRoom";
 
 type Target = { channelId: string; workspaceId: string; channelName: string } | null;
@@ -92,7 +93,30 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
     leaveChannel,
   };
 
-  return <VoiceCallContext.Provider value={value}>{children}</VoiceCallContext.Provider>;
+  return (
+    <VoiceCallContext.Provider value={value}>
+      {children}
+      {/* EL AUDIO VIVE DONDE VIVE LA LLAMADA, Y ESTE ERA EL FALLO.
+
+          Los elementos que reproducen a los demás los pintaba la PANTALLA del
+          canal. Así que al irte a cualquier otra —el tablero, la biblioteca,
+          otro espacio— se desmontaban, su `srcObject` se soltaba, y dejabas de
+          oír a todo el mundo. La conexión seguía viva y la barra seguía
+          diciendo «en llamada», así que a ti te seguían oyendo: el síntoma era
+          justo ese, «me cambio de pantalla y se deja de oír».
+
+          Aquí no pasa: este proveedor cuelga de `app/layout.tsx`, que es el
+          armazón que sobrevive a navegar. Es el mismo sitio donde ya vive la
+          conexión, y esa es la razón de fondo: el sonido tiene que durar lo
+          que dure la llamada, no lo que dure la vista.
+
+          Y por eso las pantallas ya NO lo pintan: dos elementos con el mismo
+          stream es oír a cada uno dos veces. */}
+      {room.participants.map((participante) => (
+        <HiddenAudio key={participante.peerId} stream={participante.audioStream} />
+      ))}
+    </VoiceCallContext.Provider>
+  );
 }
 
 export function useVoiceCall(): VoiceCallContextValue {

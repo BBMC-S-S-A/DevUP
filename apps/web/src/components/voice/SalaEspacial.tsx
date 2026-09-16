@@ -4,7 +4,6 @@ import type { CSSProperties } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { tinte } from "@/lib/tinte";
 import { useSpeaking } from "@/lib/voice/useSpeaking";
-import { HiddenAudio } from "./ParticipantTile";
 import { iniciales } from "@/lib/fechas";
 import { CaraDePersonaje } from "@/components/perfil/CaraDePersonaje";
 import { useCara } from "@/lib/caras";
@@ -94,7 +93,8 @@ function Presencia({ persona, indice }: { persona: EnLaSala; indice: number }) {
         } as CSSProperties
       }
     >
-      {!persona.esYo && <HiddenAudio stream={persona.audioStream} />}
+      {/* Ídem: el audio lo pinta `VoiceCallProvider`. Aquí se oía mientras se
+          mirara esta sala, que no es lo mismo que mientras dure la llamada. */}
 
       <div className="relative">
         {/* Dos anillos concéntricos, solo al hablar. Uno solo se confunde con

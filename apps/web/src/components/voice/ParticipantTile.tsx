@@ -101,7 +101,8 @@ export function ParticipantVideos({
 
   return (
     <>
-      {!isSelf && <HiddenAudio stream={participant.audioStream} />}
+      {/* El audio ya no se pinta aquí: lo pinta `VoiceCallProvider`, que no se
+          desmonta al cambiar de pantalla. Ver el porqué allí. */}
       {tiles.map((tile, posicion) => (
         <ParticipantTile
           key={tile.key}
