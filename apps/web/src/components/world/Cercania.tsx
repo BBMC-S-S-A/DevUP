@@ -1,6 +1,6 @@
 "use client";
 
-import { Hand, Phone, PhoneOff, Video } from "lucide-react";
+import { Hand, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
@@ -119,20 +119,28 @@ export function PanelLlamada({
   estado,
   remoto,
   conVideo,
+  camaraPropia,
+  fallaCamara,
   onColgar,
   onCamara,
+  onApagarCamara,
   enviarPorCanal,
   escucharCanal,
 }: {
   estado: EstadoLlamada;
   remoto: MediaStream | null;
   conVideo: boolean;
+  /** Mi propia cámara, cuando la he encendido. Ver el porqué más abajo. */
+  camaraPropia: MediaStream | null;
+  fallaCamara: string | null;
   onColgar: () => void;
   onCamara: () => void;
+  onApagarCamara: () => void;
   enviarPorCanal: (dato: unknown) => boolean;
   escucharCanal: (fn: ((d: unknown) => void) | null) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
+  const mio = useRef<HTMLVideoElement>(null);
   const audio = useRef<HTMLAudioElement>(null);
   const [pizarra, setPizarra] = useState(false);
 
@@ -156,6 +164,22 @@ export function PanelLlamada({
     if (video.current) video.current.srcObject = remoto;
   }, [remoto, conVideo]);
 
+  /**
+   * VERSE A UNO MISMO, QUE ERA LA OTRA MITAD DE «LA CÁMARA NO SIRVE».
+   *
+   * Arreglado lo de arriba, seguía sin servir para el caso normal: encender la
+   * cámara cuando el otro no ha encendido la suya. Este panel solo pintaba el
+   * vídeo del OTRO extremo, así que le dabas al botón, se encendía la luz de la
+   * cámara, y en pantalla no pasaba nada. Sin error, sin cambio en el botón,
+   * sin imagen. Cualquiera concluye lo mismo: no sirve.
+   *
+   * Y no hacía falta un segundo navegador para verlo — que es lo que tenía
+   * parada la tarjeta.
+   */
+  useEffect(() => {
+    if (mio.current) mio.current.srcObject = camaraPropia;
+  }, [camaraPropia]);
+
   if (estado.fase === "libre" || estado.fase === "entrante") return null;
 
   const hablando = estado.fase === "hablando";
@@ -176,8 +200,41 @@ export function PanelLlamada({
 
       <div className="pointer-events-auto fixed bottom-4 right-4 z-40 w-64">
         <div className="cristal-denso overflow-hidden rounded-2xl shadow-xl">
-          {conVideo && (
-            <video ref={video} autoPlay playsInline className="aspect-video w-full bg-canvas" />
+          {/* El vídeo del otro manda cuando lo hay; el mío se queda de
+              recuadro en una esquina. Sin vídeo del otro, el mío ocupa el
+              marco: es lo único que hay que ver. */}
+          {(conVideo || camaraPropia) && (
+            <div className="relative">
+              {conVideo && (
+                <video ref={video} autoPlay playsInline className="aspect-video w-full bg-canvas" />
+              )}
+              {camaraPropia && (
+                <>
+                  <video
+                    ref={mio}
+                    autoPlay
+                    playsInline
+                    // MUDO SIEMPRE, y no es un detalle: el navegador no
+                    // reproduce un vídeo con sonido sin gesto previo, y si lo
+                    // reprodujera te oirías a ti mismo con retardo.
+                    muted
+                    className={
+                      conVideo
+                        ? "absolute bottom-2 right-2 w-20 -scale-x-100 rounded-lg border border-line-strong bg-canvas shadow-lg"
+                        : "aspect-video w-full -scale-x-100 bg-canvas"
+                    }
+                  />
+                  {/* Espejado como un espejo de verdad (`-scale-x-100`): verse
+                      al revés es lo que desconcierta a todo el mundo en las
+                      videollamadas que no lo hacen. */}
+                  {!conVideo && (
+                    <span className="absolute bottom-2 left-2 rounded-lg bg-canvas/80 px-1.5 py-0.5 font-display text-[10px] uppercase tracking-wider text-muted">
+                      Tú
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           )}
 
           <div className="p-3">
@@ -193,9 +250,24 @@ export function PanelLlamada({
               )}
             </div>
 
+            {/* Lo que dijo el navegador cuando dijo que no. Cada motivo se
+                arregla de una forma distinta, así que se dice cuál fue. */}
+            {fallaCamara && (
+              <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-2 py-1.5 text-[11px] leading-relaxed text-danger">
+                {fallaCamara}
+              </p>
+            )}
+
             <div className="flex items-center gap-1.5">
-              <BotonIcono etiqueta="Encender la cámara" onClick={onCamara} disabled={!hablando}>
-                <Video size={14} />
+              {/* Un botón que se queda igual después de pulsarlo no dice si
+                  funcionó. Ahora cambia de icono y de etiqueta, y apaga. */}
+              <BotonIcono
+                etiqueta={camaraPropia ? "Apagar la cámara" : "Encender la cámara"}
+                onClick={camaraPropia ? onApagarCamara : onCamara}
+                disabled={!hablando}
+                className={camaraPropia ? "text-accent" : ""}
+              >
+                {camaraPropia ? <VideoOff size={14} /> : <Video size={14} />}
               </BotonIcono>
               {hablando && <BotonPizarra onAbrir={() => setPizarra(true)} />}
               <div className="flex-1" />

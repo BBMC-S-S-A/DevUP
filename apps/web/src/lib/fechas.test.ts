@@ -18,7 +18,7 @@
 // comportamiento que depende de esto.
 process.env.TZ = "America/Bogota";
 
-import { diasHasta, fechaCorta, fechaLarga, hoyLocal, iniciales } from "./fechas.js";
+import { diaLocal, diasHasta, fechaCorta, fechaLarga, hoyLocal, iniciales } from "./fechas.js";
 
 let total = 0;
 let fallos = 0;
@@ -77,6 +77,32 @@ check(
     new Date().getDate(),
   ).padStart(2, "0")}`,
 );
+
+console.log("\nUn INSTANTE cae en el día de aquí, no en el de UTC");
+
+// El mismo fallo de arriba, por el otro lado: `fechaCorta` parte el texto en
+// crudo, así que un timestamptz de la base —que llega en UTC— se pintaba con el
+// día de MAÑANA para quien mira por la tarde en Bogotá. Apareció enseñando un
+// push: el commit decía 15 y el empuje 16.
+check(
+  "las siete de la tarde de Bogotá siguen siendo hoy",
+  fechaCorta(diaLocal("2026-09-16T00:52:09.859Z"), "2026"),
+  "15 sep",
+);
+check(
+  "y la medianoche justa de aquí, también",
+  fechaCorta(diaLocal("2026-09-16T05:00:00.000Z"), "2026"),
+  "16 sep",
+);
+check(
+  "un minuto antes es el día anterior",
+  fechaCorta(diaLocal("2026-09-16T04:59:00.000Z"), "2026"),
+  "15 sep",
+);
+check("devuelve la forma que espera fechaCorta", /^\d{4}-\d{2}-\d{2}$/.test(diaLocal("2026-09-16T00:52:09.859Z")), true);
+// Y lo que no es una fecha sigue saliendo tal cual, como en las de arriba:
+// inventar un día a partir de un texto que no se entiende es peor que enseñarlo.
+check("un texto que no es una fecha se devuelve igual", diaLocal("cuando sea"), "cuando sea");
 
 console.log("\nIniciales");
 

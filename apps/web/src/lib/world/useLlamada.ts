@@ -38,6 +38,18 @@ export function useLlamada(enviar: Enviar) {
   const [estado, setEstado] = useState<EstadoLlamada>({ fase: "libre" });
   const [remoto, setRemoto] = useState<MediaStream | null>(null);
   const [conVideo, setConVideo] = useState(false);
+  /**
+   * MI PROPIA CÁMARA, Y ES LA MITAD QUE FALTABA.
+   *
+   * El panel solo pintaba el vídeo del OTRO extremo, y solo cuando el otro
+   * encendía el suyo. Así que quien le daba al botón veía encenderse la luz de
+   * su cámara y en pantalla no pasaba nada: ni su cara, ni el botón cambiando,
+   * ni un aviso. De ahí el «la cámara está inutilizada porque no sirve» — y por
+   * eso no hacían falta dos personas para verlo.
+   */
+  const [camaraPropia, setCamaraPropia] = useState<MediaStream | null>(null);
+  /** Lo que el navegador contestó cuando dijo que no. Para poder enseñarlo. */
+  const [fallaCamara, setFallaCamara] = useState<string | null>(null);
 
   const pc = useRef<RTCPeerConnection | null>(null);
   const local = useRef<MediaStream | null>(null);
@@ -56,6 +68,8 @@ export function useLlamada(enviar: Enviar) {
     otro.current = null;
     setRemoto(null);
     setConVideo(false);
+    setCamaraPropia(null);
+    setFallaCamara(null);
     setEstado({ fase: "libre" });
   }, []);
 
@@ -159,16 +173,75 @@ export function useLlamada(enviar: Enviar) {
     [estado, enviar, crearConexion, engancharCanal, tomarMedios],
   );
 
-  /** Enciende la cámara a mitad de llamada, para los dos por separado. */
+  /**
+   * Enciende la cámara a mitad de llamada, para los dos por separado.
+   *
+   * LOS FALLOS SE CUENTAN, NO SE TRAGAN. `getUserMedia` estaba sin `try`: si
+   * alguien había denegado el permiso una vez, la promesa se rompía, la consola
+   * escupía un rechazo sin dueño y la pantalla seguía igual. Los tres motivos
+   * reales tienen nombre propio en el navegador y cada uno se arregla de una
+   * forma distinta, así que se dicen distintos.
+   */
   const encenderCamara = useCallback(async () => {
     const conexion = pc.current;
     if (!conexion || !local.current) return;
-    const [pista] = (await navigator.mediaDevices.getUserMedia({ video: true })).getVideoTracks();
-    if (!pista) return;
+
+    let pista: MediaStreamTrack | undefined;
+    try {
+      setFallaCamara(null);
+      [pista] = (await navigator.mediaDevices.getUserMedia({ video: true })).getVideoTracks();
+    } catch (fallo) {
+      const nombre = fallo instanceof Error ? fallo.name : "";
+      setFallaCamara(
+        nombre === "NotAllowedError"
+          ? "No diste permiso de cámara. Se cambia en el candado de la barra de direcciones."
+          : nombre === "NotFoundError"
+            ? "No encuentro ninguna cámara conectada."
+            : nombre === "NotReadableError"
+              ? "Otra aplicación tiene cogida la cámara."
+              : "No pude encender la cámara.",
+      );
+      return;
+    }
+    if (!pista) {
+      setFallaCamara("No pude encender la cámara.");
+      return;
+    }
+
     local.current.addTrack(pista);
     conexion.addTrack(pista, local.current);
+
+    // Verse a uno mismo, que es lo que confirma que funcionó. Va en su propio
+    // stream y no en `local`: el de la llamada lleva también el micrófono, y un
+    // `<video>` con la pista de audio dentro se oiría a sí mismo.
+    setCamaraPropia(new MediaStream([pista]));
+
     // Añadir una pista después de conectar obliga a renegociar; sin esto la
     // otra parte nunca ve el vídeo aunque se esté enviando.
+    const oferta = await conexion.createOffer();
+    await conexion.setLocalDescription(oferta);
+    if (otro.current) enviar({ type: "rtc", toPeerId: otro.current, data: { sdp: oferta } });
+  }, [enviar]);
+
+  /**
+   * Y apagarla, que tampoco existía: una vez encendida no había forma de
+   * quitarla sin colgar. Se para la pista —lo que apaga la luz de la cámara, y
+   * esa luz es lo que la gente mira para creerse que está apagada— y se quita
+   * del envío, renegociando como al encenderla.
+   */
+  const apagarCamara = useCallback(async () => {
+    const conexion = pc.current;
+    setFallaCamara(null);
+    if (!conexion || !local.current) return;
+
+    for (const pista of local.current.getVideoTracks()) {
+      const emisor = conexion.getSenders().find((s) => s.track === pista);
+      if (emisor) conexion.removeTrack(emisor);
+      pista.stop();
+      local.current.removeTrack(pista);
+    }
+    setCamaraPropia(null);
+
     const oferta = await conexion.createOffer();
     await conexion.setLocalDescription(oferta);
     if (otro.current) enviar({ type: "rtc", toPeerId: otro.current, data: { sdp: oferta } });
@@ -258,7 +331,10 @@ export function useLlamada(enviar: Enviar) {
     saludar,
     responder,
     colgar,
+    camaraPropia,
+    fallaCamara,
     encenderCamara,
+    apagarCamara,
     recibir,
     enviarPorCanal,
     escucharCanal,

@@ -870,8 +870,11 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         estado={llamada.estado}
         remoto={llamada.remoto}
         conVideo={llamada.conVideo}
+        camaraPropia={llamada.camaraPropia}
+        fallaCamara={llamada.fallaCamara}
         onColgar={llamada.colgar}
         onCamara={() => void llamada.encenderCamara()}
+        onApagarCamara={() => void llamada.apagarCamara()}
         enviarPorCanal={llamada.enviarPorCanal}
         escucharCanal={llamada.escucharCanal}
       />
