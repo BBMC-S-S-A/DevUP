@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * La llamada que nace de acercarse a alguien.
@@ -58,7 +58,22 @@ export function useLlamada(enviar: Enviar, workspaceId: string, salas: Corrillos
 
   // Irse del mundo cuelga. Estar en el pasillo es lo que sostiene un corrillo:
   // fuera de la oficina no hay pasillo en el que estar.
-  useEffect(() => colgar, [colgar]);
+  //
+  // AL DESMONTAR, Y SOLO AL DESMONTAR. Esto era `useEffect(() => colgar,
+  // [colgar])`, que suena a lo mismo y no lo es: un efecto con dependencias
+  // ejecuta su limpieza CADA VEZ QUE CAMBIAN, no solo al desaparecer. Como
+  // `colgar` cuelga de `leaveChannel`, que venía del contexto y se recreaba en
+  // cada renderizado, la limpieza corría sin parar: colgaba, hacía `setEstado`,
+  // eso renderizaba, y vuelta a empezar. DevVerse se colgaba a sí mismo en
+  // bucle («Maximum update depth exceeded»).
+  //
+  // El proveedor ya da funciones estables, así que el bucle está cortado por
+  // los dos lados. Esto se queda igualmente porque la intención —«al salir del
+  // mundo»— es el desmontaje y nada más, y escribirlo así lo deja dicho en vez
+  // de depender de que nadie rompa la estabilidad de una función ajena.
+  const ultimoColgar = useRef(colgar);
+  ultimoColgar.current = colgar;
+  useEffect(() => () => ultimoColgar.current(), []);
 
   /**
    * Llamar a alguien.

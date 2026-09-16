@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { HiddenAudio } from "@/components/voice/ParticipantTile";
 import { useVoiceRoom } from "./useVoiceRoom";
 
@@ -66,34 +74,57 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
   /** Qué identifica a un destino: el canal, o el corrillo si no hay canal. */
   const claveDe = (t: Target): string | null => (t ? (t.corrillo ?? t.channelId) : null);
 
-  const joinCorrillo = (corrillo: string, workspaceId: string, nombre: string) => {
-    if (target?.corrillo === corrillo) return;
+  /**
+   * LO ÚLTIMO QUE SE SABE, PARA QUE LAS TRES FUNCIONES DE ABAJO NO CAMBIEN
+   * NUNCA DE IDENTIDAD. Y eso no es una optimización: es lo que impide un
+   * bucle infinito.
+   *
+   * Estas funciones salen por el contexto, y hay quien las usa como
+   * dependencia de un efecto. `useLlamada` —el pasillo del DevVerse— tiene un
+   * `useEffect(() => colgar, [colgar])` para colgar al salir del mundo, y
+   * `colgar` depende de `leaveChannel`. Mientras `leaveChannel` se recreaba en
+   * CADA renderizado, la cadena era: renderizo → `leaveChannel` nuevo →
+   * `colgar` nuevo → el efecto ejecuta su limpieza → cuelga y hace `setEstado`
+   * → renderizo. DevVerse se colgaba a sí mismo en bucle y la pestaña se comía
+   * la CPU con «Maximum update depth exceeded».
+   *
+   * Con las dependencias leídas de este ref, las funciones se crean una vez y
+   * ya. Meterlas en `useCallback` con `[target, room]` no habría bastado:
+   * `room` trae los participantes y cambia sola cada vez que alguien habla.
+   */
+  const ultimo = useRef({ target, room });
+  ultimo.current = { target, room };
+
+  const joinCorrillo = useCallback((corrillo: string, workspaceId: string, nombre: string) => {
+    const { target: actual, room: sala } = ultimo.current;
+    if (actual?.corrillo === corrillo) return;
     desired.current = { channelId: "", workspaceId, channelName: nombre, corrillo };
-    if (room.status === "idle") {
+    if (sala.status === "idle") {
       setTarget(desired.current);
     } else {
-      room.leave();
+      sala.leave();
     }
-  };
+  }, []);
 
-  const joinChannel = (channelId: string, workspaceId: string, channelName: string) => {
-    if (target?.channelId === channelId && !target?.corrillo) return;
+  const joinChannel = useCallback((channelId: string, workspaceId: string, channelName: string) => {
+    const { target: actual, room: sala } = ultimo.current;
+    if (actual?.channelId === channelId && !actual?.corrillo) return;
     desired.current = { channelId, workspaceId, channelName };
-    if (room.status === "idle") {
+    if (sala.status === "idle") {
       setTarget(desired.current);
     } else {
       // Cambiar de sala a mitad de llamada: primero se sale de la actual: el
       // efecto de abajo recoge `desired` en cuanto quede libre.
-      room.leave();
+      sala.leave();
     }
-  };
+  }, []);
 
-  const leaveChannel = () => {
+  const leaveChannel = useCallback(() => {
     desired.current = null;
     joinedFor.current = null;
-    room.leave();
+    ultimo.current.room.leave();
     setTarget(null);
-  };
+  }, []);
 
   // Al quedar libre (recién llegado, o tras salir para cambiar de sala),
   // aplica el destino pendiente si todavía hay uno.
