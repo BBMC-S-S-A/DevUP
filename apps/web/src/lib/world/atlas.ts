@@ -66,17 +66,40 @@ export const hairTone = (i: number): string => pick(HAIR_TONES, i);
 export const clothTone = (i: number): string => pick(CLOTH_TONES, i);
 export const zoneTone = (i: number) => pick(ZONE_PALETTE, i);
 
-/** Cuántas variantes hay de cada pieza. Lo usa el editor de avatar. */
+/**
+ * Cuántas variantes hay de cada pieza. Lo usa el editor de avatar.
+ *
+ * LOS ÍNDICES NUNCA SE REORDENAN. Lo que la gente lleva puesto está guardado
+ * como un número: mover el 2 al 3 le cambiaría el gorro a quien lo tenga sin
+ * que nadie haya tocado nada. Las piezas nuevas se añaden AL FINAL, siempre.
+ *
+ * DE AQUÍ EN ADELANTE HAY PIEZAS QUE SE COMPRAN (0069), y las gratis son las
+ * de antes: ese corte vive en PRIMERA_DE_PAGO y no aquí, porque esto describe
+ * el dibujo y aquello es una decisión de producto que se mueve sola cuando el
+ * catálogo de la tienda cambie.
+ */
 export const CATALOG = {
   body: 3,
   hair: 6,
   top: 5,
   bottom: 4,
-  hat: 4,
-  glasses: 3,
+  hat: 7,
+  glasses: 4,
   beard: 4,
   shoes: 3,
 } as const;
+
+/**
+ * A partir de qué índice una pieza deja de ser gratis.
+ *
+ * Todo lo que existía antes de la tienda sigue siendo gratis para siempre:
+ * cobrar por algo que alguien ya lleva puesto es desandar lo ganado. Por eso
+ * el corte es un número y no una lista — lo nuevo nace de pago, lo viejo no.
+ */
+export const PRIMERA_DE_PAGO: Partial<Record<keyof typeof CATALOG, number>> = {
+  hat: 4,
+  glasses: 3,
+};
 
 // ---------------------------------------------------------------------------
 // Suelo
@@ -499,14 +522,33 @@ export function drawAvatar(
   // Gafas: encima de los ojos, y también de perfil.
   const glasses = (look.glasses ?? 0) % CATALOG.glasses;
   if (glasses > 0 && facing !== "n") {
-    ctx.fillStyle = glasses === 1 ? "#1a1f27" : "#5b8cff";
-    if (profile) {
-      ctx.fillRect(x + dir * 1.5 - 1.5, headY + 6, 4, 3);
-      ctx.fillRect(x + dir * 4, headY + 6.5, 2, 1);
+    if (glasses === 3) {
+      // Visor: UNA pieza de lado a lado, no dos cristales con puente. Esa es
+      // toda la diferencia de silueta, y es lo que lo hace reconocible a esta
+      // escala — a doce píxeles de cara, un color distinto no se distingue.
+      ctx.fillStyle = "#0e1726";
+      if (profile) {
+        ctx.fillRect(x + dir * 1.5 - 2, headY + 5.5, 6.5, 3.5);
+      } else {
+        ctx.fillRect(x - 5, headY + 5.5, 10, 3.5);
+      }
+      // El brillo, una línea. Sin ella el visor es una mancha negra en la cara.
+      ctx.fillStyle = "#67e8f9";
+      if (profile) {
+        ctx.fillRect(x + dir * 1.5 - 1, headY + 6.5, 4, 1);
+      } else {
+        ctx.fillRect(x - 4, headY + 6.5, 8, 1);
+      }
     } else {
-      ctx.fillRect(x - 4.5, headY + 6, 4, 3);
-      ctx.fillRect(x + 0.5, headY + 6, 4, 3);
-      ctx.fillRect(x - 1, headY + 7, 2, 1);
+      ctx.fillStyle = glasses === 1 ? "#1a1f27" : "#5b8cff";
+      if (profile) {
+        ctx.fillRect(x + dir * 1.5 - 1.5, headY + 6, 4, 3);
+        ctx.fillRect(x + dir * 4, headY + 6.5, 2, 1);
+      } else {
+        ctx.fillRect(x - 4.5, headY + 6, 4, 3);
+        ctx.fillRect(x + 0.5, headY + 6, 4, 3);
+        ctx.fillRect(x - 1, headY + 7, 2, 1);
+      }
     }
   }
 
@@ -533,6 +575,33 @@ export function drawAvatar(
       ctx.fillStyle = hatColor;
       ctx.fillRect(x - 8.5, headY + 1, 3, 6);
       ctx.fillRect(x + 5.5, headY + 1, 3, 6);
+    }
+    // --- De aquí en adelante, las que se compran (0069) -------------------
+    if (hat === 4) {
+      // Bandana: una cinta ancha en la frente, con el nudo asomando por un
+      // lado. Va MÁS ABAJO que los gorros —sobre la frente, no sobre el
+      // cráneo— y eso es lo que la distingue de una gorra sin visera.
+      ctx.fillRect(x - 6.5, headY + 1.5, 13, 3);
+      ctx.fillStyle = shade(hatColor, 0.8);
+      ctx.fillRect(profile ? x - dir * 7.5 : x + 5.5, headY + 2.5, 3, 4.5);
+    }
+    if (hat === 5) {
+      // Sombrero de ala: la silueta más ancha del vestuario, que es justo por
+      // lo que se reconoce de lejos y en movimiento.
+      ctx.fillRect(x - 9, headY + 0.5, 18, 2);
+      ctx.fillRect(x - 5, headY - 5, 10, 6);
+      ctx.fillStyle = shade(hatColor, 0.7);
+      ctx.fillRect(x - 5, headY - 1, 10, 1.5);
+    }
+    if (hat === 6) {
+      // Corona: tres puntas y aro. La cara de arriba va más clara para que se
+      // lea como metal y no como un gorro recortado.
+      ctx.fillRect(x - 6, headY - 1, 12, 3);
+      ctx.fillRect(x - 6, headY - 4, 2.5, 3);
+      ctx.fillRect(x - 1.25, headY - 5.5, 2.5, 4.5);
+      ctx.fillRect(x + 3.5, headY - 4, 2.5, 3);
+      ctx.fillStyle = shade(hatColor, 1.35);
+      ctx.fillRect(x - 6, headY - 1, 12, 1);
     }
   }
 }

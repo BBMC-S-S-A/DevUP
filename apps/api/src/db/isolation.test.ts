@@ -2924,6 +2924,108 @@ async function main(): Promise<void> {
     });
     check("ni los infla, ni los borra: siguen como los dejo el disparador", intacto === 10);
 
+    console.log("\nGastar los puntos: la tienda (0069)");
+
+    // Ana necesita saldo para comprar algo. Se le apunta a mano DESDE EL
+    // ADMINISTRADOR —que se salta RLS— y no desde la aplicación, precisamente
+    // porque lo que se acaba de comprobar arriba es que por la aplicación no se
+    // puede. `task_id` nulo: el único de (tarea, motivo) solo aplica cuando hay
+    // tarea, y un ingreso suelto no la tiene.
+    await admin.query(
+      `insert into puntos (organization_id, workspace_id, user_id, motivo, cantidad, a_solas)
+       values ($1,$2,$3,'cerro_tarea',200,false)`,
+      [acme.org, acme.ws, ana],
+    );
+
+    const saldoDe = async (quien: string): Promise<number> =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ saldo: string }>(
+          "select coalesce(sum(cantidad),0)::int as saldo from puntos where user_id = $1",
+          [quien],
+        );
+        return Number(rows[0]?.saldo ?? 0);
+      });
+
+    check("Ana llega a la tienda con 210", (await saldoDe(ana)) === 210);
+
+    // LA QUE MÁS IMPORTA DE LAS TRES: sin saldo no se compra. Carla no ha
+    // cerrado nada, así que tiene cero.
+    await denied("quien no tiene puntos no se lleva nada", () =>
+      withUser(carla, (db) => db.query("select public.comprar_articulo('hat:4')")),
+    );
+
+    const compra = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ comprar_articulo: string }>(
+        "select public.comprar_articulo('hat:4')",
+      );
+      return rows[0]?.comprar_articulo ?? null;
+    });
+    check("Ana compra el gorro", compra !== null);
+    check("y el saldo baja lo que costó, ni más ni menos", (await saldoDe(ana)) === 150);
+
+    const asiento = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ cantidad: number; motivo: string; task_label: string }>(
+        "select cantidad, motivo, task_label from puntos where user_id = $1 and cantidad < 0",
+        [ana],
+      );
+      return rows[0];
+    });
+    check("el gasto es un asiento negativo, no un saldo aparte", asiento?.cantidad === -60);
+    check("con su motivo", asiento?.motivo === "compro");
+    check("y con el nombre de lo comprado, que sobrevive al catálogo", asiento?.task_label === "Gorro de lana");
+
+    await denied("lo mismo no se compra dos veces", () =>
+      withUser(ana, (db) => db.query("select public.comprar_articulo('hat:4')")),
+    );
+    check("y el saldo sigue donde estaba", (await saldoDe(ana)) === 150);
+
+    // Que el rechazo no deje la compra a medias: la corona cuesta 500 y le
+    // quedan 150. Si la fila entrara y el asiento no —o al revés— el saldo y lo
+    // comprado empezarían a discrepar, que es exactamente lo que este diseño
+    // existe para impedir.
+    await denied("y lo que no alcanza, tampoco", () =>
+      withUser(ana, (db) => db.query("select public.comprar_articulo('hat:6')")),
+    );
+    check("sin dejar nada a medias: el saldo no se movió", (await saldoDe(ana)) === 150);
+    check(
+      "ni quedó la compra suelta",
+      (await withUser(ana, (db) => db.query("select 1 from compras where user_id = $1", [ana])))
+        .rowCount === 1,
+    );
+
+    check(
+      "Carla no ve lo que se compró Ana",
+      (await withUser(carla, (db) => db.query("select id from compras"))).rowCount === 0,
+    );
+
+    // Sin políticas de escritura: se entra por la función o no se entra. Una
+    // compra escrita a mano es un artículo gratis, y un artículo escrito a mano
+    // es un precio que se pone quien va a pagarlo.
+    await denied("nadie se regala una compra", () =>
+      withUser(carla, (db) =>
+        db.query(
+          `insert into compras (user_id, articulo_id, precio_pagado)
+           select $1, id, 1 from tienda_articulos where clave = 'hat:4'`,
+          [carla],
+        ),
+      ),
+    );
+    await denied("ni se inventa un artículo de un punto", () =>
+      withUser(carla, (db) =>
+        db.query(
+          "insert into tienda_articulos (clave, nombre, precio) values ('hat:99','trampa',1)",
+        ),
+      ),
+    );
+
+    // El catálogo sí lo ve todo el mundo: es contenido del producto, y enseñar
+    // lo que se vende no cuenta nada de nadie.
+    check(
+      "el catálogo se ve desde cualquier sesión",
+      ((await withUser(bruno, (db) => db.query("select id from tienda_articulos"))).rowCount ?? 0) >
+        0,
+    );
+
     console.log("\nRamas y evidencia de una tarea");
 
     // Las dos tablas de la 0042 NO llevan `workspace_id` propio: se apoyan en
