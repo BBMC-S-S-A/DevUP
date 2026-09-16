@@ -2,12 +2,16 @@
 
 import {
   Check,
+  ChevronRight,
+  CornerLeftUp,
   FileArchive,
   FileAudio,
   FileCode2,
   FileText,
   FileVideo,
+  Folder,
   FolderOpen,
+  FolderPlus,
   Image as ImageIcon,
   LayoutGrid,
   Plus,
@@ -25,7 +29,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { type FileRecord, type Tag, api } from "@/lib/api";
+import { type Carpeta, type FileRecord, type Tag, api } from "@/lib/api";
 import { retraso } from "@/lib/animacion";
 import { formatBytes, kindOf } from "@/lib/files/upload";
 import { useFileFeed } from "@/lib/files/useFileFeed";
@@ -85,6 +89,28 @@ export function FileLibrary({
   // tamaños y autores en columna. No viaja al servidor ni filtra nada.
   const [vista, setVista] = useState<"rejilla" | "lista">("rejilla");
 
+  /**
+   * Las carpetas (0053), y dónde estamos dentro de ellas.
+   *
+   * La base las tenía desde la 0053 —con el anillo impedido por un disparador,
+   * para que una carpeta no pueda acabar siendo su propia abuela— y la API ya
+   * las servía. Lo único que faltaba era esto: una rejilla plana donde doce
+   * archivos se llaman `image.png` no se ordena con etiquetas.
+   */
+  const [carpetas, setCarpetas] = useState<Carpeta[]>([]);
+  const [carpetaId, setCarpetaId] = useState<string | null>(null);
+  const [creandoCarpeta, setCreandoCarpeta] = useState(false);
+  /** Sobre qué carpeta se está soltando ahora mismo. Solo para pintarla. */
+  const [encima, setEncima] = useState<string | null>(null);
+  /**
+   * Las miniaturas, por id de archivo.
+   *
+   * SE PIDEN EN BLOQUE Y NO UNA POR TARJETA: `POST /files/urls` firma hasta
+   * cincuenta de una vez, así que una rejilla entera cuesta UNA petición. Una
+   * por miniatura serían sesenta, y el ahorro no es de red sino de firmas.
+   */
+  const [previas, setPrevias] = useState<Record<string, string>>({});
+
   // La búsqueda espera a que la persona deje de escribir: sin esto, «informe»
   // son siete consultas a la base y la última puede llegar antes que la
   // penúltima.
@@ -93,13 +119,19 @@ export function FileLibrary({
     return () => clearTimeout(timer);
   }, [search]);
 
+  const filtrando = debounced.length > 0 || selectedTags.length > 0;
+
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (debounced) params.set("q", debounced);
     if (channelId) params.set("channelId", channelId);
     if (selectedTags.length > 0) params.set("tags", selectedTags.join(","));
+    // BUSCAR MIRA LA BIBLIOTECA ENTERA, no la carpeta abierta. Si buscar solo
+    // mirara aquí dentro, lo que se busca sería justamente lo que no aparece —
+    // nadie recuerda en qué carpeta dejó algo, por eso lo busca.
+    if (!filtrando) params.set("carpeta", carpetaId ?? "raiz");
     return params.toString();
-  }, [debounced, channelId, selectedTags]);
+  }, [debounced, channelId, selectedTags, filtrando, carpetaId]);
 
   // Descarta respuestas que llegan tarde: sin esto, una búsqueda lenta puede
   // pisar el resultado de otra posterior y enseñar lo que no toca.
@@ -108,15 +140,32 @@ export function FileLibrary({
   const load = useCallback(async () => {
     const mine = ++requestId.current;
     try {
-      const [{ files }, { tags }] = await Promise.all([
+      const [{ files }, { tags }, { carpetas }] = await Promise.all([
         api.get<{ files: FileRecord[] }>(
           `/workspaces/${workspaceId}/files${query ? `?${query}` : ""}`,
         ),
         api.get<{ tags: Tag[] }>(`/organizations/${organizationId}/tags`),
+        api.get<{ carpetas: Carpeta[] }>(`/workspaces/${workspaceId}/carpetas`),
       ]);
       if (mine !== requestId.current) return;
       setFiles(files);
       setTags(tags);
+      setCarpetas(carpetas);
+
+      // Las miniaturas, después y sin bloquear: la rejilla ya se puede usar
+      // con sus iconos mientras llegan. Si esto falla, se quedan los iconos —
+      // que es exactamente lo que había antes, no una pantalla rota.
+      const imagenes = files.filter((f) => kindOf(f.mimeType) === "image").slice(0, 50);
+      if (imagenes.length > 0) {
+        void api
+          .post<{ urls: Record<string, string> }>("/files/urls", {
+            ids: imagenes.map((f) => f.id),
+          })
+          .then(({ urls }) => {
+            if (mine === requestId.current) setPrevias((previo) => ({ ...previo, ...urls }));
+          })
+          .catch(() => {});
+      }
     } finally {
       if (mine === requestId.current) setLoading(false);
     }
@@ -129,7 +178,43 @@ export function FileLibrary({
   // Subir algo en otra pestaña tiene que aparecer aquí.
   useFileFeed(workspaceId, load);
 
-  const filtrando = debounced.length > 0 || selectedTags.length > 0;
+  /** Mover un archivo a una carpeta. `null` es sacarlo a la raíz. */
+  const mover = useCallback(
+    async (fileId: string, destino: string | null) => {
+      // Optimista: la tarjeta desaparece de la carpeta abierta en cuanto se
+      // suelta. Si el servidor dice que no, `load` la devuelve a su sitio.
+      setFiles((actuales) => actuales.filter((f) => f.id !== fileId));
+      try {
+        await api.patch(`/files/${fileId}`, { carpetaId: destino });
+      } finally {
+        await load();
+      }
+    },
+    [load],
+  );
+
+  /** Las carpetas de este nivel. El árbol se arma aquí, a partir de `padreId`. */
+  const aquiDentro = useMemo(
+    () => carpetas.filter((c) => (c.padreId ?? null) === carpetaId),
+    [carpetas, carpetaId],
+  );
+
+  /** El camino hasta donde estamos, para las migas. */
+  const camino = useMemo(() => {
+    const ruta: Carpeta[] = [];
+    let actual = carpetaId;
+    // Con tope: el disparador de la 0053 impide los anillos en la base, pero
+    // esto se dibuja con lo que llegue por la red y un bucle infinito aquí
+    // congelaría la pestaña.
+    for (let i = 0; actual && i < 20; i += 1) {
+      const carpeta = carpetas.find((c) => c.id === actual);
+      if (!carpeta) break;
+      ruta.unshift(carpeta);
+      actual = carpeta.padreId ?? null;
+    }
+    return ruta;
+  }, [carpetas, carpetaId]);
+
 
   // El peso total del listado visible. `sizeBytes` puede llegar como cadena
   // (bigint serializado), así que se normaliza antes de sumar o una sola fila
@@ -203,6 +288,69 @@ export function FileLibrary({
         </div>
       )}
 
+      {/* Dónde estoy, y cómo salgo. Las migas son también sitio para soltar:
+          arrastrar un archivo a «Biblioteca» lo saca de la carpeta, que es el
+          gesto que falta en casi todas las bibliotecas que sí dejan meterlo. */}
+      {!filtrando && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <MigaCarpeta
+            texto="Biblioteca"
+            activa={carpetaId === null}
+            resaltada={encima === "raiz"}
+            onIr={() => setCarpetaId(null)}
+            onSoltar={(fileId) => void mover(fileId, null)}
+            onEncima={(si) => setEncima(si ? "raiz" : null)}
+          />
+          {camino.map((carpeta) => (
+            <span key={carpeta.id} className="flex items-center gap-1.5">
+              <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden />
+              <MigaCarpeta
+                texto={carpeta.nombre}
+                activa={carpeta.id === carpetaId}
+                resaltada={encima === carpeta.id}
+                onIr={() => setCarpetaId(carpeta.id)}
+                onSoltar={(fileId) => void mover(fileId, carpeta.id)}
+                onEncima={(si) => setEncima(si ? carpeta.id : null)}
+              />
+            </span>
+          ))}
+          <div className="flex-1" />
+          {creandoCarpeta ? (
+            <NuevaCarpeta
+              workspaceId={workspaceId}
+              padreId={carpetaId}
+              onCerrar={() => setCreandoCarpeta(false)}
+              onCreada={load}
+            />
+          ) : (
+            <Boton
+              tamano="sm"
+              variante="secundario"
+              icono={<FolderPlus size={14} />}
+              onClick={() => setCreandoCarpeta(true)}
+            >
+              Nueva carpeta
+            </Boton>
+          )}
+        </div>
+      )}
+
+      {!filtrando && aquiDentro.length > 0 && (
+        <ul className={REJILLA}>
+          {aquiDentro.map((carpeta, indice) => (
+            <li key={carpeta.id} className="devup-entrada" style={retraso(indice, 40)}>
+              <TarjetaCarpeta
+                carpeta={carpeta}
+                resaltada={encima === carpeta.id}
+                onAbrir={() => setCarpetaId(carpeta.id)}
+                onSoltar={(fileId) => void mover(fileId, carpeta.id)}
+                onEncima={(si) => setEncima(si ? carpeta.id : null)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
       {/* Fila de instrumentos: lo que hay delante, cuánto pesa y cómo se mira.
           El filo de luz separa el mando del contenido sin un borde duro. */}
       <div className="filo-luz flex items-center justify-between gap-3 pb-2.5">
@@ -270,15 +418,23 @@ export function FileLibrary({
         ) : (
           <EstadoVacio
             icono={<FolderOpen size={20} />}
-            titulo="El almacén está vacío"
-            pista="Arrastra archivos a la zona de arriba. Se guardan cifrados y se abren siempre por enlace firmado."
+            titulo={carpetaId ? "Esta carpeta está vacía" : "El almacén está vacío"}
+            pista={
+              carpetaId
+                ? "Arrastra aquí un archivo desde la biblioteca, o súbelo con la carpeta abierta."
+                : "Arrastra archivos a la zona de arriba. Se guardan cifrados y se abren siempre por enlace firmado."
+            }
           />
         )
       ) : vista === "rejilla" ? (
         <ul className={REJILLA}>
           {files.map((file, indice) => (
             <li key={file.id} className="devup-entrada" style={retraso(indice, 40)}>
-              <TarjetaArchivo file={file} onAbrir={() => setPreview(file)} />
+              <TarjetaArchivo
+                file={file}
+                previa={previas[file.id]}
+                onAbrir={() => setPreview(file)}
+              />
             </li>
           ))}
         </ul>
@@ -310,6 +466,11 @@ export function FileLibrary({
       {preview && (
         <FilePreview
           file={preview}
+          carpetas={carpetas}
+          onMover={async (destino) => {
+            await mover(preview.id, destino);
+            setPreview(null);
+          }}
           onClose={() => setPreview(null)}
           onDeleted={(fileId) => setFiles((current) => current.filter((f) => f.id !== fileId))}
         />
@@ -320,8 +481,164 @@ export function FileLibrary({
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Una miga del camino, que además es sitio donde soltar.
+ *
+ * El arrastre va con la API nativa de HTML5, como el tablero: la misma forma de
+ * hacerlo en los dos sitios de la aplicación donde se arrastra, y ninguna
+ * dependencia nueva.
+ */
+function MigaCarpeta({
+  texto,
+  activa,
+  resaltada,
+  onIr,
+  onSoltar,
+  onEncima,
+}: {
+  texto: string;
+  activa: boolean;
+  resaltada: boolean;
+  onIr: () => void;
+  onSoltar: (fileId: string) => void;
+  onEncima: (si: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onIr}
+      onDragOver={(evento) => {
+        evento.preventDefault();
+        onEncima(true);
+      }}
+      onDragLeave={() => onEncima(false)}
+      onDrop={(evento) => {
+        evento.preventDefault();
+        onEncima(false);
+        const fileId = evento.dataTransfer.getData("text/devup-archivo");
+        if (fileId) onSoltar(fileId);
+      }}
+      className={`presionable flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs transition-colors
+        ${resaltada ? "border-accent/50 bg-accent-soft/50 text-accent" : activa ? "border-line-strong text-ink" : "border-transparent text-muted hover:text-ink"}`}
+    >
+      {activa ? <FolderOpen size={12} /> : <CornerLeftUp size={12} />}
+      {texto}
+    </button>
+  );
+}
+
+/** Una carpeta en la rejilla: se abre al pulsarla y traga lo que se le suelte. */
+function TarjetaCarpeta({
+  carpeta,
+  resaltada,
+  onAbrir,
+  onSoltar,
+  onEncima,
+}: {
+  carpeta: Carpeta;
+  resaltada: boolean;
+  onAbrir: () => void;
+  onSoltar: (fileId: string) => void;
+  onEncima: (si: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      onDragOver={(evento) => {
+        evento.preventDefault();
+        onEncima(true);
+      }}
+      onDragLeave={() => onEncima(false)}
+      onDrop={(evento) => {
+        evento.preventDefault();
+        onEncima(false);
+        const fileId = evento.dataTransfer.getData("text/devup-archivo");
+        if (fileId) onSoltar(fileId);
+      }}
+      className={`capa-flotante elevable group flex h-full w-full items-center gap-3 rounded-2xl p-3 text-left
+        transition-colors ${resaltada ? "border-accent/60 bg-accent-soft/30" : "hover:border-line-strong"}`}
+    >
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-raised/50 text-muted">
+        <Folder size={18} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-medium text-ink">{carpeta.nombre}</span>
+        <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-faint">
+          {carpeta.archivos} {carpeta.archivos === 1 ? "archivo" : "archivos"}
+          {carpeta.subcarpetas > 0 && ` · ${carpeta.subcarpetas} dentro`}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** El campo para crear una carpeta aquí mismo, sin salir de donde estás. */
+function NuevaCarpeta({
+  workspaceId,
+  padreId,
+  onCerrar,
+  onCreada,
+}: {
+  workspaceId: string;
+  padreId: string | null;
+  onCerrar: () => void;
+  onCreada: () => Promise<void> | void;
+}) {
+  const [nombre, setNombre] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  return (
+    <form
+      className="flex items-center gap-1.5"
+      onSubmit={async (evento) => {
+        evento.preventDefault();
+        if (nombre.trim().length === 0) return;
+        setEnviando(true);
+        try {
+          await api.post(`/workspaces/${workspaceId}/carpetas`, {
+            nombre: nombre.trim(),
+            padreId,
+          });
+          await onCreada();
+          onCerrar();
+        } finally {
+          setEnviando(false);
+        }
+      }}
+    >
+      <Entrada
+        autoFocus
+        value={nombre}
+        onChange={(evento) => setNombre(evento.target.value)}
+        onKeyDown={(evento) => {
+          if (evento.key === "Escape") onCerrar();
+        }}
+        placeholder="Nombre de la carpeta"
+        aria-label="Nombre de la carpeta"
+        className="w-48"
+      />
+      <Boton type="submit" tamano="sm" variante="primario" cargando={enviando}>
+        Crear
+      </Boton>
+      <Boton type="button" tamano="sm" variante="fantasma" onClick={onCerrar}>
+        Cancelar
+      </Boton>
+    </form>
+  );
+}
+
 /** Tarjeta de la rejilla. Toda ella es el disparador de la previsualización. */
-function TarjetaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => void }) {
+function TarjetaArchivo({
+  file,
+  previa,
+  onAbrir,
+}: {
+  file: FileRecord;
+  /** La URL firmada de la miniatura, si es una imagen y ya llegó. */
+  previa?: string;
+  onAbrir: () => void;
+}) {
   const tipo = TIPOS[kindOf(file.mimeType)];
   const extension = extensionDe(file.name);
 
@@ -329,6 +646,10 @@ function TarjetaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => vo
     <button
       type="button"
       onClick={onAbrir}
+      draggable
+      // El id viaja en un tipo propio y no en `text/plain`: así soltar un
+      // archivo del escritorio sobre una carpeta no se confunde con esto.
+      onDragStart={(evento) => evento.dataTransfer.setData("text/devup-archivo", file.id)}
       // `elevable` y no `presionable`: la tarjeta entera es el botón, y en
       // globals.css el levantado del hover gana al hundido del pulsado, así que
       // poner las dos deja la pulsación sin respuesta.
@@ -345,11 +666,26 @@ function TarjetaArchivo({ file, onAbrir }: { file: FileRecord; onAbrir: () => vo
         className={`relative grid h-24 place-items-center overflow-hidden rounded-xl border ${tipo.pozo}`}
       >
         <span aria-hidden className="rejilla absolute inset-0 opacity-70" />
-        <tipo.Icono
-          size={24}
-          className={`relative transition-transform duration-200 ease-[var(--ease-out)]
-            motion-safe:group-hover:scale-110 ${tipo.tinte}`}
-        />
+        {/* LA MINIATURA, QUE ES LA MITAD DE ESTA PANTALLA: doce archivos
+            llamados `image.png` se distinguen mirando, no leyendo. Cuando no
+            hay —no es imagen, o la firma no llegó— se queda el icono de tipo,
+            que es lo que había antes. */}
+        {previa ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previa}
+            alt=""
+            loading="lazy"
+            className="absolute inset-0 size-full object-cover transition-transform duration-200
+              ease-[var(--ease-out)] motion-safe:group-hover:scale-105"
+          />
+        ) : (
+          <tipo.Icono
+            size={24}
+            className={`relative transition-transform duration-200 ease-[var(--ease-out)]
+              motion-safe:group-hover:scale-110 ${tipo.tinte}`}
+          />
+        )}
         {extension && (
           <span
             className={`absolute left-2 top-2 rounded-md border border-line-strong/60 bg-canvas/80 px-1.5

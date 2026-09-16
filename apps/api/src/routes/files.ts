@@ -25,6 +25,10 @@ const FILE_COLUMNS = `
   -- como tampoco se avisaba de que existía, grabar una llamada era para los
   -- demás como si no hubiera pasado.
   f.call_session_id as "callSessionId",
+  -- En qué carpeta está (0053). La columna existía y no salía de la API, así
+  -- que la biblioteca no podía enseñar carpetas por mucho que la base las
+  -- tuviera: es la mitad que faltaba, no una función nueva.
+  f.folder_id as "carpetaId",
   f.name, f.description, f.mime_type as "mimeType",
   f.size_bytes::bigint as "sizeBytes", f.status, f.uploaded_by as "uploadedBy",
   f.created_at as "createdAt",
@@ -251,6 +255,16 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
         q: z.string().trim().max(200).optional(),
         channelId: uuid.optional(),
         tags: z.string().optional(), // ids separados por coma
+        /**
+         * En qué carpeta mirar. `raiz` es lo que no está en ninguna.
+         *
+         * AUSENTE NO ES LO MISMO QUE `raiz`, y esa diferencia es la que hace
+         * que buscar siga funcionando: sin el parámetro se mira la biblioteca
+         * ENTERA, que es lo que hay que hacer cuando alguien escribe en el
+         * buscador — si buscar solo mirara la carpeta abierta, lo que se busca
+         * sería justo lo que no se encuentra.
+         */
+        carpeta: z.union([z.literal("raiz"), uuid]).optional(),
         limit: z.coerce.number().int().min(1).max(200).default(60),
         offset: z.coerce.number().int().min(0).default(0),
       }),
@@ -271,6 +285,11 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
             and f.deleted_at is null
             and f.status = 'ready'
             and ($2::uuid is null or f.channel_id = $2)
+            and (
+              $7::text is null
+              or ($7 = 'raiz' and f.folder_id is null)
+              or f.folder_id::text = $7
+            )
             and (
               $3::text is null
               or to_tsvector('simple', coalesce(f.name,'') || ' ' || coalesce(f.description,''))
@@ -293,6 +312,7 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
           tagIds,
           query.limit,
           query.offset,
+          query.carpeta ?? null,
         ],
       );
       return { files: rows };

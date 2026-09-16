@@ -347,6 +347,8 @@ export type FileRecord = {
   taskId: string | null;
   /** De qué llamada salió, si es la grabación de una. */
   callSessionId: string | null;
+  /** En qué carpeta está (0053). Nulo = en la raíz de la biblioteca. */
+  carpetaId: string | null;
   name: string;
   description: string;
   mimeType: string;
@@ -356,6 +358,21 @@ export type FileRecord = {
   uploadedByName: string;
   createdAt: string;
   tags: Tag[];
+};
+
+/**
+ * Una carpeta de la biblioteca (0053).
+ *
+ * El árbol se arma en el cliente a partir de `padreId`: la API las devuelve
+ * planas a propósito, para no anidarlas allí y desanidarlas aquí.
+ */
+export type Carpeta = {
+  id: string;
+  nombre: string;
+  padreId: string | null;
+  /** Cuántos archivos tiene dentro, sin contar los de sus subcarpetas. */
+  archivos: number;
+  subcarpetas: number;
 };
 
 export type Task = {

@@ -2,11 +2,12 @@
 
 import { Download, FileQuestion, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { type FileRecord, api } from "@/lib/api";
+import { type Carpeta, type FileRecord, api } from "@/lib/api";
 import { downloadUrl, formatBytes, kindOf } from "@/lib/files/upload";
 import { BotonIcono } from "@/components/ui/Boton";
 import { Chip, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { useConfirmar } from "@/components/ui/Confirmar";
+import { Desplegable } from "@/components/ui/Field";
 import { useSinAtmosfera } from "@/lib/atmosfera";
 import { TagBadge } from "./TagBadge";
 
@@ -34,10 +35,15 @@ const TIPOS = {
  */
 export function FilePreview({
   file,
+  carpetas = [],
+  onMover,
   onClose,
   onDeleted,
 }: {
   file: FileRecord;
+  /** Las carpetas del espacio, para poder mover sin arrastrar. */
+  carpetas?: Carpeta[];
+  onMover?: (destino: string | null) => void | Promise<void>;
   onClose: () => void;
   onDeleted: (fileId: string) => void;
 }) {
@@ -120,6 +126,32 @@ export function FilePreview({
                   <TagBadge key={tag.id} tag={tag} />
                 ))}
               </div>
+            )}
+
+            {/* MOVER SIN ARRASTRAR, y no es un extra: en la rejilla un archivo
+                se lleva a una carpeta arrastrándolo, y si esa fuera la única
+                forma, ordenar la biblioteca se perdería para quien no usa ratón
+                —el mismo argumento que ya obligó a que las tarjetas del tablero
+                se muevan también con el teclado—. */}
+            {onMover && carpetas.length > 0 && (
+              <label className="mt-2.5 flex items-center gap-2">
+                <Rotulo>carpeta</Rotulo>
+                <Desplegable
+                  tamano="sm"
+                  value={file.carpetaId ?? ""}
+                  aria-label="Mover a una carpeta"
+                  onChange={(evento) => void onMover(evento.target.value || null)}
+                >
+                  <option className="bg-surface" value="">
+                    Biblioteca (sin carpeta)
+                  </option>
+                  {carpetas.map((carpeta) => (
+                    <option className="bg-surface" key={carpeta.id} value={carpeta.id}>
+                      {carpeta.nombre}
+                    </option>
+                  ))}
+                </Desplegable>
+              </label>
             )}
           </div>
 
