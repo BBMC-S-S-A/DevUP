@@ -139,6 +139,35 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     return { invitation: invitacion };
   });
 
+  /**
+   * «Avísale de que caducó».
+   *
+   * ES LA ACCIÓN QUE LE FALTABA A UNA PANTALLA QUE SOLO DABA UNA FRASE. Quien
+   * abre una invitación caducada no tiene sesión, no está en la organización y
+   * no tiene ninguna forma de decírselo a quien le invitó: la salida era
+   * escribirle por fuera, o abandonar.
+   *
+   * SIN SESIÓN Y NO PASA NADA, que es la parte que hubo que decidir. Lo que
+   * llega es el token de UNA invitación concreta, y lo único que se puede
+   * hacer con él es avisar a quien la mandó — no hay ninguna dirección que
+   * elegir, así que esto no es un enviador de correo disfrazado. El porqué
+   * entero, y el camino que se descartó, están en la migración 0070.
+   *
+   * CONTESTA LO MISMO PASE LO QUE PASE. Si el token no existe, si ya se
+   * aceptó, o si se avisó hace diez minutos, la respuesta es idéntica:
+   * distinguirlas convertiría esto en una forma de averiguar qué invitaciones
+   * hay vivas probando tokens.
+   */
+  app.post("/invitations/:token/avisar", limiteEstricto, async (request, reply) => {
+    const { token } = parseParams(z.object({ token: z.string().min(8) }), request.params);
+
+    await withUser(null, (db) =>
+      db.query("select public.avisar_invitacion_caducada($1)", [hashDeInvitacion(token)]),
+    ).catch(() => {});
+
+    return reply.status(202).send({ avisado: true });
+  });
+
   // --- Invitar --------------------------------------------------------------
   app.post(
     "/organizations/:orgId/invitations",

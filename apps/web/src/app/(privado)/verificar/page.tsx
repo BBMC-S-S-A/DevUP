@@ -128,15 +128,22 @@ function Verificar() {
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 {error}
               </p>
+              {/* DÓNDE, Y NO «DESDE LA APLICACIÓN». Decirle a alguien que pida
+                  otro sin decirle desde dónde es dejarlo buscando por un menú de
+                  veinte destinos. El reenvío pide sesión a propósito —abrirlo sin
+                  ella sería una ruta que manda correo a la dirección que elija
+                  quien llame—, así que el camino honesto es entrar primero y el
+                  botón está donde se dice. */}
               <p className="mt-3 text-xs leading-relaxed text-muted">
-                Los enlaces de verificación caducan. Puedes pedir otro desde la aplicación.
+                Los enlaces de verificación caducan. Entra y pídelo desde <b>Mi cuenta</b>: el aviso
+                de arriba de esa pantalla lleva un botón para reenviarlo.
               </p>
               <Link
                 href="/login"
                 className="presionable mt-4 flex h-10 w-full items-center justify-center rounded-xl border
                   border-line bg-raised/60 px-4 text-sm text-ink hover:border-line-strong hover:bg-raised"
               >
-                Ir al acceso
+                Entrar y pedir otro
               </Link>
             </>
           )}

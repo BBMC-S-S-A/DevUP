@@ -143,9 +143,15 @@ function Invitacion() {
         chip={<Chip tono="warn">Caducada</Chip>}
       >
         <p className="text-sm leading-relaxed text-muted">
-          Pídele a {invitation.invitedByName} que te mande otra: las invitaciones dejan de valer
-          pasado un tiempo, a propósito.
+          Las invitaciones dejan de valer pasado un tiempo, a propósito. La nueva te la tiene que
+          mandar {invitation.invitedByName}.
         </p>
+        {/* LA ACCIÓN QUE FALTABA. Antes esto era solo la frase de arriba, y
+            quien llegaba no tenía ninguna forma de decírselo desde dentro: ni
+            sesión, ni organización, ni a quién escribir. El aviso va a una sola
+            persona —la que mandó ESTA invitación— así que no hay ninguna
+            dirección que elegir; el porqué entero está en la migración 0070. */}
+        <AvisarQueCaduco token={token} nombre={invitation.invitedByName} />
         <EnlaceSecundario href="/login">Ir al acceso</EnlaceSecundario>
       </Marco>
     );
@@ -332,5 +338,45 @@ function EnlaceSecundario({ href, children }: { href: string; children: React.Re
     >
       {children}
     </Link>
+  );
+}
+
+/**
+ * Avisar a quien invitó de que el enlace ya no vale.
+ *
+ * NO SE PUEDE PULSAR DOS VECES, y no por cortesía: el servidor solo avisa una
+ * vez por hora, así que un segundo intento no haría nada y parecería que el
+ * primero tampoco funcionó. Se dice que ya está avisado y se acaba.
+ */
+function AvisarQueCaduco({ token, nombre }: { token: string; nombre: string }) {
+  const [estado, setEstado] = useState<"quieto" | "enviando" | "hecho">("quieto");
+
+  if (estado === "hecho") {
+    return (
+      <p className="rounded-xl border border-live/30 bg-live/10 px-3 py-2.5 text-xs leading-relaxed text-live">
+        Avisado. {nombre} verá que estuviste aquí y que el enlace ya no valía.
+      </p>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={estado === "enviando"}
+      onClick={async () => {
+        setEstado("enviando");
+        // El servidor contesta lo mismo pase lo que pase —para no convertir
+        // esto en un detector de invitaciones vivas— así que aquí tampoco hay
+        // nada que distinguir: se avisó o se intentó, y las dos se cuentan
+        // igual.
+        await api.post(`/invitations/${encodeURIComponent(token)}/avisar`).catch(() => {});
+        setEstado("hecho");
+      }}
+      className="presionable flex h-10 w-full items-center justify-center rounded-xl border
+        border-accent/40 bg-accent-soft/40 px-4 text-sm text-accent hover:bg-accent-soft/60
+        disabled:opacity-60"
+    >
+      {estado === "enviando" ? "Avisando…" : `Avisar a ${nombre}`}
+    </button>
   );
 }
