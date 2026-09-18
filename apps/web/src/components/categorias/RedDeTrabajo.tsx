@@ -39,7 +39,14 @@ import { paso, type AristaFisica, type NodoFisico } from "./fisica";
 
 type Tipo = "persona" | "tarea" | "categoria";
 
-type Nodo = { id: string; tipo: Tipo; texto: string; categorias: string[] };
+type Nodo = {
+  id: string;
+  tipo: Tipo;
+  texto: string;
+  categorias: string[];
+  /** Solo para las tareas: si está en una columna terminal. */
+  cerrada?: boolean;
+};
 type Arista = { deId: string; aId: string; categorias: string[] };
 
 const SIN_RAMA = "sin-rama";
@@ -64,12 +71,30 @@ export function RedDeTrabajo({
   /** Ramas señaladas desde la lista de fuera. Vacío = se ven todas por igual. */
   elegidas: string[];
 }) {
-  // Solo lo que está sin terminar: una red que incluye lo cerrado hace meses
-  // enseña el pasado y tapa el presente, que es lo que se viene a mirar.
-  const tareas = useMemo(
-    () => columnas.filter((c) => !c.isTerminal).flatMap((c) => c.tasks),
+/**
+   * TODO: lo cerrado y lo que no.
+   *
+   * AQUÍ ANTES SE FILTRABAN LAS COLUMNAS TERMINALES —«la red enseña lo que está
+   * en curso, no lo cerrado»— y ese filtro tenía un efecto que no se vio al
+   * escribirlo: en cuanto un equipo termina lo que tenía, el grafo se queda EN
+   * BLANCO. No «con menos nodos»: vacío, con un cartel diciendo que no hay nada
+   * que dibujar, justo el día que más hay que enseñar.
+   *
+   * Y lo que se pierde no es solo la foto. Este grafo es de donde el motor
+   * agéntico saca el contexto del proyecto, y un proyecto sin su historia es un
+   * proyecto que hay que volver a explicar entero cada vez. Lo cerrado es
+   * exactamente lo que dice de qué va esto: qué se hizo, en qué rama, y quién
+   * lo llevó.
+   *
+   * Se dibujan las dos cosas y se distinguen a la vista —la cerrada va hueca,
+   * la de en curso maciza—, que es lo que el filtro intentaba resolver
+   * escondiendo la mitad.
+   */
+  const terminales = useMemo(
+    () => new Set(columnas.filter((c) => c.isTerminal).map((c) => c.id)),
     [columnas],
   );
+  const tareas = useMemo(() => columnas.flatMap((c) => c.tasks), [columnas]);
 
   const { nodos, aristas } = useMemo(() => {
     const personas = new Map<string, string>();
@@ -87,11 +112,13 @@ export function RedDeTrabajo({
       tipo: "tarea",
       texto: t.title,
       categorias: [t.categoryId ?? SIN_RAMA],
+      cerrada: terminales.has(t.columnId),
     }));
 
-    // Solo las ramas con algo sin terminar, y al final «sin rama» — el nodo
-    // que más dice, porque hasta ahora lo que nadie clasificó no se veía en
-    // ningún sitio.
+    // Las ramas que tienen algo —abierto o cerrado— y al final «sin rama», el
+    // nodo que más dice, porque lo que nadie clasificó no se ve en ningún otro
+    // sitio. Una rama entera terminada sigue siendo parte del proyecto: era de
+    // las que desaparecían con el filtro de antes.
     const usadas = ramas.filter((r) => tareas.some((t) => t.categoryId === r.id));
     const huerfanas = tareas.some((t) => !t.categoryId);
     const columnaCategoria: { id: string; nombre: string }[] = [
@@ -117,7 +144,7 @@ export function RedDeTrabajo({
     }
 
     return { nodos: [...nodosPersona, ...nodosTarea, ...nodosCategoria], aristas };
-  }, [tareas, ramas]);
+  }, [tareas, ramas, terminales]);
 
   return (
     <GrafoFisico
@@ -352,7 +379,8 @@ function GrafoFisico({
   if (vacio) {
     return (
       <p className="px-1 py-8 text-center text-xs text-faint">
-        No hay tareas sin terminar que dibujar. La red enseña lo que está en curso, no lo cerrado.
+        Todavía no hay ninguna tarea que dibujar. En cuanto haya una, aparece aquí — y se queda
+        cuando se cierre.
       </p>
     );
   }
@@ -413,13 +441,21 @@ function GrafoFisico({
                     bajarPuntero(e, n.id);
                   }}
                 >
+                  {/* HUECA SI ESTÁ CERRADA, maciza si sigue en curso. Se
+                      distingue por la FORMA y no por el color: los colores ya
+                      dicen de qué tipo es cada nodo, y meter un cuarto color
+                      para un segundo significado es como se vuelven ilegibles
+                      estas cosas. Un círculo hueco se lee de un vistazo incluso
+                      alejado del todo, que es como se mira un grafo. */}
                   <circle
                     cx={p.x}
                     cy={p.y}
                     r={RADIO[n.tipo] / vista.k}
-                    fill={COLOR[n.tipo]}
-                    stroke={enFoco ? "var(--c-accent-bright)" : "transparent"}
-                    strokeWidth={2 / vista.k}
+                    fill={n.cerrada ? "var(--c-surface)" : COLOR[n.tipo]}
+                    stroke={
+                      enFoco ? "var(--c-accent-bright)" : n.cerrada ? COLOR[n.tipo] : "transparent"
+                    }
+                    strokeWidth={(n.cerrada && !enFoco ? 1.5 : 2) / vista.k}
                   />
                   <text
                     x={p.x}
@@ -446,7 +482,7 @@ function GrafoFisico({
           {(
             [
               ["persona", "Persona"],
-              ["tarea", "Tarea sin terminar"],
+              ["tarea", "Tarea"],
               ["categoria", "Categoría"],
             ] as const
           ).map(([tipo, texto]) => (
@@ -455,6 +491,16 @@ function GrafoFisico({
               {texto}
             </span>
           ))}
+          {/* La forma, explicada una vez. Sin esto, un nodo hueco parece un
+              fallo de dibujo en vez de una tarea terminada. */}
+          <span className="flex items-center gap-1.5 text-[11px] text-faint">
+            <span
+              aria-hidden
+              className="size-2 rounded-full border"
+              style={{ borderColor: COLOR.tarea, background: "var(--c-surface)" }}
+            />
+            Cerrada
+          </span>
         </div>
         <p className="text-[11px] text-faint">
           Arrastra para mover, rueda para zoom, clic en un nodo para aislarlo.
