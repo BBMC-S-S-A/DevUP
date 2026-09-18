@@ -72,6 +72,15 @@ jobs:
       - name: Aislamiento entre organizaciones
         run: npm run test:rls
 
+      - name: El bus entre instancias
+        # Producción corre partida —`api` sin sockets, `live` con ellos— y las
+        # salas del hub viven en memoria: cada aviso nacido de una escritura por
+        # REST se repartía a un hub vacío mientras la gente estaba en el otro
+        # proceso. Sin un solo error en los registros. Esto levanta DOS buses de
+        # verdad y comprueba que el aviso cruza, que no llega duplicado a quien
+        # lo publicó, y que uno más grande que un `NOTIFY` llega entero.
+        run: npm run test:bus
+
       - name: El corrillo, la sala de voz sin canal
         # Tres personas en la misma malla, que es lo que la llamada por
         # cercanía no podía hacer con una sola conexión. Y las dos cosas que

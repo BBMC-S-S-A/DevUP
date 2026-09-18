@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { verifyAccessToken } from "../auth/tokens.js";
 import { withUser } from "../db/pool.js";
+import { bus } from "./bus.js";
 import { type Member, channelHub, fileHub, send, userHub, voiceHub } from "./hub.js";
 
 const HEARTBEAT_MS = 30_000;
@@ -630,7 +631,7 @@ export function announceNotification(
   userId: string,
   notification: Record<string, unknown>,
 ): void {
-  userHub.broadcast(userId, { type: "notification", notification });
+  bus.repartir("persona", userId, { type: "notification", notification });
 }
 
 /** Reparte un mensaje nuevo, editado o borrado a quien tenga el canal abierto. */
@@ -639,7 +640,7 @@ export function announceMessage(
   action: "created" | "updated" | "deleted",
   message: Record<string, unknown>,
 ): void {
-  channelHub.broadcast(channelId, { type: "message", action, message });
+  bus.repartir("canal", channelId, { type: "message", action, message });
 }
 
 /** Avisa al workspace de que su biblioteca ha cambiado. */
@@ -656,7 +657,7 @@ export function announceMessage(
  * dice «vuelve a preguntar», no lo que cambió.
  */
 export function announceVoz(workspaceId: string): void {
-  fileHub.broadcast(workspaceId, { type: "voz-change" });
+  bus.repartir("espacio", workspaceId, { type: "voz-change" });
 }
 
 export function announceFileChange(
@@ -664,7 +665,7 @@ export function announceFileChange(
   action: "created" | "updated" | "deleted",
   fileId: string,
 ): void {
-  fileHub.broadcast(workspaceId, { type: "file-change", action, fileId });
+  bus.repartir("espacio", workspaceId, { type: "file-change", action, fileId });
 }
 
 /**
@@ -693,7 +694,7 @@ export function announceBoardChange(
   action: "created" | "updated" | "moved" | "deleted",
   taskId: string,
 ): void {
-  fileHub.broadcast(workspaceId, { type: "board-change", action, taskId });
+  bus.repartir("espacio", workspaceId, { type: "board-change", action, taskId });
 }
 
 /**
@@ -702,5 +703,5 @@ export function announceBoardChange(
  * falta una conexión aparte para algo tan ligero.
  */
 export function announceSpotifySession(channelId: string, payload: Record<string, unknown>): void {
-  channelHub.broadcast(channelId, { type: "spotify", ...payload });
+  bus.repartir("canal", channelId, { type: "spotify", ...payload });
 }

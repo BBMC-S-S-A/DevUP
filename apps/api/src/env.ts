@@ -92,11 +92,25 @@ const schema = z.object({
    * socket y puede vivir en un alojamiento medido por uso sin que una
    * videollamada de una hora dispare el consumo.
    *
-   * NO HACE FALTA TOCAR NADA MÁS PARA QUE FUNCIONE PARTIDO EN DOS PROCESOS. El
-   * ticket de `/auth/ws-ticket` es un JWT firmado con AUTH_SECRET, no una
-   * entrada en memoria — lo puede verificar cualquier proceso que comparta
-   * ese secreto y la misma base, así que la instancia que emite el ticket y la
-   * que atiende el socket no tienen por qué ser la misma.
+   * EL TICKET NO ATA LAS DOS INSTANCIAS. El de `/auth/ws-ticket` es un JWT
+   * firmado con AUTH_SECRET, no una entrada en memoria — lo verifica cualquier
+   * proceso que comparta ese secreto y la misma base, así que quien emite el
+   * ticket y quien atiende el socket no tienen por qué ser el mismo.
+   *
+   * LO QUE SÍ HACÍA FALTA, Y AQUÍ PONÍA QUE NO. Esta nota decía «no hace falta
+   * tocar nada más para que funcione partido en dos procesos», y con eso puesto
+   * se partió producción en `api` (false) y `live` (true) el 16 de septiembre.
+   * Faltaba una cosa, y era grande: las salas del hub viven EN MEMORIA. Toda
+   * escritura por REST caía en la instancia sin sockets y repartía su aviso a un
+   * hub vacío, mientras la gente estaba conectada a la otra. El chat no llegaba
+   * solo, la campana no se encendía, el tablero no se movía. Sin un error en
+   * ningún registro, porque repartir a nadie no falla.
+   *
+   * Ya está cosido: `realtime/bus.ts` publica cada aviso por `NOTIFY` y las
+   * instancias con sockets lo reparten en el suyo. Partirlo vuelve a ser seguro
+   * PARA LOS AVISOS. No lo es para la voz ni para el mundo: esas salas guardan
+   * presencia, no avisos, y dos instancias sirviéndolas a la vez no se verían
+   * entre sí. Hoy las cinco las sirve la misma, y conviene que siga así.
    */
   REALTIME_ENABLED: bool("true"),
 

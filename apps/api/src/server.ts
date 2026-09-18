@@ -9,6 +9,7 @@ import { authPlugin } from "./auth/plugin.js";
 import { closePool, withUser } from "./db/pool.js";
 import { env, webOrigins } from "./env.js";
 import { HttpError, translateDbError } from "./lib/http.js";
+import { escucharElBus, bus } from "./realtime/bus.js";
 import { signalingRoutes } from "./realtime/signaling.js";
 import { worldSocketRoutes } from "./realtime/world.js";
 import { accountRoutes } from "./routes/account.js";
@@ -214,11 +215,17 @@ await app.register(youtubeRoutes);
 await app.register(worldRoutes);
 
 // Los cinco WebSockets y el reloj de DevVerse, solo en la instancia que los
-// sirve. El resto de rutas de arriba —incluidas messages, notifications,
-// files y spotify, que avisan al hub tras cada escritura— no dependen de
-// esto: avisar a un hub sin nadie escuchando es una vuelta sobre un mapa
-// vacío, no un error. Lo único que se pierde sin esta instancia es el
-// empujón en vivo; la escritura en la base ya ocurrió por REST.
+// sirve.
+//
+// AQUÍ ANTES PONÍA QUE EL RESTO DE RUTAS NO DEPENDEN DE ESTO —«avisar a un hub
+// sin nadie escuchando es una vuelta sobre un mapa vacío, no un error»— y era
+// verdad solo mientras hubo UNA instancia: si no hay sockets en ningún sitio,
+// no se pierde nada. Partido en dos servicios, los sockets están en el OTRO
+// proceso, y ese mapa vacío era exactamente la avería: se escribía en `api` y
+// se repartía en el hub de `api`, donde no había nadie, mientras la gente
+// estaba conectada a `live`. De ahí que el chat, la campana, el tablero y la
+// biblioteca dejaran de moverse solos sin un solo error en los registros.
+// Lo cose `realtime/bus.ts`, que va más abajo.
 if (env.REALTIME_ENABLED) {
   await app.register(signalingRoutes);
   await app.register(worldSocketRoutes);
@@ -310,6 +317,17 @@ await ensureBucket();
 // que significar «esto no existe» también al arrancar.
 if (env.REPOS_ALOJADOS) await prepararAlmacen();
 
+/**
+ * A la escucha de lo que reparten las demás instancias.
+ *
+ * ANTES DE ESCUCHAR PETICIONES y con `await`: si la base no deja abrir esta
+ * conexión, es mejor que el arranque falle diciéndolo que quedarse en pie
+ * repartiendo solo la mitad de los avisos — que es justo el fallo silencioso
+ * que esto viene a cerrar. En la instancia de solo REST no hace nada: no tiene
+ * sockets a los que repartir. Ver `realtime/bus.ts`.
+ */
+await escucharElBus();
+
 const sweeper = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
 void sweep();
 const githubSweeper = setInterval(() => void refreshGithubRepos(), GITHUB_REFRESH_INTERVAL_MS);
@@ -320,6 +338,7 @@ async function shutdown(signal: string): Promise<void> {
   clearInterval(sweeper);
   clearInterval(githubSweeper);
   await app.close();
+  await bus.cerrar();
   await closePool();
   process.exit(0);
 }
