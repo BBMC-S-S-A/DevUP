@@ -373,7 +373,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.get("/auth/me", { onRequest: requireSession }, async (request) => {
     const userId = requireUser(request);
     const me = await withUser(userId, (db) => loadMe(db, userId));
-    return { user: me, capacidades: { reposAlojados: env.REPOS_ALOJADOS } };
+    return {
+      user: me,
+      capacidades: {
+        reposAlojados: env.REPOS_ALOJADOS,
+        // Si esta instalación atiende el MCP por URL. Sin esto, la pantalla
+        // enseñaría una dirección para pegar en Claude que contesta 404 —peor
+        // que no enseñar nada, porque parece que lo roto es el Claude de quien
+        // lo intenta.
+        mcpRemoto: env.MCP_REMOTE_ENABLED,
+      },
+    };
   });
 
   /**

@@ -21,11 +21,11 @@ import { olvidarUltimoEspacio } from "./ultimo-espacio";
  * falta un volumen de verdad, ver `env.ts` en la API— y donde están apagados
  * la entrada del menú no debe aparecer, porque llevaría a un 404.
  */
-export type Capacidades = { reposAlojados: boolean };
+export type Capacidades = { reposAlojados: boolean; mcpRemoto: boolean };
 
 /** Apagado mientras no conste lo contrario: un menú que falta se nota y se
  *  arregla; uno que aparece y no lleva a ninguna parte parece una avería. */
-const NINGUNA: Capacidades = { reposAlojados: false };
+const NINGUNA: Capacidades = { reposAlojados: false, mcpRemoto: false };
 
 type SessionState = {
   user: User | null;

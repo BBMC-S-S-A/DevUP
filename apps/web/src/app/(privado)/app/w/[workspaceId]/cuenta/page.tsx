@@ -27,6 +27,7 @@ import {
   type ConexionDeAgente,
   type ContrasenaDeGit,
   type Sesion,
+  API_URL,
   ApiError,
   api,
 } from "@/lib/api";
@@ -836,6 +837,67 @@ function Perfil() {
  * de la fila que se puede listar, por eso enseñar «tienes una clave puesta»
  * no puede filtrar la clave.
  */
+/**
+ * La dirección que se pega en Claude para conectar DevUP. Una línea, sin token.
+ *
+ * POR QUÉ HACÍA FALTA. Debajo de esto se crea un token y se enseña dónde
+ * pegarlo, y lo que se enseña es una configuración de `mcpServers` que apunta a
+ * `<ruta>/apps/mcp/src/index.ts`. Eso solo lo puede seguir quien tenga el
+ * repositorio clonado y node a mano — o sea, nosotros. Para cualquier otra
+ * persona del equipo, «conecta tu IA» terminaba en una ruta de archivo que en
+ * su máquina no existe.
+ *
+ * Y LA PUERTA POR URL YA ESTABA ABIERTA: la API atiende el MCP en `/mcp`, con
+ * registro dinámico de cliente y PKCE (ver `routes/oauth.ts`), que es justo lo
+ * que Claude sabe hacer solo. Se pega la dirección, Claude pide permiso con la
+ * cuenta de quien la pega, y ya está. Sin token que copiar, sin nada que
+ * instalar, y sin una credencial de larga vida dando vueltas por un archivo de
+ * configuración.
+ *
+ * SOLO SI ESTA INSTALACIÓN LA SIRVE. `MCP_REMOTE_ENABLED` viene apagado por
+ * defecto, y enseñar la dirección donde no está encendida sería dar una URL que
+ * contesta 404 — y quien la pega no tiene forma de saber que lo roto no es su
+ * Claude. Por eso viaja en `capacidades`, igual que los repositorios alojados.
+ */
+function ConectorMcp() {
+  const { capacidades } = useSession();
+  const [copiado, setCopiado] = useState(false);
+  const url = `${API_URL}/mcp`;
+
+  if (!capacidades.mcpRemoto) return null;
+
+  return (
+    <div className="mb-4 rounded-xl border border-line bg-canvas/40 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <Rotulo>La forma corta</Rotulo>
+        <Chip tono="accent">sin token</Chip>
+      </div>
+      <p className="mb-2.5 max-w-prose text-[11px] leading-relaxed text-muted">
+        Pega esta dirección como conector en tu Claude. Te pedirá permiso con tu cuenta de DevUP y
+        listo: no hay nada que instalar ni ningún token que guardar. Lo de abajo es para conectar un
+        Claude que corre en tu máquina contra una DevUP local.
+      </p>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg border border-line bg-canvas/70 px-2.5 py-2 font-mono text-[11px]">
+          {url}
+        </code>
+        <Boton
+          tamano="sm"
+          variante={copiado ? "fantasma" : "secundario"}
+          icono={copiado ? <Check size={13} /> : <Copy size={13} />}
+          onClick={async () => {
+            await navigator.clipboard.writeText(url);
+            setCopiado(true);
+            toast.success("Dirección copiada");
+          }}
+        >
+          {copiado ? "Copiada" : "Copiar"}
+        </Boton>
+      </div>
+    </div>
+  );
+}
+
 function ClaveDeIA() {
   const confirmar = useConfirmar();
   const [conexiones, setConexiones] = useState<{ id: string; provider: Proveedor }[] | undefined>(
@@ -1080,10 +1142,12 @@ function ConexionesDeAgente() {
       </div>
 
       <p className="mb-4 max-w-prose text-xs leading-relaxed text-muted">
-        Cada una es la llave con la que <b>tu propio Claude</b> entra a DevUP por MCP y puede
-        preguntarle al proyecto. DevUP no paga la inferencia de nadie: el modelo es el tuyo, corre
-        en tu máquina y ve exactamente lo que ves tú, ni una fila más.
+        Así es como <b>tu propio Claude</b> entra a DevUP por MCP y puede preguntarle al proyecto.
+        DevUP no paga la inferencia de nadie: el modelo es el tuyo y ve exactamente lo que ves tú,
+        ni una fila más.
       </p>
+
+      <ConectorMcp />
 
       {error && <p className="mb-3 text-xs text-danger">{error}</p>}
 
