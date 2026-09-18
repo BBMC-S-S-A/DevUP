@@ -83,14 +83,28 @@ type MeteredIceServer = {
  * una credencial nueva con su propia API, así que aquí nunca se guarda ni se
  * reutiliza un secreto fijo — la caducidad y la rotación las gestiona Metered.
  * Si su API falla, se sirve solo STUN en vez de tumbar la petición entera.
+ *
+ * CON PLAZO, Y NO ES UN DETALLE. Esta llamada es lo PRIMERO que hace `join()`
+ * en el cliente: antes de pedir el micrófono, antes de abrir el socket. Sin
+ * plazo, un Metered lento no da error —se queda—, y lo que se ve es el botón de
+ * entrar a la sala girando para siempre sin decir nada, con la llamada sin
+ * empezar y sin nada que mirar en los registros. Un tercero que tarda no puede
+ * decidir cuánto dura una llamada nuestra: a los seis segundos se sigue sin él,
+ * con STUN, que es exactamente lo que ya hace cuando contesta mal.
+ *
+ * Seis y no quince: aquí hay alguien esperando delante de una pantalla, no un
+ * refresco de fondo. Medido contra la API de Metered, la respuesta normal tarda
+ * poco más de un segundo.
  */
+const PLAZO_MS = 6_000;
+
 async function fetchMeteredIceServers(request: FastifyRequest) {
   const url =
     `https://${env.METERED_APP_NAME}.metered.live/api/v1/turn/credentials` +
     `?apiKey=${encodeURIComponent(env.METERED_API_KEY)}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(PLAZO_MS) });
     if (!response.ok) {
       throw new Error(`Metered respondió ${response.status}`);
     }
@@ -109,6 +123,9 @@ async function fetchMeteredIceServers(request: FastifyRequest) {
       { error },
       "No se pudo obtener credenciales de Metered.ca; se sirve solo STUN",
     );
+    // Sin TURN la llamada conecta igual y, en muchas redes, no se oye nada. El
+    // cliente lo enseña en pantalla con `turnConfigured`, pero quien mira los
+    // registros de producción también tiene que poder saberlo.
     return {
       iceServers: stunUrls.length > 0 ? [{ urls: stunUrls }] : [],
       turnConfigured: false,
