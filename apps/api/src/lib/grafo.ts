@@ -154,6 +154,76 @@ export type Vecino = {
  * No hace falta ningún `where` de organización: la política de la 0043 ya
  * excluye cualquier enlace del que no se vean los dos extremos.
  */
+/**
+ * Lo que cuelga del espacio: sus canales, sus ramas, sus repositorios, sus
+ * entornos y su gente.
+ *
+ * POR QUÉ EXISTE. La pantalla de la red ENTRA SIEMPRE POR EL ESPACIO —es la
+ * única puerta que no depende de haber pulsado algo antes— y ninguna regla
+ * tejía un solo enlace hacia él. Resultado: el grafo se abría vacío y parecía
+ * que el proyecto no tenía nada dentro, cuando lo que no había era por dónde
+ * empezar. Lo mismo le pasaba al motor agéntico, que arranca por aquí: sin
+ * vecinos en la raíz no hay proyecto que leer, y el resto del grafo —que sí
+ * está tejido— quedaba inalcanzable por no tener primer paso.
+ *
+ * SE CALCULA, NO SE GUARDA, y es la decisión que importa. Guardarlos obligaría
+ * a tejer al crear un canal, al conectar un repositorio, al dar de alta un
+ * entorno, al añadir a alguien... y a destejer en cada uno de esos sitios al
+ * revés. Basta olvidar UNO para que la raíz del grafo mienta: enseñaría un
+ * canal que ya no existe, o se callaría uno que sí. Y los vecinos del espacio
+ * no son una relación que alguien decide: son su CONTENIDO, y las tablas ya
+ * saben contestarlo. Calculado no puede quedarse viejo.
+ *
+ * CORRE BAJO RLS COMO TODO LO DEMÁS, así que cada quien ve sus canales y su
+ * gente. Un canal privado al que no perteneces no sale aquí, igual que no sale
+ * en la barra lateral.
+ *
+ * LO QUE NO ESTÁ, Y A PROPÓSITO:
+ *
+ *  · Los COMPONENTES de la arquitectura. Son cientos en un repositorio mediano
+ *    y ahogarían al resto en la misma lista. Cuelgan de su repositorio, que es
+ *    donde se va a buscarlos.
+ *
+ *  · La GENTE. Aquí estuvo, y se quitó al escribir la consulta: quién alcanza
+ *    un espacio no es «quién está en `workspace_members`». Esa tabla es solo la
+ *    lista EXPLÍCITA de los espacios compartidos; quien entró a toda la
+ *    organización con `all_workspaces` no aparece en ella, y el dueño y los
+ *    administradores tampoco. La regla entera vive en `can_access_workspace`
+ *    (0027) y contesta por QUIEN PREGUNTA, no por un tercero, así que no se
+ *    puede reutilizar desde aquí — habría que escribirla por segunda vez, y la
+ *    segunda copia es la que se queda atrás. Con `workspace_members` a secas se
+ *    enseñaría a casi nadie y parecería que el espacio está desierto.
+ *
+ *    La gente sigue en el grafo por donde de verdad se la busca: desde la tarea
+ *    que lleva (`retejerTarea`, «la lleva»), que sí es un hecho de una fila.
+ */
+async function vecinosDelEspacio(db: Db, workspaceId: string, limite: number): Promise<Vecino[]> {
+  const { rows } = await db.query<Vecino>(
+    `select * from (
+        select 'espacio:canal:' || c.id as id, 'contiene' as etiqueta,
+               'regla' as procedencia, c.created_at as "creadoEn",
+               'sale' as direccion, 'canal' as tipo, c.id as "nodoId", c.name as nombre
+          from channels c where c.workspace_id = $1
+        union all
+        select 'espacio:area:' || a.id, 'se organiza en',
+               'regla', a.created_at, 'sale', 'area', a.id, a.name
+          from task_categories a where a.workspace_id = $1
+        union all
+        select 'espacio:repositorio:' || r.id, 'programa en',
+               'regla', r.created_at, 'sale', 'repositorio', r.id, r.full_name
+          from github_repos r where r.workspace_id = $1
+        union all
+        select 'espacio:entorno:' || e.id, 'despliega en',
+               'regla', e.created_at, 'sale', 'entorno', e.id, e.name
+          from environments e where e.workspace_id = $1
+      ) v
+      order by v."creadoEn" desc
+      limit $2`,
+    [workspaceId, limite],
+  );
+  return rows;
+}
+
 export async function vecinosDe(
   db: Db,
   tipo: TipoDeNodo,
@@ -178,7 +248,23 @@ export async function vecinosDe(
       limit $3`,
     [tipo, id, limite],
   );
-  return rows;
+
+  /**
+   * Y, si se preguntó por el espacio, lo que cuelga de él.
+   *
+   * VAN JUNTOS Y NO EN VEZ DE. Los enlaces que alguien puso a mano hacia el
+   * espacio siguen siendo suyos y tienen que salir; lo calculado se añade. Se
+   * quita el duplicado por si alguien enlazó a mano algo que ya cuelga solo:
+   * verlo dos veces en la lista sería un fallo visible, y el de a mano es el
+   * que se queda porque lleva quién lo puso.
+   */
+  if (tipo !== "espacio") return rows;
+
+  const yaEstan = new Set(rows.map((v) => `${v.tipo}:${v.nodoId}`));
+  const delEspacio = (await vecinosDelEspacio(db, id, limite)).filter(
+    (v) => !yaEstan.has(`${v.tipo}:${v.nodoId}`),
+  );
+  return [...rows, ...delEspacio].slice(0, limite);
 }
 
 /**
@@ -263,6 +349,44 @@ export async function retejerTarea(db: Db, tareaId: string): Promise<void> {
       where source_kind = 'tarea' and source_id = $1 and source = 'regla'`,
     [tareaId],
   );
+
+  /**
+   * --- De qué rama cuelga, y quién la lleva --------------------------------
+   *
+   * SIN ESTAS DOS, BAJAR DESDE EL ESPACIO NO LLEGA A NINGÚN LADO. Ahora la raíz
+   * enseña las ramas de trabajo y la gente, pero ni una ni otra tenían enlaces
+   * hacia las tareas: se entraba en una rama y estaba vacía. El camino que el
+   * motor agéntico recorre —espacio, rama, tarea, y de ahí a su archivo o su
+   * repositorio— se cortaba en el segundo paso.
+   *
+   * Van desde la tarea porque es donde vive el dato (`category_id`,
+   * `assignee_id`) y porque `retejerTarea` ya corre al crearla, al moverla y al
+   * editarla: reasignarla o cambiarla de rama rehace el enlace solo. Tejerlo
+   * desde la rama obligaría a retejer la rama entera cada vez que se toca una
+   * de sus tareas.
+   */
+  const { rows: sitio } = await db.query<{ category_id: string | null; assignee_id: string | null }>(
+    "select category_id, assignee_id from tasks where id = $1",
+    [tareaId],
+  );
+  if (sitio[0]?.category_id) {
+    await tejer(db, {
+      origenTipo: "tarea",
+      origenId: tareaId,
+      destinoTipo: "area",
+      destinoId: sitio[0].category_id,
+      etiqueta: "cuelga de",
+    });
+  }
+  if (sitio[0]?.assignee_id) {
+    await tejer(db, {
+      origenTipo: "tarea",
+      origenId: tareaId,
+      destinoTipo: "persona",
+      destinoId: sitio[0].assignee_id,
+      etiqueta: "la lleva",
+    });
+  }
 
   // --- Lo que lleva pegado --------------------------------------------------
   // `files.task_id` es la única arista de esta lista que el documento daba ya

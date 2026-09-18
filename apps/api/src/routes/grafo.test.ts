@@ -514,6 +514,94 @@ async function main(): Promise<void> {
       return (await vecinosDe(db, "mensaje", otro.rows[0]!.id)).length;
     });
     check("y borrarlo se lleva la suya", trasBorrar === 0);
+
+    // -----------------------------------------------------------------------
+    console.log("\nLa raíz del grafo no se abre vacía");
+    // -----------------------------------------------------------------------
+    //
+    // La pantalla de la red entra SIEMPRE por el espacio, y ninguna regla tejía
+    // un enlace hacia él: se abría vacía y parecía que el proyecto no tenía
+    // nada dentro. Lo mismo le pasaba al motor agéntico, que arranca por aquí.
+    // Ahora los vecinos del espacio se CALCULAN de su contenido, así que no hay
+    // forma de que se queden viejos ni de que falte tejerlos en algún sitio.
+
+    const raiz = await withUser(ana, (db) => vecinosDe(db, "espacio", acme.ws));
+
+    check("el espacio trae vecinos sin que nadie los haya tejido", raiz.length > 0);
+    check(
+      "entre ellos el canal que tiene dentro",
+      raiz.some((v) => v.tipo === "canal" && v.nodoId === canal),
+    );
+    // La gente NO cuelga de la raíz, y conviene que esto se quede escrito en
+    // una comprobación: la regla de quién alcanza un espacio vive en
+    // `can_access_workspace` y contesta por quien pregunta, no por un tercero.
+    // Copiarla aquí sería la segunda copia. Ver la cabecera de `vecinosDelEspacio`.
+    check(
+      "la gente no, porque su regla de visibilidad no se puede copiar aquí",
+      !raiz.some((v) => v.tipo === "persona"),
+    );
+    // Lo calculado se AÑADE a lo guardado, no lo sustituye: el enlace que se
+    // puso a mano al principio de esta prueba sigue saliendo, y con su marca.
+    check(
+      "sin tapar lo que alguien puso a mano",
+      raiz.some((v) => v.procedencia === "persona" && v.nodoId === acme.pagos),
+    );
+    check("y sin repetir ningún vecino", new Set(raiz.map((v) => `${v.tipo}:${v.nodoId}`)).size === raiz.length);
+
+    // La puerta sigue siendo RLS: calcular en vez de guardar no puede abrir un
+    // espacio ajeno. Es el único sitio donde este cambio podría romper algo.
+    const ajena = await withUser(bruno, (db) => vecinosDe(db, "espacio", acme.ws));
+    check("el espacio de otra organización no enseña nada", ajena.length === 0);
+
+    // -----------------------------------------------------------------------
+    console.log("\nY bajar desde la raíz llega a alguna parte");
+    // -----------------------------------------------------------------------
+    //
+    // Enseñar ramas y gente en la raíz no sirve de nada si al entrar están
+    // vacías: el camino que recorre el motor agéntico —espacio, rama, tarea, y
+    // de ahí a su archivo o su repositorio— se cortaba en el segundo paso.
+
+    const ramaDeTrabajo = await withUser(ana, async (db) => {
+      const cat = (
+        await db.query<{ id: string }>(
+          "insert into task_categories (workspace_id, name) values ($1,$2) returning id",
+          [acme.ws, "Pagos"],
+        )
+      ).rows[0]!.id;
+      await db.query("update tasks set category_id = $1, assignee_id = $2 where id = $3", [
+        cat,
+        ana,
+        acme.pagos,
+      ]);
+      await retejerTarea(db, acme.pagos);
+      return cat;
+    });
+
+    const desdeLaRama = await withUser(ana, (db) => vecinosDe(db, "area", ramaDeTrabajo));
+    check(
+      "desde la rama de trabajo se llega a su tarea",
+      desdeLaRama.some((v) => v.tipo === "tarea" && v.nodoId === acme.pagos),
+    );
+
+    const desdeLaPersona = await withUser(ana, (db) => vecinosDe(db, "persona", ana));
+    check(
+      "y desde la persona, a lo que lleva",
+      desdeLaPersona.some((v) => v.tipo === "tarea" && v.nodoId === acme.pagos),
+    );
+
+    // Reasignar rehace el enlace solo, porque va desde la tarea y `retejerTarea`
+    // ya corre al editarla. Si fuera al revés habría que retejer la rama entera
+    // cada vez que se toca una de sus tareas — y ese es el olvido que deja el
+    // grafo mintiendo.
+    const traslado = await withUser(ana, async (db) => {
+      await db.query("update tasks set category_id = null where id = $1", [acme.pagos]);
+      await retejerTarea(db, acme.pagos);
+      return vecinosDe(db, "area", ramaDeTrabajo);
+    });
+    check(
+      "y sacarla de la rama se lleva el enlace",
+      !traslado.some((v) => v.nodoId === acme.pagos),
+    );
   } finally {
     await admin.query("delete from public.organizations where slug like $1", [`%-grafo-${sufijo}`]);
     await admin.query("delete from public.users where email like $1", [
