@@ -140,9 +140,27 @@ for (const nombre of ARCHIVOS_DE_INTERES) {
 for (const ruta of rutas.filter((r) => r.endsWith("package.json") && r !== "package.json").slice(0, 6)) {
   archivos.set(ruta, readFileSync(join(raiz, ruta), "utf8"));
 }
-// El diagnóstico también mira código: se le dan los mismos archivos que le
-// daría la ruta HTTP para un repositorio ajeno.
-for (const ruta of rutas.filter((r) => r.startsWith("apps/api/src/realtime/")).slice(0, 6)) {
+/**
+ * El diagnóstico también mira código, así que hay que darle código.
+ *
+ * AQUÍ ANTES SE COGÍAN LOS SEIS PRIMEROS ARCHIVOS DE LA CARPETA, y eso ató una
+ * comprobación sobre el CONTENIDO a los NOMBRES de los archivos. Al añadir
+ * `bus.ts` y `bus.test.ts`, `world.ts` —el único que tiene el `setInterval` que
+ * la última comprobación dice que hay que señalar— se salió de los seis por
+ * orden alfabético. La prueba se puso roja sin que cambiara nada de lo que
+ * prueba, y el mensaje no daba ninguna pista de por qué.
+ *
+ * Ahora el archivo que la comprobación NOMBRA va puesto a mano, y el resto es
+ * la muestra de siempre. Sin los archivos de prueba: no son código que corra en
+ * producción, y ocupaban sitio en la muestra sin aportar nada que diagnosticar.
+ */
+const CON_EL_RELOJ = "apps/api/src/realtime/world.ts";
+const deServidor = new Set([
+  CON_EL_RELOJ,
+  ...rutas.filter((r) => r.startsWith("apps/api/src/realtime/") && !r.endsWith(".test.ts")),
+]);
+for (const ruta of [...deServidor].slice(0, 6)) {
+  if (!rutas.includes(ruta)) continue;
   archivos.set(ruta, readFileSync(join(raiz, ruta), "utf8"));
 }
 
@@ -160,8 +178,9 @@ check(
 // Esta sí es verdad y conviene que salga: el reparto del mundo corre con
 // setInterval dentro del proceso de la API. Con dos instancias, dos relojes.
 check(
-  "sí señala el setInterval del reparto del mundo, que es cierto",
+  `sí señala el setInterval del reparto del mundo, que es cierto (${CON_EL_RELOJ})`,
   propio.some((r) => r.id === "cron-en-el-proceso"),
+  archivos.has(CON_EL_RELOJ) ? "el diagnóstico no lo vio" : "ni siquiera se le dio el archivo",
 );
 
 console.log(`\n${total - fallos} comprobaciones correctas, ${fallos} fallidas`);
