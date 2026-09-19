@@ -19,8 +19,17 @@ import { join, resolve, sep } from "node:path";
 
 process.env.GIT_ROOT = await mkdtemp(join(tmpdir(), "devup-git-"));
 
-const { nombreValido, rutaDelRepo, RutaInsegura, crearRepo, existeRepo, borrarRepo, ramasDelRepo } =
-  await import("./almacen.js");
+const {
+  nombreValido,
+  rutaDelRepo,
+  rutaDelEspacio,
+  RutaInsegura,
+  crearRepo,
+  existeRepo,
+  borrarRepo,
+  borrarReposDelEspacio,
+  ramasDelRepo,
+} = await import("./almacen.js");
 const { pktLine, cabeceraDeAnuncio, protocoloPedido, esServicio, escribe } = await import(
   "./protocolo.js"
 );
@@ -92,6 +101,40 @@ async function main(): Promise<void> {
   check("recién creado no tiene ramas", (await ramasDelRepo(ESPACIO, "mi-proyecto")).length === 0);
   await borrarRepo(ESPACIO, "mi-proyecto");
   check("y después de borrarlo ya no", !(await existeRepo(ESPACIO, "mi-proyecto")));
+
+  console.log("\nBorrar un espacio entero no se lleva a los demás");
+  // Es un `rm -r`: lo que se prueba es que nunca pueda apuntar a la raíz ni
+  // salirse de ella, porque la raíz son los repositorios de todos los clientes.
+  const rechazaEspacio = (id: string): boolean => {
+    try {
+      rutaDelEspacio(id);
+      return false;
+    } catch (error) {
+      return error instanceof RutaInsegura;
+    }
+  };
+  check("vacío no es un espacio", rechazaEspacio(""));
+  check("ni el punto", rechazaEspacio("."));
+  check("ni una travesía", rechazaEspacio("../.."));
+  check("ni algo que no sea un uuid", rechazaEspacio("no-soy-un-uuid"));
+  check(
+    "la carpeta de un espacio cuelga de la raíz y no es la raíz",
+    rutaDelEspacio(ESPACIO).startsWith(raiz + sep) && rutaDelEspacio(ESPACIO) !== raiz,
+  );
+
+  const OTRO = "11111111-2222-3333-4444-555555555555";
+  await crearRepo(ESPACIO, "uno", "main");
+  await crearRepo(ESPACIO, "dos", "main");
+  await crearRepo(OTRO, "del-vecino", "main");
+  await borrarReposDelEspacio(ESPACIO);
+  check(
+    "se borran todos los repositorios del espacio",
+    !(await existeRepo(ESPACIO, "uno")) && !(await existeRepo(ESPACIO, "dos")),
+  );
+  check("y el del espacio de al lado sigue ahí", await existeRepo(OTRO, "del-vecino"));
+  await borrarReposDelEspacio(ESPACIO);
+  check("borrar un espacio que ya no tiene nada no revienta", !(await existeRepo(ESPACIO, "uno")));
+  await borrarRepo(OTRO, "del-vecino");
 
   console.log("\nEl formato que git espera");
   // El ejemplo canónico de la documentación de git: la línea del servicio mide

@@ -41,6 +41,7 @@
     "test:avisos": "tsx src/routes/avisos.test.ts",
     "test:conexiones": "tsx src/routes/conexiones.test.ts",
     "test:git": "tsx src/git/almacen.test.ts",
+    "test:prefijos": "tsx src/storage/prefijos.test.ts",
     "test:git:e2e": "tsx src/git/extremo-a-extremo.test.ts",
     "test:corrillo": "tsx src/realtime/corrillo.test.ts",
     "test:bus": "tsx src/realtime/bus.test.ts"
