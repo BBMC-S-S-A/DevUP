@@ -63,6 +63,14 @@ jobs:
 
       - run: npm ci
 
+      - name: Construir el paquete MCP
+        # La API importa piezas de `@devup/mcp` (el registro de herramientas, el
+        # marcado de datos), y sus exportaciones apuntan a `dist/` en ejecución.
+        # `dist/` no está en git y el build general va al final, así que sin
+        # esto cualquier prueba que cargue esos módulos antes de él no los
+        # encuentra. Es un `tsc` pequeño.
+        run: npm run build --workspace apps/mcp
+
       - name: Tipos
         run: npm run typecheck
 
@@ -115,6 +123,13 @@ jobs:
         # pkt-line, que si se rompe hace que git diga «invalid server response»
         # sin más pistas.
         run: npm run test:git
+
+      - name: Qué prefijos del almacén se pueden borrar
+        # Borrar un espacio o una organización barre sus archivos por prefijo.
+        # Un prefijo vacío lista el bucket entero, y lo que se lista se borra:
+        # esta es la única comprobación entre «borrar un espacio» y «borrar los
+        # archivos de todos los clientes». Sin base ni almacén.
+        run: npm run test:prefijos --workspace apps/api
 
       - name: Clonar y empujar de verdad
         # La prueba que justifica la decisión de 0068: que no era un simulacro.

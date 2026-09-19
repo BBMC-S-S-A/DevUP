@@ -30,7 +30,9 @@
  *
  *   npm run test:espacios --workspace apps/api
  */
+import { randomBytes } from "node:crypto";
 import { closePool, withUser } from "../db/pool.js";
+import { restosDeEspacio, restosDeOrganizacion } from "../lib/restos.js";
 
 let total = 0;
 const fallos: string[] = [];
@@ -237,6 +239,76 @@ async function main(): Promise<void> {
     check("y se lleva sus canales", (await cuentaDe("channels", "id", canal)) === 0);
     check("sus tareas", (await cuentaDe("tasks", "id", tarea)) === 0);
     check("y sus columnas", (await cuentaDe("task_columns", "id", columna)) === 0);
+
+    console.log("\nLo que queda fuera de la base");
+    // Borrar un espacio arrastra sus filas en cascada, pero sus archivos, su
+    // base alojada y sus repositorios alojados no viven en la base. La ruta los
+    // lee ANTES de borrar (`lib/restos.ts`) y los barre después. Lo que se fija
+    // aquí es la lectura, que es la mitad que depende de RLS: si se leyera con
+    // quien no ve el espacio, se barrería nada y no se notaría.
+    const conRestos = await crear(ana, "Con restos", "shared");
+    const hex = () => randomBytes(6).toString("hex");
+    await admin.query(
+      `insert into hosted_databases (workspace_id, organization_id, db_name, role_name)
+       values ($1,$2,$3,$4)`,
+      [conRestos, org, `ws_${hex()}`, `ws_${hex()}`],
+    );
+    await admin.query(
+      "insert into hosted_repos (workspace_id, organization_id, slug) values ($1,$2,'web')",
+      [conRestos, org],
+    );
+
+    const restos = await withUser(beto, (db) => restosDeEspacio(db, conRestos));
+    check(
+      "el prefijo es el del espacio, dentro de su organización",
+      restos?.prefijo === `${org}/${conRestos}/`,
+    );
+    check("encuentra su base alojada", restos?.espaciosConBase.includes(conRestos) === true);
+    check("y sus repositorios alojados", restos?.espaciosConRepos.includes(conRestos) === true);
+
+    const deFueraRestos = await alta("FueraRestos");
+    check(
+      "quien no ve el espacio no saca nada, y la ruta no llega a borrar",
+      (await withUser(deFueraRestos, (db) => restosDeEspacio(db, conRestos))) === null,
+    );
+
+    const personalDeCarla = await crear(carla, "Lo de Carla", "personal");
+    await admin.query(
+      "insert into hosted_repos (workspace_id, organization_id, slug) values ($1,$2,'suyo')",
+      [personalDeCarla, org],
+    );
+    const restosOrg = await withUser(ana, (db) => restosDeOrganizacion(db, org));
+    check("al borrar la organización, el prefijo es el de toda ella", restosOrg.prefijo === `${org}/`);
+    check(
+      "y encuentra lo alojado en los espacios que ve",
+      restosOrg.espaciosConRepos.includes(conRestos),
+    );
+    // Y TAMBIÉN LO DEL ESPACIO PERSONAL DE OTRA PERSONA. Un espacio personal no
+    // lo ve nadie más, salvo quien administra la organización
+    // (`can_access_workspace`, 0027). Solo el propietario borra la
+    // organización, así que encuentra todo. Si un día esa función dejara de
+    // abrir los personales a quien administra, borrar una organización
+    // dejaría vivas las bases y los repositorios de esos espacios, y esto se
+    // pondría rojo.
+    check(
+      "y lo del espacio personal de otra persona, porque quien borra administra",
+      restosOrg.espaciosConRepos.includes(personalDeCarla),
+    );
+
+    const quedaFila = async (tabla: string): Promise<boolean> =>
+      Number(
+        (
+          await admin.query<{ n: string }>(
+            `select count(*) as n from ${tabla} where workspace_id = $1`,
+            [conRestos],
+          )
+        ).rows[0]!.n,
+      ) > 0;
+    await borrar(beto, conRestos);
+    check(
+      "y por eso se leen antes: después del borrado no queda ninguna fila que los nombre",
+      !(await quedaFila("hosted_databases")) && !(await quedaFila("hosted_repos")),
+    );
 
     console.log("\nBorrar una rama pide mandar en el espacio");
     // Lo que esto justifica es el 403 de la ruta. La política de borrado pide
