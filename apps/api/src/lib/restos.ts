@@ -33,14 +33,11 @@ import { borrarPorPrefijo } from "../storage/s3.js";
  * falla es limpiar, contestar con un error haría creer que el espacio sigue ahí.
  * Lo que falle se escribe en el registro con lo necesario para repetirlo a mano.
  *
- * LO QUE NO ALCANZA, Y HAY QUE SABERLO. Las bases y repositorios alojados se
- * leen con la identidad de quien borra, y sus políticas piden
- * `can_access_workspace`. Al borrar una ORGANIZACIÓN, quien la borra no ve los
- * espacios personales de otras personas, así que sus bases y repositorios
- * alojados no se encuentran y se quedan. Los archivos sí se borran todos,
- * porque van por prefijo de organización. Cerrarlo del todo necesita una
- * función `security definer` que liste los restos de una organización para su
- * propietario: es una migración, y está pedida.
+ * AL BORRAR UNA ORGANIZACIÓN SE ENCUENTRA TODO, también lo de los espacios
+ * personales de otras personas. Las políticas de lo alojado piden
+ * `can_access_workspace`, y esa función deja entrar a quien administra la
+ * organización en todos sus espacios (0027). Solo el propietario puede borrar
+ * una organización, y el propietario administra. Lo fija `espacios.test.ts`.
  */
 export type Restos = {
   /** Prefijo del almacén que se borra entero. */

@@ -283,14 +283,16 @@ async function main(): Promise<void> {
       "y encuentra lo alojado en los espacios que ve",
       restosOrg.espaciosConRepos.includes(conRestos),
     );
-    // LIMITACIÓN CONOCIDA, FIJADA A PROPÓSITO. Quien borra la organización no
-    // ve los espacios personales de otras personas, así que sus repositorios y
-    // bases alojadas no se encuentran. Los archivos sí se borran, porque van
-    // por prefijo. Cerrarlo necesita una función `security definer` (migración,
-    // pedida). Cuando exista, esta comprobación tiene que cambiar: por eso está.
+    // Y TAMBIÉN LO DEL ESPACIO PERSONAL DE OTRA PERSONA. Un espacio personal no
+    // lo ve nadie más, salvo quien administra la organización
+    // (`can_access_workspace`, 0027). Solo el propietario borra la
+    // organización, así que encuentra todo. Si un día esa función dejara de
+    // abrir los personales a quien administra, borrar una organización
+    // dejaría vivas las bases y los repositorios de esos espacios, y esto se
+    // pondría rojo.
     check(
-      "limitación conocida: no ve lo alojado en el espacio personal de otra persona",
-      !restosOrg.espaciosConRepos.includes(personalDeCarla),
+      "y lo del espacio personal de otra persona, porque quien borra administra",
+      restosOrg.espaciosConRepos.includes(personalDeCarla),
     );
 
     const quedaFila = async (tabla: string): Promise<boolean> =>
