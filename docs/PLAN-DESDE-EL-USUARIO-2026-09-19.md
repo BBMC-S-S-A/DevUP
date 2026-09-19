@@ -25,25 +25,26 @@ Es una lista de deseos de un usuario, no un contrato. Se usó así:
 - **No se tomó como orden de compra** lo que pide el ciclo completo (fusionar y
   desplegar desde DevUP). Eso exige un modelo de permisos que aún no existe y va
   detrás de una decisión (tarea «Decidir · niveles de un agente»).
-- Todo lo de abajo sale de leer el repositorio, **no de ejecutarlo**. Donde no
-  se pudo comprobar, dice «no verificado».
+- Todo lo de abajo sale de leer el repositorio, **no de ejecutarlo**. Una
+  segunda revisión, el mismo día, cerró los puntos que habían quedado «por
+  verificar»; uno de ellos resultó ser el hallazgo más grave del plan (§2bis).
 
 ## 2. Dónde está DevUP frente a los 53 requisitos
 
-Resultado: **1 cubierto, 15 a medias, 2 por verificar, 35 sin empezar.**
+Resultado: **3 cubiertos, 14 a medias, 36 sin empezar.**
 
 | Req. | Estado | Lo que hay |
 |---|---|---|
 | SEG-01 política de datos | No | Nada en `docs/` ni en la raíz |
 | SEG-02 cifrado en reposo | Parcial | Bóveda con AES-256-GCM. Base, adjuntos y respaldos dependen del proveedor y no está documentado |
-| SEG-03 adjuntos privados | Parcial | Las subidas van con URL firmada y caducidad. La lectura no se verificó |
-| SEG-04 tokens con alcance | Parcial | OAuth con caducidad y revocación. Sin alcance por nivel ni por proyecto |
+| SEG-03 adjuntos privados | Sí, en el código | Subidas y lecturas firmadas, 15 min (`storage/s3.ts`). Que el bucket sea privado depende del proveedor y no se ve desde aquí |
+| SEG-04 tokens con alcance | Parcial | Una «conexión de agente» (0029) es una sesión de la persona con etiqueta, caducidad y revocación, pero con **todos** sus permisos |
 | SEG-05 detector de secretos | No | |
 | SEG-06 auditoría exportable | No | El registro de actividad guarda escrituras, no lecturas, y lo dice |
 | SEG-07 terceros como dato | No | El MCP entrega texto de tareas tal cual |
 | SEG-08 exportar y borrar | No | No se encontró |
-| SEG-09 salida de personas | No | No se encontró |
-| SEG-10 secretos nunca visibles | No verificado | Hay lectura de variables de Railway; falta comprobar qué sale |
+| SEG-09 salida de personas | Parcial | Quitar a alguien le corta el acceso al momento por RLS. Sus tareas siguen a su nombre y nada lista lo que dejó creado |
+| SEG-10 secretos nunca visibles | Sí | Las variables de Railway solo se usan en el servidor. La cadena de una base alojada se entrega una vez a quien la crea, por decisión escrita. Falta una prueba que lo fije |
 | TAB-01 área y categoría | Parcial | Decidido en la 0050 (una rama por tarea, con gerente). El MCP sigue creando categorías por nombre si no existen |
 | TAB-02 borrar y fusionar etiquetas | Parcial | `DELETE /tags/:id` existe. No hay fusión ni herramienta MCP |
 | TAB-03 comentarios | No | Solo el verbo `comento` en el vocabulario, sin quien lo escriba |
@@ -55,7 +56,7 @@ Resultado: **1 cubierto, 15 a medias, 2 por verificar, 35 sin empezar.**
 | BD-01 registro de migraciones | Parcial | Hay `/environments/:id/migrate`; sin registro por entorno ni tipo aditiva/destructiva |
 | BD-02 aplicar con nivel | Parcial | Sin niveles ni respaldo previo |
 | BD-03, BD-04, BD-05, BD-07 | No | |
-| BD-06 escritura con doble llave | No verificado | Existe `/database/query`; falta ver si separa lectura de escritura |
+| BD-06 escritura con doble llave | **No, y peor** | Ver §2bis |
 | ARQ-01 mapa de servicios | Sí | `ver_arquitectura`, `dibujar_arquitectura`, lector de Terraform |
 | ARQ-02 variables por servicio | Parcial | Se leen para configurar la base; no hay vista «puesta sí o no» |
 | ARQ-03 trabajos programados | No | |
@@ -70,11 +71,28 @@ Resultado: **1 cubierto, 15 a medias, 2 por verificar, 35 sin empezar.**
 
 De las **33 herramientas MCP** que proponen, ninguna existe con ese nombre.
 
+## 2bis. El hallazgo que no estaba en la lista del cliente
+
+`POST /workspaces/:id/database/query` (`routes/basedatos.ts`) pasa lo que llegue
+a `ejecutarSQL`, que hace `client.query(sql)`: **cualquier sentencia, escrituras
+incluidas, y varias a la vez**. La conexión se descifra con las políticas de
+`connections` y `connection_secrets`, que dejan leer a quien tenga
+`can_access_workspace`. O sea: **cualquier miembro con acceso al espacio, no solo
+quien lo administra, puede lanzar `DELETE` o `DROP` contra la base del
+proyecto.**
+
+GESTEK pedía que las escrituras pasaran por una propuesta con vista previa
+(BD-06). Antes que eso hace falta lo mínimo: exigir mando sobre el espacio y
+correr la consola en modo solo lectura. Es un arreglo sin migración, y va el
+primero de todo el plan.
+
+Está verificado leyendo el código, no ejecutándolo. La tarea lo dice.
+
 ## 3. El orden, y por qué
 
-**Fase 0 · lo que no espera (hasta el 17-oct).** La política de datos y
-las comprobaciones de cifrado son texto y verificación, no código. Junto a ellas,
-que ningún secreto salga por la API ni por el MCP.
+**Fase 0 · lo que no espera (hasta el 17-oct).** Primero, cerrar la consola
+SQL (§2bis). Después, la política de datos y las comprobaciones de cifrado, que
+son texto y verificación, no código.
 
 **Fase 1 · lo que más horas costó (hasta el 31-oct).** Etiquetas que no se
 duplican, comentarios que se añaden, tarea ↔ PR automático, registro de
@@ -104,7 +122,7 @@ objetos, auditoría exportable y salida de personas.
 
 ## 5. Riesgos
 
-- **El plan es largo y el equipo son tres.** Por eso las fases 3 a 5 quedan como
+- **El plan es largo y el equipo son dos.** Por eso las fases 3 a 5 quedan como
   dirección y no como compromiso; se revisan al terminar la fase 2.
 - **API por delante de la interfaz.** Es lo que ya pasó una vez: nueve funciones
   hechas sin pantalla. Cada tarea de API con pantalla lleva su tarea de web
@@ -112,21 +130,41 @@ objetos, auditoría exportable y salida de personas.
 - **Un cliente real espera respuesta.** La política de datos (SEG-01) es lo único
   con un interlocutor esperando, y por eso va primero.
 
-## 6. Lo que hay en el tablero, y lo que no
+## 6. Lo que hay en el tablero, y quién lo lleva
 
-El tablero de DevUP tenía 80 tareas, todas en Hecho. Este plan añade **35**, en
-«Por hacer»: 10 de Fase 0, 9 de Fase 1, 5 de Fase 2, 4 de Fase 3, 4 de Fase 4 y
+El tablero de DevUP tenía 80 tareas, todas en Hecho. Este plan añade **34**, en
+«Por hacer»: 10 de Fase 0, 8 de Fase 1, 5 de Fase 2, 4 de Fase 3, 4 de Fase 4 y
 3 de Fase 5. Los 53 requisitos se agruparon; el identificador de cada uno va en
 el título.
 
-**Reparto de hoy: 28 tareas para la sesión de datos y 7 para la de web.** Está
-descompensado porque casi todo lo que pide el documento es de API, migración o
-MCP. Cada tarea de API con pantalla lleva su tarea de web enlazada, pero conviene
-mirar si parte de la web pasa a otra persona antes de que la Fase 1 empiece.
+**El equipo pasa a ser de dos**: Juan Medina y Juan Bonilla. Reparto: **19 para
+Juan Bonilla y 15 para Juan Medina.**
+
+Con dos personas y este volumen, el reparto por capas de CAMINOS.md (una sesión
+la web, la otra migraciones, API y MCP) dejaba 27 tareas a un lado y 7 al otro.
+Así que se reparte **por tarea entera**: quien lleva una tarea hace su API, su
+MCP y su pantalla, y eso además evita que la API se adelante a la interfaz, que
+ya pasó con nueve funciones. Se mantienen dos reglas, porque son las que salieron
+caras:
+
+1. **Las migraciones las escribe solo Juan Bonilla.** Es el único sitio donde un
+   conflicto no se arregla fusionando: el migrador va por checksum. Si una tarea
+   de Juan Medina necesita una columna, se pide.
+2. **Nadie empuja a la rama del otro.**
+
+Esto cambia el contrato de CAMINOS.md, que manda sobre este documento. **Hay que
+acordarlo con Juan Bonilla y reflejarlo allí** antes de que empiece la Fase 1.
+
+Criterio del reparto: Juan Bonilla lleva lo que necesita migración, proveedores
+(Railway, Neon, S3, GitHub) o producción. Juan Medina lleva la redacción de la
+política de datos, las decisiones, las pantallas, y lo que se resuelve en API o
+MCP sin tocar el esquema (texto de terceros como dato, detector de secretos,
+etiquetas duplicadas, trabajos programados, salida de personas, tejer
+tarea ↔ mensaje).
 
 **No se bajaron al tablero, a propósito** (son P2 y P3 del documento y ninguna
 bloquea a otra): TAB-06 pedido a plan, COO-02 y COO-03 sesiones y restricciones
-activas, PR-04 revisión por IA, PR-06 políticas de commits, BD-04 a BD-05 y BD-07
+activas, PR-04 revisión por IA, PR-06 políticas de commits, BD-04, BD-05 y BD-07
 fichas de tabla, consultas guardadas y respaldos visibles, ARQ-05 y ARQ-06
 despliegue guiado y vuelta atrás, PRO-04, PRO-06 y PRO-07, y MAN-01 a MAN-03. Se
 revisan al cerrar la Fase 2.
