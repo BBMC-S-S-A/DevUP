@@ -7,12 +7,14 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env, webOrigins } from "../env.js";
+import { prefijoBorrable } from "./prefijos.js";
 
 const comun = {
   region: env.S3_REGION,
@@ -227,6 +229,54 @@ export async function deleteObjects(keys: string[]): Promise<void> {
         console.warn("[s3] borrado por lotes incompleto:", error);
       });
   }
+}
+
+/**
+ * Borra todo lo que cuelga de un prefijo. Devuelve cuántos objetos había.
+ *
+ * REVIENTA ANTES DE LISTAR SI EL PREFIJO NO ES UNO DE LOS DOS PERMITIDOS (ver
+ * `prefijos.ts`). No se confía en que quien llama pase algo sensato: un
+ * prefijo vacío aquí es el bucket entero.
+ *
+ * A DIFERENCIA DE `deleteObjects`, ESTO SÍ AVISA DE UN FALLO. Allí un objeto
+ * que no se borra es basura suelta; aquí es el rastro de una organización que
+ * ya no existe, y quien llama tiene que poder decirlo en el registro para
+ * volver a intentarlo.
+ */
+export async function borrarPorPrefijo(prefijo: string): Promise<number> {
+  if (!prefijoBorrable(prefijo)) {
+    throw new Error(`prefijo no borrable: «${prefijo}»`);
+  }
+
+  // Se vuelve a listar desde el principio en cada vuelta en vez de seguir un
+  // token de continuación: lo que se lista se borra, así que la siguiente
+  // lista empieza por lo que queda. No depende de cómo trate el almacén un
+  // token que apunta a objetos que ya no existen. No hay bucle infinito
+  // posible: si un lote no se borra entero, se lanza.
+  let total = 0;
+  for (;;) {
+    const pagina = await s3Interno.send(
+      new ListObjectsV2Command({ Bucket: env.S3_BUCKET, Prefix: prefijo, MaxKeys: 1000 }),
+    );
+    const claves = (pagina.Contents ?? [])
+      .map((objeto) => objeto.Key)
+      .filter((clave): clave is string => typeof clave === "string" && clave.startsWith(prefijo));
+    if (claves.length === 0) break;
+
+    const respuesta = await s3Interno.send(
+      new DeleteObjectsCommand({
+        Bucket: env.S3_BUCKET,
+        Delete: { Objects: claves.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    const fallidos = respuesta.Errors?.length ?? 0;
+    if (fallidos > 0) {
+      throw new Error(`${fallidos} objeto(s) de «${prefijo}» no se pudieron borrar`);
+    }
+    total += claves.length;
+  }
+
+  return total;
 }
 
 /**

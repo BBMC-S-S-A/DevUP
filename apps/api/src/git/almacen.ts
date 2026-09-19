@@ -108,6 +108,38 @@ export async function borrarRepo(workspaceId: string, slug: string): Promise<voi
   await rm(rutaDelRepo(workspaceId, slug), { recursive: true, force: true });
 }
 
+/**
+ * La carpeta que agrupa todos los repositorios de un espacio, o revienta.
+ *
+ * Las mismas redes que `rutaDelRepo`, sin la del nombre: el identificador tiene
+ * que ser un uuid de verdad y la ruta tiene que colgar de la raíz. Y una más,
+ * que allí no hacía falta: **nunca devuelve la raíz misma**. Esta función
+ * acaba en un `rm -r`, y un identificador que por lo que sea resolviera a la
+ * raíz borraría los repositorios de todos los clientes.
+ */
+export function rutaDelEspacio(workspaceId: string): string {
+  if (!UUID.test(workspaceId)) throw new RutaInsegura("identificador de espacio inesperado");
+
+  const raiz = resolve(env.GIT_ROOT);
+  const destino = resolve(join(raiz, workspaceId.toLowerCase()));
+  if (destino === raiz || !destino.startsWith(raiz + sep)) {
+    throw new RutaInsegura("la ruta se sale del almacén de repositorios");
+  }
+  return destino;
+}
+
+/**
+ * Borra todos los repositorios de un espacio de una vez.
+ *
+ * Para cuando el espacio desaparece: la fila de `hosted_repos` se va en cascada
+ * con el espacio, pero la carpeta del disco no la borra ninguna cascada. Sin
+ * esto, los repositorios de un espacio borrado seguían en el servidor, con su
+ * código entero, sin ninguna fila que los nombrara.
+ */
+export async function borrarReposDelEspacio(workspaceId: string): Promise<void> {
+  await rm(rutaDelEspacio(workspaceId), { recursive: true, force: true });
+}
+
 export async function existeRepo(workspaceId: string, slug: string): Promise<boolean> {
   try {
     const s = await stat(rutaDelRepo(workspaceId, slug));

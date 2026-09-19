@@ -9,6 +9,10 @@ import { forbidden, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
 import { asegurarEtiqueta } from "./files.js";
 import { crearTareaEnDb, moverTareaEnDb } from "./tasks.js";
+// Lo que devuelven las herramientas va marcado como dato, igual que por la
+// puerta MCP: el modelo lo lee junto a la pregunta de la persona, y casi todo lo
+// escribió otra gente. Ver apps/mcp/src/dato.ts.
+import { comoDato } from "@devup/mcp/dato.js";
 
 /**
  * El asistente de dentro de DevUP.
@@ -738,7 +742,7 @@ async function correrAnthropic(
         resultados.push({
           type: "tool_result",
           tool_use_id: peticion.id,
-          content: r.texto,
+          content: r.esError ? r.texto : comoDato(r.texto),
           ...(r.esError ? { is_error: true } : {}),
         });
       }
@@ -855,7 +859,7 @@ async function correrGemini(
           functionResponse: {
             id: llamada.id,
             name: llamada.name,
-            response: r.esError ? { error: r.texto } : { output: r.texto },
+            response: r.esError ? { error: r.texto } : { output: comoDato(r.texto) },
           },
         });
       }

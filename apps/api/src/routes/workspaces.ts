@@ -5,6 +5,7 @@ import { withUser } from "../db/pool.js";
 import { voiceHub } from "../realtime/hub.js";
 import { env } from "../env.js";
 import { badRequest, forbidden, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { barrerRestos, restosDeEspacio, restosDeOrganizacion } from "../lib/restos.js";
 import {
   buildOrgAssetKey,
   deleteObject,
@@ -158,7 +159,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const { orgId } = parseParams(z.object({ orgId: uuid }), request.params);
     const body = parseBody(z.object({ confirmarSlug: z.string().trim().min(1) }), request.body);
 
-    await withUser(userId, async (db) => {
+    const restos = await withUser(userId, async (db) => {
       const { rows } = await db.query<{ slug: string; name: string }>(
         "select slug, name from organizations where id = $1",
         [orgId],
@@ -173,14 +174,21 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         );
       }
 
+      // Antes del `delete`: después no queda de dónde leer qué había fuera de
+      // la base. Ver `lib/restos.ts`.
+      const restos = await restosDeOrganizacion(db, orgId);
+
       const { rowCount } = await db.query("delete from organizations where id = $1", [orgId]);
       // Cero filas aquí no es «no existe» —acabamos de leerla— sino que la
       // política de borrado la rechazó: no es la persona propietaria.
       if (!rowCount) {
         throw forbidden("solo quien es propietario de la organización puede borrarla");
       }
+      return restos;
     });
 
+    // Fuera de la transacción, y ya confirmada: el almacén no se deshace.
+    await barrerRestos(restos, request.log);
     return reply.status(204).send();
   });
 
@@ -658,7 +666,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
    * SE LLEVA POR DELANTE, EN CASCADA, todo lo que cuelga de él: sus canales con
    * sus mensajes, los archivos, el tablero entero con sus tareas y su historia,
    * el diagrama, los repositorios conectados, las credenciales guardadas y el
-   * registro de actividad. No hay papelera.
+   * registro de actividad. No hay papelera. Y lo que vive fuera de la base
+   * —archivos del almacén, base alojada, repositorios alojados— lo barre
+   * `lib/restos.ts` en cuanto la transacción confirma.
    *
    * POR ESO PIDE ESCRIBIR EL NOMBRE, igual que la organización pide su
    * identificador. No es teatro: un borrado a secas se dispara desde un botón
@@ -676,7 +686,7 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const body = parseBody(z.object({ confirmarNombre: z.string().trim().min(1) }), request.body);
 
-    await withUser(userId, async (db) => {
+    const restos = await withUser(userId, async (db) => {
       const { rows } = await db.query<{ name: string }>(
         "select name from workspaces where id = $1",
         [workspaceId],
@@ -694,6 +704,9 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
         );
       }
 
+      // Antes del `delete`, por lo mismo que en la organización.
+      const restos = await restosDeEspacio(db, workspaceId);
+
       const { rowCount } = await db.query("delete from workspaces where id = $1", [workspaceId]);
       // Cero filas aquí no es «no existe» —acabamos de leerlo— sino que la
       // política de borrado lo rechazó.
@@ -703,8 +716,10 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
             "organización, y los personales solo quien los creó",
         );
       }
+      return restos;
     });
 
+    if (restos) await barrerRestos(restos, request.log);
     return reply.status(204).send();
   });
 
