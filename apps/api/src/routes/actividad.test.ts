@@ -195,9 +195,18 @@ async function main(): Promise<void> {
       return rows[0]!.id;
     });
 
-    // Lo que hace útiles las áreas: sin decir a quién, la tarea cae en quien
-    // lleva el área. Si esto se rompe, la función pierde su motivo de existir.
-    const heredada = await withUser(ana, (db) =>
+    // ARCHIVAR EN UNA RAMA NO ASIGNA A NADIE, y esta comprobación decía lo
+    // contrario. La 0050 dejó escrito que quien lleva una rama es su GERENTE y
+    // que su trabajo es REPARTIR: un gerente con cuarenta tareas a su nombre no
+    // reparte nada. Lo que entra sin responsable espera en «por repartir», que
+    // es la lista que el gerente abre.
+    //
+    // El área de arriba se crea con `owner_id` a propósito —como las que
+    // existían antes de la 0050— porque es justo el caso que fallaba: esa
+    // columna dejó de escribirse pero se seguía leyendo, así que las ramas
+    // viejas asignaban solas y las nuevas no. Si alguien vuelve a leerla, esto
+    // se pone rojo.
+    const sinRepartir = await withUser(ana, (db) =>
       crearTareaEnDb(db, {
         workspaceId: ws,
         columnId: pendiente,
@@ -210,11 +219,31 @@ async function main(): Promise<void> {
         autor: ana,
       }),
     );
-    check("una tarea archivada en un área hereda a quien la lleva", heredada.assigneeId === ana);
-    check("y queda clasificada en esa área", heredada.categoryId === area);
+    check(
+      "archivar en una rama NO asigna a nadie, ni en las que traen owner_id",
+      sinRepartir.assigneeId === null,
+    );
 
-    // Sin área no hay a quién heredar: la tarea se queda sin responsable, que
-    // es el comportamiento de siempre y no debe cambiar por añadir esto.
+    // Y un responsable explícito se respeta, que es lo único que decide a quién
+    // va una tarea.
+    const conDuenyo = await withUser(ana, (db) =>
+      crearTareaEnDb(db, {
+        workspaceId: ws,
+        columnId: pendiente,
+        title: "Con responsable dicho",
+        description: "",
+        assigneeId: ana,
+        dueDate: null,
+        tagIds: [],
+        categoryId: area,
+        autor: ana,
+      }),
+    );
+    check("y a quien se diga, se le asigna", conDuenyo.assigneeId === ana);
+    check("y queda clasificada en esa área", sinRepartir.categoryId === area);
+
+    // Sin área, igual: sin responsable. Lo que cambió con la 0050 es que CON
+    // área tampoco.
     const sinArea = await withUser(ana, (db) =>
       crearTareaEnDb(db, {
         workspaceId: ws,
