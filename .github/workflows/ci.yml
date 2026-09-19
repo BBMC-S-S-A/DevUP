@@ -116,6 +116,13 @@ jobs:
         # sin más pistas.
         run: npm run test:git
 
+      - name: Qué prefijos del almacén se pueden borrar
+        # Borrar un espacio o una organización barre sus archivos por prefijo.
+        # Un prefijo vacío lista el bucket entero, y lo que se lista se borra:
+        # esta es la única comprobación entre «borrar un espacio» y «borrar los
+        # archivos de todos los clientes». Sin base ni almacén.
+        run: npm run test:prefijos --workspace apps/api
+
       - name: Clonar y empujar de verdad
         # La prueba que justifica la decisión de 0068: que no era un simulacro.
         # Clona por HTTP con una contraseña de git, empuja un commit y vuelve a
