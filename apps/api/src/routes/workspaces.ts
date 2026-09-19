@@ -563,7 +563,13 @@ export async function workspaceRoutes(app: FastifyInstance): Promise<void> {
     return withUser(userId, async (db) => {
       const { rows } = await db.query(
         `select id, organization_id as "organizationId", name, visibility,
-                created_by as "createdBy", created_at as "createdAt"
+                created_by as "createdBy", created_at as "createdAt",
+                -- QUIÉN PUEDE MANDAR AQUÍ, resuelto por la MISMA función que
+                -- usan las políticas. La pantalla lo necesita para no enseñar
+                -- botones que van a fallar, y calcularlo allí sería la segunda
+                -- copia de una regla de permisos: la que se queda vieja el día
+                -- que la primera cambie.
+                public.can_manage_workspace(id) as "puedoGestionar"
            from workspaces where id = $1`,
         [workspaceId],
       );

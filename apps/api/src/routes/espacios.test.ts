@@ -238,6 +238,60 @@ async function main(): Promise<void> {
     check("sus tareas", (await cuentaDe("tasks", "id", tarea)) === 0);
     check("y sus columnas", (await cuentaDe("task_columns", "id", columna)) === 0);
 
+    console.log("\nBorrar una rama pide mandar en el espacio");
+    // Lo que esto justifica es el 403 de la ruta. La política de borrado pide
+    // `can_manage_workspace`, y a quien no puede le borra CERO filas sin ningún
+    // error: con un 204 a secas, la pantalla decía «borrada», se refrescaba y
+    // la rama volvía a aparecer sin una palabra.
+    const conRamas = await crear(ana, "Con ramas", "shared");
+    const nuevaRama = async (nombre: string): Promise<string> =>
+      (
+        await admin.query<{ id: string }>(
+          `insert into task_categories (workspace_id, name, created_by)
+           values ($1,$2,$3) returning id`,
+          [conRamas, nombre, ana],
+        )
+      ).rows[0]!.id;
+    const borrarRama = (quien: string, id: string): Promise<number> =>
+      withUser(quien, async (db) => {
+        const { rowCount } = await db.query("delete from task_categories where id = $1", [id]);
+        return rowCount ?? 0;
+      });
+
+    const unaRama = await nuevaRama("Frontend");
+    check("un miembro raso no borra una rama", (await borrarRama(carla, unaRama)) === 0);
+    check("y quien administra la organización sí", (await borrarRama(beto, unaRama)) === 1);
+
+    // Y lo que se le promete a quien confirma el borrado: sus tareas no caen
+    // con ella. Si esto dejara de ser verdad, el aviso de la pantalla estaría
+    // mintiendo justo cuando alguien decide borrar.
+    const conTareas = await nuevaRama("Infra");
+    const columnaInfra = (
+      await admin.query<{ id: string }>(
+        "select id from task_columns where workspace_id = $1 order by position limit 1",
+        [conRamas],
+      )
+    ).rows[0]!.id;
+    const tareaInfra = (
+      await admin.query<{ id: string }>(
+        `insert into tasks (workspace_id, column_id, title, position, created_by, category_id)
+         values ($1,$2,'algo',1000,$3,$4) returning id`,
+        [conRamas, columnaInfra, ana, conTareas],
+      )
+    ).rows[0]!.id;
+    await borrarRama(ana, conTareas);
+    check(
+      "borrar una rama NO borra sus tareas: se quedan sin clasificar",
+      Number(
+        (
+          await admin.query<{ n: string }>(
+            "select count(*) as n from tasks where id = $1 and category_id is null",
+            [tareaInfra],
+          )
+        ).rows[0]!.n,
+      ) === 1,
+    );
+
     console.log("\nY el aislamiento");
 
     const deFuera = await alta("Fuera");
