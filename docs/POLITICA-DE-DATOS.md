@@ -39,10 +39,8 @@ Hasta entonces no hay que leerlas como garantía.
    contra la base de datos conectada a ese espacio, incluidas las que borran.
    Estamos restringiéndola a quien administra el espacio y a solo lectura. Plazo:
    26 de septiembre.
-2. **Borrar una organización no borra sus archivos del almacén.** Se borran sus
-   datos de la base, pero los archivos subidos quedan guardados.
-3. **No existe todavía una forma de borrar tu cuenta.**
-4. **Los datos están, casi con seguridad, fuera de Colombia.** Ver pregunta 11.
+2. **No existe todavía una forma de borrar tu cuenta.**
+3. **Los datos están, casi con seguridad, fuera de Colombia.** Ver pregunta 11.
 
 ---
 
@@ -176,9 +174,12 @@ Qué se borra y cuándo:
 
 - **Una tarea, un mensaje o un archivo:** se borran de la base al momento. Un
   archivo borrado desde su pantalla también se borra del almacén.
-- **Un espacio o una organización:** al borrarlos se borran sus datos de la base.
-  **Sus archivos quedan en el almacén**, porque borrar la organización no los
-  toca. Estamos corrigiéndolo.
+- **Un espacio o una organización:** al borrarlos se borran sus datos de la base
+  y, en cuanto eso confirma, **lo que vive fuera de ella**: sus archivos del
+  almacén, la base de datos alojada del espacio —una base Postgres de verdad, con
+  su rol y su contraseña— y sus repositorios git en el disco del servidor. Hasta
+  el 19 de septiembre las tres cosas se quedaban vivas, sin ninguna fila que las
+  nombrara.
 - **Tu cuenta:** no hay todavía una forma de borrarla. Si necesitas que se
   borre, hay que pedirlo y se hace a mano.
 - **Registro de actividad:** no se puede editar ni borrar desde la aplicación a
@@ -260,7 +261,6 @@ está en el plan.
 |---|---|
 | Restringir la consola SQL a quien administra el espacio, y a solo lectura | 26-sep-2026 |
 | Confirmar cifrado en reposo, almacén privado y región con los proveedores | 26-sep-2026 |
-| Que borrar una organización borre también sus archivos | 3-oct-2026 |
 | Retirar los accesos de quien dejó el equipo | 26-sep-2026 |
 | Decidir los niveles de permiso de un agente | 3-oct-2026 |
 | Que el MCP marque el texto escrito por terceros como dato y no como orden | 3-oct-2026 |
