@@ -63,6 +63,14 @@ jobs:
 
       - run: npm ci
 
+      - name: Construir el paquete MCP
+        # La API importa piezas de `@devup/mcp` (el registro de herramientas, el
+        # marcado de datos), y sus exportaciones apuntan a `dist/` en ejecución.
+        # `dist/` no está en git y el build general va al final, así que sin
+        # esto cualquier prueba que cargue esos módulos antes de él no los
+        # encuentra. Es un `tsc` pequeño.
+        run: npm run build --workspace apps/mcp
+
       - name: Tipos
         run: npm run typecheck
 

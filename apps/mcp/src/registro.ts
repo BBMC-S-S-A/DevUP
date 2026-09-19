@@ -30,6 +30,7 @@ import {
 import { descripcionQueHaPasado, esquemaQueHaPasado, queHaPasado } from "./herramientas/pasado.js";
 import { descripcionDiario, diarioDelProyecto, esquemaDiario } from "./herramientas/diario.js";
 import { descripcionPuntos, esquemaPuntos, verPuntos } from "./herramientas/puntos.js";
+import { comoDato } from "./dato.js";
 import { contextoDeTarea, descripcionContexto, esquemaContexto } from "./herramientas/contexto.js";
 import {
   descripcionMisTareas,
@@ -130,7 +131,15 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
       const cliente = obtenerCliente();
       try {
         latir(cliente, nombre);
-        return { content: await hacer(cliente, entrada) };
+        // Todo el texto que sale se marca como dato y no como orden: casi todo
+        // lo escribió alguien, y el agente lo lee junto a las instrucciones de
+        // su persona. Ver `dato.ts`. Las imágenes pasan tal cual.
+        const contenido = await hacer(cliente, entrada);
+        return {
+          content: contenido.map((pieza) =>
+            pieza.type === "text" ? { ...pieza, text: comoDato(pieza.text) } : pieza,
+          ),
+        };
       } catch (fallo) {
         return comoError(fallo);
       }
