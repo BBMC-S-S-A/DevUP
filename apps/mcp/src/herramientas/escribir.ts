@@ -272,7 +272,11 @@ export const esquemaCrearArea = {
   responsable: z
     .string()
     .optional()
-    .describe("Quién la lleva. Las tareas que se archiven aquí se le asignan solas."),
+    .describe(
+      "Quién responde del área: su gerente. Reparte su trabajo y NO carga con él — " +
+        "archivar una tarea aquí no se la asigna a nadie. Puede haber varios; " +
+        "los demás se añaden desde la pantalla de ramas.",
+    ),
   espacio: z.string().optional(),
   organizacion: z.string().optional(),
 };
@@ -284,9 +288,10 @@ export const descripcionCrearArea = [
   "ÁREA dice de qué trata y de quién es: «DevVerse», «Flujos», «Infraestructura».",
   "Sirve para que un tablero de cuarenta tarjetas se pueda leer.",
   "",
-  "Lo que la hace útil es el responsable: las tareas que se archiven en un área",
-  "se asignan solas a quien la lleva, salvo que se diga otra cosa. Así se deja",
-  "de repartir tarea por tarea.",
+  "Lo que la hace útil es su GERENTE: quien responde de ese frente y REPARTE su",
+  "trabajo. No carga con él — archivar una tarea en un área NO se la asigna a",
+  "nadie. Lo que entra sin responsable espera en «por repartir», que es la lista",
+  "que el gerente abre para repartir.",
   "",
   "Pocas y estables. Un tablero con ocho áreas que nadie usa es peor que uno",
   "con tres.",
@@ -306,7 +311,9 @@ export async function crearArea(
     { name: entrada.nombre, ownerId: responsable },
   );
 
-  const quien = entrada.responsable ? `, que lleva ${entrada.responsable}` : ", sin responsable";
+  const quien = entrada.responsable
+    ? `, que la gerencia ${entrada.responsable}`
+    : ", todavía sin gerente";
   return `Creada el área «${category.name}» en ${espacio.name}${quien}.  [area ${category.id}]`;
 }
 
@@ -332,7 +339,10 @@ export const esquemaCrearTarea = {
   area: z
     .string()
     .optional()
-    .describe("En qué área se archiva. Si el área tiene responsable, se asigna a esa persona."),
+    .describe(
+      "En qué área se archiva. Archivar NO asigna a nadie: si no se dice quién la " +
+        "hace, la tarea espera en «por repartir» de esa área.",
+    ),
   vence: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -344,9 +354,10 @@ export const esquemaCrearTarea = {
     .max(10)
     .optional()
     .describe(
-      "De qué áreas es, por su nombre. Se crean si no existen. Son las mismas " +
-        "etiquetas por las que filtra el tablero, así que conviene usar las que " +
-        "el equipo ya tenga en vez de inventar una parecida.",
+      "ETIQUETAS, que son el otro eje y no el área: una tarea vive en UN área y " +
+        "puede llevar varias etiquetas, para cruzar («todo lo de FESTECH»). Se " +
+        "crean si no existen, así que conviene usar las que el equipo ya tenga: " +
+        "una etiqueta nueva parecida a otra parte el tablero en dos sin avisar.",
     ),
   organizacion: z.string().optional(),
 };
@@ -433,7 +444,7 @@ export async function crearTarea(
   // Quien la lleva puede venir del área sin que nadie lo dijera: se nombra
   // igual, porque enterarse después de a quién se le asignó es peor.
   if (entrada.responsable) trozos.push(`para ${entrada.responsable}`);
-  else if (area?.ownerName) trozos.push(`para ${area.ownerName}, que lleva el área`);
+  else if (area) trozos.push("sin responsable: espera en «por repartir» del área");
   if (entrada.vence) trozos.push(`vence el ${entrada.vence}`);
   const puestas = entrada.categorias?.filter((c) => c.trim()) ?? [];
   const conCategorias = puestas.length > 0 ? ` en ${puestas.join(" y ")},` : "";

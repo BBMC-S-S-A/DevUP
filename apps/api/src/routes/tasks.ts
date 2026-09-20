@@ -2,7 +2,7 @@ import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
-import { notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
+import { forbidden, notFound, parseBody, parseParams, parseQuery, requireUser } from "../lib/http.js";
 import { olvidarNodo, retejerTarea, vecinosDe } from "../lib/grafo.js";
 import { detalleDeRama, ramasDe } from "../lib/ramas.js";
 import { type Procedencia, anotar, recorta } from "../lib/actividad.js";
@@ -433,10 +433,26 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   app.delete("/categories/:categoryId", async (request, reply) => {
     const userId = requireUser(request);
     const { categoryId } = parseParams(z.object({ categoryId: uuid }), request.params);
-    // Las tareas NO caen con ella: se quedan sin clasificar. Ver la 0039.
-    await withUser(userId, (db) =>
-      db.query("delete from task_categories where id = $1", [categoryId]),
-    );
+    // Las tareas NO caen con ella: se quedan sin clasificar. Ver la 0044.
+    //
+    // Y SE MIRA EL RECUENTO, que antes no se miraba. La política de borrado
+    // pide poder gestionar el espacio; a quien no puede, el `delete` le borra
+    // cero filas y no da ningún error. Con un 204 a secas, la pantalla decía
+    // «borrada», se refrescaba, y la rama volvía a aparecer sin explicación —
+    // que es de las peores formas de contestar que no.
+    const borradas = await withUser(userId, async (db) => {
+      const { rowCount } = await db.query("delete from task_categories where id = $1", [
+        categoryId,
+      ]);
+      return rowCount ?? 0;
+    });
+    if (borradas === 0) {
+      // La misma respuesta para «no existe» y «no es tuya», como en los
+      // gerentes: así no se pueden probar identificadores desde fuera.
+      throw forbidden(
+        "no se pudo borrar la rama: hay que poder gestionar el espacio para hacerlo",
+      );
+    }
     return reply.status(204).send();
   });
 
@@ -1153,19 +1169,24 @@ export async function crearTareaEnDb(
   },
   log?: FastifyBaseLogger,
 ): Promise<Record<string, unknown>> {
-  // EL GESTO QUE HACE ÚTILES LAS ÁREAS: si la tarea se archiva en un área que
-  // tiene dueño y nadie dijo a quién asignarla, se asigna a quien lleva esa
-  // área. Se deja de repartir tareas una a una y se pasa a clasificarlas.
-  // Un responsable explícito siempre gana: el automatismo rellena huecos, no
-  // discute decisiones.
-  let assigneeId = datos.assigneeId;
-  if (!assigneeId && datos.categoryId) {
-    const { rows: duenyo } = await db.query<{ owner_id: string | null }>(
-      "select owner_id from task_categories where id = $1",
-      [datos.categoryId],
-    );
-    assigneeId = duenyo[0]?.owner_id ?? null;
-  }
+  // ARCHIVAR EN UNA RAMA NO ASIGNA A NADIE, y aquí estaba lo contrario.
+  //
+  // Hasta ahora, una tarea que entraba en una rama sin responsable se asignaba
+  // al `owner_id` de la rama. La 0050 retiró esa columna —«ya no se usa para
+  // asignar; no escribir aquí»— porque quien lleva una rama es su GERENTE, y su
+  // trabajo es repartir, no cargar: un gerente con cuarenta tareas a su nombre
+  // no puede repartir nada. Los gerentes viven desde entonces en
+  // `task_category_owners`, y son varios.
+  //
+  // Lo que hacía esto tan silencioso es que la columna dejó de escribirse pero
+  // se seguía leyendo: las ramas creadas ANTES de la 0050 conservan su
+  // `owner_id` y seguían asignando solas, y las de después no. El mismo gesto
+  // hacía dos cosas distintas según la edad de la rama. Y si quien figuraba
+  // como dueño ya no está en el equipo, sus tareas le seguían cayendo a él.
+  //
+  // Lo que no tiene responsable no se pierde: aparece en «por repartir», que es
+  // justo lo que el gerente abre para repartirlo.
+  const assigneeId = datos.assigneeId;
 
   const { rows } = await db.query<{ id: string }>(
     `insert into tasks

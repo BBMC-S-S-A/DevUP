@@ -320,6 +320,16 @@ export type Workspace = {
   visibility: "shared" | "personal";
   createdBy: string;
   createdAt: string;
+  /**
+   * Si quien mira puede mandar aquí: crear y borrar ramas, nombrar gerentes,
+   * renombrar el espacio. Lo resuelve la API con la MISMA función que usan las
+   * políticas (`can_manage_workspace`), así que la pantalla no vuelve a
+   * escribir la regla — solo decide qué botones enseña.
+   *
+   * Opcional porque solo lo devuelve `GET /workspaces/:id`; en las listas no
+   * viene, y ahí se asume que no.
+   */
+  puedoGestionar?: boolean;
 };
 
 export type Channel = {

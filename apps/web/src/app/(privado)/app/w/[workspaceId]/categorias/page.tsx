@@ -9,6 +9,7 @@ import {
   type DetalleDeRama,
   type OrganizationMember,
   type Rama,
+  type Workspace,
   api,
 } from "@/lib/api";
 import { RedDeTrabajo } from "@/components/categorias/RedDeTrabajo";
@@ -18,6 +19,7 @@ import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useOrgId, useWorkspaceId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
+import { seParecen } from "@/lib/nombres";
 import { Avatar } from "@/components/perfil/Avatar";
 
 /**
@@ -67,6 +69,12 @@ export default function CategoriasPage() {
   );
   // El tablero, solo para la red: es de donde salen las personas y las tareas.
   const tablero = useRecurso<{ columns: BoardColumn[] }>(`/workspaces/${workspaceId}/board`);
+  // Quién puede mandar aquí. Lo dice la API, que lo resuelve con la MISMA
+  // función que usan las políticas; aquí solo se decide qué se enseña. Mientras
+  // no llega la respuesta se asume que NO: enseñar un botón y quitarlo un
+  // segundo después es peor que enseñarlo un segundo más tarde.
+  const espacio = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
+  const puedoGestionar = espacio.datos?.workspace.puedoGestionar === true;
 
   const lista = ramas.datos?.ramas ?? [];
 
@@ -85,7 +93,7 @@ export default function CategoriasPage() {
       icono={<Network size={18} />}
       ancho="xl"
       acciones={
-        lista.length > 0 && !creando ? (
+        lista.length > 0 && !creando && puedoGestionar ? (
           <Boton
             variante="fantasma"
             tamano="sm"
@@ -128,6 +136,7 @@ export default function CategoriasPage() {
               {creando && (
                 <NuevaRama
                   workspaceId={workspaceId}
+                  existentes={lista.map((r) => r.nombre)}
                   onListo={() => {
                     setCreando(false);
                     void ramas.recargar();
@@ -139,16 +148,22 @@ export default function CategoriasPage() {
                 <EstadoVacio
                   icono={<Network size={20} />}
                   titulo="Todavía no hay ninguna rama"
-                  pista="Una rama es de dónde cuelga el trabajo: «Frontend», «Infraestructura», «DevVerse». Cada tarea vive en una sola, y quien la gerencia responde de que avance."
+                  pista={
+                    puedoGestionar
+                      ? "Una rama es de dónde cuelga el trabajo: «Frontend», «Infraestructura», «DevVerse». Cada tarea vive en una sola, y quien la gerencia responde de que avance."
+                      : "Una rama es de dónde cuelga el trabajo. Las crea quien administra este espacio."
+                  }
                   accion={
-                    <Boton
-                      variante="primario"
-                      tamano="sm"
-                      icono={<Plus size={14} />}
-                      onClick={() => setCreando(true)}
-                    >
-                      Crear la primera
-                    </Boton>
+                    puedoGestionar ? (
+                      <Boton
+                        variante="primario"
+                        tamano="sm"
+                        icono={<Plus size={14} />}
+                        onClick={() => setCreando(true)}
+                      >
+                        Crear la primera
+                      </Boton>
+                    ) : undefined
                   }
                 />
               ) : (
@@ -160,6 +175,7 @@ export default function CategoriasPage() {
                     miembros={miembros.datos?.members ?? []}
                     onAbrir={() => setAbierta(rama.id)}
                     onCambiada={() => void ramas.recargar()}
+                    puedoGestionar={puedoGestionar}
                   />
                 ))
               )}
@@ -183,12 +199,20 @@ function FichaDeRama({
   miembros,
   onAbrir,
   onCambiada,
+  puedoGestionar,
 }: {
   rama: Rama;
   abierta: boolean;
   miembros: OrganizationMember[];
   onAbrir: () => void;
   onCambiada: () => void;
+  /**
+   * Renombrar, borrar y nombrar gerentes piden mandar en el espacio. Sin esto
+   * la papelera se le enseñaba a todo el mundo: quien no podía la pulsaba,
+   * confirmaba, la pantalla se refrescaba y la rama volvía a aparecer sin una
+   * palabra. Un botón que no va a funcionar es peor que uno que no está.
+   */
+  puedoGestionar: boolean;
 }) {
   const confirmar = useConfirmar();
   const [editando, setEditando] = useState(false);
@@ -300,15 +324,17 @@ function FichaDeRama({
             >
               {rama.nombre}
             </button>
-            <button
-              type="button"
-              onClick={() => setEditando(true)}
-              title="Renombrar la rama"
-              aria-label={`Renombrar «${rama.nombre}»`}
-              className="presionable shrink-0 rounded-lg p-0.5 text-line-strong transition-colors hover:text-muted"
-            >
-              {ocupado ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
-            </button>
+            {puedoGestionar && (
+              <button
+                type="button"
+                onClick={() => setEditando(true)}
+                title="Renombrar la rama"
+                aria-label={`Renombrar «${rama.nombre}»`}
+                className="presionable shrink-0 rounded-lg p-0.5 text-line-strong transition-colors hover:text-muted"
+              >
+                {ocupado ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
+              </button>
+            )}
           </>
         )}
 
@@ -326,15 +352,17 @@ function FichaDeRama({
           {rama.pendientes === 0 && rama.cerradasReciente === 0 && (
             <span className="text-[11px] text-faint">sin movimiento</span>
           )}
-          <button
-            type="button"
-            onClick={() => void borrar()}
-            title="Borrar la rama"
-            aria-label={`Borrar «${rama.nombre}»`}
-            className="presionable rounded-lg p-0.5 text-line-strong transition-colors hover:text-danger"
-          >
-            <Trash2 size={12} />
-          </button>
+          {puedoGestionar && (
+            <button
+              type="button"
+              onClick={() => void borrar()}
+              title="Borrar la rama"
+              aria-label={`Borrar «${rama.nombre}»`}
+              className="presionable rounded-lg p-0.5 text-line-strong transition-colors hover:text-danger"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
         </span>
       </div>
 
@@ -359,39 +387,43 @@ function FichaDeRama({
             >
               <Avatar userId={g.id} nombre={g.nombre} tamano={20} />
               <span className="text-[11px] text-ink">{g.nombre ?? "alguien"}</span>
-              <button
-                type="button"
-                disabled={ocupado}
-                onClick={() => void gerente(g.id, false)}
-                title={`Quitar a ${g.nombre ?? "esta persona"} como gerente`}
-                aria-label={`Quitar a ${g.nombre ?? "esta persona"} como gerente de ${rama.nombre}`}
-                className="presionable rounded p-0.5 text-faint transition-colors hover:text-danger"
-              >
-                <X size={11} />
-              </button>
+              {puedoGestionar && (
+                <button
+                  type="button"
+                  disabled={ocupado}
+                  onClick={() => void gerente(g.id, false)}
+                  title={`Quitar a ${g.nombre ?? "esta persona"} como gerente`}
+                  aria-label={`Quitar a ${g.nombre ?? "esta persona"} como gerente de ${rama.nombre}`}
+                  className="presionable rounded p-0.5 text-faint transition-colors hover:text-danger"
+                >
+                  <X size={11} />
+                </button>
+              )}
             </li>
           ))}
 
-          <li>
-            <select
-              value=""
-              disabled={ocupado}
-              aria-label={`Añadir gerente a ${rama.nombre}`}
-              onChange={(e) => {
-                if (e.target.value) void gerente(e.target.value, true);
-              }}
-              className="rounded-lg border border-dashed border-line-strong bg-canvas/60 px-2 py-1 text-[11px] text-muted"
-            >
-              <option value="">+ añadir</option>
-              {miembros
-                .filter((m) => !esGerente(m.userId))
-                .map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.displayName}
-                  </option>
-                ))}
-            </select>
-          </li>
+          {puedoGestionar && (
+            <li>
+              <select
+                value=""
+                disabled={ocupado}
+                aria-label={`Añadir gerente a ${rama.nombre}`}
+                onChange={(e) => {
+                  if (e.target.value) void gerente(e.target.value, true);
+                }}
+                className="rounded-lg border border-dashed border-line-strong bg-canvas/60 px-2 py-1 text-[11px] text-muted"
+              >
+                <option value="">+ añadir</option>
+                {miembros
+                  .filter((m) => !esGerente(m.userId))
+                  .map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.displayName}
+                    </option>
+                  ))}
+              </select>
+            </li>
+          )}
         </ul>
       </div>
     </Tarjeta>
@@ -525,19 +557,42 @@ function PanelDeRama({ rama }: { rama: Rama }) {
 
 function NuevaRama({
   workspaceId,
+  existentes,
   onListo,
   onCancelar,
 }: {
   workspaceId: string;
+  /** Las que ya hay, para no crear dos veces la misma con otra caja. */
+  existentes: string[];
   onListo: () => void;
   onCancelar: () => void;
 }) {
+  const confirmar = useConfirmar();
   const [nombre, setNombre] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   const crear = async () => {
     const limpio = nombre.trim();
     if (!limpio) return;
+
+    // «Frontend», «frontend» y «Frontend » son tres ramas distintas para la
+    // base: la unicidad es sobre el nombre exacto. Con etiquetas eso ensucia;
+    // con ramas MIENTE, porque una tarea vive en una sola y el trabajo de
+    // frontend quedaría partido en dos montones que nadie suma. Se avisa en vez
+    // de impedirlo: puede haber un motivo, pero no puede pasar sin verlo.
+    const parecida = existentes.find((otra) => seParecen(otra, limpio));
+    if (parecida) {
+      const seguir = await confirmar({
+        titulo: "Ya hay una rama que se llama casi igual",
+        descripcion:
+          `«${parecida}» y «${limpio}» se leen igual, y serían dos ramas ` +
+          "distintas: cada tarea vive en una sola, así que su trabajo quedaría " +
+          "partido en dos.",
+        accion: "Crearla de todos modos",
+      });
+      if (!seguir) return;
+    }
+
     setGuardando(true);
     try {
       await api.post(`/workspaces/${workspaceId}/categories`, { name: limpio });
