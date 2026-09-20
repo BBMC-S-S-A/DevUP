@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleDot, ClipboardList, History } from "lucide-react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { type BoardColumn, type OrganizationMember } from "@/lib/api";
 import { Dialogo, Rotulo } from "@/components/ui/Superficies";
@@ -50,6 +51,7 @@ export function TarjetaPersona({
   miembro,
   workspaceId,
   columnas,
+  pie,
   onCerrar,
 }: {
   miembro: OrganizationMember;
@@ -61,6 +63,16 @@ export function TarjetaPersona({
   workspaceId?: string;
   /** El tablero, si quien abre la tarjeta ya lo tenía a mano. */
   columnas?: BoardColumn[];
+  /**
+   * Lo que se puede HACER desde aquí, cuando la tarjeta es la de uno mismo.
+   *
+   * Vacío para la ficha de otra persona, y eso es el punto: mirando a un
+   * compañero no hay nada que tocar —por eso esta tarjeta existe— y mirándose a
+   * uno mismo sí: el estado, el tema, la configuración de la cuenta y la
+   * salida. Un hueco opcional en vez de dos componentes parecidos, que es como
+   * empiezan a separarse.
+   */
+  pie?: ReactNode;
   onCerrar: () => void;
 }) {
   // Solo se pide si no vino dado. `useRecurso` con clave nula no llama a nada.
@@ -126,6 +138,8 @@ export function TarjetaPersona({
       )}
 
       <Rastro personaId={miembro.userId} />
+
+      {pie && <div className="mt-5 border-t border-line pt-4">{pie}</div>}
     </Dialogo>
   );
 }

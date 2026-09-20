@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
   CalendarClock,
   CheckCircle2,
   History,
+  ArrowRight,
   Home,
   Inbox,
   LayoutGrid,
@@ -14,6 +15,7 @@ import {
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useRecurso } from "@/lib/datos";
+import { leerUltimoEspacio } from "@/lib/ultimo-espacio";
 import { verboLegible } from "@/lib/actividad";
 import { fechaCorta, hoyLocal } from "@/lib/fechas";
 import { IconoDeTipo, TIPO_EN_PALABRAS, tonoDePrioridad } from "@/components/tasks/ficha";
@@ -151,6 +153,7 @@ export default function InicioPage() {
       }
       icono={<Home size={20} />}
       ancho="trabajo"
+      acciones={<SeguirDondeEstabas />}
     >
       {inicio.cargando || !inicio.datos ? (
         <Cargando etiqueta="Reuniendo tu trabajo de todos los espacios" />
@@ -454,5 +457,47 @@ function LoUltimo({ hechos, dias }: { hechos: Hecho[]; dias: number }) {
         ))}
       </ul>
     </Tarjeta>
+  );
+}
+
+/**
+ * «Seguir donde estabas».
+ *
+ * ES LA OTRA MITAD DE LA DECISIÓN DE ATERRIZAR AQUÍ. Entrar en DevUP te dejaba
+ * directo en el último espacio abierto: cómodo para seguir, inútil para
+ * empezar, y se saltaba los dos niveles de arriba. Ahora se entra por la raíz
+ * —persona, organización, espacio— y esto es lo que impide que el cambio
+ * cueste dos clics en el gesto más repetido que hay.
+ *
+ * LEE EL MISMO RECUERDO DEL NAVEGADOR que leía la puerta, y por el mismo
+ * motivo sigue siendo del navegador y no de la cuenta: la misma persona en el
+ * portátil y en el ordenador de la oficina está en cosas distintas.
+ *
+ * NO COMPRUEBA QUE EL ESPACIO SIGA SIENDO TUYO, igual que antes: comprobarlo
+ * cuesta una petición en cada carga de la portada para un caso raro —te
+ * sacaron del espacio, o se borró— que el armazón del espacio ya atiende con
+ * su propia salida. Se paga la vez que falla, no todas las que funciona.
+ *
+ * Y NO SE PINTA SI NO HAY RECUERDO: un botón que lleva a ninguna parte es peor
+ * que uno que falta.
+ */
+function SeguirDondeEstabas() {
+  // En el cliente y después de montar: `localStorage` no existe cuando esto se
+  // pinta en el servidor, y leerlo directo daría una cabecera distinta en las
+  // dos pasadas.
+  const [espacio, setEspacio] = useState<string | null>(null);
+  useEffect(() => setEspacio(leerUltimoEspacio()), []);
+
+  if (!espacio) return null;
+
+  return (
+    <Link
+      href={`/app/w/${espacio}`}
+      className="presionable inline-flex h-8 items-center gap-1.5 rounded-lg border border-line
+        bg-raised/60 px-3 text-xs text-ink hover:border-line-strong hover:bg-raised"
+    >
+      Seguir donde estabas
+      <ArrowRight size={13} className="shrink-0 text-faint" />
+    </Link>
   );
 }
