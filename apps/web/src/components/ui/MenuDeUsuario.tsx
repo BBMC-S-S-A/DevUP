@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
 import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Rotulo } from "@/components/ui/Superficies";
-import { useConfirmar } from "@/components/ui/Confirmar";
+import { useCerrarSesion } from "@/components/ui/cerrar-sesion";
 import { useSession } from "@/lib/session";
 
 /**
@@ -31,8 +31,8 @@ import { useSession } from "@/lib/session";
  * vez al día como mucho.
  */
 export function MenuDeUsuario({ orgId }: { orgId?: string }) {
-  const { user, signOut } = useSession();
-  const confirmar = useConfirmar();
+  const { user } = useSession();
+  const cerrarSesion = useCerrarSesion();
   const [abierto, setAbierto] = useState(false);
   const caja = useRef<HTMLDivElement>(null);
 
@@ -52,16 +52,11 @@ export function MenuDeUsuario({ orgId }: { orgId?: string }) {
     };
   }, [abierto]);
 
+  // La confirmación y su texto viven en `useCerrarSesion`: se escribieron aquí
+  // y los otros dos caminos de salida se quedaron sin ellas.
   const salir = async () => {
     setAbierto(false);
-    const ok = await confirmar({
-      titulo: "¿Cerrar sesión?",
-      descripcion:
-        "Se cierra en este navegador. Tus llaves de agente y tu clave de IA siguen donde estaban.",
-      accion: "Cerrar sesión",
-      peligro: true,
-    });
-    if (ok) await signOut();
+    await cerrarSesion();
   };
 
   return (

@@ -38,6 +38,7 @@ import { useConfirmar } from "@/components/ui/Confirmar";
 import { Desplegable, Entrada } from "@/components/ui/Field";
 import { Logo } from "@/components/ui/Logo";
 import { Chip, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { useCerrarSesion } from "@/components/ui/cerrar-sesion";
 import { useSession } from "@/lib/session";
 import { ignorar } from "@/lib/fallo";
 
@@ -66,7 +67,8 @@ const ROLES: Record<Organization["role"], string> = {
 };
 
 export default function OrganizationsPage() {
-  const { user, signOut } = useSession();
+  const { user } = useSession();
+  const cerrarSesion = useCerrarSesion();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [workspaces, setWorkspaces] = useState<Record<string, Workspace[]>>({});
   // Las organizaciones cuya lista de espacios no llegó. Es distinto de no
@@ -152,11 +154,13 @@ export default function OrganizationsPage() {
 
           <div className="flex items-center gap-1.5">
             <NotificationBell />
+            {/* Pregunta antes, como los otros dos caminos de salida. Aquí
+                llamaba a `signOut()` directo: un clic y fuera. */}
             <Boton
               variante="secundario"
               tamano="sm"
               icono={<LogOut size={14} />}
-              onClick={() => void signOut()}
+              onClick={() => void cerrarSesion()}
             >
               Salir
             </Boton>
