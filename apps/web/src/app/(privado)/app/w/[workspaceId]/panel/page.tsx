@@ -239,7 +239,18 @@ export default function PanelPage() {
     // comentario: «para lo que se desplaza por dentro y no debe crecer con su
     // contenido». El panel es exactamente eso y era el único sitio que no la
     // usaba.
-    <div className="alto-util-fijo mx-auto flex min-h-0 max-w-[100rem] flex-col gap-4 px-6 py-6">
+    // NO USA `Pagina`, Y NO ES UN OLVIDO. Esta pantalla es de alto fijo y se
+    // desplaza por dentro; el marco pinta una cabecera y un <main> que crecen
+    // con su contenido, así que meterla ahí devolvería el fallo que explica el
+    // comentario de aquí abajo: las tres columnas quedándose del alto de su
+    // contenido, con todo el hueco de abajo vacío.
+    //
+    // Su cabecera tampoco es una cabecera de pantalla: es un saludo con la
+    // fecha. No tiene título que repetir ni acciones que colocar.
+    //
+    // Lo que sí se alinea es el ancho. Tenía un `100rem` propio —un sexto valor
+    // en una escala que acaba de bajar a tres— y pasa al tope de `trabajo`.
+    <div className="alto-util-fijo mx-auto flex min-h-0 max-w-[90rem] flex-col gap-4 px-6 py-6">
       <header className="flex flex-wrap items-end gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
@@ -492,7 +503,7 @@ export default function PanelPage() {
 
 function EsqueletoPanel() {
   return (
-    <div className="mx-auto max-w-[100rem] px-6 py-6">
+    <div className="mx-auto max-w-[90rem] px-6 py-6">
       <div className="devup-esqueleto h-7 w-56 rounded-lg" />
       <div className="devup-esqueleto mt-2 h-3.5 w-72 rounded" />
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_21rem]">

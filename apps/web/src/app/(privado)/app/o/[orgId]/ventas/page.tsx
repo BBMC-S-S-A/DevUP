@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
 import { AreaTexto, Desplegable, Entrada } from "@/components/ui/Field";
+import { Pagina } from "@/components/ui/Pagina";
 import { Chip, Dialogo, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { useOrgId } from "@/lib/workspace-context";
 import { diasHasta, fechaCorta, hoyLocal } from "@/lib/fechas";
@@ -232,40 +233,43 @@ export default function SalesPage() {
   if (loading) return <EsqueletoEmbudo />;
 
   return (
-    <div className="alto-util">
-      {/* La cabecera es el tablero de instrumentos: rejilla de fondo, filo de
-          luz en vez de borde duro y las dos cifras que resumen la pantalla. */}
-      <header className="filo-luz relative px-6 pb-5 pt-4">
-        <div aria-hidden className="rejilla pointer-events-none absolute inset-0" />
+    // LA CABECERA ERA PROPIA. Tenía su rejilla, su filo de luz, su chapa y su
+    // reparto de cifras, escritos aquí porque cuando llegó esta pantalla no
+    // existía el marco. Y no era una copia cualquiera: era la que se separó
+    // más —título en `text-lg` cuando el resto lo tiene en `text-xl`, y sin
+    // ancho de columna, así que el embudo se estiraba hasta el borde de un
+    // monitor de 1900.
+    //
+    // `junto` y `acciones` existen exactamente para esto: las dos cifras que
+    // resumen la pantalla y los cuatro botones de la derecha son lo que el
+    // marco deja abierto a propósito.
+    <Pagina
+      titulo="Ventas"
+      rotulo="Embudo comercial"
+      icono={<Target size={18} />}
+      // Cinco columnas comparables en fila: el ancho es capacidad.
+      ancho="trabajo"
+      junto={
+        <>
+          <Lectura
+            rotulo="Embudo abierto"
+            valor={money(open)}
+            plasma
+            nota={`${openDeals.length} ${openDeals.length === 1 ? "operación viva" : "operaciones vivas"}`}
+          />
 
-        <div className="relative">
-          <div className="mt-3 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-            <div className="flex flex-wrap items-end gap-x-7 gap-y-4">
-              <div>
-                <h1 className="text-lg font-semibold">Ventas</h1>
-                <Rotulo className="mt-1.5 block">Embudo comercial</Rotulo>
-              </div>
+          <span aria-hidden className="hidden h-11 w-px bg-line sm:block" />
 
-              <span aria-hidden className="hidden h-11 w-px bg-line sm:block" />
-
-              <Lectura
-                rotulo="Embudo abierto"
-                valor={money(open)}
-                plasma
-                nota={`${openDeals.length} ${openDeals.length === 1 ? "operación viva" : "operaciones vivas"}`}
-              />
-
-              <span aria-hidden className="hidden h-11 w-px bg-line sm:block" />
-
-              <Lectura
-                rotulo="Ganado"
-                valor={money(won)}
-                tono="text-live"
-                nota={`${wonCount} ${wonCount === 1 ? "cierre" : "cierres"}`}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
+          <Lectura
+            rotulo="Ganado"
+            valor={money(won)}
+            tono="text-live"
+            nota={`${wonCount} ${wonCount === 1 ? "cierre" : "cierres"}`}
+          />
+        </>
+      }
+      acciones={
+        <>
               <Boton tamano="sm" icono={<Target size={13} />} onClick={() => setPanel("goal")}>
                 Objetivo
               </Boton>
@@ -292,15 +296,13 @@ export default function SalesPage() {
                   Nueva venta
                 </Boton>
               </span>
-            </div>
-          </div>
-
-          {error && <Aviso>{error}</Aviso>}
-        </div>
-      </header>
+        </>
+      }
+    >
+      {error && <Aviso>{error}</Aviso>}
 
       {goals.length > 0 && (
-        <section className="border-b border-line px-6 py-4">
+        <section className="border-b border-line py-4">
           <div className="mb-2.5 flex items-center gap-1.5">
             <Target size={11} className="text-faint" />
             <Rotulo>Objetivos</Rotulo>
@@ -368,7 +370,7 @@ export default function SalesPage() {
 
       {/* Mismo criterio que el tablero: las etapas de un embudo son columnas y
           al desplazarse hay que aterrizar en una, no entre dos. */}
-      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-10 pt-5">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-10 pt-5">
         {STAGES.map((stage, index) => {
           const total = totals.get(stage.id)!;
           const activa = sobreEtapa === stage.id;
@@ -551,7 +553,7 @@ export default function SalesPage() {
           onChanged={load}
         />
       )}
-    </div>
+    </Pagina>
   );
 }
 
