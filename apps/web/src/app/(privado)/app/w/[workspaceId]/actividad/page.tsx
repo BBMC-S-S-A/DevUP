@@ -107,7 +107,7 @@ export default function ActividadPage() {
       titulo="Qué ha pasado aquí"
       rotulo="desde que te fuiste"
       icono={<History size={18} />}
-      ancho="lg"
+      ancho="lectura"
       acciones={
         <div className="flex flex-wrap gap-1.5">
           {VENTANAS.map((v) => (

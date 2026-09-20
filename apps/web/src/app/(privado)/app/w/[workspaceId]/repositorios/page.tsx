@@ -68,7 +68,7 @@ export default function RepositoriosPage() {
       titulo="Repositorios"
       rotulo="los que aloja DevUP, con git de verdad"
       icono={<GitBranch size={20} />}
-      ancho="lg"
+      ancho="trabajo"
       acciones={
         repos.length > 0 && !creando ? (
           <Boton tamano="sm" icono={<Plus size={14} />} onClick={() => setCreando(true)}>

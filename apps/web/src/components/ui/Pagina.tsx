@@ -23,40 +23,50 @@ import { Rotulo } from "./Superficies";
  */
 
 /**
- * El ancho se elige por la FORMA del contenido, no por gusto.
+ * El ancho se elige por la FORMA del contenido, y hay TRES formas.
  *
- * Estaba decidiéndose pantalla a pantalla y salió lo esperable: todas las
- * pantallas reales acabaron en `lg` —896 px— y en un monitor de 1900 eso deja
- * más de la mitad vacía. La queja al usarlo fue exactamente esa.
+ * ANTES HABÍA CINCO VALORES —sm, md, lg, xl, completo— y se elegían a ojo,
+ * pantalla por pantalla. Salió lo esperable: once pantallas en `lg` y dos en
+ * `completo`. Y `lg` son 896 px, así que en un monitor de 1905, con los 320 px
+ * que se lleva el armazón, quedan 344 px vacíos A CADA LADO: el 44 % del ancho
+ * útil en blanco. No es una impresión, es la resta.
  *
- * Pero ensanchar todo tampoco: una línea de texto de 1900 px no se lee mejor,
- * se lee peor, y un formulario estirado a lo ancho es más difícil de rellenar
- * que uno en columna. Así que la regla, y no el caso por caso:
+ * Cinco valores en una escala continua invitan a eso: «este es un poco más
+ * ancho que el otro» es una decisión que se puede tomar mal cada vez. Tres
+ * modos con nombre obligan a contestar antes qué es la pantalla.
  *
- * - `sm` / `md`: texto para leer y formularios. Noticias, Ajustes, Mi cuenta.
- * - `lg` / `xl`: listas con prosa dentro, donde la línea sigue importando.
- *   La auditoría, las migraciones y las integraciones.
- * - `completo`: lo que está hecho de columnas, tarjetas o lienzo, donde el
- *   ancho es capacidad y no decoración. El embudo, GitHub, la infraestructura,
- *   el tablero.
+ * LA PREGUNTA QUE LOS SEPARA: el ancho de más, ¿se llena de LÍNEA o de
+ * CONTENIDO?
  *
- * La pregunta para decidir: ¿el ancho de más se llena de CONTENIDO o de LÍNEA?
- * Si es contenido, `completo`. Si es línea, columna.
+ * - `lectura` — se llena de línea. Texto y formularios: una línea de 1.500 px
+ *   no se lee mejor, se lee peor, y un formulario estirado a lo ancho es más
+ *   difícil de rellenar que uno en columna. Noticias, la cuenta, el asistente,
+ *   la actividad.
+ *
+ * - `trabajo` — se llena de contenido. Tablas, rejillas de tarjetas, listas de
+ *   servicios, columnas comparables: aquí el ancho es capacidad. Lleva tope
+ *   igualmente, porque «usa todo» en un monitor ultrapanorámico deja la
+ *   cabecera y el contenido a dos palmos de distancia y obliga a mover la
+ *   cabeza para leer una fila.
+ *
+ * - `lienzo` — no hay columna. Lo que se dibuja o se arrastra y necesita hasta
+ *   el último píxel: el tablero, el grafo del proyecto.
+ *
+ * EL TOPE DE `trabajo` SON 90rem (1.440 px) a propósito. Con el armazón puesto,
+ * en una pantalla de 1905 deja unos 70 px de aire a cada lado —aire, no vacío—
+ * y en una de 1440 o menos no se nota que exista.
  */
 const ANCHOS = {
-  sm: "max-w-2xl",
-  md: "max-w-3xl",
-  lg: "max-w-4xl",
-  xl: "max-w-5xl",
-  /** Sin columna: la pantalla se extiende. Para tableros y rejillas. */
-  completo: "max-w-none",
+  lectura: "max-w-3xl",
+  trabajo: "max-w-[90rem]",
+  lienzo: "max-w-none",
 } as const;
 
 export function Pagina({
   titulo,
   rotulo,
   icono,
-  ancho = "md",
+  ancho = "lectura",
   acciones,
   junto,
   children,

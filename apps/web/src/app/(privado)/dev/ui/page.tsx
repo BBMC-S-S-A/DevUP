@@ -50,7 +50,7 @@ export default function MuestrarioPage() {
       titulo="Muestrario"
       rotulo="Todas las primitivas, en todos sus estados"
       icono={<Wrench size={20} />}
-      ancho="lg"
+      ancho="trabajo"
       acciones={
         <div className="flex items-center gap-2">
           <SelectorPresencia />

@@ -150,7 +150,7 @@ export default function InicioPage() {
               }${vencidas > 0 ? ` · ${vencidas} vencida${vencidas === 1 ? "" : "s"}` : ""}`
       }
       icono={<Home size={20} />}
-      ancho="xl"
+      ancho="trabajo"
     >
       {inicio.cargando || !inicio.datos ? (
         <Cargando etiqueta="Reuniendo tu trabajo de todos los espacios" />

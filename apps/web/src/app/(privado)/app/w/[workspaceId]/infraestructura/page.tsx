@@ -26,7 +26,7 @@ export default function InfraestructuraPage() {
       titulo="Infraestructura"
       rotulo="La arquitectura del proyecto"
       icono={<Server size={20} />}
-      ancho="completo"
+      ancho="trabajo"
     >
       <DiagramaArquitectura workspaceId={workspaceId} />
     </Pagina>

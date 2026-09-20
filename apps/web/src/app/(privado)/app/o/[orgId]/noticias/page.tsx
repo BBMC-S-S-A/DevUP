@@ -57,7 +57,7 @@ export default function AnnouncementsPage() {
         titulo="Noticias"
         rotulo="Lo que publica quien administra"
         icono={<Megaphone size={20} />}
-        ancho="sm"
+        ancho="lectura"
       >
         {error && (
           <Fallo className="mb-5" onReintentar={() => void noticias.recargar()}>

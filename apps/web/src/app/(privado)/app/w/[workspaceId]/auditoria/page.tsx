@@ -210,7 +210,7 @@ export default function AuditoriaPage() {
             : "Todo lo que hay que mirar en este repositorio, junto"
       }
       icono={<ScanSearch size={20} />}
-      ancho="xl"
+      ancho="trabajo"
       acciones={
         mitad === "repositorio" && lista.length > 1 ? (
           <Desplegable

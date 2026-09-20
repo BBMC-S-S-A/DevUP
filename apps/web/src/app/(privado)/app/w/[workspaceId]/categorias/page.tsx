@@ -91,7 +91,7 @@ export default function CategoriasPage() {
       titulo="Ramas de trabajo"
       rotulo="de dónde cuelga cada cosa, y quién responde de ella"
       icono={<Network size={18} />}
-      ancho="xl"
+      ancho="trabajo"
       acciones={
         lista.length > 0 && !creando && puedoGestionar ? (
           <Boton
