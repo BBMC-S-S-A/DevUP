@@ -1,106 +1,398 @@
 "use client";
 
-import { ArrowRight, Loader2, Plus, UserRound, Users } from "lucide-react";
+import { Building2, CircleDot, Hand, Hourglass, Loader2, Plus, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ApiError, type Workspace, api } from "@/lib/api";
 import { Boton } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
+import { Avatar } from "@/components/perfil/Avatar";
 import { Marcador } from "@/components/puntos/Marcador";
+import { IconoDeTipo, tonoDePrioridad } from "@/components/tasks/ficha";
+import { fechaCorta } from "@/lib/fechas";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
+import { ApiError, api, type TipoDeTarea } from "@/lib/api";
 
 /**
- * La organización: qué espacios de trabajo tiene y cómo entrar en uno.
+ * La casa de la organización: cómo va, quién la mueve y qué no tiene dueño.
  *
- * FALTABA, Y SE NOTABA. `/app/o/[orgId]` no existía como pantalla: había
- * Ventas, Noticias, Ajustes y Buscar colgando de esa ruta, pero la ruta en sí
- * daba 404. Por eso el riel no podía llevar a una organización y saltaba al
- * primer espacio que tuviera — eligiendo por ti cuál abrir, que está mal en
- * cuanto hay más de uno.
+ * ANTES ERA UN ÍNDICE. Enseñaba la lista de espacios de trabajo bajo el título
+ * «Espacios de trabajo», que es casi lo único que no hace falta saber aquí: los
+ * espacios ya están en el menú lateral, a un clic, y repetirlos en el centro
+ * gasta la mejor posición del producto en un índice.
  *
- * EL PASO INTERMEDIO ES EL PUNTO. Pulsar una organización enseña lo que tiene;
- * desde ahí se entra al espacio que toque, y entonces sí aparece su Panel, su
- * tablero y lo demás. Cada nivel enseña lo suyo en vez de adivinar el
- * siguiente.
+ * Y ERA EL SÍNTOMA DE ALGO MÁS GORDO. DevUP tiene tres niveles —persona,
+ * organización, espacio— y ninguno tenía casa: `/app` era una redirección al
+ * último espacio, la raíz de un espacio otra redirección al canal general, y
+ * esto una lista. La jerarquía que promete el riel no existía en el producto.
+ * Decidido el 20 de septiembre: es un sistema de carpetas, y **una carpeta que
+ * se abre enseña lo que tiene dentro**.
  *
- * LA BARRA YA HACÍA SU MITAD. El armazón de organización lista los espacios
- * desde hace tiempo; lo que no había era contenido al lado, así que el paso
- * intermedio existía a medias y no se podía usar.
+ * LA API YA ESTABA ENTERA Y NO LA LLAMABA NADIE. `GET
+ * /organizations/:id/panorama` lleva desde su migración devolviendo esto en una
+ * sola petición, con el porqué de cada trozo escrito en `lib/panorama.ts`. Lo
+ * único que faltaba era la pantalla — el mismo caso que «Inicio» y que la red
+ * del proyecto, y por eso conviene decirlo: aquí lo caro no ha sido construir,
+ * ha sido darse cuenta de lo que ya estaba construido.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * EL ORDEN DE LA PANTALLA ES UNA OPINIÓN. Primero lo que no tiene dueño, y no
+ * porque sea lo más grave: porque es lo único de aquí que se puede ACCIONAR.
+ * «Doce tareas pendientes» informa; «tres tareas que no tiene nadie» pide algo,
+ * y lo que pide siempre es lo mismo —repartirlas—. Una portada que empieza por
+ * lo que se puede hacer se abre por la mañana; una que empieza por cifras se
+ * abre una vez.
+ *
+ * NO HAY RECUENTOS DE ADORNO. La pantalla anterior tenía «ORGANIZACIONES 02 /
+ * WORKSPACES 05» en la mejor franja de la página, y nadie decide nada distinto
+ * sabiendo que tiene dos. Los números que quedan van pegados a la cosa que
+ * cuentan y sirven para elegir: cuatro pendientes y nada cerrado esta semana no
+ * se lee igual que cuatro pendientes y once cerradas.
+ *
+ * EL ESTADO DE ALGUIEN ES LO QUE ESA PERSONA ELIGIÓ, nunca una deducción. La
+ * tentación de una portada con puntitos verdes es la contraria —deducir «en
+ * línea» de si hay una pestaña abierta— y un estado adivinado miente: dice
+ * «disponible» de quien salió a comer con el portátil abierto, y enseña a no
+ * fiarse de él, que es peor que no tenerlo.
+ *
+ * LO QUE TODAVÍA NO HACE: invitar y retirar desde aquí. Los dos gestos viven
+ * hoy dentro de los ajustes de la organización, escritos a mano en una pantalla
+ * de 797 líneas, y sacarlos de ahí es una mudanza con su propio riesgo — no un
+ * trozo de esta. Mientras tanto, la sección de la gente lleva la salida a donde
+ * están.
  */
+
+type Espacio = {
+  id: string;
+  nombre: string;
+  pendientes: number;
+  cerradasReciente: number;
+  personas: number;
+  ultimoMovimiento: string | null;
+};
+
+type Persona = {
+  id: string;
+  nombre: string;
+  avatar: string | null;
+  estado: "available" | "busy_open" | "do_not_disturb" | null;
+  oficio: string | null;
+  permiso: "owner" | "admin" | "member";
+  enQue: string[];
+};
+
+type Tarea = {
+  id: string;
+  titulo: string;
+  prioridad?: number;
+  tipo?: TipoDeTarea | null;
+  espacio: string;
+  espacioId?: string;
+  responsable?: string | null;
+  ultimoToque?: string | null;
+  creada?: string;
+};
+
+type Panorama = {
+  dias: number;
+  espacios: Espacio[];
+  gente: Persona[];
+  enMarcha: Tarea[];
+  atascadas: Tarea[];
+  sinDuenio: Tarea[];
+};
+
+/** Lo que cada cual eligió decir de sí mismo. Sin elegir, no se inventa. */
+const ESTADO: Record<NonNullable<Persona["estado"]>, string> = {
+  available: "Disponible",
+  busy_open: "Ocupado, se le puede escribir",
+  do_not_disturb: "No molestar",
+};
+
 export default function OrganizacionPage() {
   const orgId = useOrgId();
-  const espacios = useRecurso<{ workspaces: Workspace[] }>(`/organizations/${orgId}/workspaces`);
-  const lista = espacios.datos?.workspaces ?? [];
+  const panorama = useRecurso<Panorama>(`/organizations/${orgId}/panorama`);
+  const datos = panorama.datos;
 
   return (
     <Pagina
-      titulo="Espacios de trabajo"
-      rotulo="dónde se trabaja dentro de esta organización"
-      icono={<Users size={18} />}
+      titulo="Resumen"
+      rotulo="cómo va la organización y quién la mueve"
+      icono={<Building2 size={18} />}
+      // Se llena de contenido: tarjetas de gente y listas de tareas en paralelo.
       ancho="trabajo"
     >
-      {espacios.error ? (
-        <Fallo onReintentar={() => void espacios.recargar()}>{espacios.error}</Fallo>
-      ) : espacios.cargando ? (
-        <Cargando etiqueta="Cargando espacios" />
+      {panorama.error ? (
+        <Fallo onReintentar={() => void panorama.recargar()}>{panorama.error}</Fallo>
+      ) : !datos ? (
+        <Cargando etiqueta="Mirando cómo va la organización" />
       ) : (
-        <div className="space-y-4">
-          {/* EL MARCADOR VA EN LA PORTADA Y NO EN UNA PANTALLA PROPIA. Los
-              puntos se ganan solos al cerrar tareas; una pantalla a la que hay
-              que acordarse de ir no la abre nadie, y entonces lo que se gana no
-              lo ve nadie — que es lo mismo que no ganarlo.
-              Y cuando está vacío se queda igualmente, diciendo CÓMO se ganan:
-              es lo único que explica la mecánica a quien acaba de llegar, y un
-              hueco en blanco no enseña nada. */}
+        <div className="space-y-7">
+          <SinDuenio tareas={datos.sinDuenio} />
+
+          <Gente gente={datos.gente} orgId={orgId} />
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <EnMarcha tareas={datos.enMarcha} />
+            <Atascadas tareas={datos.atascadas} dias={datos.dias} />
+          </div>
+
+          <Espacios espacios={datos.espacios} dias={datos.dias} />
+
+          {/* Crear un espacio SE QUEDA AQUÍ. Era lo único accionable de la
+              pantalla anterior y perderlo al reescribirla habría sido cambiar
+              una lista inútil por una portada incompleta. Va debajo de los
+              proyectos porque es donde se mira antes de decidir que falta uno. */}
+          <NuevoEspacio orgId={orgId} onCreado={() => void panorama.recargar()} />
+
+          {/* El marcador se queda de la pantalla anterior: los puntos se ganan
+              solos al cerrar tareas, y una pantalla a la que hay que acordarse
+              de ir no la abre nadie. Va abajo porque celebra, y lo que celebra
+              no es lo primero que hay que mirar por la mañana. */}
           <Marcador orgId={orgId} />
-
-          {lista.length === 0 ? (
-            <EstadoVacio
-              icono={<Users size={20} />}
-              titulo="Todavía no hay ningún espacio"
-              pista="Un espacio de trabajo es un proyecto: sus canales, sus archivos, su tablero y su repositorio. Crea el primero aquí abajo."
-            />
-          ) : (
-            <ul className="space-y-2">
-              {lista.map((w) => (
-                <li key={w.id}>
-                  <Link
-                    href={`/app/w/${w.id}`}
-                    className="presionable flex items-center gap-3 rounded-2xl border border-line
-                      bg-surface/60 px-4 py-3 hover:border-line-strong hover:bg-raised/60"
-                  >
-                    <span
-                      aria-hidden
-                      className="grid size-9 shrink-0 place-items-center rounded-xl border border-line-strong
-                        bg-accent-soft/70 font-display text-sm font-semibold text-accent-bright"
-                    >
-                      {w.visibility === "personal" ? <UserRound size={15} /> : "#"}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-ink">{w.name}</span>
-                      {/* Un espacio personal no es «privado a medias»: no lo ve
-                          nadie más, ni quien administra. Decirlo aquí evita la
-                          pregunta de por qué los demás no lo encuentran. */}
-                      <span className="block text-[11px] text-faint">
-                        {w.visibility === "personal" ? "Solo tuyo" : "Compartido con la organización"}
-                      </span>
-                    </span>
-                    <ArrowRight size={14} className="shrink-0 text-faint" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <NuevoEspacio orgId={orgId} onCreado={() => void espacios.recargar()} />
         </div>
       )}
     </Pagina>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function Seccion({
+  titulo,
+  cuantas,
+  children,
+}: {
+  titulo: string;
+  cuantas?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2.5 flex items-center gap-2">
+        <Rotulo>{titulo}</Rotulo>
+        {cuantas !== undefined && cuantas > 0 && (
+          <span className="font-mono text-[11px] tabular-nums text-faint">{cuantas}</span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Lo que no tiene dueño, arriba del todo.
+ *
+ * Cuando está vacío NO se calla: decirlo es una buena noticia y cuesta una
+ * línea. Un hueco en blanco se lee como «esto no ha cargado».
+ */
+function SinDuenio({ tareas }: { tareas: Tarea[] }) {
+  if (tareas.length === 0) {
+    return (
+      <Tarjeta className="flex items-center gap-2.5 px-4 py-3">
+        <Hand size={15} className="shrink-0 text-live" />
+        <p className="text-xs text-muted">Todo lo que está abierto tiene a alguien detrás.</p>
+      </Tarjeta>
+    );
+  }
+
+  return (
+    <Seccion titulo="No lo tiene nadie" cuantas={tareas.length}>
+      <ul className="space-y-1.5">
+        {tareas.map((t) => (
+          <li key={t.id}>
+            <Link
+              href={`/app/w/${t.espacioId}/board`}
+              className="presionable flex items-center gap-3 rounded-xl border border-line bg-surface/60
+                px-3.5 py-2.5 hover:border-line-strong hover:bg-raised/60"
+            >
+              {t.tipo && <IconoDeTipo tipo={t.tipo} />}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-ink">{t.titulo}</span>
+                <span className="mt-0.5 block text-[11px] text-faint">
+                  {t.espacio}
+                  {t.creada ? ` · apuntada el ${fechaCorta(t.creada)}` : ""}
+                </span>
+              </span>
+              {/* Solo urgente y alta: el resto de prioridades no cambian a
+                  quién hay que darle esto, que es la decisión de esta lista. */}
+              {(() => {
+                const tono = t.prioridad === undefined ? null : tonoDePrioridad(t.prioridad);
+                return tono && t.prioridad! > 1 ? (
+                  <span
+                    className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] ${tono.clase}`}
+                  >
+                    {tono.texto}
+                  </span>
+                ) : null;
+              })()}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Seccion>
+  );
+}
+
+function Gente({ gente, orgId }: { gente: Persona[]; orgId: string }) {
+  return (
+    <Seccion titulo="La gente" cuantas={gente.length}>
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {gente.map((p) => (
+          <Tarjeta key={p.id} className="flex items-start gap-3 p-3.5">
+            <Avatar userId={p.id} nombre={p.nombre} tamano={38} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ink">{p.nombre}</p>
+              {/* El oficio, nunca el permiso: `member` es lo que puede hacer,
+                  no a lo que se dedica. Y el de ESTA organización (0048): una
+                  persona no hace lo mismo en todas. */}
+              <p className="truncate text-[11px] text-faint">{p.oficio ?? "sin decir"}</p>
+              {p.estado && (
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
+                  <CircleDot size={10} className="shrink-0 text-faint" />
+                  {ESTADO[p.estado]}
+                </p>
+              )}
+              {p.enQue.length > 0 && (
+                <p className="mt-1.5 truncate text-[11px] text-faint" title={p.enQue.join(", ")}>
+                  en {p.enQue.join(", ")}
+                </p>
+              )}
+            </div>
+          </Tarjeta>
+        ))}
+      </div>
+
+      {/* Invitar y retirar siguen viviendo en los ajustes. La salida va aquí,
+          que es donde se busca, hasta que se muden. */}
+      <Link
+        href={`/app/o/${orgId}/ajustes`}
+        className="presionable mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg border border-line
+          bg-raised/60 px-3 text-xs text-ink hover:border-line-strong hover:bg-raised"
+      >
+        <UserRound size={13} className="shrink-0 text-faint" />
+        Invitar o retirar a alguien
+      </Link>
+    </Seccion>
+  );
+}
+
+function EnMarcha({ tareas }: { tareas: Tarea[] }) {
+  return (
+    <Seccion titulo="En marcha" cuantas={tareas.length}>
+      {tareas.length === 0 ? (
+        <EstadoVacio
+          icono={<Users size={18} />}
+          titulo="Nada empezado"
+          pista="Lo que se mueva de la primera columna de cualquier tablero aparece aquí."
+        />
+      ) : (
+        <ul className="space-y-1.5">
+          {tareas.slice(0, 8).map((t) => (
+            <li
+              key={t.id}
+              className="flex items-center gap-3 rounded-xl border border-line bg-surface/40 px-3.5 py-2.5"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-ink">{t.titulo}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-faint">
+                  {t.espacio}
+                  {t.responsable ? ` · ${t.responsable}` : ""}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Seccion>
+  );
+}
+
+/**
+ * Atascada NO es vencida, y por eso es una sección aparte.
+ *
+ * Una tarea sin fecha no vence nunca y puede llevar tres semanas quieta. Es
+ * justo la que hay que sacar a la superficie, porque nadie va a ir a buscarla.
+ */
+function Atascadas({ tareas, dias }: { tareas: Tarea[]; dias: number }) {
+  return (
+    <Seccion titulo={`Sin tocar en ${dias} días`} cuantas={tareas.length}>
+      {tareas.length === 0 ? (
+        <EstadoVacio
+          icono={<Hourglass size={18} />}
+          titulo="Nada parado"
+          pista="Todo lo abierto se ha tocado esta semana."
+        />
+      ) : (
+        <ul className="space-y-1.5">
+          {tareas.map((t) => (
+            <li
+              key={t.id}
+              className="flex items-center gap-3 rounded-xl border border-line bg-surface/40 px-3.5 py-2.5"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-ink">{t.titulo}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-faint">
+                  {t.espacio}
+                  {t.responsable ? ` · ${t.responsable}` : " · sin responsable"}
+                </span>
+              </span>
+              {t.ultimoToque && (
+                <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">
+                  {fechaCorta(t.ultimoToque)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Seccion>
+  );
+}
+
+function Espacios({ espacios, dias }: { espacios: Espacio[]; dias: number }) {
+  if (espacios.length === 0) {
+    return (
+      <EstadoVacio
+        icono={<Users size={20} />}
+        titulo="Todavía no hay ningún espacio"
+        pista="Un espacio de trabajo es un proyecto: sus canales, sus archivos, su tablero y su repositorio. Se crea desde el menú lateral."
+      />
+    );
+  }
+
+  return (
+    <Seccion titulo="Los proyectos" cuantas={espacios.length}>
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {espacios.map((e) => (
+          <Link
+            key={e.id}
+            href={`/app/w/${e.id}`}
+            className="presionable rounded-2xl border border-line bg-surface/60 p-4
+              hover:border-line-strong hover:bg-raised/60"
+          >
+            <p className="truncate text-sm font-medium text-ink">{e.nombre}</p>
+            {/* Los dos números juntos, y no uno: cuatro pendientes con nada
+                cerrado esta semana es un proyecto parado; cuatro con once
+                cerradas es uno que va. Un solo número no distingue los dos. */}
+            <p className="mt-1.5 text-[11px] text-faint">
+              {e.pendientes} {e.pendientes === 1 ? "pendiente" : "pendientes"}
+              {" · "}
+              {e.cerradasReciente} {e.cerradasReciente === 1 ? "cerrada" : "cerradas"} en {dias} días
+            </p>
+            <p className="mt-0.5 text-[11px] text-faint">
+              {e.personas} {e.personas === 1 ? "persona" : "personas"}
+              {e.ultimoMovimiento ? ` · se movió el ${fechaCorta(e.ultimoMovimiento)}` : " · quieto"}
+            </p>
+          </Link>
+        ))}
+      </div>
+    </Seccion>
   );
 }
 

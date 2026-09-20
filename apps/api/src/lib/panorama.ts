@@ -46,6 +46,7 @@ export type Panorama = {
   gente: Record<string, unknown>[];
   enMarcha: Record<string, unknown>[];
   atascadas: Record<string, unknown>[];
+  sinDuenio: Record<string, unknown>[];
 };
 
 /**
@@ -58,7 +59,7 @@ export async function panoramaDeOrganizacion(
   db: Db,
   filtro: { organizationId: string; dias: number },
 ): Promise<Panorama> {
-  const [espacios, gente, enMarcha, atascadas] = await Promise.all([
+  const [espacios, gente, enMarcha, atascadas, sinDuenio] = await Promise.all([
         /**
          * Los espacios, con lo que hace falta para decidir en cuál entrar.
          *
@@ -176,6 +177,41 @@ export async function panoramaDeOrganizacion(
             limit 10`,
           [filtro.organizationId, filtro.dias],
         ),
+
+        /**
+         * Lo que no tiene dueño.
+         *
+         * ES LA ÚNICA CIFRA DE ESTA PORTADA QUE HACE QUE ALGUIEN HAGA ALGO AL
+         * LEERLA. «Doce tareas pendientes» no se puede accionar; «tres tareas
+         * que no tiene nadie» sí, y la acción es siempre la misma: repartirlas.
+         * Todo lo demás de aquí informa; esto pide.
+         *
+         * SIN EXCLUIR LA PRIMERA COLUMNA, al revés que `enMarcha` y
+         * `atascadas`. Esas dos preguntan «¿qué se está moviendo?» y para eso
+         * lo que solo está apuntado estorba. Esta pregunta es la contraria —
+         * «¿qué no ha empezado porque no es de nadie?»— y el sitio donde eso
+         * se acumula es justo la primera columna.
+         *
+         * Las terminadas fuera, claro: una tarea cerrada sin responsable no es
+         * un problema pendiente, es historia.
+         *
+         * MÁS ANTIGUAS PRIMERO. Una tarea sin dueño de hace tres semanas es
+         * peor noticia que la de ayer: la de ayer todavía puede estar
+         * esperando a que alguien la lea.
+         */
+        db.query(
+          `select t.id, t.title as titulo, t.prioridad, t.tipo,
+                  w.name as espacio, w.id as "espacioId", t.created_at as "creada"
+             from tasks t
+             join task_columns c on c.id = t.column_id
+             join workspaces w on w.id = t.workspace_id
+            where w.organization_id = $1
+              and t.assignee_id is null
+              and not c.is_terminal
+            order by t.created_at asc
+            limit 15`,
+          [filtro.organizationId],
+        ),
       ]);
 
 
@@ -184,5 +220,6 @@ export async function panoramaDeOrganizacion(
     gente: gente.rows,
     enMarcha: enMarcha.rows,
     atascadas: atascadas.rows,
+    sinDuenio: sinDuenio.rows,
   };
 }
