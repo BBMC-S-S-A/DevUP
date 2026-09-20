@@ -1,22 +1,19 @@
 "use client";
 
-import { ArrowLeft, Home, LogOut, Search, UserRound } from "lucide-react";
+import { ArrowLeft, Inbox, Search, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { BotonIcono } from "@/components/ui/Boton";
+import { MenuDeUsuario } from "@/components/ui/MenuDeUsuario";
 import { NavegacionOrganizacion } from "@/components/ui/NavegacionOrganizacion";
 import { PaletaComandos } from "@/components/ui/PaletaComandos";
-import { SelectorPresencia } from "@/components/ui/SelectorPresencia";
-import { SelectorTema } from "@/components/ui/SelectorTema";
 import { Armazon, EsqueletoArmazon } from "@/components/ui/Armazon";
 import { useHayRiel } from "@/components/ui/RielOrganizaciones";
 import { Chip, Rotulo } from "@/components/ui/Superficies";
 import { ItemNav } from "@/components/ui/ItemNav";
 import { ApiError, type Organization, type Workspace, api } from "@/lib/api";
 import { retraso } from "@/lib/animacion";
-import { useSession } from "@/lib/session";
 import { ignorar } from "@/lib/fallo";
 
 /**
@@ -44,7 +41,6 @@ import { ignorar } from "@/lib/fallo";
 export default function OrgLayout({ children }: { children: ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();
   const pathname = usePathname();
-  const { user, signOut } = useSession();
   const hayRiel = useHayRiel();
 
   const [organizacion, setOrganizacion] = useState<Organization | null>(null);
@@ -178,10 +174,15 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
         </header>
 
         <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-2.5 py-4">
-          {/* También aquí, y por el mismo motivo: Inicio cruza TODAS las
+          {/* También aquí, y por el mismo motivo: esta portada cruza TODAS las
               organizaciones, así que desde dentro de una es la salida hacia
               «¿qué tengo en todas?». Si solo estuviera en el armazón de espacio,
-              quien se quede en el nivel de organización no la vería nunca. */}
+              quien se quede en el nivel de organización no la vería nunca.
+
+              Y con el mismo rótulo que allí. Se llamaba «Inicio» en las dos
+              barras, y dentro de una organización «Inicio» se lee como el
+              inicio DE ESTA organización — que es otra pantalla, la de al lado,
+              y enseña otra cosa. */}
           <Link
             href="/app/inicio"
             style={retraso(0)}
@@ -193,8 +194,8 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
                   : "border-line bg-canvas/50 text-muted"
               }`}
           >
-            <Home size={13} className="shrink-0 text-faint" />
-            Inicio
+            <Inbox size={13} className="shrink-0 text-faint" />
+            Todo lo mío
           </Link>
 
           <Link
@@ -262,35 +263,20 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
             className="pointer-events-none absolute inset-x-0 top-0 h-px
               bg-gradient-to-r from-transparent via-line-strong to-transparent"
           />
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <Rotulo>Estado</Rotulo>
-            <SelectorPresencia />
-          </div>
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <Rotulo>Tema</Rotulo>
-            <SelectorTema />
-          </div>
+          {/* EL MISMO PIE QUE EL DEL ESPACIO, y hasta hoy no lo era.
+              Aquí el nombre era un `<p>` —pulsarlo no hacía nada, que es justo
+              lo que se reportó—, el estado y el tema ocupaban dos filas fijas, y
+              cerrar sesión era un icono suelto que llamaba a `signOut()`
+              directo: **un clic, sin preguntar**.
 
-          <div className="flex items-center gap-2.5">
-            <span
-              aria-hidden
-              className="grid size-8 shrink-0 place-items-center rounded-full border border-line-strong
-                bg-raised font-display text-[11px] font-semibold text-muted"
-            >
-              {(user?.displayName ?? "?").trim().charAt(0).toUpperCase()}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-ink" title={user?.displayName}>
-                {user?.displayName}
-              </p>
-              <p className="truncate text-[10px] text-faint" title={user?.email}>
-                {user?.email}
-              </p>
-            </div>
+              La mudanza a `MenuDeUsuario` se hizo en el armazón del espacio y
+              se quedó a medias. Que una acción irreversible pida confirmación
+              en una pantalla y no en la de al lado es peor que no pedirla
+              nunca: el gesto se aprende donde es seguro y se repite donde no lo
+              es. */}
+          <div className="flex items-center gap-2">
+            <MenuDeUsuario orgId={orgId} />
             <NotificationBell />
-            <BotonIcono etiqueta="Cerrar sesión" onClick={() => void signOut()} className="group">
-              <LogOut size={15} className="transition-colors group-hover:text-danger" />
-            </BotonIcono>
           </div>
         </footer>
       </>

@@ -3,7 +3,6 @@ import {
   Database,
   GitBranch,
   Github,
-  KeyRound,
   Megaphone,
   Network,
   Orbit,
@@ -180,26 +179,20 @@ export function NavegacionOrganizacion({
         </a>
       )}
 
-      {/* Mi cuenta va SIN puerta de rol, al revés que Ajustes: ahí es correcto
-          esconderlo porque es la organización, pero una conexión de agente la
-          necesita cualquiera que quiera enchufar su Claude, y un miembro raso
-          es justamente quien no tiene otra manera de llegar. */}
-      {grupo !== "proyecto" && (
-        <ItemNav
-          href={`${base}/cuenta`}
-          icono={<KeyRound size={14} />}
-          indice={indiceInicial + pantallas.length + 1}
-          activo={pathname === `${base}/cuenta`}
-        >
-          Mi cuenta
-        </ItemNav>
-      )}
+      {/* «MI CUENTA» YA NO ESTÁ AQUÍ. Estuvo, sin puerta de rol, para que un
+          miembro raso pudiera llegar a sus conexiones de agente; el motivo era
+          bueno y el sitio no: la configuración de una persona no es un destino
+          de la organización, y en esta lista se leía como una pantalla más de
+          la empresa. Ahora cuelga de tu propia ficha, que se abre pulsando tu
+          cara en el pie —donde se busca— y sigue sin puerta de rol.
+
+          Ver `MenuDeUsuario`. */}
 
       {puedeAjustar && grupo !== "proyecto" && (
         <ItemNav
           href={`${base}/ajustes`}
           icono={<Settings size={14} />}
-          indice={indiceInicial + pantallas.length + 2}
+          indice={indiceInicial + pantallas.length + 1}
           activo={pathname === `${base}/ajustes`}
         >
           Ajustes

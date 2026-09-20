@@ -8,7 +8,8 @@ import {
   Hash,
   KanbanSquare,
   History,
-  Home,
+  Building2,
+  Inbox,
   LayoutDashboard,
   PhoneCall,
   LayoutGrid,
@@ -261,15 +262,20 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               organizaciones está en su pie, y dos caminos al mismo sitio en la
               misma pantalla es la duplicación que este armazón vino a quitar.
               Sin riel —una sola organización, o móvil— sigue siendo la única
-              salida y se queda. */}
+              salida y se queda.
+
+              LLEVA A LA ORGANIZACIÓN Y NO A LA LISTA DE TODAS. Decía
+              «Workspaces» y saltaba a `/app/organizaciones`, que es subir dos
+              niveles de una vez: quien quiere salir de un espacio casi nunca
+              quiere salir también de la empresa. */}
           {!hayRiel && (
             <Link
-              href="/app/organizaciones"
+              href={`/app/o/${workspace.organizationId}`}
               className="presionable -ml-1 mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5
                 text-[11px] text-muted hover:text-accent-bright"
             >
               <ArrowLeft size={12} />
-              Workspaces
+              Organización
             </Link>
           )}
 
@@ -327,19 +333,38 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             Buscar
           </Link>
 
-          {/* INICIO VA AQUÍ, FUERA DEL GRUPO, y el motivo es el mismo que
-              pide el §5 de CAMINOS.md: no es una pantalla de este espacio, es
-              la que contesta «¿qué tengo, en todos?». Se pidió «encima de
-              Panel», y encima está — pero encima del rótulo y no debajo de él,
-              porque el grupo se llama «Espacio» y meterla dentro la convertiría
-              en una pantalla más de este espacio, que es justo lo que el §5
-              dice que no es.
+          {/* LA PORTADA GLOBAL SIGUE AQUÍ, FUERA DEL GRUPO, por el motivo del
+              §5 de CAMINOS.md: no es una pantalla de este espacio, es la que
+              contesta «¿qué tengo, en todos?», y meterla dentro del grupo
+              «Espacio» la convertiría en una pantalla más de este espacio. Eso
+              no cambia: sigue fuera del grupo y sigue encima de Panel.
 
-              Y hay precedente a dos líneas de aquí: «Buscar» ya vive fuera del
-              grupo por esta misma razón. */}
+              LO QUE CAMBIA ES EL RÓTULO, y es lo que estaba mintiendo. Se
+              llamaba «Inicio» dentro de un espacio, y ahí «Inicio» solo puede
+              querer decir una cosa: el inicio de ESTE espacio. Quien lo pulsa
+              estando en Gestek aterriza en una pantalla que suma Gestek y
+              devup —«52 tareas en 2 espacios»— sin que nada le haya avisado de
+              que salía. La pantalla está bien; el rótulo la presentaba como
+              otra cosa.
+
+              Y ENCIMA VA LA VUELTA A LA ORGANIZACIÓN, que es lo que de verdad
+              faltaba: desde dentro de un espacio no había forma de subir un
+              nivel. La única salida llevaba a `/app/organizaciones` —la lista
+              de TODAS— que es subir dos y aterrizar en otro sitio. */}
+          <Link
+            href={`/app/o/${workspace.organizationId}`}
+            style={retraso(1)}
+            className="devup-entrada presionable flex h-9 items-center gap-2 rounded-xl border border-line
+              bg-canvas/50 px-2.5 text-[13px] text-muted
+              hover:border-line-strong hover:bg-canvas hover:text-ink"
+          >
+            <Building2 size={13} className="shrink-0 text-faint" />
+            Organización
+          </Link>
+
           <Link
             href="/app/inicio"
-            style={retraso(0)}
+            style={retraso(2)}
             aria-current={pathname === "/app/inicio" ? "page" : undefined}
             className={`devup-entrada presionable flex h-9 items-center gap-2 rounded-xl border px-2.5
               text-[13px] hover:border-line-strong hover:bg-canvas hover:text-ink ${
@@ -348,8 +373,8 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   : "border-line bg-canvas/50 text-muted"
               }`}
           >
-            <Home size={13} className="shrink-0 text-faint" />
-            Inicio
+            <Inbox size={13} className="shrink-0 text-faint" />
+            Todo lo mío
           </Link>
 
           <div>
@@ -596,7 +621,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               ocupar sitio: un icono de puerta al lado del nombre del espacio no
               dice «cerrar sesión», dice «salir de aquí». */}
           <div className="flex items-center gap-2">
-            <MenuDeUsuario orgId={workspace.organizationId} />
+            <MenuDeUsuario orgId={workspace.organizationId} workspaceId={workspaceId} />
             <NotificationBell />
           </div>
         </footer>
