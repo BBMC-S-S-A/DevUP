@@ -1,10 +1,11 @@
 "use client";
 
-import { Files, Loader2, ShieldCheck } from "lucide-react";
+import { Files, ShieldCheck } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FileLibrary } from "@/components/files/FileLibrary";
-import { Chip, Rotulo } from "@/components/ui/Superficies";
+import { Cargando, Pagina } from "@/components/ui/Pagina";
+import { Chip } from "@/components/ui/Superficies";
 import { type Workspace, api } from "@/lib/api";
 
 /**
@@ -16,6 +17,12 @@ import { type Workspace, api } from "@/lib/api";
  * sin ser lo que el propio menú lateral dice que es lo primero (el Panel es
  * `indice={0}`; esto era `indice={1}` y aun así la raíz). Se movió aquí, y la
  * raíz ahora manda directa al canal general.
+ *
+ * LA CABECERA ERA PROPIA Y AHORA ES LA DE TODOS. Tenía su chapa de icono, su
+ * rejilla, su filo de luz y su `max-w-6xl` —un sexto ancho, distinto de los
+ * cinco que ya había—, escritos aquí porque cuando llegó esta pantalla no
+ * existía el marco. Todo eso lo pone `Pagina`, con la diferencia de que ahí se
+ * decide una vez.
  */
 export default function WorkspaceFilesPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -28,50 +35,37 @@ export default function WorkspaceFilesPage() {
       .catch(() => setWorkspace(null));
   }, [workspaceId]);
 
-  if (!workspace) {
-    return (
-      <div className="alto-util-fijo grid place-items-center">
-        <span className="flex items-center gap-2 text-faint">
-          <Loader2 className="animate-spin" size={16} />
-          <Rotulo>abriendo la biblioteca</Rotulo>
-        </span>
-      </div>
-    );
-  }
-
   return (
-    <div className="alto-util">
-      {/* La cabecera lleva la rejilla y el filo de luz porque es la única
-          superficie fija de la vista: da profundidad al fondo y marca dónde
-          acaba el rótulo y empieza el almacén, sin un borde duro de por medio. */}
-      <header className="rejilla filo-luz px-6 pb-6 pt-7 sm:px-8">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-accent/25 bg-accent-soft/60 text-accent-bright">
-              <Files size={18} />
-            </span>
-            <div className="min-w-0">
-              <Rotulo>almacén · {workspace.name}</Rotulo>
-              <h1 className="mt-0.5 truncate text-xl font-semibold">Biblioteca</h1>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Chip tono="accent">
-              <ShieldCheck size={11} />
-              enlace firmado
-            </Chip>
-            <p className="max-w-xl text-xs leading-relaxed text-muted">
-              Todos los archivos de {workspace.name}. Se acceden por enlace firmado con caducidad,
-              nunca desde un bucket público.
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl px-6 pb-16 pt-6 sm:px-8">
-        <FileLibrary workspaceId={workspaceId} organizationId={workspace.organizationId} />
-      </div>
-    </div>
+    <Pagina
+      titulo="Biblioteca"
+      rotulo={workspace ? `almacén · ${workspace.name}` : "almacén"}
+      icono={<Files size={18} />}
+      // Se llena de contenido: son filas de archivos con su tamaño, su fecha y
+      // quién lo subió, no párrafos.
+      ancho="trabajo"
+      acciones={
+        <Chip tono="accent">
+          <ShieldCheck size={11} />
+          enlace firmado
+        </Chip>
+      }
+    >
+      {workspace ? (
+        <>
+          {/* Esta frase se queda, aunque sea de las que explican el producto
+              dentro del producto: es una de las doce preguntas que hizo GESTEK
+              por escrito, y la contesta donde se hace. */}
+          <p className="mb-5 max-w-xl text-xs leading-relaxed text-muted">
+            Todos los archivos de {workspace.name}. Se acceden por enlace firmado con caducidad,
+            nunca desde un bucket público.
+          </p>
+          <FileLibrary workspaceId={workspaceId} organizationId={workspace.organizationId} />
+        </>
+      ) : (
+        // La cabecera ya está pintada mientras esto llega, así que la espera no
+        // es una pantalla en blanco: es un hueco dentro de algo que ya se lee.
+        <Cargando etiqueta="Abriendo la biblioteca" />
+      )}
+    </Pagina>
   );
 }

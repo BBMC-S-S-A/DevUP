@@ -140,6 +140,19 @@ function Buscador() {
   const vacio = results !== null && results.length === 0 && !loading;
 
   return (
+    // TAMPOCO USA `Pagina`, Y TAMBIÉN A PROPÓSITO. El marco coloca un título a
+    // la izquierda con su chapa y sus acciones a la derecha; aquí el título no
+    // es lo que se mira, es el campo. Va centrado, mide 56 px de alto y se
+    // enfoca solo al entrar, porque quien abre esta pantalla viene a escribir.
+    //
+    // Y el ancho es DOS anchos, no uno: el campo estrecho arriba —una caja de
+    // búsqueda de 1.200 px no se lee mejor— y los resultados anchos debajo.
+    // `Pagina` decide una columna para toda la pantalla, que es justo lo que
+    // aquí no sirve.
+    //
+    // Es la única excepción del armazón, y está aquí escrita para que la
+    // siguiente pantalla que quiera saltarse el marco tenga que dar un motivo
+    // igual de concreto.
     <div className="alto-util">
       <header className="filo-luz relative bg-surface/40">
         <div className="rejilla pointer-events-none absolute inset-0" aria-hidden />
