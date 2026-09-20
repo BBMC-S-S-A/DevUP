@@ -205,6 +205,25 @@ export function NavegacionOrganizacion({
           Ajustes
         </ItemNav>
       )}
+
+      {/* LA INSTALACIÓN VA APARTE DE LOS AJUSTES, y no es una entrada de más:
+          es que eran dos pantallas en una. Ajustes es de la organización —su
+          foto, su gente, sus enlaces— y esto es de la instancia: si el almacén
+          responde, si el correo sale, qué migraciones hay aplicadas.
+
+          Con la misma puerta de rol que la de al lado, y por un motivo más
+          fuerte: `/salud` la pide con `is_org_admin`, así que a quien no administra
+          esta entrada le llevaría a un 403 con forma de tarjeta. */}
+      {puedeAjustar && grupo !== "proyecto" && (
+        <ItemNav
+          href={`${base}/instalacion`}
+          icono={<Server size={14} />}
+          indice={indiceInicial + pantallas.length + 3}
+          activo={pathname === `${base}/instalacion`}
+        >
+          Instalación
+        </ItemNav>
+      )}
     </>
   );
 }

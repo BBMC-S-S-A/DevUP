@@ -11,10 +11,12 @@ import {
   Loader2,
   Mail,
   Plus,
+  Server,
   Settings,
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
@@ -29,7 +31,6 @@ import {
   api,
 } from "@/lib/api";
 import { AjustesDelEspacio } from "@/components/ajustes/AjustesDelEspacio";
-import { EstadoTecnico } from "@/components/ajustes/EstadoTecnico";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
 import { uploadOrgLogo } from "@/lib/files/upload";
@@ -111,7 +112,7 @@ export default function OrganizationSettingsPage() {
   return (
     <Pagina
       titulo="Ajustes"
-      rotulo="Foto, miembros y enlaces de la organización"
+      rotulo="foto, miembros y enlaces de la organización"
       icono={<Settings size={20} />}
     >
       <div className="space-y-5">
@@ -137,13 +138,26 @@ export default function OrganizationSettingsPage() {
         <Miembros orgId={orgId} members={members} yo={user?.id ?? null} administro={administro} onChange={load} />
         <Enlaces orgId={orgId} puedeEditar={administro} />
 
-        {/* EL ESTADO DE LA INSTALACIÓN VA AL FINAL Y SOLO A QUIEN ADMINISTRA.
-            Al final porque nadie entra en «Ajustes» buscando esto: se entra a
-            invitar a alguien o a cambiar la foto, y quien viene a mirar si el
-            almacén responde ya sabe que baja. Y solo a quien administra porque
-            es lo que el servidor contesta —lo pide `is_org_admin`—: pintarlo a
-            todo el mundo sería enseñar un 403 con forma de tarjeta. */}
-        {administro && <EstadoTecnico orgId={orgId} />}
+        {/* EL ESTADO DE LA INSTALACIÓN YA NO ESTÁ AQUÍ. Estaba al final, y el
+            sitio no era un descuido: nadie entra en «Ajustes» buscando si el
+            almacén responde. Pero seguía siendo la misma pantalla que la foto
+            de la organización y la lista de miembros, y es información de otro
+            oficio — bóveda, almacén, TURN, y «0 migraciones aplicadas» con un
+            párrafo explicando por qué ese número no significa lo que parece.
+
+            Se mudó a `/instalacion`, con la misma puerta de rol. Queda la
+            salida, y solo para quien puede pasar por ella. */}
+        {administro && (
+          <Link
+            href={`/app/o/${orgId}/instalacion`}
+            className="presionable flex items-center gap-2.5 rounded-xl border border-line
+              bg-surface/60 px-4 py-3 text-sm text-muted
+              hover:border-line-strong hover:bg-raised/60 hover:text-ink"
+          >
+            <Server size={15} className="shrink-0 text-faint" />
+            Cómo está montada esta instalación
+          </Link>
+        )}
       </div>
     </Pagina>
   );
