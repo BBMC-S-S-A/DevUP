@@ -621,7 +621,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               ocupar sitio: un icono de puerta al lado del nombre del espacio no
               dice «cerrar sesión», dice «salir de aquí». */}
           <div className="flex items-center gap-2">
-            <MenuDeUsuario orgId={workspace.organizationId} />
+            <MenuDeUsuario orgId={workspace.organizationId} workspaceId={workspaceId} />
             <NotificationBell />
           </div>
         </footer>
