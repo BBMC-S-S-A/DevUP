@@ -49,26 +49,9 @@ import { resolverOrganizacion } from "../organizaciones.js";
  * RLS, no la buena educación del modelo.
  */
 
-export const ETIQUETA_AGENTE = "agente";
-
 type Columna = { id: string; name: string; tasks: { id: string; title: string }[] };
 type Miembro = { userId: string; displayName: string };
 type Etiqueta = { id: string; name: string };
-
-/**
- * Se asegura de que exista la etiqueta de procedencia y devuelve su id.
- *
- * El alta de etiquetas ya es idempotente en la API (`on conflict do update`),
- * así que esto es una llamada y no una comprobación previa.
- */
-async function etiquetaDeAgente(cliente: ClienteApi, organizacion?: string): Promise<string> {
-  const org = await resolverOrganizacion(cliente, organizacion);
-  const { tag } = await cliente.post<{ tag: Etiqueta }>(`/organizations/${org.id}/tags`, {
-    name: ETIQUETA_AGENTE,
-    color: "violet",
-  });
-  return tag.id;
-}
 
 /**
  * Resuelve categorías por nombre, creando las que falten.
@@ -376,11 +359,9 @@ export const descripcionCrearTarea = [
   "",
   "Lo que se cree por aquí queda anotado como hecho por un agente en el registro",
   "de actividad, junto a quién lo pidió. Ahí no se puede borrar y se puede",
-  "consultar — a diferencia de una etiqueta, que quita cualquiera y además",
-  "ensuciaba el filtro de áreas del tablero.",
-  "equipo vea de un vistazo qué salió de un modelo y pueda revisarlo o",
-  "deshacerlo en bloque. No se puede desactivar, y es lo que hace aceptable que",
-  "un modelo escriba en el tablero de otros.",
+  "consultar, así que el equipo ve de un vistazo qué salió de un modelo y puede",
+  "revisarlo. No se puede desactivar, y es lo que hace aceptable que un modelo",
+  "escriba en el tablero de otros.",
   "",
   "Si el tablero no tiene columnas, primero `crear_columna`.",
 ].join("\n");
@@ -401,7 +382,6 @@ export async function crearTarea(
 ): Promise<string> {
   const espacio: Espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
   const columna = resolverColumna(await tablero(cliente, espacio.id), entrada.columna);
-  const etiqueta = await etiquetaDeAgente(cliente, entrada.organizacion);
   const categorias = await categoriasPorNombre(
     cliente,
     entrada.categorias ?? [],
@@ -448,7 +428,9 @@ export async function crearTarea(
   if (entrada.vence) trozos.push(`vence el ${entrada.vence}`);
   const puestas = entrada.categorias?.filter((c) => c.trim()) ?? [];
   const conCategorias = puestas.length > 0 ? ` en ${puestas.join(" y ")},` : "";
-  return `Creada «${task.title}» ${trozos.join(", ")},${conCategorias} con la etiqueta «${ETIQUETA_AGENTE}».  [tarea ${task.id}]`;
+  // Sin coletilla de etiqueta: decía que ponía una que ya no pone.
+  const cierre = conCategorias ? conCategorias.replace(/,$/, ".") : ".";
+  return `Creada «${task.title}» ${trozos.join(", ")}${cierre}  [tarea ${task.id}]`;
 }
 
 // ---------------------------------------------------------------------------

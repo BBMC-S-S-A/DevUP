@@ -4,7 +4,7 @@
  * QUÉ SE PRUEBA, Y POR QUÉ SIN MODELO. Que el modelo elija bien la herramienta
  * es cosa de su descripción y se ve usándolo; lo que se puede —y hay que—
  * probar aquí es lo que pasa cuando la elige: que la tarea acabe en la columna
- * correcta, con su responsable, con la etiqueta de procedencia, y que un
+ * correcta, con su responsable, con su procedencia anotada, y que un
  * identificador de otro espacio se rechace. Nada de esto necesita gastar la
  * clave de nadie.
  *
@@ -97,7 +97,10 @@ async function main(): Promise<void> {
       }),
     );
     check("crea la tarea con responsable y fecha", tarea.texto.includes("Creada"));
-    check("y dice que queda marcada", tarea.texto.includes("agente"));
+    // Ya no promete ninguna etiqueta, porque ya no la pone. Anunciarla era la
+    // mitad del fallo: el mensaje siguió diciéndolo después de dejar de
+    // hacerlo.
+    check("y no anuncia ninguna etiqueta", !tarea.texto.includes("etiqueta"));
 
     const fila = await withUser(ana, async (db) => {
       const { rows } = await db.query<{
@@ -124,9 +127,34 @@ async function main(): Promise<void> {
     check("en la columna correcta", fila?.columna === "Por hacer");
     check("con su responsable", fila?.responsable === "Ana Asistente");
     check("con su fecha", fila?.vence === "2026-09-15");
-    // La procedencia es la promesa que hace aceptable que un modelo escriba en
-    // el tablero de un equipo. Si esto falla, la promesa está rota.
-    check("y con la etiqueta de procedencia", fila?.etiquetas === "agente");
+    // LA PROCEDENCIA ES LA PROMESA que hace aceptable que un modelo escriba en
+    // el tablero de un equipo, y sigue entera — lo que cambió es dónde vive.
+    //
+    // Estaba en una etiqueta, y una etiqueta la quita cualquiera: como garantía
+    // nunca valió nada. Peor: en DevUP las etiquetas SON las áreas del tablero,
+    // así que la marca se colaba en el filtro y hacía que todo pareciera de un
+    // área llamada «agente», que no es un área ni la pidió nadie.
+    //
+    // Ahora se comprueban las dos mitades: que la tarea salga limpia de
+    // etiquetas, y que el registro de actividad —donde no se puede borrar—
+    // guarde quién lo pidió y que lo hizo un agente.
+    check("y sin ninguna etiqueta puesta a la fuerza", fila?.etiquetas === null);
+
+    const anotada = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ source: string; actor: string }>(
+        `select a.source, a.actor_id as actor
+           from activity a
+           join tasks t on t.id = a.subject_id
+          where t.workspace_id = $1 and a.subject_type = 'tarea'
+          order by a.at desc
+          limit 1`,
+        [uno],
+      );
+      return rows[0];
+    });
+
+    check("la procedencia queda en el registro, que no se borra", anotada?.source === "agente");
+    check("y junto a quien lo pidió", anotada?.actor === ana);
 
     console.log("\nCuando el nombre no basta");
     const nadie = await withUser(ana, (db) =>

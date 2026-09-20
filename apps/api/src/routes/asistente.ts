@@ -7,7 +7,6 @@ import { requireSession } from "../auth/plugin.js";
 import { type Db, withUser } from "../db/pool.js";
 import { forbidden, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { getDecryptedSecret } from "./connections.js";
-import { asegurarEtiqueta } from "./files.js";
 import { crearTareaEnDb, moverTareaEnDb } from "./tasks.js";
 // Lo que devuelven las herramientas va marcado como dato, igual que por la
 // puerta MCP: el modelo lo lee junto a la pregunta de la persona, y casi todo lo
@@ -114,8 +113,8 @@ solo lo que te confirmen — salvo que te lo pidan ya creado, y entonces las
 creas sin volver a preguntar. Cada tarea debe ser algo que una persona pueda
 terminar; no «hacer el módulo de pagos» sino los pasos en que eso se parte.
 
-Todo lo que crees queda con la etiqueta «agente». Dilo cuando crees algo, para
-que quien te lo pidió sepa que puede encontrarlo y deshacerlo en bloque.
+Todo lo que crees queda anotado en el registro de actividad como hecho por un
+agente, junto a quien te lo pidió. Ahí no se puede borrar y se puede consultar.
 
 Nunca borras nada: no tienes herramienta para eso, y si te lo piden dices que
 eso se hace a mano en el tablero.
@@ -126,15 +125,20 @@ mejor que un resumen amable.`;
 type Paso = { herramienta: string; entrada: unknown };
 
 /**
- * La etiqueta con la que queda marcado todo lo que escribe el asistente.
+ * AQUÍ HABÍA UNA ETIQUETA «agente», y todo lo que escribía el asistente la
+ * llevaba a la fuerza.
  *
- * Es el mismo nombre que usa la puerta MCP a propósito: lo que el equipo ve en
- * el tablero no debe depender de por dónde entró el agente. Y no es adorno —
- * es lo que permite ver de un vistazo que salió de un modelo, filtrarlo y
- * deshacerlo en bloque. Sin esa marca, dejar escribir a un modelo en el
- * tablero de otras personas no sería aceptable.
+ * El motivo era bueno: que se viera de un vistazo qué salió de un modelo. El
+ * sitio, no. Una etiqueta la quita cualquiera —así que nunca fue una garantía—
+ * y en DevUP las etiquetas son además las ÁREAS del tablero: la marca se colaba
+ * en el filtro y hacía que todo pareciera de un área llamada «agente», que no
+ * es un área ni la pidió nadie.
+ *
+ * La marca sigue entera donde no se puede borrar: `procedencia: "agente"` en el
+ * registro de actividad, junto a `actor_id`, quien lo pidió. Eso es lo que hace
+ * aceptable que un modelo escriba en el tablero de otras personas, y es
+ * estrictamente mejor: no se borra, se consulta y no ensucia nada.
  */
-const ETIQUETA_AGENTE = "agente";
 
 /** Un adjunto que alguna herramienta ha tocado, para que la pantalla lo pinte
  *  debajo de la respuesta. Es como el asistente «enseña» una imagen. */
@@ -490,8 +494,6 @@ export async function ejecutar(
         assigneeId = quien;
       }
 
-      const etiqueta = await asegurarEtiqueta(db, organizationId, ETIQUETA_AGENTE, "violet", userId);
-
       const tarea = await crearTareaEnDb(db, {
         workspaceId,
         columnId: columna.id,
@@ -499,7 +501,8 @@ export async function ejecutar(
         description: datos.data.detalle ?? "",
         assigneeId,
         dueDate: datos.data.vence ?? null,
-        tagIds: [etiqueta.id],
+        // Sin etiquetas. La procedencia va abajo, en el registro.
+        tagIds: [],
         autor: userId,
         // Lo pidió una persona, pero lo hizo el asistente. El registro guarda
         // las dos cosas para que la auditoría no le atribuya a nadie trabajo
@@ -511,9 +514,7 @@ export async function ejecutar(
       if (datos.data.responsable) extras.push(`para ${datos.data.responsable}`);
       if (datos.data.vence) extras.push(`vence el ${datos.data.vence}`);
       return {
-        texto:
-          `Creada «${datos.data.titulo}» ${extras.join(", ")}, con la etiqueta ` +
-          `«${ETIQUETA_AGENTE}».  [id ${String(tarea.id)}]`,
+        texto: `Creada «${datos.data.titulo}» ${extras.join(", ")}.  [id ${String(tarea.id)}]`,
         adjuntos: [],
       };
     }
