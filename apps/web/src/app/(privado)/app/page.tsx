@@ -5,30 +5,32 @@ import { Suspense, useEffect } from "react";
 import { toast } from "sonner";
 import { LogoAnimado } from "@/components/marca/LogoAnimado";
 import { Rotulo } from "@/components/ui/Superficies";
-import { type Organization, type Workspace, api } from "@/lib/api";
-import { leerUltimoEspacio } from "@/lib/ultimo-espacio";
 
 /**
- * `/app` ya no es una pantalla: es la puerta.
+ * `/app` no es una pantalla: es la puerta. Y la puerta da a tu casa.
  *
- * ANTES ERA UN MENÚ DE MENÚS. Lo primero que veía quien entraba era una lista de
- * organizaciones, cada una repitiendo los mismos seis botones — con tres
- * organizaciones, dieciocho botones con seis nombres. Una lista de sitios a los
- * que ir, en vez del trabajo. Y como era el aterrizaje obligatorio, cambiar de
- * espacio de trabajo pasaba siempre por aquí: volver al principio y volver a
- * entrar, que es la ventana dentro de la ventana.
+ * ANTES ERA UN MENÚ DE MENÚS —una lista de organizaciones repitiendo seis
+ * botones cada una—, y de ahí se pasó al otro extremo: entrar te metía directo
+ * en el último espacio que hubieras abierto, leyéndolo del navegador. Era
+ * cómodo para SEGUIR y no servía para EMPEZAR, y además se saltaba los dos
+ * niveles de arriba: la portada personal y la organización solo se veían si
+ * las buscabas.
  *
- * Ahora entrar te deja donde estabas. La lista sigue existiendo, con nombre
- * propio, en `/app/organizaciones`: es donde se crean organizaciones y espacios
- * y se invita a gente, y ahí sí es el contenido correcto.
+ * DEVUP ANIDA: persona, organización, espacio. Una carpeta que se abre enseña
+ * lo que tiene dentro, y se entra por la raíz. Así que entrar aterriza en tu
+ * casa —tus organizaciones, tu gente, lo que te espera— y desde ahí se baja.
  *
- * POR QUÉ LA DECISIÓN SE TOMA AQUÍ Y NO EN EL SERVIDOR. Lo último que se abrió
- * es de este navegador, no de la cuenta: la misma persona en el portátil y en
- * el ordenador de la oficina está en cosas distintas, y guardarlo en el
- * servidor haría que uno mandara sobre el otro. Por eso vive en el navegador.
- * Y por eso no se valida antes de usarlo: validar cuesta una ronda de
- * peticiones en el gesto más repetido de la aplicación, y el caso raro ya está
- * cubierto río abajo.
+ * LO QUE ESO CUESTA, DICHO: dos clics más cuando lo que querías era seguir
+ * donde estabas, en el gesto más repetido de la aplicación. Se paga con el
+ * atajo de la portada: «seguir donde estabas» sigue leyendo el mismo recuerdo
+ * del navegador, así que el camino rápido no desaparece — deja de ser
+ * obligatorio.
+ *
+ * Y YA NO SE PREGUNTA NADA ANTES DE REDIRIGIR. La versión anterior pedía las
+ * organizaciones y sus espacios para decidir a dónde ir: una ronda de
+ * peticiones por organización en cada apertura. La portada ya pide lo suyo al
+ * montarse, y el caso de quien no tiene ninguna organización lo contesta ella
+ * con su propio hueco vacío, que es donde se crea la primera.
  */
 export default function PuertaApp() {
   return (
@@ -66,51 +68,7 @@ function Puerta() {
   }, [params]);
 
   useEffect(() => {
-    let vigente = true;
-
-    // Con recuerdo se va directo, SIN PREGUNTAR NADA. Comprobar antes que ese
-    // espacio sigue siendo tuyo cuesta una petición más otra por organización,
-    // y eso es un giro visible cada vez que se abre la aplicación — el gesto
-    // más repetido que hay. El caso raro —te sacaron del espacio, o se borró—
-    // no queda desatendido: el armazón del espacio ya lo cuenta con su salida
-    // a la lista. Se paga la vez que falla, no todas las que funciona.
-    const recordado = leerUltimoEspacio();
-    if (recordado) {
-      router.replace(`/app/w/${recordado}`);
-      return;
-    }
-
-    void (async () => {
-      const { organizations } = await api
-        .get<{ organizations: Organization[] }>("/organizations")
-        .catch(() => ({ organizations: [] as Organization[] }));
-
-      // Sin organizaciones no hay nada que abrir: la lista es, esta vez sí, lo
-      // que hay que ver — es donde se crea la primera.
-      if (!organizations.length) {
-        if (vigente) router.replace("/app/organizaciones");
-        return;
-      }
-
-      const listas = await Promise.all(
-        organizations.map((o) =>
-          api
-            .get<{ workspaces: Workspace[] }>(`/organizations/${o.id}/workspaces`)
-            .catch(() => ({ workspaces: [] as Workspace[] })),
-        ),
-      );
-      const espacios = listas.flatMap((l) => l.workspaces);
-      if (!vigente) return;
-
-      // Sin recuerdo —primera vez, o navegador nuevo— se entra al primero que
-      // haya. Y si no hay ninguno, a la lista: ahí es donde se crea.
-      const destino = espacios[0] ?? null;
-      router.replace(destino ? `/app/w/${destino.id}` : "/app/organizaciones");
-    })();
-
-    return () => {
-      vigente = false;
-    };
+    router.replace("/app/inicio");
   }, [router]);
 
   return <Esperando />;
