@@ -75,7 +75,7 @@ export default function IntegracionesPage() {
       titulo="Integraciones"
       rotulo="Lo que este workspace conecta, y lo que le costaría menos si conectara"
       icono={<Plug size={20} />}
-      ancho="xl"
+      ancho="trabajo"
     >
       <div className="mb-5 flex gap-1 border-b border-line">
         {PESTANAS.map((p) => (

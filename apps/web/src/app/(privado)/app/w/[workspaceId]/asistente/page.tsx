@@ -22,7 +22,7 @@ export default function AsistentePage() {
       titulo="Asistente"
       rotulo="pregúntale por tu trabajo"
       icono={<Bot size={16} />}
-      ancho="lg"
+      ancho="lectura"
       junto={<Chip tono="accent">tu propio modelo</Chip>}
     >
       <Asistente workspaceId={workspaceId} />

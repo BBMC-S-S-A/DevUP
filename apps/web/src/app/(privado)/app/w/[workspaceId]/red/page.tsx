@@ -158,7 +158,7 @@ export default function RedPage() {
       titulo="Red del proyecto"
       rotulo="qué está enlazado con qué"
       icono={<Network size={20} />}
-      ancho="lg"
+      ancho="lienzo"
       acciones={
         camino.length > 0 ? (
           <Boton

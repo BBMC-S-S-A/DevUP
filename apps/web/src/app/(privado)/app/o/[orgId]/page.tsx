@@ -42,7 +42,7 @@ export default function OrganizacionPage() {
       titulo="Espacios de trabajo"
       rotulo="dónde se trabaja dentro de esta organización"
       icono={<Users size={18} />}
-      ancho="lg"
+      ancho="trabajo"
     >
       {espacios.error ? (
         <Fallo onReintentar={() => void espacios.recargar()}>{espacios.error}</Fallo>

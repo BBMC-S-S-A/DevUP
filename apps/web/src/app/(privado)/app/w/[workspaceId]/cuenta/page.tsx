@@ -63,7 +63,7 @@ export default function CuentaPage() {
       titulo="Mi cuenta"
       rotulo="lo tuyo, no lo de la organización"
       icono={<KeyRound size={16} />}
-      ancho="lg"
+      ancho="lectura"
     >
       <div className="space-y-4">
         <Perfil />

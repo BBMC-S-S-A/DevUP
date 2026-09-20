@@ -101,7 +101,7 @@ export default function DevCallPage() {
       titulo="DevCall"
       rotulo="las salas de este espacio"
       icono={<PhoneCall size={18} />}
-      ancho="lg"
+      ancho="trabajo"
     >
       {canales.error ? (
         <Fallo onReintentar={() => void canales.recargar()}>{canales.error}</Fallo>

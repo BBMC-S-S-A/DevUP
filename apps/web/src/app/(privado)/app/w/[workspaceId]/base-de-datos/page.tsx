@@ -104,7 +104,7 @@ export default function BaseDeDatosPage() {
       titulo="Base de datos"
       rotulo="Las migraciones del repositorio, y la base de cada quien"
       icono={<Database size={20} />}
-      ancho="xl"
+      ancho="trabajo"
       acciones={
         pestana === "migraciones" && lista.length > 1 ? (
           <Desplegable

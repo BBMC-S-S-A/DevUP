@@ -177,7 +177,7 @@ export default function GithubPage() {
       titulo="GitHub"
       rotulo="Conector · telemetría de repositorios"
       icono={<Github size={20} />}
-      ancho="completo"
+      ancho="trabajo"
       acciones={
           connection && (
             <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/50 py-1.5 pl-3.5 pr-1.5">

@@ -152,7 +152,7 @@ export default function InicioPage() {
               }${vencidas > 0 ? ` · ${vencidas} vencida${vencidas === 1 ? "" : "s"}` : ""}`
       }
       icono={<Home size={20} />}
-      ancho="xl"
+      ancho="trabajo"
       acciones={<SeguirDondeEstabas />}
     >
       {inicio.cargando || !inicio.datos ? (
