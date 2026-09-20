@@ -114,6 +114,9 @@ async function main(): Promise<void> {
       ).rows[0]!.id;
 
     await tarea(abierto, primera.id, "Solo apuntada", ana);
+    // Sin responsable y en la primera columna: el caso que `sinDuenio` existe
+    // para sacar a la superficie, y justo el que `enMarcha` descarta.
+    await tarea(abierto, primera.id, "Nadie la ha cogido", null);
     await tarea(abierto, enMedio.id, "Empezada de verdad", carla);
     const vieja = await tarea(abierto, enMedio.id, "Lleva un mes quieta", ana);
     await admin.query("update tasks set created_at = now() - interval '30 days' where id = $1", [
@@ -126,6 +129,7 @@ async function main(): Promise<void> {
       (c) => !c.is_terminal && c.position > colsCerrado[0]!.position,
     )!;
     await tarea(cerrado, enMedioCerrado.id, "El secreto de Ana", ana);
+    await tarea(cerrado, colsCerrado[0]!.id, "Huérfana en el espacio cerrado", null);
 
     // La MISMA función que usa la ruta, no una copia del SQL.
     type Respuesta = {
@@ -133,6 +137,7 @@ async function main(): Promise<void> {
       gente: { nombre: string; oficio: string | null; permiso: string; enQue: string[] }[];
       enMarcha: { titulo: string; espacio: string }[];
       atascadas: { titulo: string }[];
+      sinDuenio: { titulo: string; espacio: string }[];
     };
 
     const pedir = (quien: string): Promise<Respuesta> =>
@@ -185,6 +190,20 @@ async function main(): Promise<void> {
     check(
       "y la recién tocada no",
       !deAna.atascadas.some((t) => t.titulo === "Empezada de verdad"),
+    );
+
+    console.log("\nLo que no tiene dueño");
+    check(
+      "una tarea sin responsable sale, aunque esté en la primera columna",
+      deAna.sinDuenio.some((t) => t.titulo === "Nadie la ha cogido"),
+    );
+    check(
+      "y no sale ninguna que sí tenga responsable",
+      !deAna.sinDuenio.some((t) => t.titulo === "Empezada de verdad"),
+    );
+    check(
+      "a Carla no se le cuela la huérfana del espacio al que no llega",
+      !deCarla.sinDuenio.some((t) => t.titulo === "Huérfana en el espacio cerrado"),
     );
 
     console.log("\nEl oficio, que no es el permiso");
