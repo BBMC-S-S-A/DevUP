@@ -211,7 +211,7 @@ export function NavegacionOrganizacion({
         <ItemNav
           href={`${base}/instalacion`}
           icono={<Server size={14} />}
-          indice={indiceInicial + pantallas.length + 3}
+          indice={indiceInicial + pantallas.length + 2}
           activo={pathname === `${base}/instalacion`}
         >
           Instalación
