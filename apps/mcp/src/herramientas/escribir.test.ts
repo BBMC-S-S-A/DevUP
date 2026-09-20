@@ -9,7 +9,8 @@
  *
  *   npm run test:mcp
  */
-import { ETIQUETA_AGENTE, campoDeFicha, marcarHecha, resolverColumna } from "./escribir.js";
+import { readFileSync } from "node:fs";
+import { campoDeFicha, marcarHecha, resolverColumna } from "./escribir.js";
 import type { ClienteApi } from "../api.js";
 
 /** Las comprobaciones de abajo se contestan ANTES de salir a la red, que es
@@ -133,7 +134,23 @@ const notaSinTexto = await marcarHecha(clienteQueNoSeUsa, {
 check("una nota sin texto, igual", notaSinTexto.includes("prueba_nota"));
 
 console.log("\nProcedencia");
-check("la etiqueta del agente es la que espera el tablero", ETIQUETA_AGENTE === "agente");
+/**
+ * AQUÍ SE COMPROBABA QUE LA ETIQUETA «agente» FUERA LA QUE ESPERA EL TABLERO.
+ *
+ * Ya no hay etiqueta. La procedencia vive en el registro de actividad, que no
+ * se puede borrar y no se cuela en el filtro de áreas del tablero. Así que lo
+ * que se fija ahora es lo contrario: que este módulo no la vuelva a poner por
+ * su cuenta, y que no le prometa al agente una etiqueta que ya no existe.
+ *
+ * Se mira el fuente y no el comportamiento porque poner la etiqueta era una
+ * llamada a la API, y estas pruebas corren sin API. Una comprobación que lee
+ * el fuente es tosca, pero falla el día que alguien vuelva a escribirlo — que
+ * es justo lo que hace falta aquí: ya se escribió una vez el comentario
+ * diciendo que se había quitado sin quitarlo.
+ */
+const fuente = readFileSync(new URL("./escribir.ts", import.meta.url), "utf8");
+check("no se crea ninguna etiqueta de procedencia", !fuente.includes(String.raw`name: "agente"`));
+check("ni se anuncia una que no se pone", !fuente.includes("con la etiqueta"));
 
 console.log(`\n${total - fallos} comprobaciones correctas, ${fallos} fallidas`);
 if (fallos > 0) process.exit(1);
