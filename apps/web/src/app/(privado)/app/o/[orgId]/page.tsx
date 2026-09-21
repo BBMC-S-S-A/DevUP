@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CircleDot, Hand, Hourglass, Loader2, Plus, UserRound, Users } from "lucide-react";
+import { Building2, Hand, Hourglass, Loader2, Plus, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,13 +9,14 @@ import { Boton } from "@/components/ui/Boton";
 import { Field } from "@/components/ui/Field";
 import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
-import { Avatar } from "@/components/perfil/Avatar";
+import { Miembros } from "@/components/organizacion/Miembros";
 import { Marcador } from "@/components/puntos/Marcador";
 import { IconoDeTipo, tonoDePrioridad } from "@/components/tasks/ficha";
 import { fechaCorta } from "@/lib/fechas";
 import { useOrgId } from "@/lib/workspace-context";
 import { useRecurso } from "@/lib/datos";
-import { ApiError, api, type TipoDeTarea } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { ApiError, api, type OrganizationMember, type TipoDeTarea } from "@/lib/api";
 
 /**
  * La casa de la organización: cómo va, quién la mueve y qué no tiene dueño.
@@ -76,6 +77,12 @@ type Espacio = {
   ultimoMovimiento: string | null;
 };
 
+/**
+ * El panorama sigue trayendo a la gente y ya no se pinta con ella: la lista la
+ * pone `Miembros`, que además sabe invitar y retirar. Se deja declarado porque
+ * describe lo que contesta la API, y quitarlo haría que la siguiente pantalla
+ * que lo necesite tenga que volver a leer el SQL para saber qué llega.
+ */
 type Persona = {
   id: string;
   nombre: string;
@@ -107,13 +114,6 @@ type Panorama = {
   sinDuenio: Tarea[];
 };
 
-/** Lo que cada cual eligió decir de sí mismo. Sin elegir, no se inventa. */
-const ESTADO: Record<NonNullable<Persona["estado"]>, string> = {
-  available: "Disponible",
-  busy_open: "Ocupado, se le puede escribir",
-  do_not_disturb: "No molestar",
-};
-
 export default function OrganizacionPage() {
   const orgId = useOrgId();
   const panorama = useRecurso<Panorama>(`/organizations/${orgId}/panorama`);
@@ -135,7 +135,7 @@ export default function OrganizacionPage() {
         <div className="space-y-7">
           <SinDuenio tareas={datos.sinDuenio} />
 
-          <Gente gente={datos.gente} orgId={orgId} />
+          <LaGente orgId={orgId} />
 
           <div className="grid gap-5 lg:grid-cols-2">
             <EnMarcha tareas={datos.enMarcha} />
@@ -239,46 +239,41 @@ function SinDuenio({ tareas }: { tareas: Tarea[] }) {
   );
 }
 
-function Gente({ gente, orgId }: { gente: Persona[]; orgId: string }) {
-  return (
-    <Seccion titulo="La gente" cuantas={gente.length}>
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-        {gente.map((p) => (
-          <Tarjeta key={p.id} className="flex items-start gap-3 p-3.5">
-            <Avatar userId={p.id} nombre={p.nombre} tamano={38} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-ink">{p.nombre}</p>
-              {/* El oficio, nunca el permiso: `member` es lo que puede hacer,
-                  no a lo que se dedica. Y el de ESTA organización (0048): una
-                  persona no hace lo mismo en todas. */}
-              <p className="truncate text-[11px] text-faint">{p.oficio ?? "sin decir"}</p>
-              {p.estado && (
-                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
-                  <CircleDot size={10} className="shrink-0 text-faint" />
-                  {ESTADO[p.estado]}
-                </p>
-              )}
-              {p.enQue.length > 0 && (
-                <p className="mt-1.5 truncate text-[11px] text-faint" title={p.enQue.join(", ")}>
-                  en {p.enQue.join(", ")}
-                </p>
-              )}
-            </div>
-          </Tarjeta>
-        ))}
-      </div>
+/**
+ * La gente, con lo que se puede hacer con ella.
+ *
+ * AQUÍ HABÍA TARJETAS DE SOLO LECTURA, dibujadas con lo que trae el panorama,
+ * y debajo un enlace a Ajustes para invitar o retirar a alguien. Enseñaba a la
+ * gente en el sitio correcto y mandaba a otra pantalla para tocarla, que es la
+ * mitad de un gesto.
+ *
+ * Ahora es el mismo componente que usa Ajustes: se extrajo de allí en vez de
+ * copiarse, porque dos copias del alta de miembros se separan y la que se
+ * queda atrás es la que pierde una comprobación de permisos — que aquí
+ * significa dar de alta a alguien como administrador sin que nadie lo revise.
+ *
+ * LO QUE SE PIERDE AL CAMBIARLAS, dicho: las tarjetas del panorama decían «en
+ * qué anda» cada cual, cruzando todos los espacios. Esto no lo dice en la
+ * lista — lo dice al pulsar a alguien, en su ficha, junto a lo último que ha
+ * tocado. Un dato menos de un vistazo a cambio de poder hacer algo con él.
+ */
+function LaGente({ orgId }: { orgId: string }) {
+  const { user } = useSession();
+  const equipo = useRecurso<{ members: OrganizationMember[] }>(
+    `/organizations/${orgId}/members`,
+  );
+  const members = equipo.datos?.members ?? null;
+  const yo = members?.find((m) => m.userId === user?.id);
+  const administro = yo ? yo.role === "owner" || yo.role === "admin" : false;
 
-      {/* Invitar y retirar siguen viviendo en los ajustes. La salida va aquí,
-          que es donde se busca, hasta que se muden. */}
-      <Link
-        href={`/app/o/${orgId}/ajustes`}
-        className="presionable mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg border border-line
-          bg-raised/60 px-3 text-xs text-ink hover:border-line-strong hover:bg-raised"
-      >
-        <UserRound size={13} className="shrink-0 text-faint" />
-        Invitar o retirar a alguien
-      </Link>
-    </Seccion>
+  return (
+    <Miembros
+      orgId={orgId}
+      members={members}
+      yo={user?.id ?? null}
+      administro={administro}
+      onChange={equipo.recargar}
+    />
   );
 }
 
