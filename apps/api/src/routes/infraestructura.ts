@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { fetchDespliegues } from "../connectors/despliegues.js";
-import { dispararWorkflow } from "../connectors/github.js";
+import { dispararWorkflow, distanciaHastaLaRama } from "../connectors/github.js";
 import { proveedorPara } from "../connectors/proveedores.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badRequest, notFound, parseBody, parseParams, requireUser } from "../lib/http.js";
@@ -150,6 +150,101 @@ export async function infraestructuraRoutes(app: FastifyInstance): Promise<void>
       );
       return { environments: rows };
     });
+  });
+
+  /**
+   * ¿QUÉ ESTÁ CORRIENDO AHÍ, Y VA POR DETRÁS? (ARQ-04)
+   *
+   * Se le pregunta al entorno, no a una tabla. DevUP no despliega estos
+   * entornos —esa es la decisión de este archivo— así que lo único que sabe de
+   * verdad es lo que el propio servicio conteste en su `/health`. Una columna
+   * en la base diría lo que DevUP CREE que se desplegó, que es exactamente el
+   * dato que se queda viejo sin avisar.
+   *
+   * NO ES AUTOMÁTICA. Cada llamada sale a internet una vez por entorno y otra
+   * a GitHub: pedirla sola en cada visita a la pantalla gastaría cupo por
+   * nada. La pide quien quiere saberlo.
+   *
+   * CADA ENTORNO FALLA POR SU CUENTA. Uno caído, o uno cuya URL es la de la web
+   * y no la de la API, no puede tumbar la respuesta de los demás: eso deja la
+   * pantalla en blanco justo cuando más falta hace.
+   */
+  app.get("/workspaces/:workspaceId/environments/version", async (request) => {
+    const userId = requireUser(request);
+    const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
+
+    const { entornos, repo } = await withUser(userId, async (db) => {
+      const { rows } = await db.query<{ id: string; name: string; url: string | null }>(
+        "select id, name, url from environments where workspace_id = $1 order by name",
+        [workspaceId],
+      );
+      // Con qué rama se compara: el primer repositorio del espacio. Si no hay
+      // ninguno se contesta igual con lo que corre, sin la comparación.
+      const { rows: repos } = await db.query<{ full_name: string; connection_id: string | null }>(
+        "select full_name, connection_id from github_repos where workspace_id = $1 order by created_at limit 1",
+        [workspaceId],
+      );
+      const r = repos[0];
+      return {
+        entornos: rows,
+        repo: r
+          ? {
+              fullName: r.full_name,
+              token: r.connection_id ? await getDecryptedSecret(db, r.connection_id) : null,
+            }
+          : null,
+      };
+    });
+
+    const versiones = await Promise.all(
+      entornos.map(async (entorno) => {
+        if (!entorno.url) {
+          return { id: entorno.id, name: entorno.name, estado: "sin-url" as const };
+        }
+        let salud: { commit?: unknown; commitCorto?: unknown; entorno?: unknown; region?: unknown };
+        try {
+          const respuesta = await fetch(`${entorno.url.replace(/\/$/, "")}/health`, {
+            signal: AbortSignal.timeout(8000),
+            headers: { accept: "application/json" },
+          });
+          if (!respuesta.ok) throw new Error(String(respuesta.status));
+          salud = (await respuesta.json()) as typeof salud;
+        } catch {
+          // Caído, o su URL no es la de una API de DevUP. Las dos cosas se
+          // cuentan igual: no contestó.
+          return { id: entorno.id, name: entorno.name, estado: "no-contesta" as const };
+        }
+
+        const commit = typeof salud.commit === "string" ? salud.commit : null;
+        if (!commit) {
+          // Contesta, pero es una versión anterior a esto, o no lo sabe.
+          return {
+            id: entorno.id,
+            name: entorno.name,
+            estado: "sin-commit" as const,
+            region: typeof salud.region === "string" ? salud.region : null,
+          };
+        }
+
+        let distancia = null;
+        if (repo) {
+          distancia = await distanciaHastaLaRama(repo.token, repo.fullName, commit).catch(() => null);
+        }
+
+        return {
+          id: entorno.id,
+          name: entorno.name,
+          estado: "responde" as const,
+          commit,
+          commitCorto: typeof salud.commitCorto === "string" ? salud.commitCorto : commit.slice(0, 7),
+          entornoQueDice: typeof salud.entorno === "string" ? salud.entorno : null,
+          region: typeof salud.region === "string" ? salud.region : null,
+          distancia,
+        };
+      }),
+    );
+
+    return { versiones, repositorio: repo?.fullName ?? null };
   });
 
   app.get("/environments/:envId/deployments", async (request) => {

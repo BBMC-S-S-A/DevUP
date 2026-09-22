@@ -600,3 +600,60 @@ export async function dispararWorkflow(
     throw new Error(`GitHub respondió ${response.status} al disparar el workflow: ${detalle.slice(0, 200)}`);
   }
 }
+
+/**
+ * Qué distancia hay entre lo que está desplegado y la rama principal (ARQ-04).
+ *
+ * LO CALCULA GITHUB, NO NOSOTROS, y esa es la decisión. `compare` conoce el
+ * grafo entero: sabe si el commit desplegado es un ancestro de la rama, si se
+ * fue por otra rama, o si ya no existe porque alguien reescribió la historia.
+ * Contar commits por nuestra cuenta —bajar los últimos N y buscar el sha—
+ * daría un número que parece bueno y miente en cuanto hay una fusión de por
+ * medio, que es siempre.
+ *
+ * `behind` es lo que se enseña: cuántos commits de la rama principal NO están
+ * desplegados. `ahead` casi siempre es 0, y cuando no lo es dice algo
+ * interesante: lo desplegado trae cosas que la rama no tiene, o sea que salió
+ * de otro sitio.
+ *
+ * DEVUELVE `null` EN VEZ DE REVENTAR cuando el commit no existe en el
+ * repositorio. Pasa de verdad: un despliegue viejo cuya rama se borró, o una
+ * historia reescrita. Es «no lo sé», no un fallo, y la pantalla tiene que poder
+ * decir eso.
+ */
+export type Distancia = {
+  ramaPrincipal: string;
+  /** Commits de la rama principal que no están desplegados. */
+  detras: number;
+  /** Commits desplegados que no están en la rama principal. */
+  delante: number;
+};
+
+export async function distanciaHastaLaRama(
+  token: string | null,
+  fullName: string,
+  commitDesplegado: string,
+): Promise<Distancia | null> {
+  if (!/^[0-9a-f]{7,40}$/i.test(commitDesplegado)) return null;
+
+  const repo = (await get(`${API}/repos/${fullName}`, token)) as { default_branch: string };
+  const rama = repo.default_branch;
+
+  try {
+    const comparacion = (await get(
+      `${API}/repos/${fullName}/compare/${encodeURIComponent(commitDesplegado)}...${encodeURIComponent(rama)}`,
+      token,
+    )) as { ahead_by: number; behind_by: number };
+    return {
+      ramaPrincipal: rama,
+      // Se comparó «desde lo desplegado hasta la rama», así que lo que GitHub
+      // llama `ahead_by` es lo que a la rama le sobra respecto al despliegue:
+      // justo lo que aquí se llama «detrás». Invertirlo es el error fácil.
+      detras: comparacion.ahead_by,
+      delante: comparacion.behind_by,
+    };
+  } catch {
+    // 404 cuando el commit ya no está en el repositorio. Ver la cabecera.
+    return null;
+  }
+}
