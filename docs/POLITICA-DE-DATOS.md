@@ -238,7 +238,22 @@ Qué se borra y cuándo:
   (`scripts/probar-restauracion.sh`). No tenemos medido cuánto tarda una
   restauración completa.
 - **Antes de cambiar la estructura de la base** en un despliegue, se hace un
-  volcado adicional, aparte del diario.
+  volcado adicional, aparte del diario. Vive 14 días y es la red de seguridad de
+  esa migración concreta.
+
+  **Este volcado se subía SIN CIFRAR, y se corrigió el 22-sep-2026.** Lo dice
+  aquí y no en un rincón porque el punto anterior —«cada copia se cifra antes de
+  salir del servidor»— era verdad del diario y no de este, que es la misma base.
+  No estaba al alcance de cualquiera de internet (descargar un artefacto exige
+  autenticarse; sin credenciales contesta 401), pero salía del servidor en claro
+  y quedaba en el almacenamiento de un repositorio público. Ahora se cifra con
+  la misma clave y el mismo método que el diario, y si no hay clave con la que
+  cifrar **no se sube**: el despliegue sigue y se avisa en el registro, porque
+  parar de publicar por una red de seguridad sería peor que quedarse sin ella un
+  día.
+
+  Quedan artefactos de ese tipo creados antes del arreglo, del 13 al 16 de
+  septiembre. **Hay que borrarlos**, y esa parte está pendiente.
 
 ## 10. Incidentes — **No**
 

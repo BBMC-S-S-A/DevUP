@@ -291,12 +291,57 @@ jobs:
             exit 1
           fi
 
-      - name: Guardar el volcado previo
+      # SE CIFRA ANTES DE SUBIRLO, IGUAL QUE EL DIARIO. Esto faltaba y era el
+      # agujero: `respaldo.yml` cifra a propósito porque «este repositorio es
+      # público y un volcado sin cifrar sería publicar la base de datos
+      # entera», y este volcado —que es la MISMA base— se subía tal cual. No
+      # estaba al alcance de cualquiera de internet (bajar un artefacto pide
+      # autenticarse), pero salía del servidor sin cifrar y quedaba en el
+      # almacenamiento de un repositorio público durante catorce días.
+      #
+      # SI NO HAY CON QUÉ CIFRAR, NO SE SUBE — y el despliegue sigue. Aquí no
+      # se puede hacer lo que hace el diario (negarse a correr): esto es la
+      # ruta de despliegue, y pararla dejaría de publicar por una red de
+      # seguridad. El volcado se toma igual, porque su comprobación de tamaño
+      # es la que detiene una migración contra una base que no contesta; lo
+      # único que se pierde es el punto de vuelta atrás descargable, y se dice
+      # en voz alta en vez de callarlo.
+      #
+      # Para abrirlo, lo mismo que el diario:
+      #   gpg --decrypt --batch --passphrase "$BACKUP_PASSPHRASE" \
+      #       -o antes.dump antes-de-migrar-AAAAMMDD-HHMMSSZ.dump.gpg
+      - name: Cifrar el volcado previo
+        id: cifrado
         if: steps.pendientes.outputs.hay == 'si'
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::warning::Sin BACKUP_PASSPHRASE no se sube el volcado previo: sin cifrar" \
+                 "acabaría en el almacenamiento de un repositorio público. El despliegue sigue," \
+                 "pero hoy no hay punto de vuelta atrás descargable."
+            rm -f "antes-de-migrar-$SELLO.dump"
+            echo "subir=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # La contraseña por descriptor de archivo y no en la línea de
+          # comandos: los argumentos de un proceso los ve cualquiera que mire
+          # la tabla de procesos.
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --symmetric \
+            --cipher-algo AES256 \
+            --passphrase-fd 0 \
+            --output "antes-de-migrar-$SELLO.dump.gpg" \
+            "antes-de-migrar-$SELLO.dump"
+          rm -f "antes-de-migrar-$SELLO.dump"
+          ls -l "antes-de-migrar-$SELLO.dump.gpg"
+          echo "subir=si" >> "$GITHUB_OUTPUT"
+
+      - name: Guardar el volcado previo
+        if: steps.pendientes.outputs.hay == 'si' && steps.cifrado.outputs.subir == 'si'
         uses: actions/upload-artifact@v4
         with:
           name: antes-de-migrar-${{ env.SELLO }}
-          path: antes-de-migrar-${{ env.SELLO }}.dump
+          path: antes-de-migrar-${{ env.SELLO }}.dump.gpg
           retention-days: 14
           if-no-files-found: error
 
