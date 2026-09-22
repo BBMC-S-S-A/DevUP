@@ -29,7 +29,7 @@ Hasta entonces no hay que leerlas como garantía.
 | 8 | Retención y borrado | Parcial |
 | 9 | Copias y recuperación | Parcial |
 | 10 | Incidentes | No |
-| 11 | Ubicación de los datos | Por confirmar |
+| 11 | Ubicación de los datos | Sí · Ámsterdam (UE), medido |
 | 12 | Registro de auditoría | Parcial |
 
 **Lo más importante que hay que saber hoy:**
@@ -40,7 +40,7 @@ Hasta entonces no hay que leerlas como garantía.
    `delete` falla con «cannot execute DELETE in a read-only transaction». Ver la
    pregunta 3.
 2. **No existe todavía una forma de borrar tu cuenta.**
-3. **Los datos están, casi con seguridad, fuera de Colombia.** Ver pregunta 11.
+3. **Los datos están fuera de Colombia: en Ámsterdam.** Confirmado el 22-sep preguntándoselo al servidor. Ver pregunta 11.
 
 ---
 
@@ -267,17 +267,34 @@ Proponemos este compromiso, **pendiente de aprobar por el equipo**:
 
 Hasta que se apruebe, no es un compromiso.
 
-## 11. Ubicación de los datos — **Por confirmar**
+## 11. Ubicación de los datos — **Sí, y es Ámsterdam**
 
 | Qué | Dónde |
 |---|---|
-| API, tiempo real, base de datos y almacén de archivos | Railway |
+| API y tiempo real | Railway, región **`ams`** (Ámsterdam, Países Bajos) |
+| Base de datos y almacén de archivos | Railway, **misma región por confirmar** |
 | Web | Cloudflare, que la sirve desde muchos países |
 | Copias de seguridad | GitHub |
 | Contenido que pasa por el asistente | El proveedor de IA que elijas |
 
-**Por confirmar** en qué región de Railway está la base. **Railway no tiene
-región en Colombia**, así que tus datos se guardan fuera del país.
+**Confirmado el 22-sep-2026, y preguntándoselo al servidor en vez de leyendo un
+panel.** Desde ese día `/health` dice en qué región corre, así que la respuesta
+se puede volver a comprobar en cualquier momento:
+
+```
+curl -s https://api.hytrex.co/health
+{"status":"ok", …, "entorno":"production", "region":"ams"}
+```
+
+Los dos servicios que ejecutan nuestro código —la API y el de tiempo real—
+contestan `ams`. La región de Postgres y del almacén **no se puede leer así**,
+porque no corren código nuestro; Railway no la expone en las variables ni en su
+CLI, y hay que mirarla en su panel. Lo normal es que sea la misma del proyecto,
+pero mientras no se compruebe se dice que falta comprobarlo en vez de darlo por
+hecho.
+
+**Tus datos están en la Unión Europea, no en Colombia.** Railway no tiene región
+en Colombia.
 
 Para datos personales de personas en Colombia (Ley 1581 de 2012), eso es una
 transferencia internacional, y tiene requisitos propios. **No somos asesores
