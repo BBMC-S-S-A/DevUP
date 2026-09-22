@@ -232,6 +232,31 @@ const schema = z.object({
    * Se enciende a mano, después de montar el volumen y comprobarlo.
    */
   REPOS_ALOJADOS: bool("false"),
+
+  /**
+   * Qué módulos NO salen en el menú de esta instalación (lista separada por
+   * comas). Vacío —lo normal— significa que salen todos.
+   *
+   * SE APAGA LO QUE SOBRA, NO SE ENCIENDE LO QUE HACE FALTA, y esa es la
+   * diferencia con `REPOS_ALOJADOS`. Aquél viene apagado porque sin un volumen
+   * no funciona: encenderlo es una decisión de infraestructura. Estos módulos
+   * funcionan hoy y los está usando gente, así que el valor por defecto que «no
+   * rompe nada» es que sigan estando. Recortar el menú para el MVP es una
+   * decisión de producto que se toma poniendo esta variable, no algo que ocurra
+   * solo al desplegar.
+   *
+   * APAGAR NO BORRA. La ruta sigue viva y quien tenga el enlace la usa igual:
+   * lo único que desaparece es la entrada del menú. Es lo contrario de quitar
+   * el código, que obligaría a devolverlo para probar si algo hacía falta.
+   *
+   * POR INSTALACIÓN Y NO POR ORGANIZACIÓN. Por organización pide una migración
+   * y una pantalla para administrarla; para recortar la navegación del MVP eso
+   * es construir el mecanismo antes de saber si la decisión se sostiene. Si
+   * algún día dos organizaciones de la misma instalación necesitan menús
+   * distintos, esto se sustituye sin que la web se entere: lo que consume es
+   * `capacidades`, no la variable.
+   */
+  MODULOS_APAGADOS: z.string().default(""),
   S3_BUCKET: z.string().min(1),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
@@ -297,6 +322,63 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+/**
+ * Los módulos que se pueden quitar del menú, y las claves con las que se
+ * nombran.
+ *
+ * SON LAS DE LAS RUTAS, a propósito: `devverse` es `/app/w/:id/devverse`. Un
+ * segundo juego de nombres —`mundo`, `oficina`— obligaría a mantener una tabla
+ * de equivalencias y a que alguien la consultara para saber qué apagó.
+ *
+ * Y ES UNA LISTA CERRADA para que un nombre mal escrito falle al arrancar en
+ * vez de no hacer nada. Apagar un módulo y que siga saliendo es el fallo que
+ * nadie investiga: se supone que la variable no llegó, se reinicia, y sigue
+ * igual.
+ */
+export const MODULOS_APAGABLES = [
+  "devverse",
+  "mesa",
+  "ventas",
+  "noticias",
+  "asistente",
+] as const;
+export type ModuloApagable = (typeof MODULOS_APAGABLES)[number];
+
+export const modulosApagados: ReadonlySet<string> = new Set(
+  env.MODULOS_APAGADOS.split(",")
+    .map((m) => m.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+/**
+ * Un nombre que no existe para el proceso, EN CUALQUIER ENTORNO — no solo en
+ * producción como el resto de comprobaciones de abajo.
+ *
+ * Porque el síntoma de escribirlo mal es que no pase nada: apagas «devVerse» o
+ * «asistentes», reinicias, y el módulo sigue saliendo. Eso no se investiga, se
+ * repite. Y quien lo escribe mal lo hace en su máquina antes que en producción,
+ * así que es ahí donde tiene que enterarse.
+ */
+{
+  const desconocidos = [...modulosApagados].filter(
+    (m) => !(MODULOS_APAGABLES as readonly string[]).includes(m),
+  );
+  if (desconocidos.length > 0) {
+    console.error(
+      `\nMODULOS_APAGADOS nombra módulos que no existen: ${desconocidos.join(", ")}\n` +
+        `  Los que se pueden apagar son: ${MODULOS_APAGABLES.join(", ")}\n`,
+    );
+    process.exit(1);
+  }
+}
+
+/** Los módulos encendidos, uno por clave. Es lo que viaja en `capacidades`. */
+export function modulosEncendidos(): Record<ModuloApagable, boolean> {
+  return Object.fromEntries(
+    MODULOS_APAGABLES.map((m) => [m, !modulosApagados.has(m)]),
+  ) as Record<ModuloApagable, boolean>;
+}
 
 export const webOrigins = env.WEB_ORIGIN.split(",")
   .map((o) => o.trim())

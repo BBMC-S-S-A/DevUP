@@ -21,7 +21,7 @@ import {
   signAccessToken,
 } from "../auth/tokens.js";
 import { type Db, withUser } from "../db/pool.js";
-import { env } from "../env.js";
+import { env, modulosEncendidos } from "../env.js";
 import { signDownload } from "../storage/s3.js";
 import {
   HttpError,
@@ -365,10 +365,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
    * menú se enseña se haría en todas las pantallas y no contestaría nada que no
    * se pudiera contestar en la primera.
    *
-   * De momento solo hay una, y es la que decide si «Repositorios» sale en la
-   * barra. Los repositorios alojados vienen apagados (ver `env.ts`): sin esto,
-   * donde están apagados el menú llevaría a una pantalla que contesta 404, que
-   * es justo la forma equivocada de que falte algo.
+   * DOS CLASES DE CAPACIDAD, Y CONVIENE NO MEZCLARLAS.
+   *
+   * Las primeras dicen si esta instalación SABE hacer algo. Los repositorios
+   * alojados y el MCP remoto vienen apagados porque sin volumen y sin esa ruta
+   * no funcionan: el menú llevaría a una pantalla que contesta 404, que es la
+   * forma equivocada de que falte algo.
+   *
+   * Las segundas —`modulosEncendidos()`— dicen qué se ha DECIDIDO enseñar.
+   * Esos módulos funcionan; se quitan del menú para recortar la navegación, y
+   * vienen encendidos porque el valor que no rompe nada es que sigan estando.
+   * Apagar uno no lo borra: su ruta sigue contestando a quien entre directo,
+   * que es lo que permite volver a encenderlo sin devolver código.
+   *
+   * Para la pantalla las dos son lo mismo —una entrada del menú que sale o no—
+   * y por eso viajan juntas. Quien las pone es quien tiene que distinguirlas.
    */
   app.get("/auth/me", { onRequest: requireSession }, async (request) => {
     const userId = requireUser(request);
@@ -382,6 +393,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // que no enseñar nada, porque parece que lo roto es el Claude de quien
         // lo intenta.
         mcpRemoto: env.MCP_REMOTE_ENABLED,
+        ...modulosEncendidos(),
       },
     };
   });

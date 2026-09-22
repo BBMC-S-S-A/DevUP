@@ -47,7 +47,8 @@
     "test:bus": "tsx src/realtime/bus.test.ts",
     "test:consola": "tsx src/connectors/basedatos.test.ts",
     "test:almacen": "tsx src/storage/s3.test.ts",
-    "test:version": "tsx src/lib/version.test.ts"
+    "test:version": "tsx src/lib/version.test.ts",
+    "test:modulos": "tsx src/lib/modulos.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

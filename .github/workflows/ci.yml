@@ -140,6 +140,16 @@ jobs:
         # Necesita Postgres, como test:rls: la autorización la decide RLS.
         run: npm run test:git:e2e
 
+      - name: Apagar un modulo del menu no lo borra
+        # Dos cosas que tiran en sentidos opuestos: un modulo apagado no sale
+        # en capacidades —de ahi saca el menu la web— y su ruta SIGUE viva.
+        # La segunda se olvida, porque nada la echa de menos hasta que alguien
+        # quiere volver atras y descubre que «apagado» significaba «quitado».
+        # Y el valor por defecto: la lista vacia deja los cinco encendidos. Si
+        # alguien invirtiera el sentido de la variable, el primer despliegue
+        # borraria cinco entradas del menu de todo el mundo sin fallar nada.
+        run: npm run test:modulos
+
       - name: Que /health siga contestando sin saber el commit
         # ARQ-04. /health es la comprobacion de vida que usa el hosting para
         # decidir si el contenedor arranco. Si un dia el commit no llega —en
