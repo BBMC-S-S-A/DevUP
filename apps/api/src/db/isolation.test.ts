@@ -67,6 +67,10 @@ async function main(): Promise<void> {
   const ana = await mkUser("ana");
   const bruno = await mkUser("bruno");
   const carla = await mkUser("carla");
+  // Solo para los enlaces de invitacion: canjear METE a alguien en Acme, y
+  // hacerlo con Bruno romperia todas las comprobaciones que lo usan como el de
+  // fuera. Se gasta un usuario propio y no se toca al forastero.
+  const dani = await mkUser("dani");
   // Diego entra invitado a UN workspace, no a la organización entera: es el
   // caso que separa «estás en el equipo» de «ves todo lo del equipo».
   const diego = await mkUser("diego");
@@ -3389,6 +3393,146 @@ async function main(): Promise<void> {
     // contraseña y deja que contesten estas politicas. O sea que lo que se
     // prueba aqui es, literalmente, quien puede clonar y empujar.
     // ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------
+    // Enlaces de invitacion (0071)
+    //
+    // Un enlace reutilizable es una PUERTA ABIERTA, asi que lo que se prueba
+    // aqui es que se pueda cerrar: quien la abre, con que papel entra quien la
+    // usa, y que caducado, agotado y revocado no dejen pasar.
+    //
+    // La comprobacion que mas importa es la del PAPEL. Si un enlace pudiera
+    // repartir «admin», cualquiera con el enlace se haria dueño de la casa —y
+    // lo impide un `check` de la base, no una ruta, precisamente para que una
+    // ruta nueva que se olvide no abra el agujero.
+    // ---------------------------------------------------------------------
+    console.log("\nEnlaces de invitacion: quien abre la puerta y con que papel se entra");
+
+    const crearEnlace = (
+      quien: string,
+      datos: { ws?: string | null; hash: string; rol?: string; caduca?: string; usos?: number },
+    ) =>
+      withUser(quien, async (db) => {
+        try {
+          const { rows } = await db.query<{ id: string }>(
+            `insert into invite_links
+               (organization_id, workspace_id, token_hash, role, expires_at, max_uses, created_by)
+             values ($1,$2,$3,$4::org_role,$5,$6,$7) returning id`,
+            [
+              acme.org,
+              datos.ws ?? null,
+              `${datos.hash}-${suffix}`,
+              datos.rol ?? "member",
+              datos.caduca ?? new Date(Date.now() + 86_400_000).toISOString(),
+              datos.usos ?? 5,
+              quien,
+            ],
+          );
+          return rows[0]!.id;
+        } catch {
+          return "rechazado";
+        }
+      });
+
+    const deAna = await crearEnlace(ana, { ws: acme.ws, hash: "enlace-ana" });
+    check("Ana, que manda en el espacio, abre un enlace para el", deAna !== "rechazado");
+
+    // Carla pertenece a Acme y trabaja en ese espacio, pero no manda en el.
+    check(
+      "Carla, que no manda, NO puede abrir uno",
+      (await crearEnlace(carla, { ws: acme.ws, hash: "enlace-carla" })) === "rechazado",
+    );
+    check(
+      "Bruno, de otra organizacion, tampoco",
+      (await crearEnlace(bruno, { ws: acme.ws, hash: "enlace-bruno" })) === "rechazado",
+    );
+
+    // LA QUE MAS IMPORTA: el papel no puede ser de administrador, lo pida quien
+    // lo pida. Sin esto, pasar un enlace seria regalar la organizacion.
+    check(
+      "nadie abre un enlace que reparta admin",
+      (await crearEnlace(ana, { ws: acme.ws, hash: "enlace-admin", rol: "admin" })) === "rechazado",
+    );
+    check(
+      "ni owner",
+      (await crearEnlace(ana, { ws: acme.ws, hash: "enlace-owner", rol: "owner" })) === "rechazado",
+    );
+
+    // La LISTA tambien pide mando: dice cuantas puertas hay abiertas.
+    check(
+      "Carla no ve la lista de enlaces del espacio",
+      (await withUser(carla, (db) => db.query("select id from invite_links where id = $1", [deAna])))
+        .rowCount === 0,
+    );
+    check(
+      "Ana si la ve",
+      (await withUser(ana, (db) => db.query("select id from invite_links where id = $1", [deAna])))
+        .rowCount === 1,
+    );
+
+    console.log("\nCanjear un enlace: entra, y solo a donde dice");
+
+    const canjearEnlace = (hash: string, quien: string) =>
+      withUser(null, async (db) => {
+        const { rows } = await db.query<{ motivo: string }>(
+          "select motivo from public.invite_link_redeem($1,$2)",
+          [`${hash}-${suffix}`, quien],
+        );
+        return rows[0]?.motivo ?? "sin-respuesta";
+      });
+
+    // Bruno es de OTRA organizacion: es justo el caso del enlace —alguien que
+    // no pertenece y entra por el.
+    check("Dani, que no era de Acme, entra con el enlace", (await canjearEnlace("enlace-ana", dani)) === "dentro");
+    const comoEntro = (
+      await admin.query<{ all_workspaces: boolean; role: string }>(
+        "select all_workspaces, role::text as role from public.organization_members where organization_id = $1 and user_id = $2",
+        [acme.org, dani],
+      )
+    ).rows[0];
+    // LO QUE HACE QUE «CADA PROYECTO POR SEPARADO» SEA VERDAD: entra a la
+    // organizacion, porque no hay otra forma de estar en un espacio, pero NO a
+    // todos sus espacios.
+    check("entra como miembro, nunca como administrador", comoEntro?.role === "member");
+    check("y sin acceso a los demas espacios de la organizacion", comoEntro?.all_workspaces === false);
+    check(
+      "queda apuntado en el espacio al que le invitaron",
+      (
+        await admin.query(
+          "select 1 from public.workspace_members where workspace_id = $1 and user_id = $2",
+          [acme.ws, dani],
+        )
+      ).rowCount === 1,
+    );
+
+    // Volver a pulsar el enlace que te pasaron por el chat no puede gastar una
+    // plaza del grupo.
+    check("volver a pulsarlo no gasta uso", (await canjearEnlace("enlace-ana", dani)) === "ya-dentro");
+    check(
+      "y el contador sigue en uno",
+      (await withUser(ana, async (db) => {
+        const { rows } = await db.query<{ uses: number }>("select uses from invite_links where id = $1", [
+          deAna,
+        ]);
+        return rows[0]?.uses;
+      })) === 1,
+    );
+
+    console.log("\nY se puede cerrar: caducado, agotado y revocado se distinguen");
+
+    await crearEnlace(ana, {
+      ws: acme.ws,
+      hash: "enlace-viejo",
+      caduca: new Date(Date.now() - 60_000).toISOString(),
+    });
+    check("un enlace caducado no deja entrar", (await canjearEnlace("enlace-viejo", carla)) === "caducado");
+
+    const paraRevocar = await crearEnlace(ana, { ws: acme.ws, hash: "enlace-rev" });
+    await withUser(ana, (db) =>
+      db.query("update invite_links set revoked_at = now() where id = $1", [paraRevocar]),
+    );
+    check("uno revocado tampoco", (await canjearEnlace("enlace-rev", carla)) === "revocado");
+    check("y uno inventado dice que no existe", (await canjearEnlace("enlace-que-nadie-hizo", carla)) === "no-existe");
+
     console.log("\nLos repositorios alojados: ver pide pertenecer, crear pide mandar");
 
     const repoDeAcme = await withUser(ana, async (db) => {

@@ -25,6 +25,7 @@ import { grafoRoutes } from "./routes/grafo.js";
 import { auditoriaRoutes } from "./routes/auditoria.js";
 import { authRoutes } from "./routes/auth.js";
 import { prepararAlmacen } from "./git/almacen.js";
+import { enlacesRoutes } from "./routes/enlaces.js";
 import { gitRoutes } from "./routes/git.js";
 import { reposRoutes } from "./routes/repos.js";
 import { basedatosRoutes } from "./routes/basedatos.js";
@@ -196,6 +197,7 @@ await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(reunionesRoutes);
 await app.register(basedatosRoutes);
+await app.register(enlacesRoutes);
 // Los repositorios alojados, solo donde se enciendan — y vienen apagados. Su
 // contenido vive en disco, así que encenderlos donde `GIT_ROOT` no sea un
 // volumen haría que cada despliegue se llevara el código de la gente sin que
