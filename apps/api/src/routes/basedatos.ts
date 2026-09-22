@@ -5,7 +5,7 @@ import { alojarBase, desalojarBase } from "../connectors/alojar.js";
 import { ejecutarSQL, listarTablas } from "../connectors/basedatos.js";
 import { esConfigRailway, variablesDeRailway } from "../connectors/proveedores.js";
 import { type Db, withUser } from "../db/pool.js";
-import { badGateway, badRequest, parseBody, parseParams, requireUser } from "../lib/http.js";
+import { badGateway, badRequest, forbidden, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { encryptSecret } from "../security/vault.js";
 import { conexionVigente, getDecryptedSecret } from "./connections.js";
 
@@ -13,6 +13,33 @@ const uuid = z.string().uuid();
 
 /** Los nombres bajo los que Railway suele guardar la cadena de una Postgres. */
 const VARIABLES_DE_CONEXION = ["DATABASE_URL", "DATABASE_PUBLIC_URL", "POSTGRES_URL"];
+
+/**
+ * La consola SQL pide MANDO sobre el espacio, no solo pertenecer (BD-06).
+ *
+ * POR QUÉ HACE FALTA ESCRIBIRLO AQUÍ, si en este archivo el argumento repetido
+ * es el contrario —que la autorización la lleven las políticas—. Porque aquí
+ * NO hay ninguna política que la lleve: la consola no consulta una tabla de
+ * DevUP, abre una conexión a la base de OTRO servidor. Lo único que RLS decide
+ * es si esta persona puede descifrar la credencial, y eso lo puede cualquier
+ * miembro del espacio. O sea que sin esta línea, cualquiera que entre al
+ * proyecto podía lanzar un `drop` contra la base de producción del cliente.
+ *
+ * Va aparte de la lectura de tablas a propósito: mirar qué tablas hay es parte
+ * de entender el proyecto y lo puede hacer cualquiera del equipo. Escribir
+ * SQL a mano contra la base de un cliente, no.
+ */
+async function exigirMando(db: Db, workspaceId: string): Promise<void> {
+  const { rows } = await db.query<{ puede: boolean }>(
+    "select public.can_manage_workspace($1) as puede",
+    [workspaceId],
+  );
+  if (!rows[0]?.puede) {
+    throw forbidden(
+      "la consola SQL es de quien administra el espacio: habla con quien lo creó o con un administrador de la organización",
+    );
+  }
+}
 
 /**
  * Administrar la base de datos propia de un workspace: tablas y SQL de
@@ -105,11 +132,15 @@ export async function basedatosRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
-   * SIN LÍMITE DE PETICIONES PROPIO A PROPÓSITO: `requireSession` ya exige
-   * estar dentro del equipo, y una consola SQL que además recorta por
+   * La consola SQL. DOS CERROJOS, y están en dos sitios distintos a propósito:
+   * quién puede abrirla se decide aquí (`exigirMando`), y qué puede hacer
+   * dentro lo decide el conector, que la corre en una transacción de solo
+   * lectura. Ver el porqué de cada uno en su sitio.
+   *
+   * SIN LÍMITE DE PETICIONES PROPIO A PROPÓSITO: ya hay que administrar el
+   * espacio para llegar hasta aquí, y una consola que además recorta por
    * frecuencia sorprendería a quien está en medio de depurar algo de verdad.
-   * El único límite que importa aquí es el `statement_timeout` del propio
-   * conector.
+   * El otro límite que importa es el `statement_timeout` del conector.
    */
   app.post("/workspaces/:workspaceId/database/query", async (request) => {
     const userId = requireUser(request);
@@ -117,6 +148,7 @@ export async function basedatosRoutes(app: FastifyInstance): Promise<void> {
     const { sql } = parseBody(z.object({ sql: z.string().trim().min(1).max(20_000) }), request.body);
 
     return withUser(userId, async (db) => {
+      await exigirMando(db, workspaceId);
       const { connectionString } = await conexionDeBase(db, workspaceId);
       try {
         return await ejecutarSQL(connectionString, sql);

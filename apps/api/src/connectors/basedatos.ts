@@ -34,12 +34,17 @@ export type ResultadoSQL = {
   comando: string;
 };
 
-async function conectar(connectionString: string): Promise<pg.Client> {
+async function conectar(connectionString: string, soloLectura = false): Promise<pg.Client> {
   const client = new pg.Client({
     connectionString,
     ssl: opcionesTls(connectionString),
     connectionTimeoutMillis: 10_000,
     statement_timeout: 30_000,
+    // La sesión entera nace de solo lectura cuando se pide. Esto solo, sin el
+    // `begin read only` de abajo, no bastaría —ver allí— pero es la primera
+    // capa: alcanza también a las sentencias que corran fuera de una
+    // transacción explícita.
+    ...(soloLectura ? { options: "-c default_transaction_read_only=on" } : {}),
   });
   await client.connect();
   return client;
@@ -96,18 +101,57 @@ export async function listarTablas(connectionString: string): Promise<Tabla[]> {
 }
 
 /**
- * Corre lo que sea, tal cual. Sin `params`: es la protocolo simple de
+ * Corre lo que sea, tal cual. Sin `params`: es el protocolo simple de
  * Postgres, que a cambio de no admitir parámetros preparados sí admite
  * VARIAS sentencias separadas por `;` en una sola llamada — lo que hace
  * falta para que esto sea una consola SQL y no un formulario de una sola
  * fila.
  *
- * `statement_timeout` (puesto al conectar) es la única red: una consulta que
- * se cuelga no se queda colgando esta petición para siempre.
+ * `statement_timeout` (puesto al conectar) es la única red contra una
+ * consulta que se cuelga.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DE SOLO LECTURA POR DEFECTO (BD-06)
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * Esto corría `client.query(sql)` con lo que llegara: cualquier sentencia,
+ * escrituras incluidas, contra la base de producción del proyecto. Y la ruta
+ * que lo llama no pedía mando sobre el espacio, así que CUALQUIER miembro
+ * podía lanzar un `delete` o un `drop`. Una consola es para mirar; borrar la
+ * base de un cliente no puede ser el camino fácil.
+ *
+ * TRES PIEZAS, Y LA TERCERA SE DESCUBRIÓ MIDIENDO:
+ *
+ *   · La sesión nace con `default_transaction_read_only=on`. Esto alcanza
+ *     también a lo que corra fuera de una transacción explícita, así que un
+ *     `commit; delete …` sigue chocando.
+ *   · `begin read only`, para la sentencia que venga.
+ *   · Y un `select 1` ANTES del SQL de quien llama. Parece de adorno y es lo
+ *     que cierra la puerta grande: `set transaction read write` está permitido
+ *     como PRIMERA sentencia de la transacción, y ahí el modo de solo lectura
+ *     se cae entero. En cuanto ha corrido una consulta, Postgres lo rechaza
+ *     con «transaction read-write mode must be set before any query».
+ *     Comprobado contra Postgres, las dos ramas.
+ *
+ * DÓNDE ESTÁ EL LÍMITE, DICHO SIN ADORNOS. Queda una salida: `set
+ * default_transaction_read_only = off` y a escribir. También comprobado. No se
+ * intenta taparla —una lista de sentencias prohibidas se puede rodear y encima
+ * da falsa calma—, y cerrarla de verdad pide un rol de solo lectura en la base
+ * DEL CLIENTE, que es suya y no nuestra; eso se recomienda, no se impone.
+ *
+ * Lo que esto compra es lo que se pedía: que una escritura no pase POR
+ * DESCUIDO, que falle con un error que se entiende, y que escribir de verdad
+ * sea un acto deliberado. La escritura con vista previa y doble llave va por
+ * otra tarea.
  */
 export async function ejecutarSQL(connectionString: string, sql: string): Promise<ResultadoSQL> {
-  const client = await conectar(connectionString);
+  const client = await conectar(connectionString, true);
   try {
+    await client.query("begin read only");
+    // No es de adorno: deja la transacción con una consulta ya corrida, y eso
+    // es lo que hace que `set transaction read write` deje de estar permitido.
+    // Ver la cabecera.
+    await client.query("select 1");
     const resultado = await client.query(sql);
     // `client.query` con varias sentencias devuelve un array de resultados;
     // con una sola, el resultado a secas. Se toma siempre el ÚLTIMO: es el
@@ -124,6 +168,11 @@ export async function ejecutarSQL(connectionString: string, sql: string): Promis
       comando: ultimo.command ?? "",
     };
   } finally {
+    // `rollback` y no `commit`: no hay nada que confirmar en una transacción de
+    // solo lectura, y si la consulta falló a mitad deshacer es lo correcto. Se
+    // ignora su fallo a propósito — si la sesión ya se murió, lo que importa es
+    // cerrar el cliente, no un error de limpieza tapando el de verdad.
+    await client.query("rollback").catch(() => {});
     await client.end();
   }
 }

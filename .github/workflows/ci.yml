@@ -140,6 +140,15 @@ jobs:
         # Necesita Postgres, como test:rls: la autorización la decide RLS.
         run: npm run test:git:e2e
 
+      - name: La consola SQL no escribe
+        # BD-06. La consola corria cualquier sentencia contra la base de
+        # produccion del proyecto, y la ruta no pedia mando sobre el espacio:
+        # cualquier miembro podia lanzar un delete o un drop. Lo delicado es
+        # el "select 1" que el conector corre antes del SQL de quien llama:
+        # parece de adorno y es lo que impide "set transaction read write",
+        # que como PRIMERA sentencia tumba el modo de solo lectura entero.
+        run: npm run test:consola
+
       - name: La credencial vigente de un espacio
         # Que gane la ÚLTIMA conexión y no la primera, y que reconectar
         # reemplace en vez de apilar. Esto se rompió en producción sin fallar

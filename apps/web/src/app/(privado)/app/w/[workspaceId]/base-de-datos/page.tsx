@@ -19,7 +19,7 @@ import { Cargando, Fallo, Pagina } from "@/components/ui/Pagina";
 import { Chip, EstadoVacio, Rotulo, Tarjeta } from "@/components/ui/Superficies";
 import { AvisoCredencialGithub } from "@/components/conexiones/AvisoCredencial";
 import { useWorkspaceId } from "@/lib/workspace-context";
-import type { GithubRepo, ResultadoSQL, TablaDB } from "@/lib/api";
+import type { GithubRepo, ResultadoSQL, TablaDB, Workspace } from "@/lib/api";
 import { api, useMutacion, useRecurso } from "@/lib/datos";
 
 const PESTANAS = [
@@ -510,10 +510,24 @@ function FilaTabla({ tabla }: { tabla: TablaDB }) {
   );
 }
 
+/**
+ * La consola es de quien administra el espacio (BD-06).
+ *
+ * Y SE DECIDE CON LO QUE DICE LA API, que lo resuelve con la MISMA función que
+ * usa la ruta para autorizar. Calcularlo aquí sería la segunda copia de una
+ * regla de permisos: la que se queda vieja el día que cambie la primera.
+ *
+ * Esconderla no es la seguridad —esa está en la ruta, que contesta 403—, es no
+ * ofrecer una caja de texto que solo puede terminar en un error. Mientras no
+ * llega la respuesta se asume que NO: enseñar la consola y quitarla un segundo
+ * después es peor que enseñarla un segundo más tarde.
+ */
 function ConsolaSQL({ workspaceId }: { workspaceId: string }) {
   const [sql, setSql] = useState("");
   const [resultado, setResultado] = useState<ResultadoSQL | null>(null);
   const confirmar = useConfirmar();
+  const espacio = useRecurso<{ workspace: Workspace }>(`/workspaces/${workspaceId}`);
+  const puedoGestionar = espacio.datos?.workspace.puedoGestionar === true;
 
   const correr = useMutacion(
     (consulta: string) => api.post<ResultadoSQL>(`/workspaces/${workspaceId}/database/query`, { sql: consulta }),
@@ -542,6 +556,19 @@ function ConsolaSQL({ workspaceId }: { workspaceId: string }) {
       if (!ok) return;
     }
     await correr.ejecutar(consulta);
+  }
+
+  if (!puedoGestionar) {
+    return (
+      <div>
+        <Rotulo className="mb-2 block">Consola SQL</Rotulo>
+        <p className="rounded-xl border border-line bg-canvas/40 p-3 text-[11px] leading-relaxed text-muted">
+          La consola es de quien administra el espacio. Las tablas de arriba sí las ve todo el
+          equipo: para escribir una consulta, habla con quien creó el espacio o con un
+          administrador de la organización.
+        </p>
+      </div>
+    );
   }
 
   return (

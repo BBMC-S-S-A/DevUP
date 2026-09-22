@@ -3335,6 +3335,51 @@ async function main(): Promise<void> {
     check("y no se puede alojar dos veces en el mismo espacio", dosVeces === "rechazado");
 
     // ---------------------------------------------------------------------
+    // La consola SQL pide MANDO, no solo pertenecer (BD-06)
+    //
+    // Esta es la mitad de arriba del arreglo; la de abajo —que la consola
+    // corre en solo lectura— vive en `connectors/basedatos.test.ts`.
+    //
+    // POR QUE SE PRUEBA LA FUNCION Y NO UNA TABLA. La consola no consulta
+    // nada de DevUP: abre una conexion a la base de OTRO servidor, asi que no
+    // hay politica de RLS que la autorice. Lo unico que RLS decide es si se
+    // puede descifrar la credencial, y eso lo puede cualquier miembro del
+    // espacio. Por eso la ruta pregunta `can_manage_workspace` a mano, y lo
+    // que hay que fijar aqui es que esa funcion contesta lo que la ruta cree.
+    // Sin esto, cualquiera que entrara al proyecto podia lanzar un `drop`
+    // contra la base de produccion de un cliente.
+    // ---------------------------------------------------------------------
+    console.log("\nLa consola SQL pide mando sobre el espacio");
+
+    const mandaEn = (quien: string, espacio: string): Promise<boolean> =>
+      withUser(quien, async (db) => {
+        const { rows } = await db.query<{ puede: boolean }>(
+          "select public.can_manage_workspace($1) as puede",
+          [espacio],
+        );
+        return rows[0]?.puede === true;
+      });
+
+    check("Ana, que creo el espacio, manda", await mandaEn(ana, acme.ws));
+    // LA QUE IMPORTA: Carla pertenece a Acme y ve el espacio entero, pero no
+    // manda. Antes eso bastaba para abrir la consola.
+    check("Carla, del mismo espacio, NO manda", !(await mandaEn(carla, acme.ws)));
+    check("Bruno, de otra organizacion, tampoco", !(await mandaEn(bruno, acme.ws)));
+    // Nunca null: un `if (!puede)` sobre null entraria igual, pero un
+    // `if (puede)` sobre null NO — y esa diferencia ya costo un agujero en
+    // `is_org_admin` antes de la 0041.
+    check(
+      "y contesta false, nunca null",
+      (await withUser(carla, async (db) => {
+        const { rows } = await db.query<{ puede: boolean | null }>(
+          "select public.can_manage_workspace($1) as puede",
+          [acme.ws],
+        );
+        return rows[0]?.puede;
+      })) === false,
+    );
+
+    // ---------------------------------------------------------------------
     // Repositorios alojados (0068)
     //
     // Mismo reparto que las bases alojadas, y por lo mismo: un repositorio
