@@ -140,6 +140,14 @@ jobs:
         # Necesita Postgres, como test:rls: la autorización la decide RLS.
         run: npm run test:git:e2e
 
+      - name: Nada se sirve por una URL publica
+        # SEG-03. Los archivos, grabaciones y fotos viven en un bucket privado
+        # y todo lo que sale hacia un navegador va firmado y caduca. Lo que
+        # esto impide es el cambio de UNA linea: componer la URL del objeto a
+        # mano es mas corto que firmar y convierte cada archivo del equipo en
+        # un enlace eterno, sin que la pantalla se vea distinta.
+        run: npm run test:almacen
+
       - name: La consola SQL no escribe
         # BD-06. La consola corria cualquier sentencia contra la base de
         # produccion del proyecto, y la ruta no pedia mando sobre el espacio:

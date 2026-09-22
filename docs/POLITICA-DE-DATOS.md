@@ -19,11 +19,11 @@ Hasta entonces no hay que leerlas como garantía.
 
 | # | Pregunta | Estado |
 |---|---|---|
-| 1 | Cifrado en tránsito | Sí |
+| 1 | Cifrado en tránsito | Sí · TLS 1.2 mínimo, medido |
 | 2 | Cifrado en reposo | Parcial · por confirmar |
 | 3 | Aislamiento entre organizaciones | Sí, con una excepción que estamos cerrando |
 | 4 | Acceso interno del equipo de DevUP | Parcial |
-| 5 | Adjuntos | Sí |
+| 5 | Adjuntos | Sí · almacén privado, confirmado |
 | 6 | Tokens del conector MCP | Parcial |
 | 7 | Modelos de IA | Sí |
 | 8 | Retención y borrado | Parcial |
@@ -34,11 +34,11 @@ Hasta entonces no hay que leerlas como garantía.
 
 **Lo más importante que hay que saber hoy:**
 
-1. **La consola SQL de un espacio deja escribir a cualquier miembro.** Hoy,
-   cualquier persona con acceso a un espacio puede ejecutar cualquier sentencia
-   contra la base de datos conectada a ese espacio, incluidas las que borran.
-   Estamos restringiéndola a quien administra el espacio y a solo lectura. Plazo:
-   26 de septiembre.
+1. ~~**La consola SQL de un espacio deja escribir a cualquier miembro.**~~
+   **Cerrado el 22 de septiembre**, antes del plazo. La consola ahora pide
+   administrar el espacio y corre en una transacción de solo lectura: un
+   `delete` falla con «cannot execute DELETE in a read-only transaction». Ver la
+   pregunta 3.
 2. **No existe todavía una forma de borrar tu cuenta.**
 3. **Los datos están, casi con seguridad, fuera de Colombia.** Ver pregunta 11.
 
@@ -63,8 +63,20 @@ como segura o si la dirección pública es `http://` (`apps/api/src/env.ts`).
   proveedor ya va cifrada entre servicios. Lo explica
   `apps/api/src/db/conexion.ts`.
 - **Webhooks:** DevUP no recibe webhooks hoy.
-- **Versión mínima de TLS:** la fijan Cloudflare y Railway, no nosotros. **Por
-  confirmar** que sea 1.2 o superior.
+- **Versión mínima de TLS: 1.2.** La fijan Cloudflare y Railway, no nosotros,
+  pero se puede medir desde fuera y se midió el 22-sep-2026, negociando a mano
+  cada versión contra los tres nombres públicos:
+
+  | | TLS 1.0 | TLS 1.1 | TLS 1.2 | TLS 1.3 |
+  |---|---|---|---|---|
+  | `devup.hytrex.co` (Cloudflare) | rechaza | rechaza | acepta | acepta |
+  | `api.hytrex.co` (Cloudflare → Railway) | rechaza | rechaza | acepta | acepta |
+  | almacén (Railway) | — | rechaza | acepta | — |
+
+  Es una medición, no una lectura del panel: dice lo que el servidor acepta hoy,
+  que es lo que de verdad importa. Si alguien bajara el mínimo en Cloudflare,
+  esta tabla dejaría de ser cierta sin que nada avise — conviene repetirla al
+  revisar la política.
 
 ## 2. Cifrado en reposo — **Parcial · por confirmar**
 
@@ -87,16 +99,27 @@ consulta se ejecuta con la identidad de quien la pide, y Postgres decide fila po
 fila qué puede ver (Row Level Security). Un fallo en el código de una pantalla no
 puede enseñar datos de otra organización, porque no es ese código quien decide.
 
-Hay una prueba automática con **304 comprobaciones de aislamiento**
+Hay una prueba automática con **364 comprobaciones de aislamiento**
 (`apps/api/src/db/isolation.test.ts`). Corre contra un Postgres real en cada
 cambio del código, y el cambio no entra si una sola falla.
 
 El asistente de IA de DevUP y el conector MCP usan esa misma frontera: un agente
 ve exactamente lo que vería la persona que lo conectó, y nada más.
 
-**La excepción:** la consola SQL de un espacio. Su problema no es entre
-organizaciones sino dentro de una misma: cualquier miembro puede escribir en la
-base conectada al espacio. Ver el resumen.
+**La excepción, ya cerrada (22-sep).** Era la consola SQL de un espacio: su
+problema no era entre organizaciones sino dentro de una misma, porque cualquier
+miembro podía escribir en la base conectada al espacio. Ahora hacen falta las
+dos cosas: administrar el espacio para abrirla, y la consola corre en una
+transacción de solo lectura, así que una escritura falla con un error de
+Postgres que se entiende. Lo fijan 16 comprobaciones contra Postgres de verdad
+(`npm run test:consola`) y 4 más en la prueba de aislamiento.
+
+Queda dicho lo que esto **no** es: una jaula. Quien administre el espacio y
+quiera de verdad escribir puede apagar el modo de solo lectura desde la propia
+consola. Impedirlo del todo pide un usuario de solo lectura en **tu** base, que
+es tuya y no nuestra, y eso lo recomendamos en vez de imponerlo. Lo que se
+acabó es que una escritura pase por descuido, o de manos de quien solo entró al
+proyecto.
 
 ## 4. Acceso interno del equipo de DevUP — **Parcial**
 
@@ -121,7 +144,16 @@ como para verlos, DevUP genera un **enlace firmado que caduca a los 15 minutos**
 Un enlace firmado lo puede abrir cualquiera que lo tenga mientras no caduque. Si
 lo copias y lo compartes, se puede ver durante esos 15 minutos.
 
-**Por confirmar** en el proveedor que el almacén esté configurado como privado.
+**Confirmado: el almacén es privado.** Comprobado el 22-sep-2026 pidiéndole sin
+credenciales una clave que no existe: contesta `403 AccessDenied`. Un bucket
+público habría contestado `404 NoSuchKey` — esa diferencia es la prueba, porque
+para negar la existencia primero hay que dejarte mirar. Listar el bucket
+contesta `403` igual.
+
+Que los enlaces sigan siendo firmados y caducando lo fija una prueba
+(`npm run test:almacen`): si alguien sustituye la firma por una URL compuesta a
+mano, CI se pone rojo. Esa es justo la regresión de una línea que nadie
+notaría mirando la pantalla.
 
 ## 6. Tokens del conector MCP — **Parcial**
 

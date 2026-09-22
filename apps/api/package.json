@@ -45,7 +45,8 @@
     "test:git:e2e": "tsx src/git/extremo-a-extremo.test.ts",
     "test:corrillo": "tsx src/realtime/corrillo.test.ts",
     "test:bus": "tsx src/realtime/bus.test.ts",
-    "test:consola": "tsx src/connectors/basedatos.test.ts"
+    "test:consola": "tsx src/connectors/basedatos.test.ts",
+    "test:almacen": "tsx src/storage/s3.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
