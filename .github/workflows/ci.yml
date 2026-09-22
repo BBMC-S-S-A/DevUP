@@ -140,6 +140,14 @@ jobs:
         # Necesita Postgres, como test:rls: la autorización la decide RLS.
         run: npm run test:git:e2e
 
+      - name: Que /health siga contestando sin saber el commit
+        # ARQ-04. /health es la comprobacion de vida que usa el hosting para
+        # decidir si el contenedor arranco. Si un dia el commit no llega —en
+        # desarrollo no llega nunca— y esto reventara, un servicio sano
+        # quedaria marcado como caido y reiniciado en bucle. Cambiar un dato
+        # que falta por una caida es el intercambio que no se puede hacer aqui.
+        run: npm run test:version
+
       - name: Nada se sirve por una URL publica
         # SEG-03. Los archivos, grabaciones y fotos viven en un bucket privado
         # y todo lo que sale hacia un navegador va firmado y caduca. Lo que

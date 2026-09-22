@@ -54,7 +54,8 @@
     "test:corrillo": "npm run test:corrillo --workspace apps/api",
     "test:bus": "npm run test:bus --workspace apps/api",
     "test:consola": "npm run test:consola --workspace apps/api",
-    "test:almacen": "npm run test:almacen --workspace apps/api"
+    "test:almacen": "npm run test:almacen --workspace apps/api",
+    "test:version": "npm run test:version --workspace apps/api"
   },
   "engines": {
     "node": ">=20.11"

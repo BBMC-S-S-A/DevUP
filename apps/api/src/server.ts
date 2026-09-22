@@ -9,6 +9,7 @@ import { authPlugin } from "./auth/plugin.js";
 import { closePool, withUser } from "./db/pool.js";
 import { env, webOrigins } from "./env.js";
 import { HttpError, translateDbError } from "./lib/http.js";
+import { version } from "./lib/version.js";
 import { escucharElBus, bus } from "./realtime/bus.js";
 import { signalingRoutes } from "./realtime/signaling.js";
 import { worldSocketRoutes } from "./realtime/world.js";
@@ -159,7 +160,17 @@ app.setErrorHandler((error: FastifyError, request, reply) => {
   return reply.status(500).send({ error: "error_interno", message: "algo ha ido mal" });
 });
 
-app.get("/health", async () => ({ status: "ok", now: new Date().toISOString() }));
+/**
+ * La comprobación de vida, y además QUÉ está vivo (ARQ-04).
+ *
+ * SIGUE SIENDO PÚBLICA Y SIGUE SIN PEDIR SESIÓN: la usa el propio hosting para
+ * decidir si el contenedor arrancó, así que no puede depender de nada que
+ * pueda fallar. Lo que devuelve tampoco es secreto — el identificador de un
+ * commit de un repositorio público, el nombre del entorno y la región — y a
+ * cambio permite contestar «¿está desplegado lo que creo?» con una petición en
+ * vez de con una captura de pantalla.
+ */
+app.get("/health", async () => ({ status: "ok", now: new Date().toISOString(), ...version() }));
 
 await app.register(authRoutes);
 await app.register(accountRoutes);

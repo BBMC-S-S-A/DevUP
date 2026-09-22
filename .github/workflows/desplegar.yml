@@ -427,12 +427,36 @@ jobs:
       #
       # `--ci` espera la construcción y devuelve error si falla; con
       # `--detach` el paso saldría en verde aunque la imagen no compilara.
-      - name: Desplegar api
+      # QUÉ COMMIT VA A QUEDAR CORRIENDO (ARQ-04). Railway no lo sabe: su
+      # `RAILWAY_GIT_COMMIT_SHA` existe cuando construye desde GitHub, y aquí el
+      # código se sube con `railway up`, así que no ve ningún git. Se comprobó
+      # pidiéndole sus variables al servicio: no está. Por eso lo ponemos
+      # nosotros, y por eso `/health` puede contestar qué está desplegado en vez
+      # de que haya que comprobarlo con una captura de pantalla.
+      #
+      # `--skip-deploys` NO ES UN DETALLE: sin él, cambiar una variable dispara
+      # un despliegue por su cuenta, y el `railway up` de abajo dispararía otro.
+      # Dos despliegues por empujón, y el primero con el código viejo y el
+      # commit nuevo — o sea, `/health` mintiendo durante un minuto.
+      - name: Apuntar el commit que se despliega
         if: steps.creds.outputs.railway == 'si'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           npm i -g @railway/cli
+          for servicio in api live; do
+            railway variables --skip-deploys \
+              --set "DEVUP_COMMIT=${{ github.sha }}" \
+              --project d05dd021-3636-4957-bc2f-55359f2690cf \
+              --environment production \
+              --service "$servicio"
+          done
+
+      - name: Desplegar api
+        if: steps.creds.outputs.railway == 'si'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
           railway up --ci \
             --project d05dd021-3636-4957-bc2f-55359f2690cf \
             --environment production \
