@@ -64,7 +64,21 @@ function urlDelEnlace(token: string): string {
 }
 
 export async function enlacesRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook("onRequest", requireSession);
+  /**
+   * SIN HOOK GLOBAL DE SESIÓN, y es a propósito: una de estas rutas tiene que
+   * ser pública.
+   *
+   * Quien abre un enlace puede no tener cuenta todavía — es el caso normal,
+   * porque el enlace se pega en un grupo de WhatsApp. Si mirar a dónde lleva
+   * pidiera sesión, esa persona vería una pantalla de acceso sin saber a qué
+   * la están invitando, que es exactamente el formulario a ciegas que estas
+   * pantallas existen para no ser.
+   *
+   * Lo que enseña es lo justo para decidir —organización y espacio— y hace
+   * falta tener el enlace, que son veinticuatro bytes al azar. Entrar de verdad
+   * sí pide cuenta.
+   */
+  const conSesion = { onRequest: requireSession };
 
   const cuerpoDeAlta = z.object({
     dias: z.number().int().min(1).max(DIAS_MAX).default(DIAS_POR_DEFECTO),
@@ -76,7 +90,7 @@ export async function enlacesRoutes(app: FastifyInstance): Promise<void> {
    * queda su hash, así que ninguna ruta puede volver a servirla ni queriendo.
    * Mismo trato que el código corto y que la cadena de una base alojada.
    */
-  app.post("/workspaces/:workspaceId/invite-links", async (request, reply) => {
+  app.post("/workspaces/:workspaceId/invite-links", conSesion, async (request, reply) => {
     const userId = requireUser(request);
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     const { dias, usos } = parseBody(cuerpoDeAlta, request.body);
@@ -98,7 +112,7 @@ export async function enlacesRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send({ enlace: { ...(fila as object), url: urlDelEnlace(token) } });
   });
 
-  app.get("/workspaces/:workspaceId/invite-links", async (request) => {
+  app.get("/workspaces/:workspaceId/invite-links", conSesion, async (request) => {
     const userId = requireUser(request);
     const { workspaceId } = parseParams(z.object({ workspaceId: uuid }), request.params);
     return withUser(userId, async (db) => {
@@ -118,7 +132,7 @@ export async function enlacesRoutes(app: FastifyInstance): Promise<void> {
    * explique cómo llegó. La política de `invite_links` ni siquiera permite
    * borrar.
    */
-  app.delete("/invite-links/:id", async (request) => {
+  app.delete("/invite-links/:id", conSesion, async (request) => {
     const userId = requireUser(request);
     const { id } = parseParams(z.object({ id: uuid }), request.params);
     const habia = await withUser(userId, async (db) => {
@@ -140,7 +154,6 @@ export async function enlacesRoutes(app: FastifyInstance): Promise<void> {
    * al aceptar.
    */
   app.get("/invite-links/:token/destino", async (request) => {
-    requireUser(request);
     const { token } = parseParams(z.object({ token: z.string().min(10).max(200) }), request.params);
 
     return withUser(null, async (db) => {
@@ -168,7 +181,7 @@ export async function enlacesRoutes(app: FastifyInstance): Promise<void> {
    * una organización. Quien llegue sin ella se registra primero y vuelve — eso
    * lo encadena la pantalla, que sabe a dónde volver.
    */
-  app.post("/invite-links/:token/aceptar", async (request) => {
+  app.post("/invite-links/:token/aceptar", conSesion, async (request) => {
     const userId = requireUser(request);
     const { token } = parseParams(z.object({ token: z.string().min(10).max(200) }), request.params);
 

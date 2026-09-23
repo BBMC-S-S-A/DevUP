@@ -29,6 +29,7 @@ import { tinte } from "@/lib/tinte";
 import { diasHasta, hoyLocal } from "@/lib/fechas";
 import { dineroRedondo } from "@/lib/dinero";
 import { TarjetaPersona } from "@/components/perfil/TarjetaPersona";
+import { EnlaceDelProyecto } from "@/components/organizacion/EnlaceDelProyecto";
 
 /**
  * El panel personal.
@@ -394,6 +395,10 @@ export default function PanelPage() {
 
         {/* Quién está + música */}
         <div className="flex min-h-0 flex-col gap-4">
+          {/* Meter al equipo en el proyecto, justo encima de quién está ya: es
+              la misma pregunta —quién trabaja aquí— vista desde los dos lados. */}
+          <EnlaceDelProyecto workspaceId={workspaceId} />
+
           <section className="capa-flotante flex shrink-0 flex-col gap-3 rounded-2xl p-4">
             <div className="flex items-center gap-2">
               <Rotulo>Quién está</Rotulo>

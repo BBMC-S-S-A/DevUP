@@ -112,6 +112,23 @@ function LoginForm() {
   // alta por defecto solo porque el enlace trae una invitación.
   const pideAcceso = params.get("modo") === "acceso";
 
+  /**
+   * A dónde volver al terminar, si quien llegó venía de algún sitio.
+   *
+   * Lo usa el enlace de invitación a un proyecto: quien lo abre sin cuenta se
+   * da de alta y tiene que VOLVER AL ENLACE, no aterrizar en el panel y buscarlo
+   * otra vez en el chat de donde vino.
+   *
+   * SE VALIDA, Y NO ES PARANOIA: un destino que llega por la URL y se usa sin
+   * mirar es una redirección abierta. Un `volverA` apuntando a otro sitio
+   * mandaría a quien acaba de entrar a una copia de esta pantalla pidiéndole la
+   * contraseña otra vez, con DevUP de trampolín. Solo se aceptan rutas de aquí
+   * dentro: tienen que empezar por una barra, y no por dos — dos barras son una
+   * dirección absoluta sin protocolo, y el navegador la sigue igual.
+   */
+  const pedido = params.get("volverA");
+  const volverA = pedido?.startsWith("/") && !pedido.startsWith("//") ? pedido : "/app";
+
   const [mode, setMode] = useState<Mode>(
     pideAcceso ? "login" : inviteToken || pideRegistro ? "register" : "login",
   );
@@ -160,8 +177,8 @@ function LoginForm() {
   const { user, loading, refresh } = useSession();
 
   useEffect(() => {
-    if (!loading && user) router.replace("/app");
-  }, [user, loading, router]);
+    if (!loading && user) router.replace(volverA);
+  }, [user, loading, router, volverA]);
 
   useEffect(() => {
     void api
@@ -225,7 +242,7 @@ function LoginForm() {
         // resultó no existir dejaría a la pantalla saludando mañana a una
         // cuenta equivocada.
         recordarCorreo(email);
-        router.replace("/app");
+        router.replace(volverA);
       } else {
         setError("la sesión no llegó a confirmarse — inténtalo otra vez");
       }
