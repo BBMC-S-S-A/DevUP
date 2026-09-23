@@ -38,6 +38,7 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   sincronizar_entornos: "preguntándole a GitHub por los despliegues",
   crear_entorno: "montando un entorno nuevo",
   subir_archivos: "subiendo archivos a la biblioteca",
+  borrar_archivo: "borrando un archivo de la biblioteca",
 };
 
 /**

@@ -48,6 +48,14 @@ export interface ClienteApi {
   get<T>(camino: string): Promise<T>;
   post<T>(camino: string, cuerpo: unknown): Promise<T>;
   patch<T>(camino: string, cuerpo: unknown): Promise<T>;
+  /**
+   * Mismo trato que `post`: un solo reintento, y solo si el acceso caducó.
+   * Un 401 lo rechaza `requireSession` ANTES de que el borrado se ejecute
+   * —nunca a medias— así que renovar el acceso y reintentar una vez es tan
+   * seguro aquí como en `post`. Lo que no se reintenta es cualquier otro
+   * fallo: un borrado no se repite a ciegas.
+   */
+  delete<T>(camino: string): Promise<T>;
 }
 
 export class ClienteDevUP implements ClienteApi {
@@ -170,6 +178,24 @@ export class ClienteDevUP implements ClienteApi {
     return leer<T>(respuesta, camino);
   }
 
+  async delete<T>(camino: string): Promise<T> {
+    const lanzar = async () =>
+      fetch(`${this.config.apiUrl}${camino}`, {
+        method: "DELETE",
+        headers: {
+          authorization: `Bearer ${await this.accesoValido()}`,
+          "user-agent": "devup-mcp",
+        },
+      });
+
+    let respuesta = await lanzar();
+    if (respuesta.status === 401) {
+      this.acceso = null;
+      respuesta = await lanzar();
+    }
+    return leer<T>(respuesta, camino);
+  }
+
   async get<T>(camino: string): Promise<T> {
     const acceso = await this.accesoValido();
     const respuesta = await fetch(`${this.config.apiUrl}${camino}`, {
@@ -207,6 +233,11 @@ async function leer<T>(respuesta: Response, camino: string): Promise<T> {
       respuesta.status,
     );
   }
+  // Un 204 —lo que devuelve borrar— no trae cuerpo. `.json()` sobre una
+  // respuesta vacía revienta con «Unexpected end of JSON input», y hasta
+  // ahora nada de este cliente llamaba a una ruta que contestara 204: el
+  // primer `delete` habría fallado siempre, incluso cuando de verdad borraba.
+  if (respuesta.status === 204) return undefined as T;
   return (await respuesta.json()) as T;
 }
 

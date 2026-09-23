@@ -53,6 +53,7 @@ function clienteCon(respuestas: Record<string, unknown>): ClienteApi {
     }) as ClienteApi["get"],
     post: (async () => ({})) as ClienteApi["post"],
     patch: (async () => ({})) as ClienteApi["patch"],
+    delete: (async () => ({})) as ClienteApi["delete"],
   };
 }
 

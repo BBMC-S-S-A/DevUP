@@ -67,7 +67,10 @@ import {
   moverTarea,
 } from "./herramientas/escribir.js";
 import {
+  borrarArchivo,
+  descripcionBorrarArchivo,
   descripcionSubirArchivos,
+  esquemaBorrarArchivo,
   esquemaSubirArchivos,
   subirArchivos,
 } from "./herramientas/archivos.js";
@@ -360,6 +363,21 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
     esquemaSubirArchivos,
     async (cliente, entrada) => [
       { type: "text" as const, text: await subirArchivos(cliente, entrada) },
+    ],
+  );
+
+  /**
+   * La única que borra en todo `registro.ts`, y por eso pide dos llamadas: la
+   * primera solo describe, la segunda —con `confirmar: true` puesto a mano—
+   * ejecuta. Ver la cabecera de `herramientas/archivos.ts` para el porqué de
+   * la excepción.
+   */
+  registrar(
+    "borrar_archivo",
+    descripcionBorrarArchivo,
+    esquemaBorrarArchivo,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await borrarArchivo(cliente, entrada) },
     ],
   );
 }

@@ -1,17 +1,24 @@
 import type { ClienteApi } from "../api.js";
-import { subirArchivos } from "./archivos.js";
+import { borrarArchivo, subirArchivos } from "./archivos.js";
 
 /**
- * Subir archivos de una: qué falla, y qué NO puede fallar por culpa de otro.
+ * Subir y borrar archivos por el MCP: qué falla sin tirar a los demás, y qué
+ * NUNCA se borra sin que alguien lo haya pedido dos veces.
  *
- * LA QUE JUSTIFICA EL FICHERO ES EL AISLAMIENTO POR ARCHIVO. Se pidió que se
+ * SUBIR: LA QUE JUSTIFICA EL AISLAMIENTO POR ARCHIVO. Se pidió que se
  * pudieran mandar varios de una sola llamada, y «de una» no puede significar
  * «o todos o ninguno»: un PDF que pesa de más no puede tirar los otros cuatro
- * que sí cabían. Así que lo que hay que fijar no es que subir funcione —eso ya
- * lo prueba `basedatos.test.ts` a su manera para la consola— sino que un fallo
- * se queda donde ocurrió.
+ * que sí cabían.
  *
- * Y DOS MÁS QUE SE LEEN BIEN ESTANDO MAL:
+ * BORRAR: LA QUE JUSTIFICA LA PRUEBA ES QUE «SIN CONFIRMAR» DE VERDAD NO
+ * TOQUE NADA. `borrar_archivo` es la única herramienta de escritura del MCP
+ * que borra algo de verdad, y lo hace en dos llamadas: la primera solo
+ * describe. Lo que hay que fijar no es que el borrado funcione —eso es un
+ * `DELETE` de una línea— sino que la PRIMERA llamada, sin `confirmar: true`,
+ * jamás dispare ese `DELETE`, ni siquiera cuando hay varios archivos que
+ * encajan con el nombre.
+ *
+ * Y TRES MÁS QUE SE LEEN BIEN ESTANDO MAL:
  *
  *   · El tamaño se mide en los BYTES DECODIFICADOS, no en la longitud del
  *     texto base64 que llega —un 33 % más larga— ni fiándose de lo que diga
@@ -19,6 +26,9 @@ import { subirArchivos } from "./archivos.js";
  *     ARQ-04 ya evitó de otra forma: el tamaño real se mide, no se pregunta.
  *   · Una carpeta ambigua para el NOMBRE ES UN ERROR, no una carpeta cualquiera:
  *     elegir la primera subiría el archivo a un sitio que nadie pidió.
+ *   · Un identificador que existe pero es de OTRO espacio no se cuela solo
+ *     porque `GET /files/:id` lo hubiera dejado leer: `borrar_archivo`
+ *     comprueba el espacio a mano, por si acaso.
  *
  *   npm run test:mcp
  */
@@ -39,17 +49,26 @@ const ORG = { id: "org-1", name: "Acme", slug: "acme" };
 const WS = { id: "ws-1", name: "Producto" };
 
 type Carpeta = { id: string; nombre: string; padreId: string | null };
+type ArchivoFake = { id: string; name: string; sizeBytes: number; uploadedByName?: string };
+
+/** Un identificador que existe pero es de OTRO espacio — para comprobar que
+ *  `borrar_archivo` no se fía de que RLS lo deje leer. */
+const ARCHIVO_AJENO = "file-de-otro-espacio";
 
 /**
- * Un cliente que contesta según la ruta, y anota cada `post` para poder
- * comprobar que uno rechazado por tamaño NUNCA llega a reservar nada.
+ * Un cliente que contesta según la ruta, y anota cada `post`/`delete` para
+ * poder comprobar que uno rechazado por tamaño NUNCA llega a reservar nada, y
+ * que sin `confirmar` nunca se llega a borrar nada.
  */
 function clienteCon(opciones: {
   carpetas?: Carpeta[];
   reservaFalla?: string;
-}): { cliente: ClienteApi; llamadasPost: string[] } {
+  archivos?: ArchivoFake[];
+}): { cliente: ClienteApi; llamadasPost: string[]; llamadasDelete: string[] } {
   const llamadasPost: string[] = [];
+  const llamadasDelete: string[] = [];
   const carpetas = opciones.carpetas ?? [];
+  const archivos = opciones.archivos ?? [];
 
   const cliente: ClienteApi = {
     apiUrl: "http://127.0.0.1:4000",
@@ -57,6 +76,20 @@ function clienteCon(opciones: {
       if (ruta === "/organizations") return { organizations: [ORG] };
       if (ruta === `/organizations/${ORG.id}/workspaces`) return { workspaces: [WS] };
       if (ruta === `/workspaces/${WS.id}/carpetas`) return { carpetas };
+
+      if (ruta.startsWith(`/workspaces/${WS.id}/files?q=`)) {
+        const q = decodeURIComponent(ruta.split("q=")[1] ?? "").toLowerCase();
+        return { files: archivos.filter((a) => a.name.toLowerCase().includes(q)) };
+      }
+      if (ruta === `/files/${ARCHIVO_AJENO}`) {
+        return { file: { id: ARCHIVO_AJENO, workspaceId: "ws-otro", name: "no-es-tuyo.pdf", sizeBytes: 1 } };
+      }
+      const porId = /^\/files\/([^/?]+)$/.exec(ruta);
+      if (porId) {
+        const archivo = archivos.find((a) => a.id === porId[1]);
+        if (!archivo) throw new Error("404");
+        return { file: { ...archivo, workspaceId: WS.id } };
+      }
       throw new Error(`ruta GET no prevista en la prueba: ${ruta}`);
     }) as ClienteApi["get"],
     post: (async (ruta: string, cuerpo: unknown) => {
@@ -70,8 +103,12 @@ function clienteCon(opciones: {
       throw new Error(`ruta POST no prevista en la prueba: ${ruta}`);
     }) as ClienteApi["post"],
     patch: (async () => ({})) as ClienteApi["patch"],
+    delete: (async (ruta: string) => {
+      llamadasDelete.push(ruta);
+      return undefined;
+    }) as ClienteApi["delete"],
   };
-  return { cliente, llamadasPost };
+  return { cliente, llamadasPost, llamadasDelete };
 }
 
 /** base64 de "hola mundo" (10 bytes). */
@@ -172,6 +209,62 @@ async function main(): Promise<void> {
       archivos: [{ nombre: "acta.pdf", contenidoBase64: CONTENIDO }],
     });
     check("una carpeta que no existe, lo dice y no sube nada", r8.includes("No encontré"));
+
+    console.log("\nBorrar: sin confirmar, no se toca nada");
+
+    const unArchivo: ArchivoFake[] = [
+      { id: "file-informe", name: "informe.pdf", sizeBytes: 2048, uploadedByName: "Ana" },
+    ];
+
+    const { cliente: b1, llamadasDelete: delB1 } = clienteCon({ archivos: unArchivo });
+    const r9 = await borrarArchivo(b1, { archivo: "informe.pdf" });
+    check("describe qué se borraría", r9.includes("informe.pdf") && r9.includes("Ana"));
+    check("avisa de que no se puede deshacer", r9.includes("NO se puede deshacer"));
+    check("dice cómo confirmar, con el identificador", r9.includes("file-informe"));
+    check("y NO llamó a delete — es la garantía que importa", delB1.length === 0);
+
+    console.log("\nCon confirmar: true, sí se ejecuta");
+
+    const { cliente: b2, llamadasDelete: delB2 } = clienteCon({ archivos: unArchivo });
+    const r10 = await borrarArchivo(b2, { archivo: "informe.pdf", confirmar: true });
+    check("dice que se borró", r10.includes("borrado"));
+    check("y llamó a delete exactamente una vez, sobre ESE archivo", delB2.length === 1 && delB2[0] === "/files/file-informe");
+
+    console.log("\nPor identificador, igual que por nombre");
+
+    // Un id CON FORMA DE UUID de verdad — "file-informe" no lo tiene, y
+    // `resolverArchivo` haría bien en tratarlo como nombre y no encontrarlo.
+    const idDeVerdad = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const { cliente: b3, llamadasDelete: delB3 } = clienteCon({
+      archivos: [{ id: idDeVerdad, name: "informe.pdf", sizeBytes: 2048 }],
+    });
+    await borrarArchivo(b3, { archivo: idDeVerdad, confirmar: true });
+    check("un identificador también se resuelve y se borra", delB3.length === 1);
+
+    console.log("\nUn identificador de OTRO espacio no se cuela");
+
+    const { cliente: b4, llamadasDelete: delB4 } = clienteCon({ archivos: unArchivo });
+    const r12 = await borrarArchivo(b4, { archivo: ARCHIVO_AJENO, confirmar: true });
+    check("no lo encuentra, aunque GET /files/:id lo hubiera dejado leer", r12.includes("No encontré"));
+    check("y por supuesto no llamó a delete", delB4.length === 0);
+
+    console.log("\nUn nombre ambiguo pregunta, no borra el primero");
+
+    const dosInformes: ArchivoFake[] = [
+      { id: "file-informe-1", name: "informe.pdf", sizeBytes: 100 },
+      { id: "file-informe-2", name: "informe-final.pdf", sizeBytes: 200 },
+    ];
+    const { cliente: b5, llamadasDelete: delB5 } = clienteCon({ archivos: dosInformes });
+    const r13 = await borrarArchivo(b5, { archivo: "informe", confirmar: true });
+    check("dice cuántos encajan", r13.includes("2 archivos"));
+    check("lista los dos con su identificador", r13.includes("file-informe-1") && r13.includes("file-informe-2"));
+    check("y NO borra ninguno aunque confirmar sea true", delB5.length === 0);
+
+    console.log("\nUn nombre que no existe, lo dice");
+
+    const { cliente: b6 } = clienteCon({ archivos: unArchivo });
+    const r14 = await borrarArchivo(b6, { archivo: "no-existe.pdf", confirmar: true });
+    check("dice que no lo encontró", r14.includes("No encontré"));
   } finally {
     globalThis.fetch = fetchOriginal;
   }

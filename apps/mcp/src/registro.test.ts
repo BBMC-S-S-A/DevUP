@@ -39,6 +39,7 @@ const clienteFalso: ClienteApi = {
   get: async () => ({}) as never,
   post: async () => ({}) as never,
   patch: async () => ({}) as never,
+  delete: async () => ({}) as never,
 };
 
 /** Las que el conector de Claude ve, con el nombre exacto. Cambiar uno rompe
@@ -66,6 +67,7 @@ const ESPERADAS = [
   "crear_entorno",
   "estoy_haciendo",
   "subir_archivos",
+  "borrar_archivo",
 ];
 
 console.log("\nRegistro de herramientas");

@@ -109,6 +109,7 @@ function clienteFalso(respuesta: unknown) {
     },
     post: async <T,>(): Promise<T> => ({}) as T,
     patch: async <T,>(): Promise<T> => ({}) as T,
+    delete: async <T,>(): Promise<T> => ({}) as T,
   };
 }
 

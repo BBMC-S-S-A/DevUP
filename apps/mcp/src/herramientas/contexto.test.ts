@@ -48,6 +48,7 @@ function clienteFalso(respuesta: unknown, caminos: string[] = []) {
     },
     post: async <T,>(): Promise<T> => ({}) as T,
     patch: async <T,>(): Promise<T> => ({}) as T,
+    delete: async <T,>(): Promise<T> => ({}) as T,
   };
 }
 
@@ -174,6 +175,7 @@ console.log("\nY cuando no sabe de cuál le hablan");
     },
     post: async <T,>(): Promise<T> => ({}) as T,
     patch: async <T,>(): Promise<T> => ({}) as T,
+    delete: async <T,>(): Promise<T> => ({}) as T,
   };
 
   let mensaje = "";

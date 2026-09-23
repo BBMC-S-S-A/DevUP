@@ -26,6 +26,9 @@ const clienteQueNoSeUsa = {
   patch: async () => {
     throw new Error("no deberia haber llamado a la API");
   },
+  delete: async () => {
+    throw new Error("no deberia haber llamado a la API");
+  },
 } as unknown as ClienteApi;
 
 let total = 0;

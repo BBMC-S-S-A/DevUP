@@ -73,6 +73,11 @@ class ClienteDeLaPeticion implements ClienteApi {
         respuesta.status,
       );
     }
+    // Un 204 —lo que devuelve borrar— no trae cuerpo. `.json()` sobre una
+    // respuesta vacía revienta con «Unexpected end of JSON input»: sin esto,
+    // `delete` habría fallado siempre por este transporte, incluso cuando el
+    // borrado sí se ejecutaba.
+    if (respuesta.status === 204) return undefined as T;
     return (await respuesta.json()) as T;
   }
 
@@ -86,6 +91,10 @@ class ClienteDeLaPeticion implements ClienteApi {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(cuerpo),
     });
+  }
+
+  delete<T>(camino: string): Promise<T> {
+    return this.pedir<T>(camino, { method: "DELETE" });
   }
 
   patch<T>(camino: string, cuerpo: unknown): Promise<T> {
