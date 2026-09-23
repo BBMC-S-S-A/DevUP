@@ -18,11 +18,14 @@ type Job = {
 export function UploadZone({
   workspaceId,
   channelId,
+  folderId,
   tagIds,
   onUploaded,
 }: {
   workspaceId: string;
   channelId?: string | null;
+  /** La carpeta abierta cuando se suelta el archivo. Null = la raíz. */
+  folderId?: string | null;
   tagIds: string[];
   onUploaded: (file: FileRecord) => void;
 }) {
@@ -42,6 +45,7 @@ export function UploadZone({
         try {
           const record = await uploadFile(workspaceId, file, {
             channelId: channelId ?? null,
+            folderId: folderId ?? null,
             tagIds,
             onProgress: (fraction) =>
               setJobs((current) =>
@@ -61,7 +65,7 @@ export function UploadZone({
         }
       }
     },
-    [workspaceId, channelId, tagIds, onUploaded],
+    [workspaceId, channelId, folderId, tagIds, onUploaded],
   );
 
   return (

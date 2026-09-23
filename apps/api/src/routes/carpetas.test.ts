@@ -197,6 +197,45 @@ async function main(): Promise<void> {
     check("pero NO sus archivos", traselBorrado.archivo !== undefined);
     check("que suben a la raíz", traselBorrado.archivo?.folder_id === null);
 
+    console.log("\nUna carpeta de OTRO espacio no sirve para colgar un archivo");
+
+    // ESTO ES LO QUE JUSTIFICA LA COMPROBACIÓN DE routes/files.ts. La clave
+    // ajena de `files.folder_id` solo exige que la carpeta EXISTA, no que sea
+    // del mismo espacio que el archivo — así que sin una comprobación aparte,
+    // reservar una subida con el `folderId` de una carpeta ajena colaría
+    // igual. Aquí se prueba que la base, por sí sola, lo permite: es la razón
+    // de ser del `select ... where id = $1 and workspace_id = $2` que la ruta
+    // hace a mano antes de insertar.
+    const wsOtro = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        "insert into workspaces (organization_id, name, created_by) values ($1,$2,$3) returning id",
+        [org, "Otro proyecto", ana],
+      );
+      return rows[0]!.id;
+    });
+    const carpetaDeOtro = await withUser(ana, async (db) => {
+      const { rows } = await db.query<{ id: string }>(
+        `insert into file_folders (workspace_id, name, created_by) values ($1,$2,$3) returning id`,
+        [wsOtro, "Ajena", ana],
+      );
+      return rows[0]!.id;
+    });
+    const coladoDeOtroEspacio = await codigoDeError(() =>
+      withUser(ana, (db) =>
+        db.query(
+          `insert into files
+             (organization_id, workspace_id, folder_id, storage_key, name, mime_type,
+              size_bytes, uploaded_by, status)
+           values ($1,$2,$3,$4,'cruzado.png','image/png',10,$5,'ready')`,
+          [org, ws, carpetaDeOtro, `acme/${sufijo}/cruzado.png`, ana],
+        ),
+      ),
+    );
+    check(
+      "la base, sola, lo deja pasar — por eso la ruta lo comprueba a mano",
+      coladoDeOtroEspacio === "sin error",
+    );
+
     console.log("\nY el aislamiento");
 
     const loQueVe = await withUser(fuera, async (db) => {

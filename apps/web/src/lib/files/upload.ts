@@ -16,6 +16,8 @@ export type UploadOptions = {
   channelId?: string | null;
   /** Para colgar el archivo de una tarea del tablero. */
   taskId?: string | null;
+  /** La carpeta abierta cuando se soltó el archivo. Null o ausente = la raíz. */
+  folderId?: string | null;
   description?: string;
   tagIds?: string[];
   onProgress?: (fraction: number) => void;
@@ -35,6 +37,7 @@ export async function uploadFile(
       sizeBytes: file.size,
       channelId: options.channelId ?? null,
       taskId: options.taskId ?? null,
+      folderId: options.folderId ?? null,
       description: options.description ?? "",
     },
   );

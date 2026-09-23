@@ -348,6 +348,11 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
         // lo comprueba la política de alta (0028), no esto: aquí solo se
         // valida la forma.
         taskId: uuid.nullish(),
+        // La carpeta ABIERTA cuando se soltó el archivo. Null = la raíz. Antes
+        // esta ruta no aceptaba ninguna, así que un archivo nacía siempre en la
+        // raíz: subir dentro de una carpeta lo dejaba fuera de ella, sin avisar
+        // — el archivo aparecía, solo que en el sitio equivocado.
+        folderId: uuid.nullish(),
         description: z.string().trim().max(2000).default(""),
       }),
       request.body,
@@ -363,18 +368,34 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
       const organizationId = ws[0]?.organizationId;
       if (!organizationId) throw notFound("workspace no encontrado");
 
+      // LA CARPETA TIENE QUE SER DE ESTE ESPACIO. Sin esto, alguien podría
+      // reservar un archivo apuntando al `folderId` de una carpeta de OTRO
+      // workspace que hubiera visto en otro sitio — la clave ajena de
+      // `files.folder_id` no lo impediría, porque una clave ajena solo exige
+      // que la fila exista, no que sea del mismo espacio. El mismo motivo por
+      // el que `carpetaId` en el PATCH de más abajo debería validarse igual
+      // (queda anotado, no es parte de este arreglo).
+      if (body.folderId) {
+        const { rows: carpeta } = await db.query(
+          "select 1 from file_folders where id = $1 and workspace_id = $2",
+          [body.folderId, workspaceId],
+        );
+        if (carpeta.length === 0) throw badRequest("esa carpeta no es de este espacio");
+      }
+
       const storageKey = buildStorageKey(organizationId, workspaceId, body.name);
       const { rows } = await db.query<{ id: string; storage_key: string }>(
         `insert into files
-           (organization_id, workspace_id, channel_id, task_id, storage_key, name,
+           (organization_id, workspace_id, channel_id, task_id, folder_id, storage_key, name,
             description, mime_type, size_bytes, uploaded_by, status)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending')
          returning id, storage_key`,
         [
           organizationId,
           workspaceId,
           body.channelId ?? null,
           body.taskId ?? null,
+          body.folderId ?? null,
           storageKey,
           body.name,
           body.description,

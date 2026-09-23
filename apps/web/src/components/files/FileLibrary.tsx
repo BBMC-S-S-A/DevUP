@@ -19,6 +19,7 @@ import {
   Rows3,
   Search,
   SearchX,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -34,6 +35,7 @@ import { retraso } from "@/lib/animacion";
 import { formatBytes, kindOf } from "@/lib/files/upload";
 import { useFileFeed } from "@/lib/files/useFileFeed";
 import { Boton, BotonIcono } from "@/components/ui/Boton";
+import { useConfirmar } from "@/components/ui/Confirmar";
 import { Dialogo, EstadoVacio, Rotulo } from "@/components/ui/Superficies";
 import { Entrada, Field } from "@/components/ui/Field";
 import { FilePreview } from "./FilePreview";
@@ -85,6 +87,7 @@ export function FileLibrary({
   const [debounced, setDebounced] = useState("");
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<FileRecord | null>(null);
+  const confirmar = useConfirmar();
   // Solo presentación: la rejilla es para reconocer, la lista para comparar
   // tamaños y autores en columna. No viaja al servidor ni filtra nada.
   const [vista, setVista] = useState<"rejilla" | "lista">("rejilla");
@@ -193,6 +196,42 @@ export function FileLibrary({
     [load],
   );
 
+  /**
+   * Borrar una carpeta.
+   *
+   * SE PREGUNTA DISTINTO SEGÚN LO QUE HAY DENTRO, porque «¿borrar esta
+   * carpeta?» significa dos cosas muy distintas según la respuesta. Los
+   * ARCHIVOS no se van con ella (0053, `on delete set null`): suben a la raíz,
+   * y eso se puede decir tranquilo. Las SUBCARPETAS sí se van, en cascada, y
+   * eso sí es irreversible — decirlo solo cuando aplica es lo que evita que la
+   * advertencia se lea como ruido de fondo las noventa veces que no hace falta.
+   */
+  const eliminarCarpeta = useCallback(
+    async (carpeta: Carpeta) => {
+      const ok = await confirmar({
+        titulo: `¿Eliminar «${carpeta.nombre}»?`,
+        descripcion:
+          carpeta.subcarpetas > 0
+            ? `Sus ${carpeta.archivos === 0 ? "archivos" : `${carpeta.archivos} archivo(s)`} subirán a la raíz, pero las ${carpeta.subcarpetas} subcarpeta(s) de dentro se borran con ella. Eso no se puede deshacer.`
+            : carpeta.archivos > 0
+              ? `Sus ${carpeta.archivos} archivo(s) no se borran: suben a la raíz de la biblioteca.`
+              : undefined,
+        accion: "Eliminar",
+        peligro: true,
+      });
+      if (!ok) return;
+
+      // Si se borra la carpeta que se está mirando ahora mismo, hay que salir
+      // de ella primero: quedarse "dentro" de una carpeta que ya no existe
+      // dejaría la pantalla mostrando un camino que ya no lleva a nada.
+      if (carpetaId === carpeta.id) setCarpetaId(carpeta.padreId ?? null);
+
+      await api.delete(`/carpetas/${carpeta.id}`);
+      await load();
+    },
+    [confirmar, carpetaId, load],
+  );
+
   /** Las carpetas de este nivel. El árbol se arma aquí, a partir de `padreId`. */
   const aquiDentro = useMemo(
     () => carpetas.filter((c) => (c.padreId ?? null) === carpetaId),
@@ -233,6 +272,10 @@ export function FileLibrary({
       <UploadZone
         workspaceId={workspaceId}
         channelId={channelId}
+        // La carpeta que se está mirando, no la raíz siempre: antes subir
+        // dentro de una carpeta abierta dejaba el archivo fuera de ella, en la
+        // raíz de la biblioteca, sin ningún aviso.
+        folderId={carpetaId}
         tagIds={selectedTags}
         onUploaded={(file) => setFiles((current) => [file, ...current])}
       />
@@ -345,6 +388,7 @@ export function FileLibrary({
                 onAbrir={() => setCarpetaId(carpeta.id)}
                 onSoltar={(fileId) => void mover(fileId, carpeta.id)}
                 onEncima={(si) => setEncima(si ? carpeta.id : null)}
+                onEliminar={() => void eliminarCarpeta(carpeta)}
               />
             </li>
           ))}
@@ -534,17 +578,17 @@ function TarjetaCarpeta({
   onAbrir,
   onSoltar,
   onEncima,
+  onEliminar,
 }: {
   carpeta: Carpeta;
   resaltada: boolean;
   onAbrir: () => void;
   onSoltar: (fileId: string) => void;
   onEncima: (si: boolean) => void;
+  onEliminar: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onAbrir}
+    <div
       onDragOver={(evento) => {
         evento.preventDefault();
         onEncima(true);
@@ -556,20 +600,35 @@ function TarjetaCarpeta({
         const fileId = evento.dataTransfer.getData("text/devup-archivo");
         if (fileId) onSoltar(fileId);
       }}
-      className={`capa-flotante elevable group flex h-full w-full items-center gap-3 rounded-2xl p-3 text-left
+      className={`capa-flotante elevable group relative flex h-full w-full items-center gap-3 rounded-2xl p-3 text-left
         transition-colors ${resaltada ? "border-accent/60 bg-accent-soft/30" : "hover:border-line-strong"}`}
     >
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-raised/50 text-muted">
-        <Folder size={18} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium text-ink">{carpeta.nombre}</span>
-        <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-faint">
-          {carpeta.archivos} {carpeta.archivos === 1 ? "archivo" : "archivos"}
-          {carpeta.subcarpetas > 0 && ` · ${carpeta.subcarpetas} dentro`}
+      <button type="button" onClick={onAbrir} className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-raised/50 text-muted">
+          <Folder size={18} />
         </span>
-      </span>
-    </button>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium text-ink">{carpeta.nombre}</span>
+          <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-faint">
+            {carpeta.archivos} {carpeta.archivos === 1 ? "archivo" : "archivos"}
+            {carpeta.subcarpetas > 0 && ` · ${carpeta.subcarpetas} dentro`}
+          </span>
+        </span>
+      </button>
+      {/* Solo al pasar el ratón, para que la rejilla no se llene de iconos
+          rojos: borrar una carpeta es raro, no algo que se ofrezca siempre. */}
+      <BotonIcono
+        etiqueta={`Eliminar «${carpeta.nombre}»`}
+        className="absolute right-2 top-2 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger
+          group-hover:opacity-100"
+        onClick={(evento) => {
+          evento.stopPropagation();
+          onEliminar();
+        }}
+      >
+        <Trash2 size={14} />
+      </BotonIcono>
+    </div>
   );
 }
 
