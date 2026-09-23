@@ -37,6 +37,7 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   ver_entornos: "mirando dónde está desplegado",
   sincronizar_entornos: "preguntándole a GitHub por los despliegues",
   crear_entorno: "montando un entorno nuevo",
+  subir_archivos: "subiendo archivos a la biblioteca",
 };
 
 /**

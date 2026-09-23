@@ -66,6 +66,11 @@ import {
   marcarHecha,
   moverTarea,
 } from "./herramientas/escribir.js";
+import {
+  descripcionSubirArchivos,
+  esquemaSubirArchivos,
+  subirArchivos,
+} from "./herramientas/archivos.js";
 
 /**
  * Qué herramientas expone la puerta MCP, en un solo sitio.
@@ -343,4 +348,18 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
   registrar("crear_entorno", descripcionCrearEntorno, esquemaCrearEntorno, async (cliente, entrada) => [
     { type: "text" as const, text: await crearEntorno(cliente, entrada) },
   ]);
+
+  /**
+   * Subir es crear, no borrar, y por eso va con las que escriben: un archivo
+   * de más se quita a mano desde la biblioteca, igual que una tarea de más se
+   * quita desde el tablero. Ver `herramientas/archivos.ts`.
+   */
+  registrar(
+    "subir_archivos",
+    descripcionSubirArchivos,
+    esquemaSubirArchivos,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await subirArchivos(cliente, entrada) },
+    ],
+  );
 }

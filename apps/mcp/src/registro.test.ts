@@ -65,6 +65,7 @@ const ESPERADAS = [
   "dibujar_arquitectura",
   "crear_entorno",
   "estoy_haciendo",
+  "subir_archivos",
 ];
 
 console.log("\nRegistro de herramientas");
