@@ -80,6 +80,8 @@ const ESPERADAS = [
   "ver_anuncios",
   "mis_avisos",
   "ver_biblioteca",
+  "ver_sesiones",
+  "registrar_sesion",
   "escribir_en_canal",
   "crear_reunion",
   "publicar_anuncio",

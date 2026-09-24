@@ -8,6 +8,7 @@ import {
   Hash,
   KanbanSquare,
   History,
+  NotebookPen,
   Building2,
   Inbox,
   LayoutDashboard,
@@ -485,6 +486,19 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
                   indice={2}
                 >
                   Qué ha pasado
+                </ItemNav>
+              </li>
+              <li>
+                {/* Justo debajo de «Qué ha pasado»: aquello son los hechos uno a
+                    uno, esto las sesiones enteras con su porqué. Se abren al
+                    llegar, igual que aquello. */}
+                <ItemNav
+                  href={`/app/w/${workspaceId}/sesiones`}
+                  icono={<NotebookPen size={15} />}
+                  activo={pathname === `/app/w/${workspaceId}/sesiones`}
+                  indice={2}
+                >
+                  Sesiones
                 </ItemNav>
               </li>
               <li>

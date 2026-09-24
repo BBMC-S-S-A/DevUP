@@ -271,6 +271,7 @@ const LEER: Record<string, (o: string, e: string) => Record<string, unknown>> = 
   ver_anuncios: (o) => ({ organizacion: o }),
   mis_avisos: () => ({ todos: true }),
   ver_biblioteca: (o, e) => ({ organizacion: o, espacio: e }),
+  ver_sesiones: (o, e) => ({ organizacion: o, espacio: e }),
 };
 
 /** Cambian el tablero o la biblioteca. Se clasifican; no se llaman. */
@@ -287,6 +288,7 @@ const ESCRIBIR = new Set([
   "crear_entorno",
   "subir_archivos",
   "borrar_archivo",
+  "registrar_sesion",
   "escribir_en_canal",
   "crear_reunion",
   "publicar_anuncio",

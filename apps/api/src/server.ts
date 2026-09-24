@@ -41,6 +41,7 @@ import { oauthRoutes } from "./routes/oauth.js";
 import { preferenceRoutes } from "./routes/preferences.js";
 import { recordingRoutes } from "./routes/recordings.js";
 import { reunionesRoutes } from "./routes/reuniones.js";
+import { sesionesRoutes } from "./routes/sesiones.js";
 import { salesRoutes } from "./routes/sales.js";
 import { searchRoutes } from "./routes/search.js";
 import { spotifyRoutes } from "./routes/spotify.js";
@@ -196,6 +197,7 @@ await app.register(iceRoutes);
 await app.register(taskRoutes);
 await app.register(messageRoutes);
 await app.register(reunionesRoutes);
+await app.register(sesionesRoutes);
 await app.register(basedatosRoutes);
 await app.register(enlacesRoutes);
 // Los repositorios alojados, solo donde se enciendan — y vienen apagados. Su
