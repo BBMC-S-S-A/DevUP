@@ -202,6 +202,14 @@ jobs:
         # que Railway rechaza. Configurar la migración rompía el despliegue.
         run: npm run test:proveedores --workspace apps/api
 
+      - name: Las herramientas MCP contra la API de verdad
+        # El MCP es un traductor, y su forma de fallar es leer el campo que no
+        # es y contestar «sin título» con toda seguridad. Esto levanta el
+        # servidor, siembra un espacio y llama a cada herramienta como Claude.
+        # Las escrituras se comprueban leyéndolas de vuelta: una herramienta
+        # que dice «publicado» y no publica —o al revés— engaña al agente.
+        run: npm run test:mcp-vivo --workspace apps/api
+
       - name: El código corto de invitación
         # Dos mitades: que normalizar perdone lo que se teclea al dictado
         # (minúsculas, guiones, la O por el cero) sin volver iguales dos

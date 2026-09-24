@@ -68,6 +68,21 @@ const ESPERADAS = [
   "estoy_haciendo",
   "subir_archivos",
   "borrar_archivo",
+  "mi_inicio",
+  "ver_organizacion",
+  "ver_equipo",
+  "ver_ramas",
+  "ver_repositorios",
+  "ver_embudo",
+  "ver_canales",
+  "leer_canal",
+  "ver_reuniones",
+  "ver_anuncios",
+  "mis_avisos",
+  "ver_biblioteca",
+  "escribir_en_canal",
+  "crear_reunion",
+  "publicar_anuncio",
 ];
 
 console.log("\nRegistro de herramientas");

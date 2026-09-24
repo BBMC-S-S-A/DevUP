@@ -39,6 +39,21 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   crear_entorno: "montando un entorno nuevo",
   subir_archivos: "subiendo archivos a la biblioteca",
   borrar_archivo: "borrando un archivo de la biblioteca",
+  mi_inicio: "repasando su día",
+  ver_organizacion: "mirando cómo va toda la organización",
+  ver_equipo: "mirando quién es quién",
+  ver_ramas: "mirando las ramas de trabajo",
+  ver_repositorios: "mirando los repositorios",
+  ver_embudo: "mirando el embudo de ventas",
+  ver_canales: "mirando qué canales hay",
+  leer_canal: "leyendo un canal",
+  ver_reuniones: "mirando la agenda",
+  ver_anuncios: "leyendo el tablón",
+  mis_avisos: "mirando la campana",
+  ver_biblioteca: "buscando en la biblioteca",
+  escribir_en_canal: "escribiendo en un canal",
+  crear_reunion: "convocando una reunión",
+  publicar_anuncio: "publicando un anuncio",
 };
 
 /**

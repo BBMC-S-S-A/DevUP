@@ -252,6 +252,18 @@ const LEER: Record<string, (o: string, e: string) => Record<string, unknown>> = 
   contexto_de_tarea: (o) => ({ organizacion: o, tarea: "una que no existe" }),
   ver_entornos: (o, e) => ({ organizacion: o, espacio: e }),
   sincronizar_entornos: (o, e) => ({ organizacion: o, espacio: e }),
+  mi_inicio: () => ({}),
+  ver_organizacion: (o) => ({ organizacion: o }),
+  ver_equipo: (o) => ({ organizacion: o }),
+  ver_ramas: (o, e) => ({ organizacion: o, espacio: e }),
+  ver_repositorios: (o, e) => ({ organizacion: o, espacio: e }),
+  ver_embudo: (o) => ({ organizacion: o }),
+  ver_canales: (o, e) => ({ organizacion: o, espacio: e }),
+  leer_canal: (o, e) => ({ organizacion: o, espacio: e, canal: "general" }),
+  ver_reuniones: (o, e) => ({ organizacion: o, espacio: e, incluir_pasadas: true }),
+  ver_anuncios: (o) => ({ organizacion: o }),
+  mis_avisos: () => ({ todos: true }),
+  ver_biblioteca: (o, e) => ({ organizacion: o, espacio: e }),
 };
 
 /** Cambian el tablero o la biblioteca. Se clasifican; no se llaman. */
@@ -268,6 +280,9 @@ const ESCRIBIR = new Set([
   "crear_entorno",
   "subir_archivos",
   "borrar_archivo",
+  "escribir_en_canal",
+  "crear_reunion",
+  "publicar_anuncio",
 ]);
 
 async function mcp(token: string, id: number, method: string, params: unknown) {

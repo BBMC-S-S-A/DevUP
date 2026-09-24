@@ -370,3 +370,99 @@ export async function borrarArchivo(
   await cliente.delete(`/files/${archivo.id}`);
   return `«${archivo.name}» borrado de ${espacio.name}. No hay vuelta atrás.`;
 }
+
+// ── ver_biblioteca ───────────────────────────────────────────────────────────
+
+/**
+ * Qué hay en la biblioteca, carpeta a carpeta.
+ *
+ * FALTABA LA MITAD DE LEER. El MCP podía subir archivos y borrarlos, pero no
+ * ver qué había: para borrar uno había que saber su nombre de antemano, y para
+ * subir a una carpeta había que adivinar cómo se llamaba.
+ */
+
+type CarpetaConCuentas = Carpeta & { archivos: number; subcarpetas: number };
+
+type ArchivoListado = {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number | string;
+  createdAt: string;
+  uploadedByName?: string;
+};
+
+export const esquemaVerBiblioteca = {
+  carpeta: z
+    .string()
+    .optional()
+    .describe("Qué carpeta abrir, por su nombre. Omitir para la raíz del espacio."),
+  buscar: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .describe("Buscar por nombre en TODA la biblioteca, no solo en la carpeta."),
+  espacio: z.string().optional().describe("Nombre del espacio de trabajo. Omitir si solo hay uno."),
+  organizacion: z.string().optional().describe("Solo si pertenece a varias organizaciones."),
+};
+
+export const descripcionVerBiblioteca = [
+  "Lo que hay en la biblioteca de un espacio de DevUP: las carpetas, con",
+  "cuánto tiene cada una, y los archivos de la carpeta abierta con su tamaño,",
+  "quién lo subió y cuándo.",
+  "",
+  "Sin «carpeta» enseña la raíz. Con «buscar» busca por nombre en todas las",
+  "carpetas a la vez. Para subir, `subir_archivos`; para borrar, `borrar_archivo`",
+  "con el identificador que sale aquí.",
+].join("\n");
+
+export async function verBiblioteca(
+  cliente: ClienteApi,
+  entrada: { carpeta?: string; buscar?: string; espacio?: string; organizacion?: string },
+): Promise<string> {
+  const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
+  const { carpetas } = await cliente.get<{ carpetas: CarpetaConCuentas[] }>(
+    `/workspaces/${espacio.id}/carpetas`,
+  );
+
+  let carpetaId: string | null = null;
+  if (entrada.carpeta && !entrada.buscar) {
+    const hallada = await resolverCarpeta(cliente, espacio.id, entrada.carpeta);
+    if ("error" in hallada) return hallada.error;
+    carpetaId = hallada.id;
+  }
+
+  const parametros = new URLSearchParams({ limit: "60" });
+  if (entrada.buscar) parametros.set("q", entrada.buscar);
+  else parametros.set("carpeta", carpetaId ?? "raiz");
+  const { files } = await cliente.get<{ files: ArchivoListado[] }>(
+    `/workspaces/${espacio.id}/files?${parametros}`,
+  );
+
+  const donde = entrada.buscar
+    ? `«${entrada.buscar}» en toda la biblioteca de ${espacio.name}`
+    : carpetaId
+      ? `${espacio.name} / ${caminoDe(carpetas, carpetaId)}`
+      : `${espacio.name} / (raíz)`;
+  const lineas = [donde, ""];
+
+  if (!entrada.buscar) {
+    const dentro = carpetas.filter((c) => c.padreId === carpetaId);
+    for (const c of dentro) {
+      const sub = c.subcarpetas > 0 ? `, ${c.subcarpetas} carpeta(s)` : "";
+      lineas.push(`▸ ${c.nombre}/ — ${c.archivos} archivo(s)${sub}`);
+    }
+    if (dentro.length > 0 && files.length > 0) lineas.push("");
+  }
+
+  for (const f of files) {
+    const quien = f.uploadedByName ? `, ${f.uploadedByName}` : "";
+    lineas.push(
+      `· ${f.name} — ${formatBytes(Number(f.sizeBytes))}${quien}, ${f.createdAt.slice(0, 10)}  [${f.id}]`,
+    );
+  }
+  if (lineas.length === 2) lineas.push(entrada.buscar ? "Nada con ese nombre." : "Vacía.");
+  if (files.length === 60) lineas.push("", "(hay más; afina con «buscar»)");
+  return lineas.join("\n");
+}
