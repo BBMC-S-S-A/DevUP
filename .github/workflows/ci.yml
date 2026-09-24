@@ -186,6 +186,22 @@ jobs:
         # privado sin token, en la lista y sin leerse.
         run: npm run test:conexiones
 
+      - name: Ninguna credencial sale por la API ni por el MCP
+        # SEG-10. Siembra un secreto reconocible en cada proveedor de la bóveda
+        # y en las variables del servidor, recorre las rutas de conexiones,
+        # infraestructura, base de datos y arquitectura —las lee del propio
+        # código, así que una ruta nueva entra sola— y llama a cada herramienta
+        # MCP de leer. Falla si el secreto aparece en cualquier respuesta. Y
+        # obliga a clasificar cada herramienta MCP nueva: una que no esté en la
+        # lista de leer ni en la de escribir la pone en rojo.
+        run: npm run test:fugas --workspace apps/api
+
+      - name: Dónde viven los identificadores de Railway
+        # Desplegar y la base de datos los leían de dos sitios distintos, y
+        # desplegar mandaba el objeto entero a Railway —migración incluida—,
+        # que Railway rechaza. Configurar la migración rompía el despliegue.
+        run: npm run test:proveedores --workspace apps/api
+
       - name: El código corto de invitación
         # Dos mitades: que normalizar perdone lo que se teclea al dictado
         # (minúsculas, guiones, la O por el cero) sin volver iguales dos

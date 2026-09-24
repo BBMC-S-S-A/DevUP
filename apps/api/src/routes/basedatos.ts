@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSession } from "../auth/plugin.js";
 import { alojarBase, desalojarBase } from "../connectors/alojar.js";
 import { ejecutarSQL, listarTablas } from "../connectors/basedatos.js";
-import { esConfigRailway, variablesDeRailway } from "../connectors/proveedores.js";
+import { configRailwayDe, variablesDeRailway } from "../connectors/proveedores.js";
 import { type Db, withUser } from "../db/pool.js";
 import { badGateway, badRequest, forbidden, parseBody, parseParams, requireUser } from "../lib/http.js";
 import { encryptSecret } from "../security/vault.js";
@@ -70,19 +70,22 @@ async function conexionDeBase(
   }
 
   const { rows: entornos } = await db.query<{
-    provider_config: { railway?: unknown };
+    provider_config: unknown;
     connection_id: string;
   }>(
     `select e.provider_config, c.id as connection_id
        from environments e
        join connections c on c.id = e.connection_id and c.provider = 'railway'
-      where e.workspace_id = $1 and e.provider_config ? 'railway'
+      where e.workspace_id = $1
+        and (e.provider_config ? 'railway' or e.provider_config ? 'projectId')
       order by e.created_at limit 1`,
     [workspaceId],
   );
   const entorno = entornos[0];
-  const configRailway = entorno?.provider_config.railway;
-  if (!entorno || !esConfigRailway(configRailway)) {
+  // Las dos formas en que se guarda, la de desplegar y la de aquí: ver
+  // `configRailwayDe`. Antes solo valía la de dentro de `railway`.
+  const configRailway = entorno ? configRailwayDe(entorno.provider_config) : null;
+  if (!entorno || !configRailway) {
     throw badRequest(
       "este workspace no tiene ninguna base de datos conectada todavía — conecta una en " +
         "Base de datos, o configura Railway en un entorno de Infraestructura",
