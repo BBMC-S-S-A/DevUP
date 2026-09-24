@@ -99,7 +99,14 @@ cargarEnv({ path: join(raiz, ".env") });
 function contrasenaDe(url: string | undefined): string | null {
   if (!url) return null;
   try {
-    const clave = decodeURIComponent(new URL(url).password);
+    const u = new URL(url);
+    const clave = decodeURIComponent(u.password);
+    // Una contraseña que es su propio usuario, o una palabra corriente, no
+    // sirve de canario: en CI la base es postgres:postgres, y «postgres» sale
+    // legítimamente en cada listado de conexiones —es el nombre de un
+    // proveedor—. Buscarla daba una fuga en cada respuesta que no lo era.
+    const corriente = ["postgres", "password", "secret", "devup"];
+    if (clave === decodeURIComponent(u.username) || corriente.includes(clave.toLowerCase())) return null;
     return clave.length >= 6 ? clave : null;
   } catch {
     return null;
