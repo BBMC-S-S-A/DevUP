@@ -271,6 +271,7 @@ const LEER: Record<string, (o: string, e: string) => Record<string, unknown>> = 
   ver_anuncios: (o) => ({ organizacion: o }),
   mis_avisos: () => ({ todos: true }),
   ver_biblioteca: (o, e) => ({ organizacion: o, espacio: e }),
+  leer_archivo: (o, e) => ({ organizacion: o, espacio: e, archivo: "uno que no existe" }),
 };
 
 /** Cambian el tablero o la biblioteca. Se clasifican; no se llaman. */

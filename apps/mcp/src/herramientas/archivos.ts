@@ -466,3 +466,194 @@ export async function verBiblioteca(
   if (files.length === 60) lineas.push("", "(hay más; afina con «buscar»)");
   return lineas.join("\n");
 }
+
+// ── leer_archivo ─────────────────────────────────────────────────────────────
+
+/**
+ * Lo que DICE un archivo de la biblioteca, no solo cómo se llama.
+ *
+ * FALTABA LA OTRA MITAD DE LEER. `ver_biblioteca` enseña nombres y tamaños,
+ * pero para contestar «revisa las propuestas que subió el equipo» hay que
+ * abrirlas. Sin esto, la única salida era pedirle a la persona que bajara los
+ * PDFs a mano y los volviera a pegar en la conversación.
+ *
+ * MISMO CAMINO QUE LAS IMÁGENES DE UNA TAREA (`imagenes.ts`): la API firma la
+ * URL —y antes comprueba con RLS que quien pide puede verlo— y el almacén
+ * sirve los bytes a un `fetch` SIN el token del agente.
+ *
+ * SE DEVUELVE TEXTO, NO EL PDF. Un bloque de recurso con el PDF en base64 lo
+ * entienden unos clientes y otros no, y pesa mucho más que su texto. Así que
+ * el texto se extrae aquí (`unpdf`, sin dependencias nativas: corre igual en
+ * stdio y dentro de la API) y va marcado por páginas, para poder citar «la
+ * página 7». Las imágenes van como imagen, igual que en `ver_tarea`.
+ *
+ * LOS TOPES, POR LO MISMO QUE EN `imagenes.ts`: un PDF de 200 páginas llenaría
+ * la conversación de una sola llamada. Hay tope de bytes para bajarlo y tope
+ * de caracteres para devolverlo; lo que no cabe se dice, y `desde_pagina` /
+ * `hasta_pagina` permiten pedir el resto por trozos.
+ */
+
+/** Más que esto no se baja: extraer el texto de un PDF enorme es lento y caro. */
+const TOPE_BAJADA = 25 * 1024 * 1024;
+/** Unas 30-40 páginas de texto corrido. */
+const TOPE_CARACTERES = 120_000;
+/** Igual que en `imagenes.ts`. */
+const TOPE_IMAGEN = 1_500_000;
+
+type ArchivoConTipo = ArchivoAPI & { mimeType?: string };
+
+export type Bloque =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
+const EXTENSIONES_DE_TEXTO = /\.(txt|md|markdown|csv|tsv|json|ya?ml|xml|html?|sql|log|ts|tsx|js|jsx|py|css)$/i;
+
+function clase(nombre: string, mimeType: string | undefined): "pdf" | "texto" | "imagen" | "otro" {
+  const tipo = (mimeType ?? "").toLowerCase();
+  if (tipo === "application/pdf" || /\.pdf$/i.test(nombre)) return "pdf";
+  if (tipo.startsWith("image/")) return "imagen";
+  if (tipo.startsWith("text/") || tipo === "application/json" || EXTENSIONES_DE_TEXTO.test(nombre)) return "texto";
+  return "otro";
+}
+
+export const esquemaLeerArchivo = {
+  archivo: z
+    .string()
+    .trim()
+    .min(1)
+    .describe("El nombre del archivo, o su identificador — el que enseñan `ver_biblioteca` y `buscar`."),
+  desde_pagina: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Solo PDF: primera página a devolver. Para leer por trozos uno largo."),
+  hasta_pagina: z.number().int().min(1).optional().describe("Solo PDF: última página a devolver."),
+  espacio: z.string().optional().describe("Nombre del espacio de trabajo. Omitir si solo hay uno."),
+  organizacion: z.string().optional().describe("Solo si pertenece a varias organizaciones."),
+};
+
+export const descripcionLeerArchivo = [
+  "Abre un archivo de la biblioteca de un espacio y devuelve su CONTENIDO:",
+  "el texto de un PDF (marcado por páginas), el de un archivo de texto",
+  "(md, csv, json…), o la imagen misma.",
+  "",
+  "Para «revisa la propuesta que subió X» o «qué dice el documento tal». Se",
+  "pide por nombre o por el identificador que enseñan `ver_biblioteca` y",
+  "`buscar`; si el nombre encaja con varios, se listan en vez de abrir uno al",
+  "azar.",
+  "",
+  `Un PDF largo se corta a unos ${TOPE_CARACTERES / 1000} mil caracteres y se dice`,
+  "hasta qué página llegó: el resto se pide con `desde_pagina`. Word, Excel y",
+  "otros binarios no se pueden leer aquí todavía; se dice en vez de inventar.",
+].join("\n");
+
+async function extraerPdf(bytes: Uint8Array): Promise<string[]> {
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const documento = await getDocumentProxy(bytes);
+  const { text } = await extractText(documento, { mergePages: false });
+  return text;
+}
+
+export async function leerArchivo(
+  cliente: ClienteApi,
+  entrada: {
+    archivo: string;
+    desde_pagina?: number;
+    hasta_pagina?: number;
+    espacio?: string;
+    organizacion?: string;
+  },
+): Promise<Bloque[]> {
+  const texto = (t: string): Bloque[] => [{ type: "text", text: t }];
+
+  const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
+  const candidatos = (await resolverArchivo(cliente, espacio.id, entrada.archivo)) as ArchivoConTipo[];
+
+  if (candidatos.length === 0) {
+    return texto(`No encontré ningún archivo que sea «${entrada.archivo}» en ${espacio.name}.`);
+  }
+  if (candidatos.length > 1) {
+    return texto(
+      `«${entrada.archivo}» encaja con ${candidatos.length} archivos. Dime cuál, con su identificador:\n` +
+        candidatos.map((f) => `- ${f.name} (${formatBytes(Number(f.sizeBytes))})  [archivo ${f.id}]`).join("\n"),
+    );
+  }
+
+  const archivo = candidatos[0]!;
+  const tamano = Number(archivo.sizeBytes);
+  const tipo = clase(archivo.name, archivo.mimeType);
+  const quien = archivo.uploadedByName ? `, subido por ${archivo.uploadedByName}` : "";
+  const cabecera = `${archivo.name} — ${formatBytes(tamano)}${quien}`;
+
+  if (tipo === "otro") {
+    return texto(
+      `${cabecera}\n\nEs un ${archivo.mimeType ?? "binario"} y todavía no sé sacarle el texto ` +
+        "(solo PDF, texto e imágenes). Habría que abrirlo desde la biblioteca.",
+    );
+  }
+  if (Number.isFinite(tamano) && tamano > TOPE_BAJADA) {
+    return texto(`${cabecera}\n\nPesa más de ${formatBytes(TOPE_BAJADA)}, demasiado para abrirlo desde aquí.`);
+  }
+  if (tipo === "imagen" && tamano > TOPE_IMAGEN) {
+    return texto(`${cabecera}\n\nImagen demasiado grande para enseñarla aquí (máximo ${formatBytes(TOPE_IMAGEN)}).`);
+  }
+
+  // Sin el token del agente: la firma ya es la autorización de ESTE archivo.
+  const { url } = await cliente.get<{ url: string }>(`/files/${archivo.id}/download-url`);
+  const respuesta = await fetch(url);
+  if (!respuesta.ok) return texto(`${cabecera}\n\nEl almacén no lo entregó (${respuesta.status}).`);
+  const bytes = new Uint8Array(await respuesta.arrayBuffer());
+
+  if (tipo === "imagen") {
+    return [
+      { type: "text", text: cabecera },
+      { type: "image", data: Buffer.from(bytes).toString("base64"), mimeType: archivo.mimeType ?? "image/png" },
+    ];
+  }
+
+  if (tipo === "texto") {
+    const contenido = new TextDecoder("utf-8").decode(bytes);
+    const cortado = contenido.length > TOPE_CARACTERES;
+    return texto(
+      `${cabecera}\n\n${cortado ? contenido.slice(0, TOPE_CARACTERES) : contenido}` +
+        (cortado ? `\n\n(cortado a ${TOPE_CARACTERES} de ${contenido.length} caracteres)` : ""),
+    );
+  }
+
+  let paginas: string[];
+  try {
+    paginas = await extraerPdf(bytes);
+  } catch (fallo) {
+    return texto(`${cabecera}\n\nNo pude leer el PDF: ${fallo instanceof Error ? fallo.message : String(fallo)}`);
+  }
+
+  const total = paginas.length;
+  const desde = Math.min(entrada.desde_pagina ?? 1, Math.max(total, 1));
+  const hasta = Math.min(entrada.hasta_pagina ?? total, total);
+  const trozos: string[] = [];
+  let usados = 0;
+  let ultima = desde - 1;
+  let conTexto = false;
+  for (let n = desde; n <= hasta; n += 1) {
+    const contenido = (paginas[n - 1] ?? "").trim();
+    const pagina = `— página ${n} —\n${contenido}`;
+    // Siempre entra al menos una página, aunque sola pase del tope.
+    if (usados + pagina.length > TOPE_CARACTERES && trozos.length > 0) break;
+    trozos.push(pagina);
+    usados += pagina.length;
+    ultima = n;
+    if (contenido) conTexto = true;
+  }
+
+  const lineas = [`${cabecera} — ${total} página(s)`, ""];
+  if (!conTexto) {
+    lineas.push("No tiene texto que extraer en esas páginas: probablemente es un escaneo o está hecho de imágenes.");
+  } else {
+    lineas.push(trozos.join("\n\n"));
+  }
+  if (ultima < hasta) {
+    lineas.push("", `(llegué hasta la página ${ultima} de ${total}; sigue con \`desde_pagina: ${ultima + 1}\`)`);
+  }
+  return texto(lineas.join("\n"));
+}

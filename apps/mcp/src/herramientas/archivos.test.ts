@@ -1,5 +1,5 @@
 import type { ClienteApi } from "../api.js";
-import { borrarArchivo, subirArchivos } from "./archivos.js";
+import { borrarArchivo, leerArchivo, subirArchivos } from "./archivos.js";
 
 /**
  * Subir y borrar archivos por el MCP: qué falla sin tirar a los demás, y qué
@@ -49,7 +49,7 @@ const ORG = { id: "org-1", name: "Acme", slug: "acme" };
 const WS = { id: "ws-1", name: "Producto" };
 
 type Carpeta = { id: string; nombre: string; padreId: string | null };
-type ArchivoFake = { id: string; name: string; sizeBytes: number; uploadedByName?: string };
+type ArchivoFake = { id: string; name: string; sizeBytes: number; uploadedByName?: string; mimeType?: string };
 
 /** Un identificador que existe pero es de OTRO espacio — para comprobar que
  *  `borrar_archivo` no se fía de que RLS lo deje leer. */
@@ -84,6 +84,8 @@ function clienteCon(opciones: {
       if (ruta === `/files/${ARCHIVO_AJENO}`) {
         return { file: { id: ARCHIVO_AJENO, workspaceId: "ws-otro", name: "no-es-tuyo.pdf", sizeBytes: 1 } };
       }
+      const firma = /^\/files\/([^/?]+)\/download-url$/.exec(ruta);
+      if (firma) return { url: `https://almacen.test/bajar/${firma[1]}` };
       const porId = /^\/files\/([^/?]+)$/.exec(ruta);
       if (porId) {
         const archivo = archivos.find((a) => a.id === porId[1]);
@@ -111,6 +113,63 @@ function clienteCon(opciones: {
   return { cliente, llamadasPost, llamadasDelete };
 }
 
+/**
+ * Un PDF de verdad, hecho a mano, con una página por texto. Hecho aquí y no
+ * leído de un archivo de prueba para que se vea qué contiene: la prueba es que
+ * `unpdf` saque ESTE texto, página a página.
+ */
+function pdfCon(paginas: string[]): Uint8Array {
+  const objetos: string[] = [];
+  const n = paginas.length;
+  const kids = paginas.map((_, i) => `${3 + i * 2} 0 R`).join(" ");
+  objetos.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objetos.push(`<< /Type /Pages /Kids [${kids}] /Count ${n} >>`);
+  const fuente = 3 + n * 2;
+  paginas.forEach((texto, i) => {
+    const flujo = `BT /F1 12 Tf 72 720 Td (${texto}) Tj ET`;
+    objetos.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${4 + i * 2} 0 R ` +
+        `/Resources << /Font << /F1 ${fuente} 0 R >> >> >>`,
+    );
+    objetos.push(`<< /Length ${flujo.length} >>
+stream
+${flujo}
+endstream`);
+  });
+  objetos.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  let pdf = "%PDF-1.4\n";
+  const posiciones: number[] = [];
+  objetos.forEach((cuerpo, i) => {
+    posiciones.push(pdf.length);
+    pdf += `${i + 1} 0 obj
+${cuerpo}
+endobj
+`;
+  });
+  const xref = pdf.length;
+  pdf += `xref
+0 ${objetos.length + 1}
+0000000000 65535 f 
+`;
+  for (const p of posiciones) pdf += `${String(p).padStart(10, "0")} 00000 n 
+`;
+  pdf += `trailer
+<< /Size ${objetos.length + 1} /Root 1 0 R >>
+startxref
+${xref}
+%%EOF`;
+  return new TextEncoder().encode(pdf);
+}
+
+/** Lo que sirve el almacén falso, por identificador de archivo. */
+const CONTENIDOS: Record<string, Uint8Array> = {
+  "file-propuesta": pdfCon(["Modulo ocho soporte", "Presupuesto y fases"]),
+  "file-notas": new TextEncoder().encode("# Notas\nuna linea"),
+};
+/** Qué se llegó a bajar: un tipo que no se sabe leer no debe bajarse. */
+const bajadas: string[] = [];
+
 /** base64 de "hola mundo" (10 bytes). */
 const CONTENIDO = Buffer.from("hola mundo").toString("base64");
 
@@ -120,6 +179,13 @@ async function main(): Promise<void> {
   // exactamente como lo hace la web. Se sustituye para no salir a la red: una
   // URL que contenga "rechaza" simula que el almacén dijo que no.
   globalThis.fetch = (async (url: string) => {
+    const bajada = /\/bajar\/(.+)$/.exec(String(url));
+    if (bajada) {
+      bajadas.push(bajada[1]!);
+      const contenido = CONTENIDOS[bajada[1]!];
+      if (!contenido) return { ok: false, status: 404 } as Response;
+      return { ok: true, status: 200, arrayBuffer: async () => contenido.slice().buffer } as unknown as Response;
+    }
     const rechaza = String(url).includes("rechaza");
     return { ok: !rechaza, status: rechaza ? 403 : 200 } as Response;
   }) as typeof fetch;
@@ -265,6 +331,47 @@ async function main(): Promise<void> {
     const { cliente: b6 } = clienteCon({ archivos: unArchivo });
     const r14 = await borrarArchivo(b6, { archivo: "no-existe.pdf", confirmar: true });
     check("dice que no lo encontró", r14.includes("No encontré"));
+
+    console.log("\nleer_archivo: un PDF devuelve su texto, marcado por páginas");
+
+    const biblioteca: ArchivoFake[] = [
+      { id: "file-propuesta", name: "propuesta.pdf", sizeBytes: 900, mimeType: "application/pdf", uploadedByName: "Ana" },
+      { id: "file-propuesta-v2", name: "propuesta-v2.pdf", sizeBytes: 900, mimeType: "application/pdf" },
+      { id: "file-notas", name: "notas.md", sizeBytes: 20, mimeType: "text/markdown" },
+      { id: "file-hoja", name: "cuentas.xlsx", sizeBytes: 20, mimeType: "application/vnd.ms-excel" },
+    ];
+    const { cliente: l1 } = clienteCon({ archivos: biblioteca });
+    const [pdf] = await leerArchivo(l1, { archivo: "propuesta.pdf" });
+    const textoPdf = pdf?.type === "text" ? pdf.text : "";
+    check("dice cuántas páginas tiene", textoPdf.includes("2 página(s)"), textoPdf);
+    check("saca el texto de la primera", textoPdf.includes("— página 1 —") && textoPdf.includes("Modulo ocho soporte"), textoPdf);
+    check("y el de la segunda", textoPdf.includes("— página 2 —") && textoPdf.includes("Presupuesto y fases"));
+    check("dice quién lo subió", textoPdf.includes("subido por Ana"));
+
+    console.log("\nleer_archivo: por trozos");
+
+    const [trozo] = await leerArchivo(l1, { archivo: "propuesta.pdf", desde_pagina: 2 });
+    const textoTrozo = trozo?.type === "text" ? trozo.text : "";
+    check("desde_pagina salta las anteriores", !textoTrozo.includes("Modulo ocho") && textoTrozo.includes("Presupuesto"));
+
+    console.log("\nleer_archivo: texto plano, ambiguos y lo que no sabe leer");
+
+    const [md] = await leerArchivo(l1, { archivo: "notas.md" });
+    check("un .md vuelve tal cual", md?.type === "text" && md.text.includes("# Notas"));
+
+    const [ambiguo] = await leerArchivo(l1, { archivo: "propuesta" });
+    check(
+      "un nombre que encaja con dos los lista, no abre uno",
+      ambiguo?.type === "text" && ambiguo.text.includes("2 archivos") && ambiguo.text.includes("file-propuesta-v2"),
+    );
+
+    bajadas.length = 0;
+    const [hoja] = await leerArchivo(l1, { archivo: "cuentas.xlsx" });
+    check("un Excel dice que no sabe leerlo", hoja?.type === "text" && hoja.text.includes("todavía no sé"));
+    check("y ni siquiera lo baja", bajadas.length === 0);
+
+    const [nada] = await leerArchivo(l1, { archivo: "no-existe.pdf" });
+    check("uno que no existe, lo dice", nada?.type === "text" && nada.text.includes("No encontré"));
   } finally {
     globalThis.fetch = fetchOriginal;
   }
