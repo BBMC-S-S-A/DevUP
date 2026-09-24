@@ -105,7 +105,7 @@ type Renglon = {
  * se enseña tal cual en vez de desaparecer: preferible un «etiqueto» soso a un
  * hecho que no se cuenta.
  */
-const COMO_SE_DICE: Record<string, string> = {
+export const COMO_SE_DICE: Record<string, string> = {
   creo: "creó",
   movio: "movió",
   cerro: "cerró",

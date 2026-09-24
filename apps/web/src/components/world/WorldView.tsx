@@ -9,6 +9,7 @@ import { useSession } from "@/lib/session";
 import { useVoiceCall } from "@/lib/voice/VoiceCallProvider";
 import { casillaDelAgente, esSalaDelAgente, peersConAgente } from "@/lib/world/agente-ia";
 import { TILE } from "@/lib/world/atlas";
+import { buscarCamino, seguirCamino, type Punto } from "@/lib/world/camino";
 import { render, type Camera } from "@/lib/world/renderer";
 import { seatsOf } from "@/lib/world/props";
 import { buildScene, type Scene } from "@/lib/world/scene";
@@ -68,6 +69,15 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<Input>({ up: false, down: false, left: false, right: false });
   const cameraRef = useRef<Camera>({ x: 0, y: 0, scale: 2 });
+  /**
+   * Lo que queda por andar después de tocar el suelo, y a dónde. Nulo es que
+   * se anda con teclas. Ver `lib/world/camino.ts`: sin esto, en un teléfono la
+   * oficina no se podía recorrer.
+   */
+  const caminoRef = useRef<Punto[] | null>(null);
+  const destinoRef = useRef<Punto | null>(null);
+  /** Dónde estaba y cuándo, para notar que el camino se atascó y soltarlo. */
+  const atascoRef = useRef({ x: 0, y: 0, t: 0 });
 
   const [map, setMap] = useState<WorldMap | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -344,12 +354,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       }
       if (event.code === "KeyE" && actionRef.current) {
         event.preventDefault();
-        const current = actionRef.current;
-        if (current.kind === "sit") sitRef.current(current.seat);
-        else if (current.kind === "stand") sitRef.current(null);
-        else if (current.kind === "board") setTableroAbierto(true);
-        else if (current.kind === "agente") setAgenteAbierto(true);
-        else router.push(current.href);
+        ejecutarRef.current(actionRef.current);
         return;
       }
       const key = KEYS[event.code];
@@ -357,6 +362,10 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       // Sin esto, las flechas desplazan la página por debajo del lienzo.
       event.preventDefault();
       inputRef.current[key] = true;
+      // Una tecla gana a lo que se tocó: quien pulsa la W quiere ir ahí, no
+      // terminar el camino de antes.
+      caminoRef.current = null;
+      destinoRef.current = null;
     };
     const up = (event: KeyboardEvent) => {
       const key = KEYS[event.code];
@@ -444,7 +453,22 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       const dt = Math.min(64, now - last);
       last = now;
 
-      step(dt, inputRef.current);
+      const teclas = inputRef.current;
+      let entrada: Input = teclas;
+      if (caminoRef.current && !teclas.up && !teclas.down && !teclas.left && !teclas.right) {
+        const yo = stateRef.current.self;
+        const siguiendo = seguirCamino(yo, caminoRef.current);
+        caminoRef.current = siguiendo.camino.length > 0 ? siguiendo.camino : null;
+        entrada = siguiendo.direccion;
+        // Si en casi un segundo no se ha avanzado nada, el camino ya no vale
+        // —alguien ha puesto un mueble en medio— y se suelta. Sin esto el
+        // personaje se quedaría andando contra el obstáculo para siempre.
+        const a = atascoRef.current;
+        if (Math.hypot(yo.x - a.x, yo.y - a.y) > 0.05) atascoRef.current = { x: yo.x, y: yo.y, t: now };
+        else if (now - a.t > 900) caminoRef.current = null;
+        if (!caminoRef.current) destinoRef.current = null;
+      }
+      step(dt, entrada);
 
       const self = stateRef.current.self;
       const camera = cameraRef.current;
@@ -477,6 +501,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         camera,
         time: now - started,
         audibleRadius: AUDIBLE_RADIUS,
+        destino: destinoRef.current,
       });
 
       // Solo se toca el estado si la acción cambia de verdad: llamar a
@@ -505,9 +530,9 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
    */
   const onCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!editor.active || !editingZone) return;
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas || !scene) return;
+      if (editor.active && !editingZone) return;
 
       const rect = canvas.getBoundingClientRect();
       const ratio = window.devicePixelRatio || 1;
@@ -518,6 +543,22 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       const worldX = ((event.clientX - rect.left) * ratio) / camera.scale + camera.x - viewW / 2;
       const worldY = ((event.clientY - rect.top) * ratio) / camera.scale + camera.y - viewH / 2;
 
+      /**
+       * FUERA DEL EDITOR, TOCAR EL SUELO ES IR AHÍ. Es lo primero que intenta
+       * quien no juega a videojuegos, y lo único posible en un teléfono. El
+       * mismo clic, la misma conversión: dos maneras de pasar de la pantalla
+       * a la casilla acabarían apuntando a sitios distintos.
+       */
+      if (!editor.active) {
+        const yo = stateRef.current.self;
+        const camino = buscarCamino(scene, yo, { x: worldX / TILE, y: worldY / TILE });
+        caminoRef.current = camino && camino.length > 0 ? camino : null;
+        destinoRef.current = caminoRef.current ? caminoRef.current[caminoRef.current.length - 1]! : null;
+        atascoRef.current = { x: yo.x, y: yo.y, t: performance.now() };
+        return;
+      }
+      if (!editingZone) return;
+
       // Relativas a la sala, que es como se guardan.
       const rx = Math.floor(worldX / TILE) - editingZone.x;
       const ry = Math.floor(worldY / TILE) - editingZone.y;
@@ -526,7 +567,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
       else if (editor.selected >= 0) editor.moveSelected(rx, ry);
       else editor.selectAt(rx, ry);
     },
-    [editor, editingZone],
+    [editor, editingZone, scene, stateRef],
   );
 
   /**
@@ -576,6 +617,21 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
   const [action, setAction] = useState<Action | null>(null);
   const actionRef = useRef(action);
   actionRef.current = action;
+
+  /**
+   * Hacer lo que se ofrece aquí. Un solo sitio para la tecla E y para el botón
+   * que se pulsa con el dedo: si fueran dos, acabarían haciendo cosas
+   * distintas y nadie lo notaría hasta usar la que no se probó.
+   */
+  const ejecutar = (current: Action): void => {
+    if (current.kind === "sit") sitRef.current(current.seat);
+    else if (current.kind === "stand") sitRef.current(null);
+    else if (current.kind === "board") setTableroAbierto(true);
+    else if (current.kind === "agente") setAgenteAbierto(true);
+    else router.push(current.href);
+  };
+  const ejecutarRef = useRef(ejecutar);
+  ejecutarRef.current = ejecutar;
 
   const [tableroAbierto, setTableroAbierto] = useState(false);
   const tableroAbiertoRef = useRef(tableroAbierto);
@@ -640,7 +696,9 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         best = { kind: "board", label: "Ver el tablero" };
         bestDistance = distance;
       } else if (piece.kind === "bookshelf") {
-        best = { kind: "link", label: "Abrir la biblioteca", href: `/app/w/${workspaceId}` };
+        // A `/archivos`. Llevaba a la raíz del espacio, que redirige al canal
+        // general: «Abrir la biblioteca» abría una conversación.
+        best = { kind: "link", label: "Abrir la biblioteca", href: `/app/w/${workspaceId}/archivos` };
         bestDistance = distance;
       } else if ((piece.kind === "monitor" || piece.kind === "dualMonitor") && zone) {
         best = {
@@ -801,18 +859,44 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
         </div>
       </div>
 
-      {/* --- Ayuda, solo mientras no se haya movido nadie --- */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
+      {/* --- Ayuda, solo mientras no se haya movido nadie ---
+          EN PANTALLA ESTRECHA VA MÁS ARRIBA: abajo a la izquierda está el botón
+          de «Vista profesional» del armazón, y en un teléfono los dos se
+          pisaban — el texto quedaba debajo del botón, a medio leer. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-2 p-4 max-sm:bottom-14">
         {action ? (
-          <p className="rounded-xl border border-accent/40 bg-accent-soft px-3 py-2 text-[11px] text-accent backdrop-blur">
+          // Un botón y no un texto: en un teléfono no hay tecla E, y esto era
+          // lo único que decía qué se podía hacer aquí sin dejar hacerlo.
+          <button
+            type="button"
+            onClick={() => ejecutarRef.current(action)}
+            className="presionable pointer-events-auto rounded-xl border border-accent/40 bg-accent-soft px-3 py-2 text-[11px] text-accent backdrop-blur hover:border-accent/70"
+          >
             <kbd className="rounded bg-canvas/60 px-1.5 py-0.5 font-semibold">E</kbd> {action.label}
-          </p>
+          </button>
         ) : (
           <p className="rounded-xl border border-line bg-surface/90 px-3 py-2 text-[11px] text-faint backdrop-blur">
-            Muévete con <kbd className="text-muted">WASD</kbd> ·{" "}
-            <kbd className="text-muted">T</kbd> para hablar ·{" "}
-            <kbd className="text-muted">1-4</kbd> gestos
+            {/* Con el dedo no hay WASD, ni T, ni 1-4: decírselo a quien no
+                tiene teclado es enseñarle a no leer esta línea. */}
+            <span className="hidden pointer-coarse:inline">Toca el suelo para moverte</span>
+            <span className="pointer-coarse:hidden">
+              Toca el suelo o usa <kbd className="text-muted">WASD</kbd> ·{" "}
+              <kbd className="text-muted">T</kbd> para hablar ·{" "}
+              <kbd className="text-muted">1-4</kbd> gestos
+            </span>
           </p>
+        )}
+        {/* HABLAR SIN TECLA T. En un teléfono era imposible decir nada dentro
+            de la oficina: la única entrada era una tecla. */}
+        {world.zone && !talking && !action && (
+          <button
+            type="button"
+            onClick={() => setTalking(true)}
+            className="presionable pointer-events-auto hidden items-center gap-1.5 rounded-xl border border-line bg-surface/90 px-3 py-2 text-[11px] text-muted backdrop-blur pointer-coarse:flex"
+          >
+            <MessageSquare size={13} className="text-accent" />
+            Decir algo
+          </button>
         )}
       </div>
 
@@ -825,7 +909,7 @@ export function WorldView({ workspaceId }: { workspaceId: string }) {
             setTalking(false);
             if (text.trim()) void say(text, world.zone!.channelId).catch(() => {});
           }}
-          className="pointer-events-auto absolute inset-x-0 bottom-16 z-30 flex justify-center px-4"
+          className="pointer-events-auto absolute inset-x-0 bottom-16 z-30 flex justify-center px-4 max-sm:bottom-28"
         >
           <div className="flex w-full max-w-md items-center gap-2 rounded-xl border border-accent/40 bg-surface/95 px-3 py-2 backdrop-blur">
             <MessageSquare size={14} className="shrink-0 text-accent" />

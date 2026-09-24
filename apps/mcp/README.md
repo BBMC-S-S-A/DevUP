@@ -21,35 +21,67 @@ apuntes también en la lista que comprueba el registro.
 
 ### Leer
 
-| Herramienta | Qué hace |
-|---|---|
-| `buscar` | Busca por texto en mensajes, archivos, tareas, clientes, servicios y oportunidades a la vez. |
-| `mis_tareas` | Las tareas asignadas a quien conectó el agente. |
-| `ver_tablero` | El tablero de un espacio, con sus columnas y tarjetas. |
-| `ver_tarea` | Una tarea con su detalle, y sus imágenes adjuntas incrustadas. |
-| `ver_arquitectura` | Los componentes del diagrama de un espacio y cómo se conectan. |
-| `que_ha_pasado` | La historia de un espacio o de la organización: quién creó, movió, cerró o asignó qué, y cuándo. Agrupada por día y en el orden en que ocurrió. Distingue lo que hizo una persona de lo que hizo su asistente. |
-| `ver_entornos` | Dónde corre lo que escribe el equipo y cómo quedó el último despliegue. Dice cuáles no pueden leer nada por faltarles repositorio o token. |
-| `sincronizar_entornos` | Vuelve a preguntarle a GitHub por los despliegues, sin esperar a la pasada automática. Va aquí aunque escriba: lo que guarda es un reflejo de lo que dijo el proveedor. |
+Organizadas por los tres niveles de DevUP —la persona, la organización y el
+espacio de trabajo—, porque es como se pregunta: «¿qué tengo yo?», «¿cómo va la
+empresa?», «¿qué pasa en este proyecto?».
+
+**Ninguna marca nada como leído.** Lo lee el agente, no la persona: si leer un
+canal moviera su contador, al abrir DevUP no sabría qué tiene pendiente.
+
+| Nivel | Herramienta | Qué hace |
+|---|---|---|
+| Persona | `mi_inicio` | Su portada, cruzando todas sus organizaciones: lo que tiene entre manos, cuánto ha hecho estos días y qué fue lo último. |
+| Persona | `mis_tareas` | Las tareas asignadas a quien conectó el agente, con sus imágenes. |
+| Persona | `mis_avisos` | La campana: menciones, tareas asignadas, grabaciones, anuncios e invitaciones. |
+| Persona | `puntos` | El marcador, con cuánto de cada total se ganó a solas. |
+| Organización | `ver_organizacion` | La portada de la organización: cómo va cada proyecto, quién está en qué, lo **atascado** y lo que **no tiene dueño**. |
+| Organización | `ver_equipo` | Quién está, a qué se dedica, qué permiso tiene y si está disponible. |
+| Organización | `ver_anuncios` | El tablón de anuncios. |
+| Organización | `ver_embudo` | El embudo de ventas por etapa, con cliente, responsable e importe. |
+| Espacio | `ver_tablero` | El tablero, con sus columnas y tarjetas. |
+| Espacio | `ver_tarea` | Una tarea con su detalle y sus imágenes incrustadas. |
+| Espacio | `contexto_de_tarea` | Por qué una tarea se hizo así: su historia, sus ramas, sus pruebas. |
+| Espacio | `ver_ramas` | Las ramas de trabajo, quién responde de cada una y cuánto está **por repartir**. |
+| Espacio | `ver_canales` | Los canales, con lo que tienes sin leer, y quién hay ahora en cada sala de voz. |
+| Espacio | `leer_canal` | Los últimos mensajes de un canal, con autor y hora en tu zona. |
+| Espacio | `ver_reuniones` | Las reuniones con hora de DevCall: cuándo, cuánto duran y si vas. |
+| Espacio | `ver_biblioteca` | Las carpetas y archivos de la biblioteca, o buscar en toda ella por nombre. |
+| Espacio | `ver_repositorios` | Los repositorios de GitHub: PRs, issues, CI y últimos commits. |
+| Espacio | `ver_arquitectura` | Los componentes del diagrama y cómo se conectan. |
+| Espacio | `ver_entornos` | Dónde corre lo que escribe el equipo y cómo quedó el último despliegue. |
+| Espacio | `sincronizar_entornos` | Vuelve a preguntar al proveedor por los despliegues. Va aquí aunque escriba: lo que guarda es un reflejo de lo que dijo el proveedor. |
+| Espacio | `que_ha_pasado` | La historia de un espacio o de la organización, agrupada por día. Distingue lo que hizo una persona de lo que hizo su asistente. |
+| Espacio | `diario` | Cómo ha ido el proyecto por semanas. |
+| Todos | `buscar` | Busca a la vez en mensajes, archivos, tareas, clientes, servicios y oportunidades. |
 
 ### Escribir
 
-Todo lo que crean en el tablero lleva la etiqueta `agente`, que es lo que
-permite verlo, filtrarlo y deshacerlo en bloque. **No hay ninguna de borrar, y
-es deliberado**: equivocarse creando deja trabajo que revisar, equivocarse
-borrando deja trabajo perdido.
+Escriben de verdad y **como la persona**: el equipo no distingue lo que hizo
+ella de lo que hizo su agente, así que sus descripciones piden que solo se
+escriba lo que ella haya pedido.
 
 | Herramienta | Qué hace |
 |---|---|
-| `crear_tarea` | Crea una tarea, con responsable, vencimiento, área y las categorías que se le digan. |
-| `crear_area` | Un área del tablero, con su delegado. Lo que se cree en ella se le asigna solo. |
+| `crear_tarea` | Crea una tarea, con responsable, vencimiento, área y categorías. |
+| `crear_area` | Una rama de trabajo, con su gerente. Archivar en ella no asigna a nadie. |
 | `crear_columna` | Una columna nueva en el tablero. |
 | `mover_tarea` | Pasa una tarea de columna. |
-| `enlazar_rama` | Apunta en una tarea la rama donde se trabaja, o cambia su estado. Varias, si el trabajo va por varios caminos. |
-| `marcar_hecha` | Cierra una tarea y, si se le pasa, deja en ella la prueba de que se hizo —el PR, el commit, el enlace o una nota—. Las dos cosas caen juntas. |
 | `actualizar_tarea` | Cambia título, descripción, responsable o fecha. |
-| `dibujar_arquitectura` | Vuelca un diagrama entero —componentes y conexiones— en un espacio. Coloca las cajas ella: no hay que darle coordenadas. Reutiliza lo que ya exista con ese nombre en vez de duplicarlo. |
-| `crear_entorno` | Crea un entorno y lo engancha a un repositorio de GitHub, leyendo sus despliegues en la misma llamada. Si al espacio le falta el token, lo crea igual y **lo dice**: sin token no sincroniza nunca, y callarlo deja esperando despliegues que no llegan. |
+| `enlazar_rama` | Apunta en una tarea la rama de git donde se trabaja, o cambia su estado. |
+| `marcar_hecha` | Cierra una tarea y deja en ella la prueba —PR, commit, enlace o nota—. Las dos cosas caen juntas. |
+| `escribir_en_canal` | Publica un mensaje en un canal, con el nombre de la persona. |
+| `crear_reunion` | Convoca una reunión con hora. La hora **tiene que llevar su zona** (`2026-09-30T15:00-05:00`): sin ella caería en UTC. |
+| `publicar_anuncio` | Publica en el tablón y **avisa a toda la organización**. Lo más ruidoso que se puede hacer desde aquí. |
+| `dibujar_arquitectura` | Vuelca un diagrama entero en un espacio. Coloca las cajas ella y reutiliza lo que ya exista. |
+| `crear_entorno` | Crea un entorno y lo engancha a un repositorio, leyendo sus despliegues en la misma llamada. |
+| `subir_archivos` | Sube archivos a la biblioteca, todos de una llamada. |
+| `borrar_archivo` | **La única que borra.** Pide dos llamadas: la primera describe qué se va a borrar, la segunda —con `confirmar: true`— lo borra. |
+| `estoy_haciendo` | Dice en DevVerse qué está haciendo el agente. |
+
+Cada herramienta tiene que estar clasificada como de leer o de escribir en
+`apps/api/src/security/fugas.test.ts`: una sin clasificar pone CI en rojo. Las
+de leer se llaman todas en esa prueba, que falla si alguna devuelve una
+credencial.
 
 ## Dos maneras de conectarlo, y cuál elegir
 

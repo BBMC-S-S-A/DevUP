@@ -48,7 +48,10 @@
     "test:consola": "tsx src/connectors/basedatos.test.ts",
     "test:almacen": "tsx src/storage/s3.test.ts",
     "test:version": "tsx src/lib/version.test.ts",
-    "test:modulos": "tsx src/lib/modulos.test.ts"
+    "test:modulos": "tsx src/lib/modulos.test.ts",
+    "test:fugas": "tsx src/security/fugas.test.ts",
+    "test:proveedores": "tsx src/connectors/proveedores.test.ts",
+    "test:mcp-vivo": "tsx src/routes/mcp-herramientas.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

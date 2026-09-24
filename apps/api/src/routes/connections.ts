@@ -70,18 +70,28 @@ export async function connectionRoutes(app: FastifyInstance): Promise<void> {
         `select id, provider from connections where workspace_id = $1`,
         [workspaceId],
       );
+      // LOS SECRETOS DE UNO EN UNO, LAS LLAMADAS A LA VEZ. Leer de la base se
+      // hace en serie porque `db` es UN cliente de Postgres, y lanzarle varias
+      // consultas a la vez es algo que `pg` ya avisa de que dejará de admitir.
+      // Lo lento es preguntar a GitHub o a Railway, y eso sí va en paralelo.
+      const secretos: { id: string; provider: string; secret: string | null; fallo?: string }[] = [];
+      for (const c of rows) {
+        try {
+          secretos.push({ ...c, secret: await getDecryptedSecret(db, c.id) });
+        } catch (error) {
+          secretos.push({
+            ...c,
+            secret: null,
+            fallo: error instanceof Error ? error.message : "no se pudo comprobar",
+          });
+        }
+      }
       const resultados = await Promise.all(
-        rows.map(async (c) => {
-          try {
-            const secret = await getDecryptedSecret(db, c.id);
-            return [c.id, await verificarConexion(c.provider, secret)] as const;
-          } catch (error) {
-            return [
-              c.id,
-              { ok: false, detalle: error instanceof Error ? error.message : "no se pudo comprobar" },
-            ] as const;
-          }
-        }),
+        secretos.map(async (c) =>
+          c.secret === null
+            ? ([c.id, { ok: false, detalle: c.fallo ?? "no se pudo comprobar" }] as const)
+            : ([c.id, await verificarConexion(c.provider, c.secret)] as const),
+        ),
       );
       return { health: Object.fromEntries(resultados) };
     });

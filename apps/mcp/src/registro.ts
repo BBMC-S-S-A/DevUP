@@ -73,7 +73,58 @@ import {
   esquemaBorrarArchivo,
   esquemaSubirArchivos,
   subirArchivos,
+  descripcionVerBiblioteca,
+  esquemaVerBiblioteca,
+  verBiblioteca,
 } from "./herramientas/archivos.js";
+import {
+  descripcionEscribirEnCanal,
+  descripcionLeerCanal,
+  descripcionVerCanales,
+  escribirEnCanal,
+  esquemaEscribirEnCanal,
+  esquemaLeerCanal,
+  esquemaVerCanales,
+  leerCanal,
+  verCanales,
+} from "./herramientas/canales.js";
+import {
+  crearReunion,
+  descripcionCrearReunion,
+  descripcionMisAvisos,
+  descripcionPublicarAnuncio,
+  descripcionVerAnuncios,
+  descripcionVerReuniones,
+  esquemaCrearReunion,
+  esquemaMisAvisos,
+  esquemaPublicarAnuncio,
+  esquemaVerAnuncios,
+  esquemaVerReuniones,
+  misAvisos,
+  publicarAnuncio,
+  verAnuncios,
+  verReuniones,
+} from "./herramientas/agenda.js";
+import {
+  descripcionMiInicio,
+  descripcionVerEmbudo,
+  descripcionVerEquipo,
+  descripcionVerOrganizacion,
+  descripcionVerRamas,
+  descripcionVerRepositorios,
+  esquemaMiInicio,
+  esquemaVerEmbudo,
+  esquemaVerEquipo,
+  esquemaVerOrganizacion,
+  esquemaVerRamas,
+  esquemaVerRepositorios,
+  miInicio,
+  verEmbudo,
+  verEquipo,
+  verOrganizacion,
+  verRamas,
+  verRepositorios,
+} from "./herramientas/niveles.js";
 
 /**
  * Qué herramientas expone la puerta MCP, en un solo sitio.
@@ -258,6 +309,53 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
     ],
   );
 
+  // --- Los tres niveles: la persona, la organización, el espacio ------------
+  //
+  // Ver `herramientas/niveles.ts`. Hasta el 24-sep el MCP solo sabía mirar
+  // dentro de un espacio, y la organización es un nivel con contenido propio.
+
+  registrar("mi_inicio", descripcionMiInicio, esquemaMiInicio, async (cliente, entrada) => [
+    { type: "text" as const, text: await miInicio(cliente, entrada) },
+  ]);
+  registrar("ver_organizacion", descripcionVerOrganizacion, esquemaVerOrganizacion, async (cliente, entrada) => [
+    { type: "text" as const, text: await verOrganizacion(cliente, entrada) },
+  ]);
+  registrar("ver_equipo", descripcionVerEquipo, esquemaVerEquipo, async (cliente, entrada) => [
+    { type: "text" as const, text: await verEquipo(cliente, entrada) },
+  ]);
+  registrar("ver_ramas", descripcionVerRamas, esquemaVerRamas, async (cliente, entrada) => [
+    { type: "text" as const, text: await verRamas(cliente, entrada) },
+  ]);
+  registrar("ver_repositorios", descripcionVerRepositorios, esquemaVerRepositorios, async (cliente, entrada) => [
+    { type: "text" as const, text: await verRepositorios(cliente, entrada) },
+  ]);
+  registrar("ver_embudo", descripcionVerEmbudo, esquemaVerEmbudo, async (cliente, entrada) => [
+    { type: "text" as const, text: await verEmbudo(cliente, entrada) },
+  ]);
+
+  // --- Lo que se habla y lo que llega ---------------------------------------
+  //
+  // Leer no marca nada como leído: lo lee el agente, no la persona.
+
+  registrar("ver_canales", descripcionVerCanales, esquemaVerCanales, async (cliente, entrada) => [
+    { type: "text" as const, text: await verCanales(cliente, entrada) },
+  ]);
+  registrar("leer_canal", descripcionLeerCanal, esquemaLeerCanal, async (cliente, entrada) => [
+    { type: "text" as const, text: await leerCanal(cliente, entrada) },
+  ]);
+  registrar("ver_reuniones", descripcionVerReuniones, esquemaVerReuniones, async (cliente, entrada) => [
+    { type: "text" as const, text: await verReuniones(cliente, entrada) },
+  ]);
+  registrar("ver_anuncios", descripcionVerAnuncios, esquemaVerAnuncios, async (cliente, entrada) => [
+    { type: "text" as const, text: await verAnuncios(cliente, entrada) },
+  ]);
+  registrar("mis_avisos", descripcionMisAvisos, esquemaMisAvisos, async (cliente, entrada) => [
+    { type: "text" as const, text: await misAvisos(cliente, entrada) },
+  ]);
+  registrar("ver_biblioteca", descripcionVerBiblioteca, esquemaVerBiblioteca, async (cliente, entrada) => [
+    { type: "text" as const, text: await verBiblioteca(cliente, entrada) },
+  ]);
+
   // --- Las que escriben -----------------------------------------------------
   //
   // Escriben en el tablero de un equipo, asi que van marcadas: todo lo que
@@ -380,4 +478,20 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
       { type: "text" as const, text: await borrarArchivo(cliente, entrada) },
     ],
   );
+
+  // --- Hablar y convocar ----------------------------------------------------
+  //
+  // Escriben COMO LA PERSONA: el mensaje, la reunión y el anuncio salen con su
+  // nombre. Por eso sus descripciones piden que solo se escriba lo que ella
+  // haya dictado. Publicar un anuncio avisa a toda la organización.
+
+  registrar("escribir_en_canal", descripcionEscribirEnCanal, esquemaEscribirEnCanal, async (cliente, entrada) => [
+    { type: "text" as const, text: await escribirEnCanal(cliente, entrada) },
+  ]);
+  registrar("crear_reunion", descripcionCrearReunion, esquemaCrearReunion, async (cliente, entrada) => [
+    { type: "text" as const, text: await crearReunion(cliente, entrada) },
+  ]);
+  registrar("publicar_anuncio", descripcionPublicarAnuncio, esquemaPublicarAnuncio, async (cliente, entrada) => [
+    { type: "text" as const, text: await publicarAnuncio(cliente, entrada) },
+  ]);
 }

@@ -48,6 +48,11 @@ Si solo se van a leer tres, son estos tres.
 - [[PLAN-LA-MEMORIA-SE-VE]] — las tres preguntas del registro de actividad y
   dónde va cada una en la interfaz.
 - [[decisiones/0002-vistas-profesional-e-inmersiva|0002 · Las dos vistas]]
+- [[PLAN-DEVVERSE-TRES-MUNDOS-2026-09-24]] — **manda sobre el DevVerse.** Tres
+  mundos que son los tres niveles —el cuarto de la persona, el edificio de la
+  organización y la oficina del espacio—, qué función de DevUP va en cada uno,
+  y personajes que parezcan tener a alguien dentro. Dice en su §6 cómo encaja
+  con el «no tocar DevVerse» del [[PLAN-UX-MVP-2026-09-20]].
 
 ## Estado y auditorías
 

@@ -52,6 +52,34 @@ export function esConfigRailway(config: unknown): config is ConfigRailway {
 }
 export type { ConfigRailway };
 
+/**
+ * Los tres identificadores de Railway de un entorno, y NADA MÁS.
+ *
+ * HABÍA DOS FORMAS Y CADA LECTOR ESPERABA UNA. Desplegar los buscaba en la raíz
+ * de `provider_config`; la base de datos, dentro de `provider_config.railway`.
+ * Configurar un entorno para una de las dos cosas dejaba la otra sin
+ * funcionar, sin que ningún mensaje lo relacionara. Aquí se aceptan las dos, y
+ * la de dentro gana si están ambas, porque es la más explícita.
+ *
+ * Y SE DEVUELVE UN OBJETO NUEVO CON SOLO ESOS TRES CAMPOS, que es la otra mitad
+ * del arreglo. Antes se mandaba `provider_config` entero como entrada de
+ * GraphQL, y ese objeto también lleva `migracion` —lo que lee `/migrate`—.
+ * GraphQL rechaza por especificación un campo que el tipo de entrada no
+ * declara, así que configurar la migración de un entorno rompía su botón de
+ * desplegar.
+ */
+export function configRailwayDe(providerConfig: unknown): ConfigRailway | null {
+  if (typeof providerConfig !== "object" || providerConfig === null) return null;
+  const dentro = (providerConfig as { railway?: unknown }).railway;
+  const candidato = esConfigRailway(dentro) ? dentro : providerConfig;
+  if (!esConfigRailway(candidato)) return null;
+  return {
+    projectId: candidato.projectId,
+    environmentId: candidato.environmentId,
+    serviceId: candidato.serviceId,
+  };
+}
+
 const RAILWAY_GRAPHQL = "https://backboard.railway.com/graphql/v2";
 
 /**
@@ -135,8 +163,9 @@ function traducirEstadoRailway(status: string): EstadoProveedor["estado"] {
 }
 
 export const proveedorRailway: ProveedorDespliegue = {
-  async estado(config, token) {
-    if (!esConfigRailway(config)) {
+  async estado(providerConfig, token) {
+    const config = configRailwayDe(providerConfig);
+    if (!config) {
       throw new Error(
         "falta configurar este entorno: necesita projectId, environmentId y serviceId de Railway.",
       );
@@ -164,8 +193,9 @@ export const proveedorRailway: ProveedorDespliegue = {
     };
   },
 
-  async desplegar(config, token) {
-    if (!esConfigRailway(config)) {
+  async desplegar(providerConfig, token) {
+    const config = configRailwayDe(providerConfig);
+    if (!config) {
       throw new Error(
         "falta configurar este entorno: necesita projectId, environmentId y serviceId de Railway.",
       );

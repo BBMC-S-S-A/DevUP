@@ -129,6 +129,13 @@ const schema = z.object({
    * token que todavía no tiene dónde usarse.
    */
   MCP_REMOTE_ENABLED: bool("false"),
+  /**
+   * Cuánto cuenta el registro. Sin poner, lo de siempre: `info` en producción y
+   * `debug` fuera. Existe para las pruebas que levantan el servidor entero —la
+   * de fugas hace cuarenta peticiones—, donde el registro de cada una ahoga la
+   * única línea que importa, la que dice qué falló.
+   */
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).optional(),
 
   // --- Altas -----------------------------------------------------------------
   // `invite` es el valor por defecto a propósito: una instancia de equipo con
