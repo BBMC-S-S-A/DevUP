@@ -60,6 +60,14 @@ export type RenderInput = {
   time: number;
   /** Radio en casillas dentro del cual se oye a alguien. Se dibuja de guía. */
   audibleRadius: number;
+  /**
+   * A dónde va el personaje, si se tocó el suelo. En casillas.
+   *
+   * Sin una marca, tocar y que el personaje eche a andar un instante después
+   * se vive como que no pasó nada y se vuelve a tocar: la marca es lo que dice
+   * «recibido» antes de que se note el primer paso.
+   */
+  destino?: { x: number; y: number } | null;
 };
 
 /** Algo que se levanta del suelo y por tanto entra en el orden por Y. */
@@ -141,6 +149,21 @@ export function render(ctx: CanvasRenderingContext2D, input: RenderInput): void 
   ctx.beginPath();
   ctx.arc(selfPx.x, selfPx.y, radius, 0, Math.PI * 2);
   ctx.fill();
+
+  // --- La marca del destino -------------------------------------------------
+  //
+  // En el suelo y debajo de todo, como el halo: es una indicación, no algo que
+  // esté ahí. Late despacio para que se vea sin llamar la atención de más.
+  if (input.destino) {
+    const cx = input.destino.x * TILE;
+    const cy = input.destino.y * TILE;
+    const pulso = 0.5 + 0.5 * Math.sin(time / 180);
+    ctx.strokeStyle = `rgba(91,140,255,${0.45 + 0.35 * pulso})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 6 + 2 * pulso, 3 + pulso, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   // --- Todo lo que tiene altura, ordenado por Y ----------------------------
   const standing: Standing[] = [];
