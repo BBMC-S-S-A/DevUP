@@ -45,10 +45,12 @@ import {
 } from "./herramientas/tareas.js";
 import {
   actualizarTarea,
+  comentarTarea,
   crearArea,
   crearColumna,
   crearTarea,
   descripcionActualizarTarea,
+  descripcionComentarTarea,
   descripcionCrearArea,
   descripcionCrearColumna,
   descripcionCrearTarea,
@@ -57,6 +59,7 @@ import {
   descripcionMoverTarea,
   enlazarRama,
   esquemaActualizarTarea,
+  esquemaComentarTarea,
   esquemaCrearArea,
   esquemaCrearColumna,
   esquemaCrearTarea,
@@ -68,9 +71,12 @@ import {
 } from "./herramientas/escribir.js";
 import {
   borrarArchivo,
+  descargarArchivo,
   descripcionBorrarArchivo,
+  descripcionDescargarArchivo,
   descripcionSubirArchivos,
   esquemaBorrarArchivo,
+  esquemaDescargarArchivo,
   esquemaSubirArchivos,
   subirArchivos,
   descripcionVerBiblioteca,
@@ -143,7 +149,21 @@ import {
  * petición.
  */
 
-type Contenido = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+type Contenido =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string }
+  /**
+   * Un archivo que NO es imagen (un PDF, un zip, lo que sea), incrustado en la
+   * propia respuesta. Es el bloque que define el propio protocolo MCP para
+   * esto —no una imagen disfrazada— y por eso `descargar_archivo` lo usa: una
+   * imagen se puede ENSEÑAR, pero un PDF no, y forzarlo en un bloque `image`
+   * sería mentirle al cliente sobre qué está recibiendo.
+   *
+   * `uri` no apunta a nada real —no hay nada que resolver del otro lado— es
+   * solo el identificador que exige el formato, y lleva el id del archivo para
+   * que se pueda reconocer de dónde salió.
+   */
+  | { type: "resource"; resource: { uri: string; mimeType: string; blob: string } };
 
 /** Convierte cualquier fallo en una respuesta que el modelo pueda leer y
  *  explicar. Lanzar hacia el transporte deja al modelo con «error interno»,
@@ -423,6 +443,15 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
     ],
   );
 
+  registrar(
+    "comentar_tarea",
+    descripcionComentarTarea,
+    esquemaComentarTarea,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await comentarTarea(cliente, entrada) },
+    ],
+  );
+
   /**
    * Dibujar la arquitectura es la única escritura que no va al tablero.
    *
@@ -494,4 +523,22 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
   registrar("publicar_anuncio", descripcionPublicarAnuncio, esquemaPublicarAnuncio, async (cliente, entrada) => [
     { type: "text" as const, text: await publicarAnuncio(cliente, entrada) },
   ]);
+
+  /**
+   * Contraparte de `subir_archivos`: baja lo que ya está en la biblioteca. Ver
+   * la cabecera de `herramientas/archivos.ts`.
+   */
+  registrar(
+    "descargar_archivo",
+    descripcionDescargarArchivo,
+    esquemaDescargarArchivo,
+    async (cliente, entrada) => {
+      const resultado = await descargarArchivo(cliente, entrada);
+      if (typeof resultado === "string") return [{ type: "text" as const, text: resultado }];
+      return [
+        { type: "text" as const, text: resultado.mensaje },
+        resultado.contenido,
+      ];
+    },
+  );
 }

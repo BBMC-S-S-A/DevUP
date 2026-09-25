@@ -33,6 +33,7 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   crear_columna: "añadiendo una columna al tablero",
   mover_tarea: "moviendo una tarjeta",
   actualizar_tarea: "actualizando una tarea",
+  comentar_tarea: "anotando en la historia de una tarea",
   dibujar_arquitectura: "dibujando la arquitectura",
   ver_entornos: "mirando dónde está desplegado",
   sincronizar_entornos: "preguntándole a GitHub por los despliegues",
@@ -54,6 +55,7 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   escribir_en_canal: "escribiendo en un canal",
   crear_reunion: "convocando una reunión",
   publicar_anuncio: "publicando un anuncio",
+  descargar_archivo: "bajando un archivo de la biblioteca",
 };
 
 /**

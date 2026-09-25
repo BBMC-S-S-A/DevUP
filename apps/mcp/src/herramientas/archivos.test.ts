@@ -1,5 +1,5 @@
 import type { ClienteApi } from "../api.js";
-import { borrarArchivo, subirArchivos } from "./archivos.js";
+import { borrarArchivo, descargarArchivo, subirArchivos } from "./archivos.js";
 
 /**
  * Subir y borrar archivos por el MCP: qué falla sin tirar a los demás, y qué
@@ -49,7 +49,13 @@ const ORG = { id: "org-1", name: "Acme", slug: "acme" };
 const WS = { id: "ws-1", name: "Producto" };
 
 type Carpeta = { id: string; nombre: string; padreId: string | null };
-type ArchivoFake = { id: string; name: string; sizeBytes: number; uploadedByName?: string };
+type ArchivoFake = {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  uploadedByName?: string;
+  mimeType?: string;
+};
 
 /** Un identificador que existe pero es de OTRO espacio — para comprobar que
  *  `borrar_archivo` no se fía de que RLS lo deje leer. */
@@ -84,6 +90,8 @@ function clienteCon(opciones: {
       if (ruta === `/files/${ARCHIVO_AJENO}`) {
         return { file: { id: ARCHIVO_AJENO, workspaceId: "ws-otro", name: "no-es-tuyo.pdf", sizeBytes: 1 } };
       }
+      const descarga = /^\/files\/([^/?]+)\/download-url$/.exec(ruta);
+      if (descarga) return { url: `https://almacen.test/bajar/${descarga[1]}` };
       const porId = /^\/files\/([^/?]+)$/.exec(ruta);
       if (porId) {
         const archivo = archivos.find((a) => a.id === porId[1]);
@@ -121,6 +129,17 @@ async function main(): Promise<void> {
   // URL que contenga "rechaza" simula que el almacén dijo que no.
   globalThis.fetch = (async (url: string) => {
     const rechaza = String(url).includes("rechaza");
+    if (String(url).startsWith("https://almacen.test/bajar/")) {
+      if (rechaza) return { ok: false, status: 403 } as Response;
+      // El contenido no importa para lo que se prueba: solo que llega y que
+      // se corta cuando pesa más de lo que el archivo dice.
+      const tamano = String(url).includes("gigante") ? 16 * 1024 * 1024 : 10;
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new ArrayBuffer(tamano),
+      } as unknown as Response;
+    }
     return { ok: !rechaza, status: rechaza ? 403 : 200 } as Response;
   }) as typeof fetch;
 
@@ -265,6 +284,54 @@ async function main(): Promise<void> {
     const { cliente: b6 } = clienteCon({ archivos: unArchivo });
     const r14 = await borrarArchivo(b6, { archivo: "no-existe.pdf", confirmar: true });
     check("dice que no lo encontró", r14.includes("No encontré"));
+
+    console.log("\nDescargar: una imagen vuelve como bloque de imagen");
+
+    const conImagen: ArchivoFake[] = [
+      { id: "file-foto", name: "foto.png", sizeBytes: 10, mimeType: "image/png" },
+    ];
+    const { cliente: d1 } = clienteCon({ archivos: conImagen });
+    const rd1 = await descargarArchivo(d1, { archivo: "foto.png" });
+    check("no es un mensaje de error, es el archivo", typeof rd1 !== "string");
+    if (typeof rd1 !== "string") {
+      check("nombra el archivo en el mensaje", rd1.mensaje.includes("foto.png"));
+      check("el bloque es de tipo imagen", rd1.contenido.type === "image");
+    }
+
+    console.log("\nDescargar: un PDF vuelve como bloque de recurso, no como imagen");
+
+    const conPdf: ArchivoFake[] = [
+      { id: "file-informe-pdf", name: "informe.pdf", sizeBytes: 10, mimeType: "application/pdf" },
+    ];
+    const { cliente: d2 } = clienteCon({ archivos: conPdf });
+    const rd2 = await descargarArchivo(d2, { archivo: "informe.pdf" });
+    check("no es un mensaje de error", typeof rd2 !== "string");
+    if (typeof rd2 !== "string") {
+      check("el bloque es de tipo resource, no image", rd2.contenido.type === "resource");
+      if (rd2.contenido.type === "resource") {
+        check("lleva el mimeType real", rd2.contenido.resource.mimeType === "application/pdf");
+        check("el uri es solo una etiqueta con el id, no una dirección real", rd2.contenido.resource.uri.includes("file-informe-pdf"));
+      }
+    }
+
+    console.log("\nDescargar: uno que pesa de más no se baja");
+
+    const conGigante: ArchivoFake[] = [
+      { id: "file-gigante", name: "gigante.pdf", sizeBytes: 16 * 1024 * 1024, mimeType: "application/pdf" },
+    ];
+    const { cliente: d3 } = clienteCon({ archivos: conGigante });
+    const rd3 = await descargarArchivo(d3, { archivo: "gigante.pdf" });
+    check("se corta antes de bajarlo, y lo dice", typeof rd3 === "string" && rd3.includes("límite"));
+
+    console.log("\nDescargar: nombre ambiguo o inexistente, igual que en borrar");
+
+    const { cliente: d4 } = clienteCon({ archivos: dosInformes });
+    const rd4 = await descargarArchivo(d4, { archivo: "informe" });
+    check("pregunta cuál en vez de bajar el primero", typeof rd4 === "string" && rd4.includes("2 archivos"));
+
+    const { cliente: d5 } = clienteCon({ archivos: unArchivo });
+    const rd5 = await descargarArchivo(d5, { archivo: "no-existe.pdf" });
+    check("dice que no lo encontró", typeof rd5 === "string" && rd5.includes("No encontré"));
   } finally {
     globalThis.fetch = fetchOriginal;
   }

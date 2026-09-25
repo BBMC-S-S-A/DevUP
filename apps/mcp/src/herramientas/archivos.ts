@@ -259,6 +259,7 @@ type ArchivoAPI = {
   workspaceId: string;
   name: string;
   sizeBytes: number | string;
+  mimeType?: string;
   uploadedByName?: string;
 };
 
@@ -465,4 +466,85 @@ export async function verBiblioteca(
   if (lineas.length === 2) lineas.push(entrada.buscar ? "Nada con ese nombre." : "Vacía.");
   if (files.length === 60) lineas.push("", "(hay más; afina con «buscar»)");
   return lineas.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// descargar_archivo
+// ---------------------------------------------------------------------------
+
+export const esquemaDescargarArchivo = {
+  archivo: z
+    .string()
+    .trim()
+    .min(1)
+    .describe("El nombre del archivo, o su identificador."),
+  espacio: z.string().optional().describe("Nombre del espacio de trabajo. Omitir si solo hay uno."),
+  organizacion: z.string().optional(),
+};
+
+export const descripcionDescargarArchivo = [
+  "Baja un archivo de la biblioteca de un espacio y lo devuelve dentro de la",
+  "propia respuesta — como imagen si es una imagen, o como archivo genérico",
+  "(un PDF, un zip, lo que sea) si no lo es.",
+  "",
+  `Tiene el mismo límite que subir_archivos (${formatBytes(LIMITE_POR_ARCHIVO)}):`,
+  "por encima de eso se dice cuánto pesa en vez de bajarlo.",
+  "",
+  "Si el nombre encaja con más de un archivo, se listan con su identificador",
+  "en vez de bajar el primero.",
+].join("\n");
+
+type ArchivoDescargable = { type: "image"; data: string; mimeType: string } | {
+  type: "resource";
+  resource: { uri: string; mimeType: string; blob: string };
+};
+
+export async function descargarArchivo(
+  cliente: ClienteApi,
+  entrada: { archivo: string; espacio?: string; organizacion?: string },
+): Promise<string | { mensaje: string; contenido: ArchivoDescargable }> {
+  const espacio = await resolverEspacio(cliente, entrada.espacio, entrada.organizacion);
+  const candidatos = await resolverArchivo(cliente, espacio.id, entrada.archivo);
+
+  if (candidatos.length === 0) {
+    return `No encontré ningún archivo que sea «${entrada.archivo}» en ${espacio.name}.`;
+  }
+  if (candidatos.length > 1) {
+    return (
+      `«${entrada.archivo}» encaja con ${candidatos.length} archivos. Dime cuál, con su identificador:\n` +
+      candidatos
+        .map((f) => `- ${f.name} (${formatBytes(Number(f.sizeBytes))})  [archivo ${f.id}]`)
+        .join("\n")
+    );
+  }
+
+  const archivo = candidatos[0]!;
+  const tamano = Number(archivo.sizeBytes);
+  if (Number.isFinite(tamano) && tamano > LIMITE_POR_ARCHIVO) {
+    return (
+      `«${archivo.name}» pesa ${formatBytes(tamano)}, más del límite de ` +
+      `${formatBytes(LIMITE_POR_ARCHIVO)} para bajarlo por aquí.`
+    );
+  }
+
+  const { url } = await cliente.get<{ url: string }>(`/files/${archivo.id}/download-url`);
+  // Sin la cabecera de sesión: la firma de la URL ya es la autorización de
+  // ESTE archivo, igual que en imagenes.ts.
+  const respuesta = await fetch(url);
+  if (!respuesta.ok) return `No pude bajar «${archivo.name}» (${respuesta.status}).`;
+  const buffer = await respuesta.arrayBuffer();
+  if (buffer.byteLength > LIMITE_POR_ARCHIVO) {
+    return `«${archivo.name}» pesa más de lo anunciado, más del límite de ${formatBytes(LIMITE_POR_ARCHIVO)}.`;
+  }
+
+  const mimeType = archivo.mimeType || "application/octet-stream";
+  const blob = Buffer.from(buffer).toString("base64");
+  const contenido: ArchivoDescargable = mimeType.startsWith("image/")
+    ? { type: "image", data: blob, mimeType }
+    : { type: "resource", resource: { uri: `archivo:${archivo.id}`, mimeType, blob } };
+
+  return {
+    mensaje: `«${archivo.name}» (${formatBytes(tamano)}) de ${espacio.name}.`,
+    contenido,
+  };
 }
