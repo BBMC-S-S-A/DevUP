@@ -84,7 +84,8 @@ export default function CategoriasPage() {
 
   // La primera se abre sola: un panel vacío al entrar hace pensar que no hay
   // nada que ver, y lo que enseña es justo lo que se viene a buscar.
-  const elegida = lista.find((r) => r.id === abierta) ?? lista[0] ?? null;
+  const elegida = lista.find((r) => r.id === abierta) ?? null;
+  const ramaPanel = elegida ?? (abierta === null ? lista[0] ?? null : null);
 
   return (
     <Pagina
@@ -118,10 +119,23 @@ export default function CategoriasPage() {
               cada tarea cuelga de «sin rama» — que es un nodo real y no un
               hueco—, así que la red tiene algo que enseñar desde el minuto
               cero. */}
-          {!tablero.cargando && (tablero.datos?.columns.length ?? 0) > 0 && (
+          {!tablero.cargando && tablero.datos && (
             <Tarjeta className="p-4">
-              <Rotulo className="mb-3 block">Red de trabajo</Rotulo>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <Rotulo>Red del proyecto</Rotulo>
+                <button
+                  type="button"
+                  aria-pressed={!elegida}
+                  onClick={() => setAbierta(null)}
+                  className={`presionable rounded-lg border px-2 py-1 text-[11px] transition-colors ${
+                    !elegida ? "border-accent/40 bg-accent-soft/20 text-ink" : "border-line text-muted hover:text-ink"
+                  }`}
+                >
+                  Proyecto completo
+                </button>
+              </div>
               <RedDeTrabajo
+                espacioNombre={espacio.datos?.workspace.name ?? "Proyecto"}
                 columnas={tablero.datos?.columns ?? []}
                 ramas={lista}
                 elegidas={elegida ? [elegida.id] : []}
@@ -181,7 +195,7 @@ export default function CategoriasPage() {
               )}
             </div>
 
-            {elegida && <PanelDeRama rama={elegida} />}
+            {ramaPanel && <PanelDeRama rama={ramaPanel} />}
           </div>
         </div>
       )}

@@ -37,7 +37,7 @@ import { paso, type AristaFisica, type NodoFisico } from "./fisica";
  * una por una.
  */
 
-type Tipo = "persona" | "tarea" | "categoria";
+type Tipo = "espacio" | "persona" | "tarea" | "categoria";
 
 type Nodo = {
   id: string;
@@ -52,20 +52,23 @@ type Arista = { deId: string; aId: string; categorias: string[] };
 const SIN_RAMA = "sin-rama";
 const ANCHO = 940;
 const ALTO = 560;
-const LONGITUD_ENLACE: Record<Tipo, number> = { persona: 90, tarea: 90, categoria: 90 };
+const LONGITUD_ENLACE: Record<Tipo, number> = { espacio: 150, persona: 90, tarea: 90, categoria: 90 };
 
 const COLOR: Record<Tipo, string> = {
+  espacio: "var(--c-accent-bright)",
   persona: "var(--c-cyan)",
   tarea: "var(--c-accent)",
   categoria: "var(--c-accent-bright)",
 };
-const RADIO: Record<Tipo, number> = { persona: 7, tarea: 4.5, categoria: 8 };
+const RADIO: Record<Tipo, number> = { espacio: 15, persona: 7, tarea: 4.5, categoria: 8 };
 
 export function RedDeTrabajo({
+  espacioNombre,
   columnas,
   ramas,
   elegidas,
 }: {
+  espacioNombre: string;
   columnas: BoardColumn[];
   ramas: Rama[];
   /** Ramas señaladas desde la lista de fuera. Vacío = se ven todas por igual. */
@@ -115,16 +118,20 @@ export function RedDeTrabajo({
       cerrada: terminales.has(t.columnId),
     }));
 
-    // Las ramas que tienen algo —abierto o cerrado— y al final «sin rama», el
-    // nodo que más dice, porque lo que nadie clasificó no se ve en ningún otro
-    // sitio. Una rama entera terminada sigue siendo parte del proyecto: era de
-    // las que desaparecían con el filtro de antes.
-    const usadas = ramas.filter((r) => tareas.some((t) => t.categoryId === r.id));
+    // Todas las ramas salen del nodo raíz, aunque todavía estén vacías. Así el
+    // mapa empieza por el proyecto y no desaparece hasta que haya una tarea.
+    // «Sin rama» también cuelga del proyecto cuando hay trabajo sin clasificar.
     const huerfanas = tareas.some((t) => !t.categoryId);
     const columnaCategoria: { id: string; nombre: string }[] = [
-      ...usadas.map((r) => ({ id: r.id, nombre: r.nombre })),
+      ...ramas.map((r) => ({ id: r.id, nombre: r.nombre })),
       ...(huerfanas ? [{ id: SIN_RAMA, nombre: "sin rama" }] : []),
     ];
+    const raiz: Nodo = {
+      id: "e:proyecto",
+      tipo: "espacio",
+      texto: espacioNombre,
+      categorias: columnaCategoria.map((r) => r.id),
+    };
     const nodosCategoria: Nodo[] = columnaCategoria.map((r) => ({
       id: `c:${r.id}`,
       tipo: "categoria",
@@ -132,7 +139,11 @@ export function RedDeTrabajo({
       categorias: [r.id],
     }));
 
-    const aristas: Arista[] = [];
+    const aristas: Arista[] = columnaCategoria.map((r) => ({
+      deId: raiz.id,
+      aId: `c:${r.id}`,
+      categorias: [r.id],
+    }));
     for (const t of tareas) {
       const suya = t.categoryId ?? SIN_RAMA;
       if (t.assigneeId && personas.has(t.assigneeId)) {
@@ -143,15 +154,15 @@ export function RedDeTrabajo({
       }
     }
 
-    return { nodos: [...nodosPersona, ...nodosTarea, ...nodosCategoria], aristas };
-  }, [tareas, ramas, terminales]);
+    return { nodos: [raiz, ...nodosPersona, ...nodosTarea, ...nodosCategoria], aristas };
+  }, [tareas, ramas, terminales, espacioNombre]);
 
   return (
     <GrafoFisico
       nodos={nodos}
       aristas={aristas}
       elegidas={elegidas}
-      vacio={tareas.length === 0}
+      vacio={nodos.length === 0}
     />
   );
 }
@@ -182,7 +193,7 @@ function GrafoFisico({
   const aristasFisicas: AristaFisica[] = useMemo(
     () =>
       aristas.map((a) => {
-        const tipoDe = a.deId.startsWith("p:") ? "persona" : a.deId.startsWith("t:") ? "tarea" : "categoria";
+        const tipoDe = a.deId.startsWith("e:") ? "espacio" : a.deId.startsWith("p:") ? "persona" : a.deId.startsWith("t:") ? "tarea" : "categoria";
         return { deId: a.deId, aId: a.aId, longitud: LONGITUD_ENLACE[tipoDe] };
       }),
     [aristas],
@@ -396,7 +407,7 @@ function GrafoFisico({
         className="w-full touch-none select-none rounded-xl border border-line bg-canvas/30"
         style={{ height: ALTO * 0.72, cursor: arrastre.current?.id ? "grabbing" : "grab" }}
         role="img"
-        aria-label="Red de personas, tareas y ramas de trabajo"
+        aria-label="Red del proyecto y sus ramas, personas y tareas"
         onPointerDown={(e) => bajarPuntero(e, null)}
         onPointerMove={moverPuntero}
         onPointerUp={subirPuntero}
