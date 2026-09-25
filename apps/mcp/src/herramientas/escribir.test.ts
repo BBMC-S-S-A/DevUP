@@ -10,7 +10,7 @@
  *   npm run test:mcp
  */
 import { readFileSync } from "node:fs";
-import { campoDeFicha, marcarHecha, resolverColumna } from "./escribir.js";
+import { campoDeFicha, comentarTarea, marcarHecha, resolverColumna } from "./escribir.js";
 import type { ClienteApi } from "../api.js";
 
 /** Las comprobaciones de abajo se contestan ANTES de salir a la red, que es
@@ -135,6 +135,31 @@ const notaSinTexto = await marcarHecha(clienteQueNoSeUsa, {
   prueba_tipo: "nota",
 });
 check("una nota sin texto, igual", notaSinTexto.includes("prueba_nota"));
+
+console.log("\nComentar una tarea sin tocar su ficha");
+let rutaComentario = "";
+let cuerpoComentario: unknown;
+const clienteComentario = {
+  ...clienteQueNoSeUsa,
+  post: async (camino: string, cuerpo: unknown) => {
+    rutaComentario = camino;
+    cuerpoComentario = cuerpo;
+    return {};
+  },
+} as unknown as ClienteApi;
+const respuestaComentario = await comentarTarea(clienteComentario, {
+  tarea: "11111111-2222-3333-4444-555555555555",
+  comentario: "  decisión contextual  ",
+});
+check(
+  "usa la ruta de comentarios de la tarea identificada",
+  rutaComentario === "/tasks/11111111-2222-3333-4444-555555555555/comments",
+);
+check(
+  "manda el comentario recortado como texto separado",
+  JSON.stringify(cuerpoComentario) === JSON.stringify({ texto: "decisión contextual" }),
+);
+check("no promete reescribir la ficha", respuestaComentario.includes("Comentario añadido"));
 
 console.log("\nProcedencia");
 /**

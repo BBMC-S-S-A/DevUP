@@ -808,6 +808,74 @@ export async function taskRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
+   * La conversación de una tarea, separada de su ficha.
+   *
+   * `loadTask` comprueba el acceso bajo RLS antes de leer los comentarios. La
+   * propia tabla repite ese límite para que tampoco se puedan consultar por
+   * SQL desde otra ruta.
+   */
+  app.get("/tasks/:taskId/comments", async (request) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+
+    return withUser(userId, async (db) => {
+      await loadTask(db, taskId);
+      const { rows } = await db.query(
+        `select c.id, c.body, c.source as procedencia,
+                c.author_id as "autorId", p.display_name as "autorNombre",
+                c.created_at as "creadoEn"
+           from task_comments c
+           left join profiles p on p.id = c.author_id
+          where c.task_id = $1
+          order by c.created_at, c.id`,
+        [taskId],
+      );
+      return { comentarios: rows };
+    });
+  });
+
+  /** Añade una nota sin modificar título, detalle ni criterio de la tarea. */
+  app.post("/tasks/:taskId/comments", async (request, reply) => {
+    const userId = requireUser(request);
+    const { taskId } = parseParams(z.object({ taskId: uuid }), request.params);
+    const body = parseBody(
+      z.object({ texto: z.string().trim().min(1).max(4000) }),
+      request.body,
+    );
+
+    return withUser(userId, async (db) => {
+      const { rows: previa } = await db.query<{ title: string; workspace_id: string }>(
+        `select t.title, t.workspace_id from tasks t where t.id = $1`,
+        [taskId],
+      );
+      if (!previa[0]) throw notFound("tarea no encontrada");
+
+      const { rows } = await db.query(
+        `insert into task_comments (task_id, author_id, source, body)
+         values ($1, $2, $3::public.activity_source, $4)
+         returning id, body, source as procedencia,
+                   author_id as "autorId", created_at as "creadoEn"`,
+        [taskId, userId, request.actorSource, body.texto],
+      );
+      const comentario = rows[0];
+
+      await anotar(db, {
+        workspaceId: previa[0].workspace_id,
+        actorId: userId,
+        procedencia: request.actorSource,
+        verbo: "comento",
+        sujeto: "tarea",
+        sujetoId: taskId,
+        sujetoNombre: previa[0].title,
+        detalle: { comentarioId: comentario.id },
+      });
+
+      announceBoardChange(previa[0].workspace_id, "updated", taskId);
+      return reply.status(201).send({ comentario });
+    });
+  });
+
+  /**
    * Todo lo que rodea a una tarea, de una vez.
    *
    * ES LA TESIS DEL PRODUCTO EN UNA RUTA. Lo que se pierde al volver a algo que

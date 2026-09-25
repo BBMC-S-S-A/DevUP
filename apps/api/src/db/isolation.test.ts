@@ -3060,16 +3060,23 @@ async function main(): Promise<void> {
          values ($1,'pr','https://github.com/acme/x/pull/1',$2)`,
         [tarea, ana],
       );
+      await db.query(
+        `insert into task_comments (task_id, author_id, body)
+         values ($1, $2, 'la decisión y su contexto')`,
+        [tarea, ana],
+      );
       return tarea;
     });
 
     const veBruno = await withUser(bruno, async (db) => {
       const ramas = await db.query("select id from task_branches where task_id = $1", [conRama]);
       const pruebas = await db.query("select id from task_evidence where task_id = $1", [conRama]);
-      return { ramas: ramas.rowCount, pruebas: pruebas.rowCount };
+      const comentarios = await db.query("select id from task_comments where task_id = $1", [conRama]);
+      return { ramas: ramas.rowCount, pruebas: pruebas.rowCount, comentarios: comentarios.rowCount };
     });
     check("Bruno no ve las ramas de una tarea que no puede ver", veBruno.ramas === 0);
     check("ni sus evidencias", veBruno.pruebas === 0);
+    check("ni los comentarios de una tarea que no puede ver", veBruno.comentarios === 0);
 
     await denied("ni puede colgarle una rama", () =>
       withUser(bruno, (db) =>
@@ -3083,6 +3090,14 @@ async function main(): Promise<void> {
         ]),
       ),
     );
+    await denied("ni un comentario en una tarea ajena", () =>
+      withUser(bruno, (db) =>
+        db.query(
+          "insert into task_comments (task_id, author_id, body) values ($1,$2,'intruso')",
+          [conRama, bruno],
+        ),
+      ),
+    );
 
     // Firmar con el nombre de otro es la unica forma que tiene esta tabla de
     // mentir: atribuirle a alguien una comprobacion que no hizo.
@@ -3090,6 +3105,14 @@ async function main(): Promise<void> {
       withUser(carla, (db) =>
         db.query(
           "insert into task_evidence (task_id, tipo, nota, created_by) values ($1,'nota','fui yo',$2)",
+          [conRama, ana],
+        ),
+      ),
+    );
+    await denied("nadie firma un comentario con el nombre de otro", () =>
+      withUser(carla, (db) =>
+        db.query(
+          "insert into task_comments (task_id, author_id, body) values ($1,$2,'suplantado')",
           [conRama, ana],
         ),
       ),
@@ -3110,14 +3133,41 @@ async function main(): Promise<void> {
       }
     });
     check("ni la propia Ana puede reescribir una evidencia", reescribio !== 1);
+    const comentarioEditado = await withUser(ana, async (db) => {
+      try {
+        const { rowCount } = await db.query(
+          "update task_comments set body = 'reescrito' where task_id = $1",
+          [conRama],
+        );
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("ni la propia Ana puede reescribir un comentario", comentarioEditado !== 1);
+    const comentarioBorrado = await withUser(ana, async (db) => {
+      try {
+        const { rowCount } = await db.query("delete from task_comments where task_id = $1", [
+          conRama,
+        ]);
+        return rowCount;
+      } catch {
+        return "rechazado";
+      }
+    });
+    check("ni la propia Ana puede borrar un comentario", comentarioBorrado !== 1);
 
     const carlaVe = await withUser(carla, async (db) => {
       const { rowCount } = await db.query("select id from task_branches where task_id = $1", [
         conRama,
       ]);
-      return rowCount;
+      const comentarios = await db.query("select id from task_comments where task_id = $1", [
+        conRama,
+      ]);
+      return { ramas: rowCount, comentarios: comentarios.rowCount };
     });
-    check("Carla, del mismo espacio, si ve la rama", carlaVe === 1);
+    check("Carla, del mismo espacio, si ve la rama", carlaVe.ramas === 1);
+    check("Carla, del mismo espacio, sí ve el comentario", carlaVe.comentarios === 1);
 
     // Borrar la tarea se lleva las dos por delante: son de la tarea, no cosas
     // con vida propia. Lo contrario dejaria pruebas huerfanas apuntando a algo
@@ -3127,9 +3177,12 @@ async function main(): Promise<void> {
     const quedanPruebas = await admin.query("select id from task_evidence where task_id = $1", [
       conRama,
     ]);
+    const quedanComentarios = await admin.query("select id from task_comments where task_id = $1", [
+      conRama,
+    ]);
     check(
-      "borrar la tarea se lleva sus ramas y sus evidencias",
-      quedan.rowCount === 0 && quedanPruebas.rowCount === 0,
+      "borrar la tarea se lleva sus ramas, evidencias y comentarios",
+      quedan.rowCount === 0 && quedanPruebas.rowCount === 0 && quedanComentarios.rowCount === 0,
     );
 
     console.log("\nReuniones con hora, y quien puede verlas");
