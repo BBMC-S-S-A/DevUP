@@ -13,7 +13,7 @@ const uuid = z.string().uuid();
  * los PRs y los pendientes llegan en el cuerpo. Los hechos —tareas movidas,
  * archivos subidos a la biblioteca— se leen al pedir el detalle, del registro
  * de actividad y de `files`, entre el inicio y el fin de la sesión y de esa
- * persona. Ver la cabecera de `0072_sesiones.sql`.
+ * persona. Ver la cabecera de `0073_sesiones.sql`.
  *
  * PARA QUE OTRA IA RECOJA EL CONTEXTO. La consulta pensada es «dame las
  * últimas sesiones de este espacio», que es lo que hace `ver_sesiones` desde

@@ -18,8 +18,11 @@ export function parseDuration(input: string): number {
 export const accessTtlSeconds = parseDuration(env.ACCESS_TOKEN_TTL);
 export const refreshTtlSeconds = parseDuration(env.REFRESH_TOKEN_TTL);
 
-export async function signAccessToken(userId: string): Promise<string> {
-  return new SignJWT({})
+export async function signAccessToken(
+  userId: string,
+  source: "persona" | "agente" = "persona",
+): Promise<string> {
+  return new SignJWT(source === "agente" ? { source } : {})
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuer(ISSUER)
@@ -29,17 +32,27 @@ export async function signAccessToken(userId: string): Promise<string> {
     .sign(secret);
 }
 
-export async function verifyAccessToken(token: string): Promise<string | null> {
+export async function verifyAccessTokenIdentity(
+  token: string,
+): Promise<{ userId: string; source: "persona" | "agente" } | null> {
   try {
     const { payload } = await jwtVerify(token, secret, {
       issuer: ISSUER,
       audience: AUDIENCE,
     });
-    return typeof payload.sub === "string" ? payload.sub : null;
+    if (typeof payload.sub !== "string") return null;
+    return {
+      userId: payload.sub,
+      source: payload.source === "agente" ? "agente" : "persona",
+    };
   } catch {
     // Caducado, manipulado o con otra firma: para el que llama es lo mismo.
     return null;
   }
+}
+
+export async function verifyAccessToken(token: string): Promise<string | null> {
+  return (await verifyAccessTokenIdentity(token))?.userId ?? null;
 }
 
 /**

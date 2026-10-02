@@ -63,6 +63,7 @@ const ESPERADAS = [
   "enlazar_rama",
   "marcar_hecha",
   "actualizar_tarea",
+  "comentar_tarea",
   "dibujar_arquitectura",
   "crear_entorno",
   "estoy_haciendo",
@@ -82,9 +83,11 @@ const ESPERADAS = [
   "ver_biblioteca",
   "ver_sesiones",
   "registrar_sesion",
+  "leer_archivo",
   "escribir_en_canal",
   "crear_reunion",
   "publicar_anuncio",
+  "descargar_archivo",
 ];
 
 console.log("\nRegistro de herramientas");

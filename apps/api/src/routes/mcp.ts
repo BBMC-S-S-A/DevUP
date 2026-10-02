@@ -121,7 +121,7 @@ export async function mcpRoutes(app: FastifyInstance): Promise<void> {
    */
   const atender = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const userId = requireUser(request);
-    const acceso = await signAccessToken(userId);
+    const acceso = await signAccessToken(userId, "agente");
     const cliente = new ClienteDeLaPeticion(bucleLocal(), acceso);
 
     const servidor = new McpServer({ name: "devup", version: "0.1.0" });

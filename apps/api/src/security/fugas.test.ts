@@ -272,6 +272,8 @@ const LEER: Record<string, (o: string, e: string) => Record<string, unknown>> = 
   mis_avisos: () => ({ todos: true }),
   ver_biblioteca: (o, e) => ({ organizacion: o, espacio: e }),
   ver_sesiones: (o, e) => ({ organizacion: o, espacio: e }),
+  descargar_archivo: (o, e) => ({ organizacion: o, espacio: e, archivo: "uno que no existe" }),
+  leer_archivo: (o, e) => ({ organizacion: o, espacio: e, archivo: "uno que no existe" }),
 };
 
 /** Cambian el tablero o la biblioteca. Se clasifican; no se llaman. */
@@ -292,6 +294,7 @@ const ESCRIBIR = new Set([
   "escribir_en_canal",
   "crear_reunion",
   "publicar_anuncio",
+  "comentar_tarea",
 ]);
 
 async function mcp(token: string, id: number, method: string, params: unknown) {
