@@ -271,6 +271,7 @@ const LEER: Record<string, (o: string, e: string) => Record<string, unknown>> = 
   ver_anuncios: (o) => ({ organizacion: o }),
   mis_avisos: () => ({ todos: true }),
   ver_biblioteca: (o, e) => ({ organizacion: o, espacio: e }),
+  ver_sesiones: (o, e) => ({ organizacion: o, espacio: e }),
   descargar_archivo: (o, e) => ({ organizacion: o, espacio: e, archivo: "uno que no existe" }),
   leer_archivo: (o, e) => ({ organizacion: o, espacio: e, archivo: "uno que no existe" }),
 };
@@ -289,6 +290,7 @@ const ESCRIBIR = new Set([
   "crear_entorno",
   "subir_archivos",
   "borrar_archivo",
+  "registrar_sesion",
   "escribir_en_canal",
   "crear_reunion",
   "publicar_anuncio",

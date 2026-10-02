@@ -87,6 +87,14 @@ import {
   leerArchivo,
 } from "./herramientas/archivos.js";
 import {
+  descripcionRegistrarSesion,
+  descripcionVerSesiones,
+  esquemaRegistrarSesion,
+  esquemaVerSesiones,
+  registrarSesion,
+  verSesiones,
+} from "./herramientas/sesiones.js";
+import {
   descripcionEscribirEnCanal,
   descripcionLeerCanal,
   descripcionVerCanales,
@@ -378,6 +386,9 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
   registrar("ver_biblioteca", descripcionVerBiblioteca, esquemaVerBiblioteca, async (cliente, entrada) => [
     { type: "text" as const, text: await verBiblioteca(cliente, entrada) },
   ]);
+  registrar("ver_sesiones", descripcionVerSesiones, esquemaVerSesiones, async (cliente, entrada) => [
+    { type: "text" as const, text: await verSesiones(cliente, entrada) },
+  ]);
   registrar("leer_archivo", descripcionLeerArchivo, esquemaLeerArchivo, (cliente, entrada) =>
     leerArchivo(cliente, entrada),
   );
@@ -511,6 +522,20 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
     esquemaBorrarArchivo,
     async (cliente, entrada) => [
       { type: "text" as const, text: await borrarArchivo(cliente, entrada) },
+    ],
+  );
+
+  /**
+   * Escribe el resumen de una sesión a nombre de la persona, marcado como de
+   * agente. Solo añade: corregir o borrar una sesión es de su autor, desde la
+   * pantalla. Ver `herramientas/sesiones.ts`.
+   */
+  registrar(
+    "registrar_sesion",
+    descripcionRegistrarSesion,
+    esquemaRegistrarSesion,
+    async (cliente, entrada) => [
+      { type: "text" as const, text: await registrarSesion(cliente, entrada) },
     ],
   );
 

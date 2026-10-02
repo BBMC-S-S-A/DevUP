@@ -52,6 +52,8 @@ export const FRASES_POR_HERRAMIENTA: Record<string, string> = {
   ver_anuncios: "leyendo el tablón",
   mis_avisos: "mirando la campana",
   ver_biblioteca: "buscando en la biblioteca",
+  ver_sesiones: "recogiendo el contexto de las sesiones",
+  registrar_sesion: "dejando escrita la sesión",
   leer_archivo: "leyendo un archivo de la biblioteca",
   escribir_en_canal: "escribiendo en un canal",
   crear_reunion: "convocando una reunión",
