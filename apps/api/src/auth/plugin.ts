@@ -2,12 +2,18 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { env } from "../env.js";
 import { unauthorized } from "../lib/http.js";
-import { accessTtlSeconds, refreshTtlSeconds, verifyAccessToken } from "./tokens.js";
+import {
+  accessTtlSeconds,
+  refreshTtlSeconds,
+  verifyAccessTokenIdentity,
+} from "./tokens.js";
 
 declare module "fastify" {
   interface FastifyRequest {
     /** Id del usuario autenticado, o null. Lo fija el hook de abajo. */
     userId: string | null;
+    /** Solo puede venir de un token firmado por el servicio MCP. */
+    actorSource: "persona" | "agente";
   }
 }
 
@@ -57,13 +63,16 @@ export function clearSessionCookies(reply: FastifyReply): void {
  */
 async function resolveIdentity(request: FastifyRequest): Promise<void> {
   request.userId = null;
+  request.actorSource = "persona";
 
   const header = request.headers.authorization;
   const bearer = header?.startsWith("Bearer ") ? header.slice(7) : null;
   const token = bearer ?? request.cookies[ACCESS_COOKIE] ?? null;
   if (!token) return;
 
-  request.userId = await verifyAccessToken(token);
+  const identidad = await verifyAccessTokenIdentity(token);
+  request.userId = identidad?.userId ?? null;
+  request.actorSource = identidad?.source ?? "persona";
 }
 
 /** Hook para rutas que exigen sesión. */
@@ -73,5 +82,6 @@ export async function requireSession(request: FastifyRequest): Promise<void> {
 
 export const authPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest("userId", null);
+  app.decorateRequest("actorSource", "persona");
   app.addHook("onRequest", resolveIdentity);
 });
