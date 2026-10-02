@@ -82,6 +82,9 @@ import {
   descripcionVerBiblioteca,
   esquemaVerBiblioteca,
   verBiblioteca,
+  descripcionLeerArchivo,
+  esquemaLeerArchivo,
+  leerArchivo,
 } from "./herramientas/archivos.js";
 import {
   descripcionEscribirEnCanal,
@@ -375,6 +378,9 @@ export function registrarHerramientas(servidor: McpServer, obtenerCliente: () =>
   registrar("ver_biblioteca", descripcionVerBiblioteca, esquemaVerBiblioteca, async (cliente, entrada) => [
     { type: "text" as const, text: await verBiblioteca(cliente, entrada) },
   ]);
+  registrar("leer_archivo", descripcionLeerArchivo, esquemaLeerArchivo, (cliente, entrada) =>
+    leerArchivo(cliente, entrada),
+  );
 
   // --- Las que escriben -----------------------------------------------------
   //
